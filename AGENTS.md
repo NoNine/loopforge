@@ -1,0 +1,99 @@
+## Repository Context
+
+This repository contains the Gerrit/Jenkins setup package described in
+`docs/prd.md`.
+
+Keep the v1 product boundary clear:
+
+- v1 is not a strict air-gapped installer.
+- v1 does not support offline Ubuntu dependency bundles.
+- Public internet fallback on target hosts is simulation-only and must be
+  labeled as such in docs, logs, and verification summaries.
+
+## Commit Messages
+
+Use standard Git-style commit messages:
+
+- Write a short imperative subject, for example `Add Jenkins validation docs`.
+- Capitalize the subject and do not end it with a period.
+- Keep the subject concise; prefer about 50 characters and stay under 72 when
+  practical.
+- Separate the subject from the body with one blank line when a body is needed.
+- Use the body to explain why the change exists and any important context.
+- Wrap body text around 72 columns for readability in Git tools.
+- Keep each commit to one logical change.
+- Add issue references or trailers at the end when relevant.
+
+Do not require `Prompt:` or `Conversation context:` sections unless the user
+explicitly asks for them.
+
+## Log Handling
+
+Never stream verbose Docker, Jenkins, Gerrit, package-manager, build, download,
+SSH, VM, or verification logs into the conversation.
+
+Before running a command that may emit long output or run for more than a few
+seconds, redirect stdout and stderr to a timestamped log file:
+
+```bash
+log="logs/command-$(date +%Y%m%d%H%M%S).log"
+command >"$log" 2>&1
+rc=$?
+printf 'exit=%s log=%s\n' "$rc" "$log"
+```
+
+For long-running commands, run them detached and record the PID:
+
+```bash
+log="logs/command-$(date +%Y%m%d%H%M%S).log"
+(command >"$log" 2>&1 & echo $! > "$log.pid")
+printf 'pid=%s log=%s\n' "$(cat "$log.pid")" "$log"
+```
+
+Inspect only bounded output:
+
+- Exit code or process status.
+- Log path and PID for detached commands.
+- `rg` markers such as `ERROR`, `FAILED`, `Timed out`, `Traceback`,
+  `Exception`, or `Completed`.
+- `tail -40 "$log"` or a similarly small bounded tail.
+- Specific failure snippets needed to explain the next action.
+
+For long-running remote verification, poll sparsely after confirming the
+process is alive and logs are being written. Each poll should inspect only
+process state, exit code, log size, phase/error markers, and bounded failure
+snippets.
+
+## Remote Access Safety
+
+Read-only inspection of remote machines, VMs, containers, Jenkins, Gerrit, or
+SSH-accessible verification hosts is allowed when it supports the current task.
+Use bounded log inspection for remote commands as described above.
+
+Never modify a remote machine, VM, container host, Jenkins controller or agent,
+Gerrit host, or SSH-accessible verification machine without explicit user
+approval for that specific target and action.
+
+Remote actions that require explicit approval include:
+
+- Installing, upgrading, removing, or reconfiguring packages.
+- Editing, creating, deleting, moving, or changing ownership or permissions of
+  remote files.
+- Running `sudo` actions or changing users, groups, SSH keys, or credentials.
+- Starting, stopping, restarting, enabling, disabling, or reloading services.
+- Creating, deleting, restoring, snapshotting, resizing, rebooting, or shutting
+  down VMs.
+- Running Docker or Compose lifecycle commands, pruning resources, changing
+  Docker networks, mounting the Docker socket, or running privileged
+  containers.
+- Changing Jenkins or Gerrit configuration, plugins, credentials, jobs, queues,
+  agents, permissions, or triggering builds that affect external state.
+- Changing firewall rules, routes, proxies, DNS, TLS certificates, or exposed
+  service bindings.
+- Deleting logs, workspaces, artifacts, caches, databases, queues, or test
+  results.
+- Running destructive cleanup, load tests, stress tests, or verification that
+  may leave persistent side effects.
+
+Prefer read-only checks and documented dry runs before requesting approval for
+remote mutation. State the expected side effects before asking for approval.
