@@ -229,25 +229,30 @@ Acceptance criteria:
 
 Document the default operator workflow as a phase contract, not as a full
 runnable command transcript. The contract must define phase order, execution
-environment, helper command ownership, and the checkpoint that lets operators
-stop, review evidence, and resume at a known boundary.
+environment, helper command ownership, inputs and outputs, side effects, and
+the checkpoint that lets operators stop, review evidence, and resume at a known
+boundary.
 
 Workflow contract:
 
-| Phase | Machine/environment | Helper commands | Required checkpoint |
-| --- | --- | --- | --- |
-| Inputs | Operator workstation | `print-env-template`, `preflight` | Reviewed env files exist for Gerrit, Jenkins controller, and Jenkins agent. |
-| Artifacts | Bundle factory | `prepare-artifacts` | Role artifact manifests and checksums are produced. |
-| Gerrit readiness | Gerrit host | `install`, `configure`, `validate` | Gerrit starts, uses LDAP, exposes HTTP/SSH, and is ready for integration. |
-| Jenkins controller readiness | Jenkins controller | `install`, `configure-service`, `install-plugins`, `configure-jcasc`, `validate` | Jenkins starts, uses LDAP/JCasC, has required plugins, and is ready for integration. |
-| Gerrit integration | Jenkins controller and Gerrit host | `generate-integration-key`, Gerrit `configure-integration`, Jenkins `configure-integration` | Jenkins-to-Gerrit SSH authentication, stream-events permission, and `Verified` voting permission are ready. |
-| Agent integration | Jenkins controller and Jenkins agent | `generate-agent-key`, agent `configure-runtime`, controller `configure-agent`, `validate-agent` | Jenkins can connect to the agent and schedule a job on the configured label. |
-| End-to-end acceptance | Jenkins controller | `verify-trigger` | A disposable Gerrit change triggers Jenkins and receives `Verified +1`. |
-| Evidence | All role environments | `collect-evidence` | Mode-labeled evidence, manifests, checksums, and bounded log references are retained. |
+| Phase | Machine/environment | Helper commands | Inputs/outputs | Side effects | Required checkpoint |
+| --- | --- | --- | --- | --- | --- |
+| Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed role env files, removes all `CHANGE_ME` values, keeps secrets out of committed examples, reviews cross-role values, and confirms browser-visible URLs for simulation. | None beyond local env-file creation. | Reviewed env files exist for Gerrit, Jenkins controller, and Jenkins agent, and preflight failures are resolved before mutation. |
+| Artifacts | Bundle factory | `prepare-artifacts` | Consumes reviewed role env files and produces role artifact directories, manifests, and checksums. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
+| Artifact staging | Bundle factory and target hosts | Role-local checksum verification in `install` or `preflight` | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
+| Gerrit readiness | Gerrit host | `install`, `configure`, `validate` | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit. | Gerrit starts, uses LDAP, exposes HTTP/SSH, records bounded logs, and is ready for integration. |
+| Jenkins controller readiness | Jenkins controller | `install`, `configure-service`, `install-plugins`, `configure-jcasc`, `validate` | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, and JCasC evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files, installs plugins, and starts or restarts Jenkins. | Jenkins starts, uses LDAP/JCasC, has required plugins, records bounded logs, and is ready for integration. |
+| Gerrit integration | Jenkins controller and Gerrit host | `generate-integration-key`, Gerrit `configure-integration`, Jenkins `configure-integration` | Jenkins controller produces the Jenkins-to-Gerrit public key; Gerrit consumes that public key; Jenkins consumes Gerrit endpoint and account values. | Creates or updates the Jenkins Gerrit integration account key material on Jenkins, Gerrit integration permissions, the `Verified` label, and Jenkins Gerrit Trigger server config. | Jenkins-to-Gerrit SSH authentication, stream-events permission, `Verified` voting permission, and integration evidence are ready. |
+| Agent integration | Jenkins controller and Jenkins agent | `generate-agent-key`, agent `configure-runtime`, controller `configure-agent`, `validate-agent` | Jenkins controller produces the agent public key; the agent consumes that public key; Jenkins consumes agent host, label, and remote filesystem values. | Creates or updates Jenkins-to-agent key material on Jenkins, agent `authorized_keys`, agent runtime filesystem, Jenkins node registration, and validation job state. | Jenkins can connect to the agent, schedule a job on the configured label, and retain agent evidence. |
+| End-to-end acceptance | Jenkins controller | `verify-trigger` | Consumes disposable Gerrit project/change and Jenkins job inputs; produces build, change, and vote evidence. | Creates disposable verification project, job, change, and review vote artifacts. | A disposable Gerrit change triggers Jenkins, runs on the agent, and receives `Verified +1`. |
+| Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
 Operator sequencing rules:
 
 - Run `prepare-artifacts` from the bundle factory environment for each role.
+- Stage prepared artifacts from the bundle factory to each target host before
+  running target-host installation, then verify manifests and checksums on the
+  target host before mutation.
 - Run `generate-integration-key` on the Jenkins controller before Gerrit
   integration, then provide the generated public key to the Gerrit helper input.
 - Run Gerrit `configure-integration` before Jenkins controller
@@ -263,10 +268,37 @@ Operator sequencing rules:
   `verify-trigger` as end-to-end acceptance for Gerrit event streaming,
   Jenkins agent scheduling, and `Verified +1` voting.
 
+Generated key handoff contract:
+
+- Jenkins controller owns the Jenkins-to-Gerrit private key and the
+  Jenkins-to-agent private key.
+- Gerrit and Jenkins agent helpers consume only public keys, never Jenkins-held
+  private keys.
+- Role manuals must name the env fields or files used for each public-key
+  handoff and must state expected file ownership and permissions.
+- Evidence may record key fingerprints, public-key paths, and credential IDs,
+  but must redact private-key material, passwords, tokens, and LDAP bind
+  secrets.
+- Key rotation is an explicit repeat of key generation, public-key handoff,
+  role-side reconfiguration, validation, and evidence collection.
+
+Operator safety rules:
+
+- Run `--dry-run` where supported before mutating target hosts, Jenkins, or
+  Gerrit.
+- Require interactive confirmation for mutating helper commands unless a
+  reviewed `--yes` flag is provided.
+- Each phase that mutates a host or application must describe expected side
+  effects before execution.
+- Each phase must emit bounded logs or evidence references so a failed run can
+  be reviewed without replaying verbose runtime output.
+
 Verification:
 
 ```bash
-rg -n "Operator Workflow Contract|Phase \\| Machine/environment \\| Helper commands \\| Required checkpoint" docs/implementation-plan.md
+rg -n "Operator Workflow Contract|Phase \\| Machine/environment \\| Helper commands \\| Inputs/outputs \\| Side effects \\| Required checkpoint" docs/implementation-plan.md
+rg -n "Artifact staging|Generated key handoff contract|Operator safety rules" docs/implementation-plan.md
+rg -n "private key|public key|fingerprint|redact|CHANGE_ME|staged artifact" docs/implementation-plan.md
 rg -n "^scripts/.+--env .+--yes" docs/implementation-plan.md
 rg -n "generate-integration-key|generate-agent-key|configure-agent|validate-agent|verify-trigger" docs/implementation-plan.md
 rg -n "^[[:space:]]*(run|configure-controller-node)$" docs/implementation-plan.md
@@ -277,6 +309,12 @@ Acceptance criteria:
 - The documented operator workflow has no catch-all `run` command.
 - The workflow identifies which side owns Jenkins-to-Gerrit and
   Jenkins-to-agent key generation.
+- The workflow defines artifact staging from the bundle factory to target hosts
+  and requires target-side checksum verification before installation.
+- The workflow defines public-key handoffs, private-key custody, and evidence
+  redaction requirements.
+- The workflow identifies mutating phases and requires confirmation or reviewed
+  `--yes` before mutation.
 - The workflow separates agent host runtime setup from controller-side node
   registration and scheduling validation.
 - The implementation plan does not embed a full runnable operator command
@@ -393,6 +431,9 @@ rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-set
 Acceptance criteria:
 
 - Every helper command has a matching manual phase.
+- The manual lists consumed inputs, produced outputs, staged artifact paths,
+  mutation side effects, validation evidence, and secret-redaction
+  expectations.
 - Gerrit artifact checksums and manifests are produced or planned by the
   helper.
 - Gerrit validation covers startup, endpoint reachability, LDAP access, SSH
@@ -480,6 +521,9 @@ rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-co
 Acceptance criteria:
 
 - Every helper command has a matching manual phase.
+- The manual lists consumed inputs, produced outputs, staged artifact paths,
+  mutation side effects, validation evidence, key handoffs, and
+  secret-redaction expectations.
 - Jenkins controller validation covers startup, endpoint reachability, LDAP,
   plugins, JCasC, Gerrit SSH connectivity, and Gerrit Trigger readiness.
 - Jenkins controller validation covers build-agent registration, agent
@@ -552,6 +596,9 @@ rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-ag
 Acceptance criteria:
 
 - Every helper command has a matching manual phase.
+- The manual lists consumed inputs, produced outputs, staged artifact paths,
+  mutation side effects, validation evidence, public-key handoffs, and
+  secret-redaction expectations.
 - Agent validation covers SSH reachability, remote filesystem readiness,
   runtime account ownership, and authorized-key readiness.
 - Unsupported offline dependency bundle commands are absent from helper command
@@ -580,6 +627,8 @@ Implementation notes:
 - Do not store secrets in evidence.
 - Do not stream verbose Docker, Jenkins, Gerrit, package-manager, SSH, VM, or
   verification logs into normal command output.
+- Collect evidence at every operator workflow checkpoint so failed runs can be
+  reviewed from the last completed boundary.
 - Summaries must distinguish simulation-only runs from production-like runs.
 - Evidence should be useful for audit review without requiring repo history.
 
@@ -595,6 +644,9 @@ Acceptance criteria:
 
 - Evidence collection can be run after role-specific validation and after
   full integration validation.
+- Evidence collection can retain per-checkpoint summaries for inputs,
+  artifacts, artifact staging, role readiness, integration, agent validation,
+  end-to-end acceptance, and final evidence.
 - Evidence summaries include mode labels and checksum references.
 - Secret-looking env values are omitted or redacted.
 
@@ -775,7 +827,7 @@ Keep commits small and logical:
 1. Add repository structure and implementation plan.
 2. Add account model.
 3. Add simulation model docs.
-4. Add operator command sequence.
+4. Add operator workflow contract.
 5. Add Gerrit Trigger integration contract.
 6. Add Gerrit manual/helper/templates.
 7. Add Jenkins controller manual/helper/templates.

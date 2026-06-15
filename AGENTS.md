@@ -12,20 +12,42 @@ Keep the v1 product boundary clear:
 
 ## Commit Messages
 
-Use standard Git-style commit messages:
+Use standard Git-style commit messages. Treat these as hard requirements, not
+preferences:
 
-- Write a short imperative subject, for example `Add Jenkins validation docs`.
+- Write a non-empty, short, imperative subject, for example
+  `Add Jenkins validation docs`.
 - Capitalize the subject and do not end it with a period.
-- Keep the subject concise; prefer about 50 characters and stay under 72 when
-  practical.
-- Separate the subject from the body with one blank line when a body is needed.
-- Use the body to explain why the change exists and any important context.
-- Wrap body text around 72 columns for readability in Git tools.
+- Keep the subject under 72 characters; prefer about 50 characters.
+- Separate the subject from the body with exactly one blank line when a body is
+  needed.
+- Use the body to explain why the change exists and any important context; do
+  not merely repeat the subject.
+- Wrap every body line at 72 characters or fewer.
 - Keep each commit to one logical change.
 - Add issue references or trailers at the end when relevant.
 
 Do not require `Prompt:` or `Conversation context:` sections unless the user
 explicitly asks for them.
+
+Before creating or amending a commit, draft the full message and check each
+line length. After creating or amending a commit, inspect
+`git log -1 --pretty=format:%B` and verify the subject, body shape, and line
+lengths before reporting completion.
+
+Prefer `git commit -F -` for multiline messages:
+
+```bash
+git commit -F - <<'EOF'
+Add Jenkins validation docs
+
+Explain why the validation evidence is needed and note any important
+operator-facing context.
+EOF
+```
+
+Do not use repeated `-m` flags to simulate wrapped body lines; each `-m`
+argument creates a separate paragraph.
 
 ## Log Handling
 
