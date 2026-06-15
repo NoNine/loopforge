@@ -205,6 +205,32 @@ Implementation notes:
 - Do not port the reference repo's supported offline Ubuntu dependency bundle
   workflow into v1 simulation.
 
+Shared simulation workflow:
+
+| Checkpoint | Docker execution | VM execution | Required verifier evidence |
+| --- | --- | --- | --- |
+| Preflight | Check local Docker/Compose tooling, env values, ports, disk, and generated-state paths. | Check host tooling, env values, SSH reachability, target addresses, disk, and approval-sensitive options. | Preflight summary with mode label and no target mutation. |
+| Input rendering | Render Docker simulation config from reviewed env values. | Bootstrap reviewed env values and machine connection inputs. | Rendered-input manifest with secret values redacted. |
+| Artifact preparation | Run role helper `prepare-artifacts` commands in the bundle factory container. | Run role helper `prepare-artifacts` commands on the bundle factory VM. | Role artifact directories, manifests, checksums, and any `simulation-only` internet-use labels. |
+| Artifact staging | Stage prepared artifacts from bundle factory output to Gerrit, Jenkins controller, and Jenkins agent containers. | Transfer prepared artifacts from the bundle factory VM to Gerrit, Jenkins controller, and Jenkins agent VMs. | Target-side staged paths and manifest/checksum verification before service mutation. |
+| Service configuration | Start or configure LDAP, Gerrit, Jenkins controller, and Jenkins agent containers from staged artifacts. | Configure LDAP, Gerrit, Jenkins controller, and Jenkins agent VMs with systemd-oriented service behavior. | Runtime-account, service-startup, endpoint, LDAP, plugin, and config evidence. |
+| Readiness checks | Run independently repeatable Docker checks before end-to-end verification. | Run independently repeatable VM checks before end-to-end verification. | Separate pass/fail results for LDAP, local OS runtime accounts, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugins, Jenkins-to-Gerrit SSH, stream-events, and agent readiness. |
+| End-to-end execution | Run disposable change, Jenkins trigger, agent job, and `Verified +1` verification. | Repeat the Docker-proven disposable change, Jenkins trigger, agent job, and `Verified +1` verification. | Separate event-stream, job-scheduling, agent-execution, and vote-posting evidence. |
+| Evidence audit | Collect Docker simulation summaries and bounded log references. | Collect VM simulation or production-like summaries and bounded log references. | Mode-labeled evidence, checksums, fingerprints, and redacted bounded log references. |
+
+Command convention model:
+
+- Every command surface uses one owning script plus a subcommand.
+- Role helpers use `scripts/<role>-setup.sh <command>`.
+- Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
+- VM simulation uses `simulation/vm/vm-verify.sh <command>`.
+- Do not add standalone role phase scripts such as `scripts/preflight.sh`,
+  Docker phase scripts such as `simulation/docker/check.sh`, or VM phase
+  scripts such as `simulation/vm/check.sh`.
+- Role-specific extra commands remain valid when they are subcommands of the
+  owning role helper, such as
+  `scripts/jenkins-controller-setup.sh verify-trigger`.
+
 Verification:
 
 ```bash
@@ -641,6 +667,8 @@ Use the Docker simulation behavior summarized in `docs/reference-digest.md`.
 
 Create Docker simulation assets under `simulation/docker/` for:
 
+- Bundle factory service that runs role helper `prepare-artifacts` commands and
+  produces role artifact directories, manifests, and checksums.
 - LDAP service with seeded bind/admin/test users.
 - Gerrit service configured for LDAP and `Verified` voting.
 - Jenkins controller configured with LDAP, JCasC, plugins, and Gerrit Trigger.
@@ -650,17 +678,28 @@ Create Docker simulation assets under `simulation/docker/` for:
 Expected command surface:
 
 ```text
-simulation/docker/preflight.sh
-simulation/docker/render-config.sh
-simulation/docker/up.sh
-simulation/docker/verify.sh
-simulation/docker/full-verify.sh
-simulation/docker/down.sh
+simulation/docker/docker-verify.sh preflight
+simulation/docker/docker-verify.sh render-config
+simulation/docker/docker-verify.sh prepare-artifacts
+simulation/docker/docker-verify.sh stage-artifacts
+simulation/docker/docker-verify.sh up
+simulation/docker/docker-verify.sh check
+simulation/docker/docker-verify.sh full-verify
+simulation/docker/docker-verify.sh down
 ```
 
 Implementation notes:
 
 - Docker is the first gate for integration behavior.
+- `docker-verify.sh prepare-artifacts` runs role helper
+  `prepare-artifacts` commands inside the bundle factory container. Do not add
+  a `bundle-factory-helper.sh`.
+- `docker-verify.sh stage-artifacts` stages prepared role artifacts from bundle
+  factory output to the Gerrit, Jenkins controller, and Jenkins agent
+  containers, then verifies manifests and checksums on the target side before
+  service mutation.
+- `docker-verify.sh check` is an independently repeatable readiness gate before
+  `docker-verify.sh full-verify`.
 - Docker verification must use the Step 9 evidence model for mode labels,
   checksums, and bounded log references.
 - Docker logs must be written to bounded log files, not streamed verbosely into
@@ -672,20 +711,28 @@ Implementation notes:
 Verification:
 
 ```bash
-bash -n simulation/docker/*.sh
-simulation/docker/preflight.sh
-simulation/docker/render-config.sh
-simulation/docker/up.sh
-simulation/docker/verify.sh
-simulation/docker/full-verify.sh
+bash -n simulation/docker/docker-verify.sh
+simulation/docker/docker-verify.sh --help
+simulation/docker/docker-verify.sh preflight
+simulation/docker/docker-verify.sh render-config
+simulation/docker/docker-verify.sh prepare-artifacts
+simulation/docker/docker-verify.sh stage-artifacts
+simulation/docker/docker-verify.sh up
+simulation/docker/docker-verify.sh check
+simulation/docker/docker-verify.sh full-verify
 ```
 
 Acceptance criteria:
 
 - Docker simulation starts all five machines, including the bundle factory
   container.
-- LDAP, Gerrit, Jenkins controller, and Jenkins agent checks pass.
-- Full verification proves Gerrit Trigger and `Verified +1`.
+- Prepared artifacts, manifests, and checksums are produced by the bundle
+  factory and verified after staging to service containers.
+- LDAP, local OS runtime account, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugin,
+  Jenkins-to-Gerrit SSH, stream-events, and Jenkins agent readiness checks pass
+  with separate evidence.
+- Full verification separately proves Gerrit event receipt, Jenkins job
+  scheduling, agent execution, and Gerrit `Verified +1` vote posting.
 - Verification writes a summary that labels the mode as Docker simulation.
 
 ## Step 11: Build VM Simulation
@@ -700,7 +747,10 @@ Expected command surface:
 ```text
 simulation/vm/vm-verify.sh create
 simulation/vm/vm-verify.sh bootstrap
+simulation/vm/vm-verify.sh prepare-artifacts
+simulation/vm/vm-verify.sh stage-artifacts
 simulation/vm/vm-verify.sh configure
+simulation/vm/vm-verify.sh check
 simulation/vm/vm-verify.sh execute
 simulation/vm/vm-verify.sh audit
 simulation/vm/vm-verify.sh full
@@ -708,8 +758,16 @@ simulation/vm/vm-verify.sh full
 
 Implementation notes:
 
-- VM simulation should use separate LDAP, Gerrit, Jenkins controller, and
-  Jenkins agent VMs.
+- VM simulation should use separate bundle factory, LDAP, Gerrit, Jenkins
+  controller, and Jenkins agent VMs.
+- `prepare-artifacts` runs role helper artifact preparation on the bundle
+  factory VM and records manifests, checksums, and any `simulation-only`
+  internet-use labels.
+- `stage-artifacts` transfers prepared artifacts to service VMs and verifies
+  manifests and checksums on each target VM before install or configuration.
+- `check` is an independently repeatable readiness gate for host tooling, env
+  values, SSH reachability, target addresses, service state, local OS runtime
+  accounts, LDAP, endpoints, Gerrit/Jenkins integration, and agent readiness.
 - VM verification must use the Step 9 evidence model for production-like or
   simulation mode labels.
 - The VM model is production-like validation, not strict air-gap verification.
@@ -723,6 +781,7 @@ Verification:
 ```bash
 bash -n simulation/vm/vm-verify.sh
 simulation/vm/vm-verify.sh --help
+simulation/vm/vm-verify.sh check --preflight-only --env simulation/vm/example.env
 simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
 ```
 
@@ -730,8 +789,12 @@ Acceptance criteria:
 
 - VM preflight can validate host tooling, env values, SSH reachability, and
   target addresses before mutation.
+- VM artifact preparation runs on the bundle factory VM, then staged artifacts
+  are verified by manifest and checksum on Gerrit, Jenkins controller, and
+  Jenkins agent VMs before service mutation.
 - Full VM verification repeats the Docker-proven LDAP, Gerrit, Jenkins,
-  Jenkins agent, Gerrit Trigger, and `Verified` vote flow.
+  Jenkins agent, Gerrit Trigger, agent scheduling, agent execution, and
+  `Verified` vote flow.
 - Evidence labels the mode as VM simulation or production-like validation,
   depending on the run.
 
@@ -776,12 +839,12 @@ Run final acceptance in this order:
 Minimum command set:
 
 ```bash
-bash -n scripts/*.sh simulation/docker/*.sh simulation/vm/*.sh
+bash -n scripts/*.sh simulation/docker/docker-verify.sh simulation/vm/*.sh
 scripts/gerrit-setup.sh --help
 scripts/jenkins-controller-setup.sh --help
 scripts/jenkins-agent-setup.sh --help
 scripts/collect-evidence.sh --help
-simulation/docker/full-verify.sh
+simulation/docker/docker-verify.sh full-verify
 simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
 ```
 
