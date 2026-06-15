@@ -5,10 +5,17 @@
 This document defines the implementation plan for building the v1
 Gerrit/Jenkins setup package described in `docs/prd.md`.
 
-The source reference is `/home/ubuntu/ai-assisted/gerrit-jenkins`. That
-reference contains useful manuals, helper scripts, Docker lab assets, and VM
-verification assets, but it is framed around air-gapped installation. This
-package must adapt those materials to the v1 boundary:
+The behavior digest is `docs/reference-digest.md`. That digest summarizes the
+known-working draft repository behavior without allowing implementation agents
+to copy code, docs, templates, scripts, config files, command bodies, or
+verbatim implementation from `/home/ubuntu/ai-assisted/gerrit-jenkins`.
+
+Implementation agents must use `docs/reference-digest.md`, `docs/prd.md`, and
+this plan as their reference set. Do not open or copy from the draft repository
+unless a human explicitly approves a new reference review.
+
+The draft behavior was originally framed around air-gapped installation. This
+package must adapt the behavior to the v1 boundary:
 
 - v1 is not a strict air-gapped installer.
 - v1 does not support offline Ubuntu dependency bundles.
@@ -32,6 +39,7 @@ README.md
 docs/
   prd.md
   implementation-plan.md
+  reference-digest.md
   account-model.md
   gerrit-setup-manual.md
   jenkins-controller-setup-manual.md
@@ -94,11 +102,7 @@ Acceptance criteria:
 
 ## Step 2: Define The Account Model
 
-Start with the reference identity model:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/docs/gerrit-jenkins-identity-model.md
-```
+Start with the account model in `docs/reference-digest.md`.
 
 Create `docs/account-model.md` with the v1 account model. Use `identity`
 only when discussing LDAP-backed identity integration; use `account` for
@@ -322,14 +326,8 @@ Acceptance criteria:
 
 ## Step 5: Define Gerrit Trigger Integration
 
-Use the trigger behavior proven by the reference Docker lab as source
-material:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/lab/README.md
-/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/gerrit-operator.sh
-/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/jenkins-operator.sh
-```
+Use the trigger behavior summarized in `docs/reference-digest.md` as source
+material.
 
 Create `docs/gerrit-trigger-integration.md` and templates for:
 
@@ -366,12 +364,8 @@ Docker simulation acceptance:
 
 ## Step 6: Create The Gerrit Manual And Helper
 
-Use these reference inputs:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/docs/gerrit-install-air-gapped.md
-/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/gerrit-operator.sh
-```
+Use the Gerrit helper and integration behavior summarized in
+`docs/reference-digest.md`.
 
 Create:
 
@@ -443,12 +437,8 @@ Acceptance criteria:
 
 ## Step 7: Create The Jenkins Controller Manual And Helper
 
-Use these reference inputs:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/docs/jenkins-install-air-gapped.md
-/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/jenkins-operator.sh
-```
+Use the Jenkins controller helper and integration behavior summarized in
+`docs/reference-digest.md`.
 
 Create:
 
@@ -533,12 +523,7 @@ Acceptance criteria:
 
 ## Step 8: Create The Jenkins Agent Manual And Helper
 
-Use these reference inputs:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/docs/jenkins-agent-install-air-gapped.md
-/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/jenkins-operator.sh
-```
+Use the Jenkins agent helper behavior summarized in `docs/reference-digest.md`.
 
 Create:
 
@@ -652,11 +637,7 @@ Acceptance criteria:
 
 ## Step 10: Build Docker Simulation
 
-Use these reference inputs:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/lab
-```
+Use the Docker simulation behavior summarized in `docs/reference-digest.md`.
 
 Create Docker simulation assets under `simulation/docker/` for:
 
@@ -709,12 +690,7 @@ Acceptance criteria:
 
 ## Step 11: Build VM Simulation
 
-Use these reference inputs:
-
-```text
-/home/ubuntu/ai-assisted/gerrit-jenkins/docs/offline-bundle-verification.md
-/home/ubuntu/ai-assisted/gerrit-jenkins/vm/scripts/vm-verify.sh
-```
+Use the VM simulation behavior summarized in `docs/reference-digest.md`.
 
 Create VM simulation assets under `simulation/vm/` after Docker verification is
 stable.
