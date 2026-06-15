@@ -26,6 +26,30 @@ The implementation should proceed in verifiable steps. Each step below must
 leave the repository in a reviewable state and include a direct verification
 command or checklist.
 
+## Functional Command Contract
+
+Every advertised helper or verifier command must be functional for its
+lifecycle phase before the step that introduces it can be accepted.
+
+- Normal command execution must perform the real lifecycle action implied by
+  the command name or exit nonzero with a clear unsupported or blocked reason.
+- `--dry-run` may describe intended mutation, but non-dry-run output must not
+  report only "would do" behavior.
+- Readiness gates fail on dummy success, operation-plan-only success,
+  `planned-checks-only`, model-only proof for required real behavior, or
+  unsupported behavior that exits 0.
+- `print-env-template`, `preflight`, `prepare-artifacts`, and
+  `collect-evidence` must be functional for their own lifecycle phases even
+  though they do not directly configure a running service.
+- Commands that install, configure, validate, or exercise Gerrit, Jenkins, the
+  Jenkins agent, LDAP integration, Gerrit Trigger, SSH connectivity, or
+  `Verified` voting must prove observable behavior in the target environment.
+
+Role-step readiness gates must run against the shared Docker harness introduced
+before the role helpers. Artifact bundles are always produced in the bundle
+factory environment, then staged to target environments and verified by
+manifest and checksum on the target before any target mutation.
+
 ## Step 1: Establish The Repository Structure
 
 Create the package layout before porting behavior. Keep manuals, templates,
@@ -192,7 +216,11 @@ these Step 2 accounts:
 
 Implementation notes:
 
-- Docker simulation is the first gate for every integration behavior.
+- A shared Docker harness is introduced before the role helper steps so Gerrit,
+  Jenkins controller, and Jenkins agent readiness gates can run in real
+  containers.
+- The full Docker simulation remains the first end-to-end integration gate for
+  Gerrit Trigger behavior, Jenkins agent scheduling, and `Verified` voting.
 - The Docker bundle factory container prepares curated application artifacts,
   plugins, manifests, and checksums before service containers start.
 - The bundle factory is an environment, not a public API. Do not add a
@@ -222,7 +250,8 @@ Command convention model:
 
 - Every command surface uses one owning script plus a subcommand.
 - Role helpers use `scripts/<role>-setup.sh <command>`.
-- Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
+- Docker role gates use `simulation/docker/docker-harness.sh <command>`.
+- Full Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
 - VM simulation uses `simulation/vm/vm-verify.sh <command>`.
 - Do not add standalone role phase scripts such as `scripts/preflight.sh`,
   Docker phase scripts such as `simulation/docker/check.sh`, or VM phase
@@ -248,7 +277,8 @@ Acceptance criteria:
 - The `operator` account is documented as a simulation environment OS account,
   not a Gerrit/Jenkins product account.
 - No bundle factory helper or bundle factory public API is introduced.
-- Docker is documented as the first verification gate.
+- Docker is documented as the shared role-gate harness and the first full
+  integration verification gate.
 - VM verification is documented as a follow-up gate, not a prerequisite for
   early Docker milestones.
 - Any target-host public internet fallback wording is explicitly
@@ -388,7 +418,108 @@ Docker simulation acceptance:
 - Jenkins posts `Verified +1` to the Gerrit change.
 - Evidence records the change, build, vote, and verification mode.
 
-## Step 6: Create The Gerrit Manual And Helper
+## Step 6: Add Shared Docker Harness
+
+Create the reusable Docker harness used by the Gerrit, Jenkins controller, and
+Jenkins agent helper readiness gates. This harness provides real containers for
+role-step validation, but it is not the full end-to-end Docker simulation.
+
+Create:
+
+- `simulation/docker/docker-harness.sh`
+- Docker Compose assets under `simulation/docker/harness/`
+- Harness env examples under `simulation/docker/harness/examples/`
+- Harness state, staging, evidence, and bounded-log directories documented as
+  generated local output
+
+Harness environments:
+
+| Environment | Responsibility |
+| --- | --- |
+| Bundle factory | Runs role helper `prepare-artifacts` commands and produces artifact bundles, manifests, and checksums. |
+| LDAP | Provides bind, admin, integration, and test directory data for role gates. |
+| Gerrit target | Runs Gerrit helper install, configure, integration, and validation commands against staged artifacts. |
+| Jenkins controller target | Runs Jenkins helper install, plugin, JCasC, credential, integration, node, job, and validation commands against staged artifacts. |
+| Jenkins agent target | Runs Jenkins agent helper install, runtime SSH setup, and validation commands against staged artifacts. |
+
+Expected command surface:
+
+```text
+simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh up
+simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
+simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
+simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
+simulation/docker/docker-harness.sh stage-artifacts --role gerrit
+simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
+simulation/docker/docker-harness.sh stage-artifacts --role jenkins-agent
+simulation/docker/docker-harness.sh run-role-gate --role gerrit
+simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
+simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
+simulation/docker/docker-harness.sh down
+```
+
+Implementation notes:
+
+- The harness must not add `bundle-factory-helper.sh` or any bundle factory
+  public API. It runs the role helpers' `prepare-artifacts` commands in the
+  bundle factory container.
+- `prepare-artifacts --role ...` must run only in the bundle factory
+  environment and must fail if invoked against a target container.
+- `stage-artifacts --role ...` copies bundle factory output to the selected
+  target container and verifies target-side manifests and checksums before
+  any install or configuration command can run.
+- `run-role-gate --role ...` runs the role helper readiness gate in the
+  corresponding target container. It must fail on dummy success,
+  `planned-checks-only`, operation-plan-only success, or modeled proof for
+  required real behavior.
+- Because this step precedes the role helpers, harness verification checks the
+  harness infrastructure, command surface, role validation, and missing-helper
+  failure behavior. Steps 7, 8, and 9 run the role-specific gates after each
+  helper exists.
+- The harness may share Docker networks, volumes, images, and env rendering
+  with the full Docker simulation, but full Gerrit Trigger end-to-end
+  verification remains in the later Docker simulation step.
+- Docker, Compose, package-manager, Gerrit, Jenkins, SSH, and verification
+  logs must be redirected to timestamped bounded log files and referenced from
+  evidence summaries.
+- Any public internet fallback in the harness is simulation-only and must be
+  labeled `simulation-only` in logs and evidence.
+- Generated local state must be ignored or clearly documented as generated.
+
+Verification:
+
+```bash
+bash -n simulation/docker/docker-harness.sh
+simulation/docker/docker-harness.sh --help
+simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh up
+! simulation/docker/docker-harness.sh prepare-artifacts --role unknown
+! simulation/docker/docker-harness.sh run-role-gate --role gerrit
+simulation/docker/docker-harness.sh down
+rg -n "dummy success|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
+rg -n "bundle-factory-helper|prepare-offline-deps|install-offline-deps" simulation/docker docs scripts templates examples
+```
+
+Acceptance criteria:
+
+- The harness starts the five environments needed by role-helper gates.
+- Before role helpers exist, role-specific harness commands fail nonzero with
+  clear missing-helper or unknown-role messages instead of reporting success.
+- Artifact bundles are produced only in the bundle factory environment.
+- Staged artifacts are verified by manifest and checksum in target
+  environments before mutation.
+- Role-gate wrappers fail on dummy, placeholder, operation-plan-only, or
+  modeled success for required real behavior.
+- Harness evidence includes mode labels, checksum references, role names,
+  container names, and bounded log references.
+- The harness is reusable by the Gerrit, Jenkins controller, Jenkins agent,
+  and full Docker simulation steps.
+- No supported offline Ubuntu dependency bundle workflow is introduced.
+
+## Step 7: Create The Gerrit Manual And Helper
 
 Use the Gerrit helper and integration behavior summarized in
 `docs/reference-digest.md`.
@@ -428,7 +559,15 @@ collect-evidence
 Implementation notes:
 
 - `prepare-artifacts` prepares version-pinned Gerrit artifacts, plugins,
-  manifests, and checksums.
+  manifests, and checksums, and the readiness gate must run it in the shared
+  Docker harness bundle factory environment.
+- Gerrit target commands consume only staged artifacts from the bundle factory
+  output and must verify target-side manifests and checksums before install or
+  configuration.
+- `install`, `configure`, `configure-integration`, and `validate` must be
+  functional against the Gerrit target container in the shared Docker harness.
+- `validate` must prove observable Gerrit behavior in the target container,
+  not operation-plan-only or `planned-checks-only` output.
 - The helper must not expose `prepare-offline-deps-bundle`,
   `install-offline-deps`, or other supported offline Ubuntu dependency bundle
   commands.
@@ -444,7 +583,11 @@ bash -n scripts/gerrit-setup.sh
 scripts/gerrit-setup.sh --help
 scripts/gerrit-setup.sh print-env-template
 scripts/gerrit-setup.sh --env examples/gerrit.env.example --dry-run preflight
+simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
+simulation/docker/docker-harness.sh stage-artifacts --role gerrit
+simulation/docker/docker-harness.sh run-role-gate --role gerrit
 rg -n "prepare-artifacts|configure-integration|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
+rg -n "dummy|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ```
 
@@ -454,14 +597,16 @@ Acceptance criteria:
 - The manual lists consumed inputs, produced outputs, staged artifact paths,
   mutation side effects, validation evidence, and secret-redaction
   expectations.
-- Gerrit artifact checksums and manifests are produced or planned by the
-  helper.
+- Gerrit artifact checksums and manifests are produced by the helper in the
+  bundle factory environment and verified after staging to the Gerrit target.
 - Gerrit validation covers startup, endpoint reachability, LDAP access, SSH
   access, plugin readiness, and integration account readiness.
+- Gerrit service commands pass the shared Docker harness role gate without
+  dummy, placeholder, operation-plan-only, or modeled success.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
 
-## Step 7: Create The Jenkins Controller Manual And Helper
+## Step 8: Create The Jenkins Controller Manual And Helper
 
 Use the Jenkins controller helper and integration behavior summarized in
 `docs/reference-digest.md`.
@@ -513,6 +658,12 @@ Implementation notes:
 
 - Preserve the reference repo's useful Jenkins plugin and JCasC patterns.
 - Treat plugin versions and checksums as curated artifacts.
+- `prepare-artifacts` must run in the shared Docker harness bundle factory
+  environment, and Jenkins controller target commands must consume only staged
+  bundle factory output.
+- Target-side manifests and checksums must be verified in the Jenkins
+  controller target before install, plugin installation, JCasC configuration,
+  credential setup, node setup, or verification jobs mutate Jenkins state.
 - Keep Jenkins admin and Jenkins Gerrit integration identities separate.
 - The Jenkins controller helper owns Jenkins-to-Gerrit private key generation
   and Jenkins-to-agent private key generation.
@@ -520,6 +671,12 @@ Implementation notes:
   scheduling validation, and end-to-end Gerrit Trigger verification.
 - Gerrit Trigger configuration and `verify-trigger` behavior must follow the
   Step 5 trigger integration contract.
+- `install`, `configure-service`, `install-plugins`, `configure-jcasc`,
+  `configure-integration`, `configure-agent`, `validate-agent`,
+  `verify-trigger`, and `validate` must be functional against the Jenkins
+  controller target in the shared Docker harness.
+- Validation and trigger commands must prove observable Jenkins and Gerrit
+  behavior, not operation-plan-only or `planned-checks-only` output.
 - Do not run builds on the controller except for explicit simulation-only
   checks; production-like validation should use the Jenkins agent.
 
@@ -530,7 +687,11 @@ bash -n scripts/jenkins-controller-setup.sh
 scripts/jenkins-controller-setup.sh --help
 scripts/jenkins-controller-setup.sh print-env-template
 scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.example --dry-run preflight
+simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
+simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
+simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|generate-integration-key|generate-agent-key|configure-agent|validate-agent|verify-trigger|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
+rg -n "dummy|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ```
 
@@ -544,10 +705,12 @@ Acceptance criteria:
   plugins, JCasC, Gerrit SSH connectivity, and Gerrit Trigger readiness.
 - Jenkins controller validation covers build-agent registration, agent
   scheduling, and Gerrit Trigger voting through separate helper commands.
+- Jenkins controller service commands pass the shared Docker harness role gate
+  without dummy, placeholder, operation-plan-only, or modeled success.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
 
-## Step 8: Create The Jenkins Agent Manual And Helper
+## Step 9: Create The Jenkins Agent Manual And Helper
 
 Use the Jenkins agent helper behavior summarized in `docs/reference-digest.md`.
 
@@ -584,6 +747,11 @@ Implementation notes:
 
 - Jenkins connects out to the agent over SSH.
 - The agent must have a dedicated runtime user and remote filesystem path.
+- `prepare-artifacts` must run in the shared Docker harness bundle factory
+  environment, and Jenkins agent target commands must consume only staged
+  bundle factory output.
+- Target-side manifests and checksums must be verified in the Jenkins agent
+  target before install or runtime configuration mutates the agent host.
 - The agent helper configures only the agent host runtime and SSH access side.
 - Jenkins controller node registration belongs to
   `scripts/jenkins-controller-setup.sh configure-agent`.
@@ -592,6 +760,10 @@ Implementation notes:
 - Agent validation must prove SSH reachability and remote filesystem readiness;
   controller-side `validate-agent` proves Jenkins scheduling on the
   configured label.
+- `install`, `configure-runtime`, and `validate` must be functional against the
+  Jenkins agent target in the shared Docker harness.
+- Agent validation must prove observable SSH and filesystem behavior, not
+  operation-plan-only or `planned-checks-only` output.
 
 Verification:
 
@@ -600,7 +772,11 @@ bash -n scripts/jenkins-agent-setup.sh
 scripts/jenkins-agent-setup.sh --help
 scripts/jenkins-agent-setup.sh print-env-template
 scripts/jenkins-agent-setup.sh --env examples/jenkins-agent.env.example --dry-run preflight
+simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
+simulation/docker/docker-harness.sh stage-artifacts --role jenkins-agent
+simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
 rg -n "agent|SSH|label|executor|collect-evidence" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
+rg -n "dummy|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 ```
 
@@ -612,10 +788,12 @@ Acceptance criteria:
   secret-redaction expectations.
 - Agent validation covers SSH reachability, remote filesystem readiness,
   runtime account ownership, and authorized-key readiness.
+- Agent service commands pass the shared Docker harness role gate without
+  dummy, placeholder, operation-plan-only, or modeled success.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
 
-## Step 9: Add Validation And Evidence Collection
+## Step 10: Add Validation And Evidence Collection
 
 Create `docs/validation-and-evidence.md` and `scripts/collect-evidence.sh`.
 
@@ -661,7 +839,7 @@ Acceptance criteria:
 - Evidence summaries include mode labels and checksum references.
 - Secret-looking env values are omitted or redacted.
 
-## Step 10: Build Docker Simulation
+## Step 11: Build Docker Simulation
 
 Use the Docker simulation behavior summarized in `docs/reference-digest.md`.
 
@@ -690,7 +868,10 @@ simulation/docker/docker-verify.sh down
 
 Implementation notes:
 
-- Docker is the first gate for integration behavior.
+- Docker simulation reuses the shared Docker harness and the functional role
+  helpers from Steps 7, 8, and 9.
+- Docker simulation is the first full end-to-end integration gate for Gerrit
+  Trigger behavior, Jenkins agent scheduling, and `Verified` voting.
 - `docker-verify.sh prepare-artifacts` runs role helper
   `prepare-artifacts` commands inside the bundle factory container. Do not add
   a `bundle-factory-helper.sh`.
@@ -700,8 +881,13 @@ Implementation notes:
   service mutation.
 - `docker-verify.sh check` is an independently repeatable readiness gate before
   `docker-verify.sh full-verify`.
-- Docker verification must use the Step 9 evidence model for mode labels,
+- Docker verification must use the Step 10 evidence model for mode labels,
   checksums, and bounded log references.
+- Docker verification must fail if any consumed role command reports dummy
+  success, operation-plan-only success, `planned-checks-only`, modeled
+  stream-events, modeled agent scheduling, modeled `Verified` voting, or
+  `real_gerrit_jenkins_behavior_proven=false` in a successful full
+  verification summary.
 - Docker logs must be written to bounded log files, not streamed verbosely into
   normal operator output.
 - Any internet use during Docker artifact preparation or fallback must be
@@ -728,14 +914,20 @@ Acceptance criteria:
   container.
 - Prepared artifacts, manifests, and checksums are produced by the bundle
   factory and verified after staging to service containers.
+- Docker simulation uses the role helpers' functional install, configuration,
+  validation, integration, agent, and trigger commands instead of reimplementing
+  or modeling role behavior inside `docker-verify.sh`.
 - LDAP, local OS runtime account, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugin,
   Jenkins-to-Gerrit SSH, stream-events, and Jenkins agent readiness checks pass
   with separate evidence.
 - Full verification separately proves Gerrit event receipt, Jenkins job
   scheduling, agent execution, and Gerrit `Verified +1` vote posting.
 - Verification writes a summary that labels the mode as Docker simulation.
+- A successful full verification summary does not use modeled pass results for
+  required real behavior and does not report
+  `real_gerrit_jenkins_behavior_proven=false`.
 
-## Step 11: Build VM Simulation
+## Step 12: Build VM Simulation
 
 Use the VM simulation behavior summarized in `docs/reference-digest.md`.
 
@@ -768,7 +960,7 @@ Implementation notes:
 - `check` is an independently repeatable readiness gate for host tooling, env
   values, SSH reachability, target addresses, service state, local OS runtime
   accounts, LDAP, endpoints, Gerrit/Jenkins integration, and agent readiness.
-- VM verification must use the Step 9 evidence model for production-like or
+- VM verification must use the Step 10 evidence model for production-like or
   simulation mode labels.
 - The VM model is production-like validation, not strict air-gap verification.
 - Remove or rename reference workflow concepts that imply supported offline
@@ -798,7 +990,7 @@ Acceptance criteria:
 - Evidence labels the mode as VM simulation or production-like validation,
   depending on the run.
 
-## Step 12: Add Cross-Repository Boundary Checks
+## Step 13: Add Cross-Repository Boundary Checks
 
 Add a lightweight verification check that prevents old reference language from
 re-entering v1 docs and helper command surfaces.
@@ -825,25 +1017,30 @@ Acceptance criteria:
 - Simulation-only fallback is visibly labeled in docs, logs, and summaries.
 - No helper exposes supported offline Ubuntu dependency bundle workflows.
 
-## Step 13: Final End-To-End Acceptance
+## Step 14: Final End-To-End Acceptance
 
 Run final acceptance in this order:
 
 1. Static docs and shell checks.
 2. Helper `--help`, `print-env-template`, and `--dry-run preflight` checks.
-3. Docker simulation preflight.
-4. Docker full verification.
-5. VM preflight.
-6. VM full verification when VM infrastructure is available.
+3. Shared Docker harness preflight and role gates.
+4. Docker simulation preflight.
+5. Docker full verification.
+6. VM preflight.
+7. VM full verification when VM infrastructure is available.
 
 Minimum command set:
 
 ```bash
-bash -n scripts/*.sh simulation/docker/docker-verify.sh simulation/vm/*.sh
+bash -n scripts/*.sh simulation/docker/docker-harness.sh simulation/docker/docker-verify.sh simulation/vm/*.sh
 scripts/gerrit-setup.sh --help
 scripts/jenkins-controller-setup.sh --help
 scripts/jenkins-agent-setup.sh --help
 scripts/collect-evidence.sh --help
+simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh run-role-gate --role gerrit
+simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
+simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
 simulation/docker/docker-verify.sh full-verify
 simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
 ```
@@ -868,20 +1065,22 @@ Keep commits small and logical:
 3. Add simulation model docs.
 4. Add operator workflow contract.
 5. Add Gerrit Trigger integration contract.
-6. Add Gerrit manual/helper/templates.
-7. Add Jenkins controller manual/helper/templates.
-8. Add Jenkins agent manual/helper/templates.
-9. Add validation and evidence collection.
-10. Add Docker simulation.
-11. Add VM simulation.
-12. Add boundary checks.
-13. Add final acceptance docs.
+6. Add shared Docker harness.
+7. Add Gerrit manual/helper/templates.
+8. Add Jenkins controller manual/helper/templates.
+9. Add Jenkins agent manual/helper/templates.
+10. Add validation and evidence collection.
+11. Add Docker simulation.
+12. Add VM simulation.
+13. Add boundary checks.
+14. Add final acceptance docs.
 
 Use standard Git-style commit messages with concise imperative subjects, for
 example:
 
 ```text
 Add Gerrit setup helper
+Add Docker role gate harness
 Add Docker simulation verification
 Document validation evidence
 ```
