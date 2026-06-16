@@ -15,17 +15,18 @@ Authoritative sources remain:
 ## Current State
 
 - Branch: `master`
-- Current implementation step: Step 2, Define The Account Model
-- Status: Step 1 accepted; Step 2 pending
-- Last accepted commit: Step 1 commit
-- Known local state: only accepted Step 1 paths were present before commit.
+- Current implementation step: Step 3, Define The Simulation Model
+- Status: Step 2 accepted; Step 3 pending
+- Last accepted commit: Step 2 commit
+- Known local state: `docs/html/` is unrelated untracked local state and is
+  ignored by user instruction.
 
 ## Step Ledger
 
 | Step | Status | Commit | Verification | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | Accepted | Step 1 commit | `logs/execution-step-1.log` (`test -f README.md`; package `find` checks; `rg -n "air-gapped|offline-bundle" docs examples scripts templates simulation`) | Added package scaffold, removed pre-existing `docs/html/` docs browser surface, and kept offline matches to authority/prohibition text. Spec and quality reviews passed. |
-| 2 | Pending |  |  | Add account model. |
+| 2 | Accepted | Step 2 commit | `logs/execution-step-2.log` (`rg -n "runtime|admin|integration|test user|LDAP|bind" docs/account-model.md`; no offline-related matches) | Added v1 account model with source, purpose, separation rules, credential custody, and evidence redaction. Spec and quality reviews passed. |
 | 3 | Pending |  |  | Add simulation model docs. |
 | 4 | Pending |  |  | Add operator workflow contract. |
 | 5 | Pending |  |  | Add Gerrit Trigger integration contract. |
@@ -42,41 +43,38 @@ Authoritative sources remain:
 
 ## Active Step Notes
 
-### Step 2: Define The Account Model
+### Step 3: Define The Simulation Model
 
-Implement exactly the Step 2 contract from `docs/implementation-plan.md`.
+Implement exactly the Step 3 contract from `docs/implementation-plan.md`.
 
 Required constraints:
 
-- Start with the account model in `docs/reference-digest.md`.
-- Use `identity` only when discussing LDAP-backed identity integration.
-- Use `account` for concrete roles.
-- Preserve separation between runtime, human admin, integration, test, bind,
-  and simulation environment accounts.
-- Keep examples account-name neutral where possible.
-- Avoid describing runtime OS accounts as application admin accounts.
+- Create documentation and directory-model definition only.
+- Do not add executable verifier scripts in this step.
+- Describe Docker-based simulation first, with the bundle factory represented
+  as a container.
+- Describe VM-based simulation second.
+- Include five machines/environments: bundle factory, LDAP, Gerrit, Jenkins
+  controller, and Jenkins agent.
+- Derive account usage from `docs/account-model.md`; do not introduce a
+  separate account taxonomy.
+- Define generated-output locations for state, staged artifacts, evidence, and
+  bounded logs.
+- Keep the bundle factory as an environment, not a public helper API.
+- Keep Ubuntu/OS dependency handling and application artifact handling as
+  separate supply lanes.
+- Limit target-host public internet fallback wording to Ubuntu/OS dependency
+  installation and label it `simulation-only`.
 
-Expected product accounts:
+Step 3-owned files:
 
-- Gerrit runtime account.
-- Jenkins runtime account.
-- Jenkins agent runtime account.
-- Gerrit admin account.
-- Jenkins admin account.
-- Jenkins Gerrit integration account.
-- Test user account.
-- LDAP bind account.
+- `simulation/README.md`
+- `simulation/docker/README.md`
+- `simulation/vm/README.md`
 
-Expected simulation environment account:
+Step 3 verification:
 
-- `operator` account.
-
-Step 2 verification:
-
-```bash
-rg -n "runtime|admin|integration|test user|LDAP|bind" docs/account-model.md
-rg -n "air-gapped|offline bundle|offline-bundle" docs/account-model.md
-```
+See the Step 3 verification block in `docs/implementation-plan.md`.
 
 ## Resume Instructions
 
