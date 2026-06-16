@@ -19,8 +19,9 @@ package must adapt the behavior to the v1 boundary:
 
 - v1 is not a strict air-gapped installer.
 - v1 does not support offline Ubuntu dependency bundles.
-- Public internet fallback on target hosts is simulation-only and must be
-  labeled that way in docs, logs, and verification summaries.
+- Public internet fallback for target-host Ubuntu/OS dependency installation is
+  simulation-only and must be labeled that way in docs, logs, and verification
+  summaries.
 
 The implementation should proceed in verifiable steps. Each step below must
 leave the repository in a reviewable state and include a direct verification
@@ -222,12 +223,28 @@ Acceptance criteria:
 
 ## Step 3: Define The Simulation Model
 
-Create `simulation/README.md` and the simulation substructure for two
-machinery layers:
+Create `simulation/README.md` and simulation model docs for two machinery
+layers:
 
 - Docker-based simulation first, with the bundle factory represented as a
   container.
 - VM-based simulation second.
+
+Step 3 owns documentation and directory-model definition only. It does not add
+executable verifier scripts; those are introduced by the Docker harness,
+Docker simulation, and VM simulation steps.
+
+Step 3-owned files:
+
+```text
+simulation/README.md
+simulation/docker/README.md
+simulation/vm/README.md
+```
+
+The simulation docs must describe generated-output locations for state, staged
+artifacts, evidence, and bounded logs. Generated runtime output must be ignored
+or clearly documented as generated.
 
 The simulation model must include five machines/environments:
 
@@ -267,8 +284,16 @@ Implementation notes:
   role helpers' `prepare-artifacts` commands.
 - VM simulation should repeat Docker-verified flows in a systemd-oriented,
   production-like environment after Docker behavior is stable.
-- Public internet fallback is allowed only in simulation and must be labeled
-  `simulation-only` in docs, logs, and summaries.
+- Follow the source-boundary terminology in `docs/prd.md`: Ubuntu/OS
+  dependencies and application artifacts are separate supply lanes. Target
+  hosts may use approved internal Ubuntu/OS package repositories for OS
+  dependencies, while application artifacts are prepared only in the bundle
+  factory or staging environment, staged to target hosts, and verified by
+  manifest and checksum before mutation.
+- Public internet fallback for target-host Ubuntu/OS dependency installation is
+  simulation-only and must be labeled `simulation-only` in docs, logs, and
+  summaries. Target hosts must not download Gerrit/Jenkins application artifacts
+  from the public internet as fallback.
 - Do not port the reference repo's supported offline Ubuntu dependency bundle
   workflow into v1 simulation.
 
@@ -284,6 +309,33 @@ Shared simulation workflow:
 | Readiness checks | Run independently repeatable Docker checks before end-to-end verification. | Run independently repeatable VM checks before end-to-end verification. | Separate pass/fail results for LDAP, local OS runtime accounts, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugins, Jenkins-to-Gerrit SSH, stream-events, and agent readiness. |
 | End-to-end execution | Run disposable change, Jenkins trigger, agent job, and `Verified +1` verification. | Repeat the Docker-proven disposable change, Jenkins trigger, agent job, and `Verified +1` verification. | Separate event-stream, job-scheduling, agent-execution, and vote-posting evidence. |
 | Evidence audit | Collect Docker simulation summaries and bounded log references. | Collect VM simulation or production-like summaries and bounded log references. | Mode-labeled evidence, checksums, fingerprints, and redacted bounded log references. |
+
+Checkpoint ownership map:
+
+| Checkpoint | Docker owner | VM owner |
+| --- | --- | --- |
+| Preflight | `simulation/docker/docker-harness.sh preflight` for role-gate harness readiness; `simulation/docker/docker-verify.sh preflight` for full Docker simulation readiness. | `simulation/vm/vm-verify.sh check --preflight-only` or `simulation/vm/vm-verify.sh full --preflight-only`. |
+| Input rendering | `simulation/docker/docker-harness.sh render-config` for role gates; `simulation/docker/docker-verify.sh render-config` for full Docker simulation. | `simulation/vm/vm-verify.sh bootstrap`. |
+| Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh prepare-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh prepare-artifacts`. |
+| Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh stage-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh stage-artifacts`. |
+| Service configuration | `simulation/docker/docker-harness.sh up` for role-gate containers; `simulation/docker/docker-verify.sh up` for full Docker simulation. | `simulation/vm/vm-verify.sh configure`. |
+| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` for full Docker readiness. | `simulation/vm/vm-verify.sh check`. |
+| End-to-end execution | `simulation/docker/docker-verify.sh full-verify`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full`. |
+| Evidence audit | Role-local `collect-evidence`, Docker harness evidence, `docker-verify.sh` summaries, and later global aggregation. | `simulation/vm/vm-verify.sh audit` and later global aggregation. |
+
+Ownership rules:
+
+- Step 3 documents the shared simulation model, checkpoint semantics, and
+  command ownership only.
+- Step 6 implements Docker harness ownership for role-step readiness gates.
+- Step 11 implements full Docker simulation ownership for end-to-end
+  integration verification.
+- Step 12 implements VM simulation ownership for production-like,
+  systemd-oriented verification.
+- Simulation wrappers orchestrate role helpers but must not replace role
+  behavior with modeled success.
+- The Docker harness owns role-step readiness gates; the full Docker verifier
+  owns Docker end-to-end integration.
 
 Command convention model:
 
@@ -302,10 +354,15 @@ Command convention model:
 Verification:
 
 ```bash
-rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|operator" simulation docs
-rg -n "Docker|VM|simulation-only|Verified|Gerrit Trigger" simulation docs
-rg -n "local OS|LDAP-backed|prepare-artifacts|bundle-factory-helper" simulation docs
-rg -n "supported offline|offline Ubuntu|offline-bundle" simulation docs
+test -f simulation/README.md
+test -f simulation/docker/README.md
+test -f simulation/vm/README.md
+rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|operator" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "Docker|VM|simulation-only|Verified|Gerrit Trigger" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "Checkpoint ownership|docker-harness.sh|docker-verify.sh|vm-verify.sh" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "Ubuntu/OS dependencies|Application artifacts|approved internal Ubuntu/OS package repositories" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "local OS|LDAP-backed|prepare-artifacts|bundle-factory-helper" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "supported offline|offline Ubuntu|offline-bundle" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 ```
 
 Acceptance criteria:
@@ -315,13 +372,19 @@ Acceptance criteria:
   account taxonomy.
 - The `operator` account is documented as a simulation environment OS account,
   not a Gerrit/Jenkins product account.
+- Simulation docs define generated-output locations for state, staged
+  artifacts, evidence, and bounded logs.
 - No bundle factory helper or bundle factory public API is introduced.
 - Docker is documented as the shared role-gate harness and the first full
   integration verification gate.
+- Docker harness, full Docker verifier, and VM verifier responsibilities are
+  distinguishable by checkpoint.
 - VM verification is documented as a follow-up gate, not a prerequisite for
   early Docker milestones.
-- Any target-host public internet fallback wording is explicitly
-  simulation-only.
+- Ubuntu/OS dependency handling and application artifact handling are documented
+  as separate lanes.
+- Any target-host public internet fallback wording is limited to Ubuntu/OS
+  dependency installation and is explicitly simulation-only.
 - Any offline-related match is reference-only, non-goal, or prohibition text.
 
 ## Step 4: Define The Operator Workflow Contract

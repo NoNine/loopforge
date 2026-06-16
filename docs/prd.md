@@ -5,9 +5,10 @@ This document defines the v1 product requirements for a repeatable
 Gerrit/Jenkins setup package.
 
 The product is not a strict air-gapped installer. v1 supports installation in
-controlled environments where staging can use public or upstream sources, and
-target hosts can use approved internal package sources during setup. Public
-internet fallback on target hosts is simulation-only.
+controlled environments where staging can use reviewed public or upstream
+sources for curated application artifacts, and target hosts can use approved
+internal Ubuntu/OS package repositories during setup. Public internet fallback
+for target-host Ubuntu/OS dependency installation is simulation-only.
 
 The product must help engineers and operators install and validate:
 
@@ -55,6 +56,25 @@ The product must help engineers and operators install and validate:
   artifacts.
 - The product must keep artifact preparation separate from target-host
   installation.
+
+### 2.1. Source Boundary
+- Ubuntu/OS dependencies are packages installed through apt or equivalent OS
+  package tooling, such as Java, SSH tools, service prerequisites, and OS
+  libraries.
+- Application artifacts include Gerrit WAR, Jenkins WAR, Gerrit/Jenkins
+  plugins, JCasC/config templates, job definitions, generated key/public-key
+  handoff files, manifests, and checksums.
+- Target hosts may use approved internal Ubuntu/OS package repositories for
+  OS dependencies during setup.
+- Public internet fallback for target-host Ubuntu/OS dependency installation is
+  simulation-only and must be labeled that way in docs, logs, and verification
+  summaries.
+- Target hosts must not download Gerrit/Jenkins application artifacts from the
+  public internet as fallback.
+- Application artifacts must be prepared in the bundle factory or staging
+  environment, staged to target hosts, and verified by manifest and checksum
+  before target-host mutation.
+- v1 does not support offline Ubuntu dependency bundles.
 
 ### 3. Repeatable Service Installation
 - Operators must be able to install Gerrit, Jenkins controller, and Jenkins
