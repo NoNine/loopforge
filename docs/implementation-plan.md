@@ -547,6 +547,26 @@ Harness environments:
 | Jenkins controller target | Runs Jenkins helper install, plugin, JCasC, credential, integration, node, job, and validation commands against staged artifacts. |
 | Jenkins agent target | Runs Jenkins agent helper install, runtime SSH setup, and validation commands against staged artifacts. |
 
+Harness implementation decisions:
+
+- Use a boundary-first target model. The Gerrit, Jenkins controller, and
+  Jenkins agent targets are host-like target containers, not prebuilt
+  Gerrit/Jenkins service images with embedded application artifacts.
+- Use `ubuntu:24.04` or another reviewed base OS image for the bundle factory,
+  Gerrit target, Jenkins controller target, and Jenkins agent target.
+- Use a real LDAP service image for the LDAP environment so LDAP reachability
+  and seeded directory assumptions can be checked by later role gates.
+- Do not use `gerritcodereview/gerrit` or `jenkins/jenkins` as Step 6 target
+  containers, because their embedded WARs would weaken the v1 artifact
+  boundary. Gerrit and Jenkins application artifacts must still be prepared in
+  the bundle factory, staged to targets, and verified before target mutation.
+- If Docker Compose v2 is unavailable but `docker-compose` v1 is available, the
+  Step 6 harness may use `docker-compose`. The command implementation should
+  detect and report the Compose command it will use.
+- Existing generated `simulation/docker/state/` and `simulation/docker/logs/`
+  content is not source material. Treat those paths as generated output and do
+  not commit retained state or verbose logs.
+
 Expected command surface:
 
 ```text
@@ -570,6 +590,11 @@ Implementation notes:
 - The harness must not add `bundle-factory-helper.sh` or any bundle factory
   public API. It runs the role helpers' `prepare-artifacts` commands in the
   bundle factory container.
+- Add ignore rules for generated harness state and log directories before
+  creating runtime output.
+- Create only source assets under `simulation/docker/` and
+  `simulation/docker/harness/`; generated state, staged artifacts, evidence,
+  and bounded logs must be written under generated paths.
 - `prepare-artifacts --role ...` must run only in the bundle factory
   environment and must fail if invoked against a target container.
 - `stage-artifacts --role ...` copies bundle factory output to the selected
