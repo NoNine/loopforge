@@ -15,17 +15,16 @@ Authoritative sources remain:
 ## Current State
 
 - Branch: `master`
-- Current implementation step: Step 1, Establish The Repository Structure
-- Status: Not started
-- Last accepted commit: `c442a52` (`Document setup version baseline`)
-- Known local state: no unrelated uncommitted paths were present when this
-  ledger was created.
+- Current implementation step: Step 2, Define The Account Model
+- Status: Step 1 accepted; Step 2 pending
+- Last accepted commit: Step 1 commit
+- Known local state: only accepted Step 1 paths were present before commit.
 
 ## Step Ledger
 
 | Step | Status | Commit | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | Pending |  |  | Add repository structure and implementation plan. |
+| 1 | Accepted | Step 1 commit | `logs/execution-step-1.log` (`test -f README.md`; package `find` checks; `rg -n "air-gapped|offline-bundle" docs examples scripts templates simulation`) | Added package scaffold, removed pre-existing `docs/html/` docs browser surface, and kept offline matches to authority/prohibition text. Spec and quality reviews passed. |
 | 2 | Pending |  |  | Add account model. |
 | 3 | Pending |  |  | Add simulation model docs. |
 | 4 | Pending |  |  | Add operator workflow contract. |
@@ -43,43 +42,40 @@ Authoritative sources remain:
 
 ## Active Step Notes
 
-### Step 1: Establish The Repository Structure
+### Step 2: Define The Account Model
 
-Implement exactly the Step 1 contract from `docs/implementation-plan.md`.
+Implement exactly the Step 2 contract from `docs/implementation-plan.md`.
 
 Required constraints:
 
-- Create the planned package layout before porting role behavior.
-- Keep manuals, templates, helpers, simulations, examples, and logs separated.
-- Add `README.md` as the top-level operator entrypoint.
-- Keep `logs/` free of committed verbose runtime output.
-- Treat any `air-gapped` or `offline-bundle` matches as reference-only,
-  non-goal, or prohibition text.
+- Start with the account model in `docs/reference-digest.md`.
+- Use `identity` only when discussing LDAP-backed identity integration.
+- Use `account` for concrete roles.
+- Preserve separation between runtime, human admin, integration, test, bind,
+  and simulation environment accounts.
+- Keep examples account-name neutral where possible.
+- Avoid describing runtime OS accounts as application admin accounts.
 
-Expected structure:
+Expected product accounts:
 
-- `README.md`
-- `docs/account-model.md`
-- `docs/gerrit-setup-manual.md`
-- `docs/jenkins-controller-setup-manual.md`
-- `docs/jenkins-agent-setup-manual.md`
-- `docs/gerrit-trigger-integration.md`
-- `docs/validation-and-evidence.md`
-- `examples/`
-- `scripts/`
-- `templates/`
-- `simulation/docker/`
-- `simulation/vm/`
-- `logs/`
+- Gerrit runtime account.
+- Jenkins runtime account.
+- Jenkins agent runtime account.
+- Gerrit admin account.
+- Jenkins admin account.
+- Jenkins Gerrit integration account.
+- Test user account.
+- LDAP bind account.
 
-Step 1 verification:
+Expected simulation environment account:
+
+- `operator` account.
+
+Step 2 verification:
 
 ```bash
-test -f README.md
-find . -maxdepth 1 -type f | sort
-find docs examples scripts templates simulation -maxdepth 3 -type d | sort
-find docs examples scripts templates simulation -maxdepth 3 -type f | sort
-rg -n "air-gapped|offline-bundle" docs examples scripts templates simulation
+rg -n "runtime|admin|integration|test user|LDAP|bind" docs/account-model.md
+rg -n "air-gapped|offline bundle|offline-bundle" docs/account-model.md
 ```
 
 ## Resume Instructions
