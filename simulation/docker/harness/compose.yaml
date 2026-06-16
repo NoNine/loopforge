@@ -1,0 +1,105 @@
+services:
+  bundle-factory:
+    image: "${HARNESS_UBUNTU_IMAGE}"
+    container_name: "${HARNESS_PROJECT_NAME}-bundle-factory"
+    hostname: bundle-factory
+    command: ["/usr/local/bin/harness-sleep.sh"]
+    environment:
+      HARNESS_ENVIRONMENT: bundle-factory
+      HARNESS_MODE: "${HARNESS_MODE}"
+      SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
+    volumes:
+      - "../../../:/workspace:ro"
+      - "${HARNESS_STATE_DIR}/bundle-factory:/harness/state"
+      - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
+      - "${HARNESS_LOG_DIR}:/harness/logs"
+      - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
+    networks:
+      - harness
+
+  ldap:
+    build:
+      context: .
+      dockerfile: ldap/Dockerfile
+      args:
+        HARNESS_LDAP_IMAGE: "${HARNESS_LDAP_IMAGE}"
+    container_name: "${HARNESS_PROJECT_NAME}-ldap"
+    hostname: ldap
+    environment:
+      LDAP_ORGANISATION: "Gerrit Jenkins Harness"
+      LDAP_DOMAIN: "${HARNESS_LDAP_DOMAIN}"
+      LDAP_BASE_DN: "${HARNESS_LDAP_BASE_DN}"
+      LDAP_ADMIN_PASSWORD: "${HARNESS_LDAP_ADMIN_PASSWORD}"
+      LDAP_CONFIG_PASSWORD: "${HARNESS_LDAP_CONFIG_PASSWORD}"
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: "${HARNESS_LDAP_BIND_USER}"
+      LDAP_READONLY_USER_PASSWORD: "${HARNESS_LDAP_BIND_PASSWORD}"
+    volumes:
+      - "${HARNESS_STATE_DIR}/ldap/data:/var/lib/ldap"
+      - "${HARNESS_STATE_DIR}/ldap/config:/etc/ldap/slapd.d"
+    networks:
+      - harness
+
+  gerrit-target:
+    image: "${HARNESS_UBUNTU_IMAGE}"
+    container_name: "${HARNESS_PROJECT_NAME}-gerrit-target"
+    hostname: gerrit-target
+    command: ["/usr/local/bin/harness-sleep.sh"]
+    environment:
+      HARNESS_ENVIRONMENT: gerrit-target
+      HARNESS_ROLE: gerrit
+      HARNESS_MODE: "${HARNESS_MODE}"
+      SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
+    volumes:
+      - "../../../:/workspace:ro"
+      - "${HARNESS_STATE_DIR}/gerrit:/harness/state"
+      - "${HARNESS_STAGING_DIR}/gerrit:/harness/staged"
+      - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
+      - "${HARNESS_LOG_DIR}:/harness/logs"
+      - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
+    networks:
+      - harness
+
+  jenkins-controller-target:
+    image: "${HARNESS_UBUNTU_IMAGE}"
+    container_name: "${HARNESS_PROJECT_NAME}-jenkins-controller-target"
+    hostname: jenkins-controller-target
+    command: ["/usr/local/bin/harness-sleep.sh"]
+    environment:
+      HARNESS_ENVIRONMENT: jenkins-controller-target
+      HARNESS_ROLE: jenkins-controller
+      HARNESS_MODE: "${HARNESS_MODE}"
+      SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
+    volumes:
+      - "../../../:/workspace:ro"
+      - "${HARNESS_STATE_DIR}/jenkins-controller:/harness/state"
+      - "${HARNESS_STAGING_DIR}/jenkins-controller:/harness/staged"
+      - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
+      - "${HARNESS_LOG_DIR}:/harness/logs"
+      - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
+    networks:
+      - harness
+
+  jenkins-agent-target:
+    image: "${HARNESS_UBUNTU_IMAGE}"
+    container_name: "${HARNESS_PROJECT_NAME}-jenkins-agent-target"
+    hostname: jenkins-agent-target
+    command: ["/usr/local/bin/harness-sleep.sh"]
+    environment:
+      HARNESS_ENVIRONMENT: jenkins-agent-target
+      HARNESS_ROLE: jenkins-agent
+      HARNESS_MODE: "${HARNESS_MODE}"
+      SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
+    volumes:
+      - "../../../:/workspace:ro"
+      - "${HARNESS_STATE_DIR}/jenkins-agent:/harness/state"
+      - "${HARNESS_STAGING_DIR}/jenkins-agent:/harness/staged"
+      - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
+      - "${HARNESS_LOG_DIR}:/harness/logs"
+      - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
+    networks:
+      - harness
+
+networks:
+  harness:
+    name: "${HARNESS_PROJECT_NAME}-network"
