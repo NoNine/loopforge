@@ -602,7 +602,7 @@ cmd_up() {
   local log rc evidence
   cmd_preflight >/dev/null
   log="$(bounded_log_path up)"
-  if compose up -d >"$log" 2>&1; then
+  if compose up -d --build >"$log" 2>&1; then
     rc=0
   else
     rc=$?
@@ -845,6 +845,48 @@ print("normalized_bounded_log_references=" + data["bounded_log_references"])
 PY
 }
 
+normalize_jenkins_agent_role_evidence_logs() {
+  local log latest
+  log="${1:?log required}"
+  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json' -print | sort | tail -1)"
+  [ -n "$latest" ] || {
+    printf 'missing_role_evidence role=jenkins-agent expected=jenkins-agent-readiness-json\n' >>"$log"
+    return 1
+  }
+
+  require_command python3
+  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$HARNESS_STATE_DIR/jenkins-agent" <<'PY' >>"$log" 2>&1
+import json
+import pathlib
+import sys
+
+evidence = pathlib.Path(sys.argv[1])
+normalized = pathlib.Path(sys.argv[2])
+host_log = pathlib.Path(sys.argv[3])
+host_state = pathlib.Path(sys.argv[4])
+data = json.loads(evidence.read_text())
+refs = data.get("bounded_log_references", "")
+mapped = []
+for ref in refs.split(";"):
+    if ref.startswith("/harness/logs/"):
+        mapped.append(str(host_log / ref.removeprefix("/harness/logs/")))
+    elif ref.startswith("/harness/state/"):
+        mapped.append(str(host_state / ref.removeprefix("/harness/state/")))
+    else:
+        mapped.append(ref)
+
+for ref in mapped:
+    path = pathlib.Path(ref)
+    if not path.is_file() or path.stat().st_size == 0:
+        raise SystemExit(f"bounded log reference missing or empty: {ref}")
+
+data["bounded_log_references"] = ";".join(mapped)
+normalized.write_text(json.dumps(data, indent=2) + "\n")
+print("normalized_role_evidence=" + str(normalized))
+print("normalized_bounded_log_references=" + data["bounded_log_references"])
+PY
+}
+
 ensure_gerrit_ready_for_jenkins_controller() {
   local log gerrit_helper gerrit_service
   log="${1:?log required}"
@@ -916,6 +958,17 @@ cmd_run_role_gate() {
         compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
+        rc=0
+      else
+        rc=$?
+      fi
+      ;;
+    jenkins-agent)
+      if compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --yes configure-runtime >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
+        normalize_jenkins_agent_role_evidence_logs "$log"; then
         rc=0
       else
         rc=$?
