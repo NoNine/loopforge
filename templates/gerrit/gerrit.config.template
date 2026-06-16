@@ -1,0 +1,20 @@
+# Gerrit config template rendered by scripts/gerrit-setup.sh configure.
+
+[gerrit]
+	canonicalWebUrl = {{GERRIT_CANONICAL_WEB_URL}}
+
+[httpd]
+	listenUrl = {{GERRIT_HTTP_LISTEN_URL}}
+
+[sshd]
+	listenAddress = {{GERRIT_SSH_LISTEN_ADDRESS}}
+
+[auth]
+	type = LDAP
+
+[ldap]
+	server = {{LDAP_URL}}
+	username = {{LDAP_BIND_DN}}
+	accountBase = {{LDAP_USER_BASE}}
+	groupBase = {{LDAP_GROUP_BASE}}
+	adminGroup = {{GERRIT_ADMIN_GROUP}}

@@ -1,0 +1,7 @@
+# Gerrit secure config template.
+#
+# The rendered file records only non-secret LDAP bind metadata. Operators must
+# provide bind secrets through reviewed secret handling outside evidence.
+
+[ldap]
+	password = <redacted-managed-secret>

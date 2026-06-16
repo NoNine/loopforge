@@ -5,20 +5,20 @@
 # - Keep the Jenkins Gerrit integration actor separate from human admins.
 #
 # Replace placeholders before use:
-# - {{GERRIT_REF_PATTERN}}: ref pattern under test, such as refs/*.
+# - {{GERRIT_VERIFICATION_REF_PATTERN}}: ref pattern under test, such as refs/*.
 # - {{JENKINS_GERRIT_INTEGRATION_GROUP}}: Gerrit group for automation.
 # - {{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}: optional service account name.
 #
 # Grant permissions to either the reviewed integration group or account.
 # read and label-Verified are project/ref scoped and belong under the reviewed
-# project access config for {{GERRIT_REF_PATTERN}}.
+# project access config for {{GERRIT_VERIFICATION_REF_PATTERN}}.
 # streamEvents is a global capability and belongs in the reviewed global or
 # All-Projects capability scope.
 # Do not grant these permissions to a human Jenkins admin as the integration
 # actor.
 # This is a declarative template, not an executable script.
 
-[access "{{GERRIT_REF_PATTERN}}"]
+[access "{{GERRIT_VERIFICATION_REF_PATTERN}}"]
 	read = group {{JENKINS_GERRIT_INTEGRATION_GROUP}}
 	label-Verified = -1..+1 group {{JENKINS_GERRIT_INTEGRATION_GROUP}}
 

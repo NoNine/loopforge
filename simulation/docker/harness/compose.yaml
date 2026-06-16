@@ -1,12 +1,19 @@
 services:
   bundle-factory:
-    image: "${HARNESS_UBUNTU_IMAGE}"
+    build:
+      context: .
+      dockerfile: target/Dockerfile
+      args:
+        HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
+        HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-bundle-factory"
     hostname: bundle-factory
     command: ["/usr/local/bin/harness-sleep.sh"]
     environment:
       HARNESS_ENVIRONMENT: bundle-factory
       HARNESS_MODE: "${HARNESS_MODE}"
+      HARNESS_STATE_DIR: "${HARNESS_STATE_DIR}"
+      HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../../:/workspace:ro"
@@ -41,7 +48,12 @@ services:
       - harness
 
   gerrit-target:
-    image: "${HARNESS_UBUNTU_IMAGE}"
+    build:
+      context: .
+      dockerfile: target/Dockerfile
+      args:
+        HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
+        HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-gerrit-target"
     hostname: gerrit-target
     command: ["/usr/local/bin/harness-sleep.sh"]
@@ -49,6 +61,8 @@ services:
       HARNESS_ENVIRONMENT: gerrit-target
       HARNESS_ROLE: gerrit
       HARNESS_MODE: "${HARNESS_MODE}"
+      HARNESS_STATE_DIR: "${HARNESS_STATE_DIR}"
+      HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../../:/workspace:ro"
@@ -61,7 +75,12 @@ services:
       - harness
 
   jenkins-controller-target:
-    image: "${HARNESS_UBUNTU_IMAGE}"
+    build:
+      context: .
+      dockerfile: target/Dockerfile
+      args:
+        HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
+        HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-controller-target"
     hostname: jenkins-controller-target
     command: ["/usr/local/bin/harness-sleep.sh"]
@@ -69,6 +88,8 @@ services:
       HARNESS_ENVIRONMENT: jenkins-controller-target
       HARNESS_ROLE: jenkins-controller
       HARNESS_MODE: "${HARNESS_MODE}"
+      HARNESS_STATE_DIR: "${HARNESS_STATE_DIR}"
+      HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../../:/workspace:ro"
@@ -81,7 +102,12 @@ services:
       - harness
 
   jenkins-agent-target:
-    image: "${HARNESS_UBUNTU_IMAGE}"
+    build:
+      context: .
+      dockerfile: target/Dockerfile
+      args:
+        HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
+        HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-agent-target"
     hostname: jenkins-agent-target
     command: ["/usr/local/bin/harness-sleep.sh"]
@@ -89,6 +115,8 @@ services:
       HARNESS_ENVIRONMENT: jenkins-agent-target
       HARNESS_ROLE: jenkins-agent
       HARNESS_MODE: "${HARNESS_MODE}"
+      HARNESS_STATE_DIR: "${HARNESS_STATE_DIR}"
+      HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../../:/workspace:ro"

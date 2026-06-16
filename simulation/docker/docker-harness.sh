@@ -99,6 +99,7 @@ HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL="${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
 HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/harness/$HARNESS_RUN_ID}"
 HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/harness/$HARNESS_RUN_ID}"
 HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/harness/$HARNESS_RUN_ID}"
+HARNESS_LEGACY_EVIDENCE_DIR="${HARNESS_LEGACY_EVIDENCE_DIR:-$repo_root/simulation/docker/state/evidence}"
 HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/harness/$HARNESS_RUN_ID}"
 HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
 HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
@@ -108,6 +109,7 @@ export HARNESS_UBUNTU_IMAGE HARNESS_LDAP_IMAGE
 export HARNESS_LDAP_DOMAIN HARNESS_LDAP_BASE_DN
 export HARNESS_LDAP_ADMIN_PASSWORD HARNESS_LDAP_CONFIG_PASSWORD
 export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
+export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
 export HARNESS_STATE_DIR HARNESS_STAGING_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
 
 compose_kind=""
@@ -143,6 +145,7 @@ ensure_dirs() {
     "$HARNESS_STATE_DIR" \
     "$HARNESS_STAGING_DIR" \
     "$HARNESS_EVIDENCE_DIR" \
+    "$HARNESS_LEGACY_EVIDENCE_DIR" \
     "$HARNESS_LOG_DIR" \
     "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
     "$HARNESS_STATE_DIR/rendered" \
@@ -409,6 +412,7 @@ write_evidence() {
   "source_boundary": $q_source_boundary
 }
 EOF
+  cp "$file" "$HARNESS_LEGACY_EVIDENCE_DIR/$(basename "$file")"
   printf '%s\n' "$file"
 }
 
@@ -506,6 +510,19 @@ require_running_service() {
   [ "$running" = "true" ] || die "Harness service '$service' is not running; run up first"
 }
 
+ensure_harness_up_for_role() {
+  local service
+  service="${1:?service required}"
+  if ! container_id_for_service "$service" >/dev/null 2>&1 ||
+    [ -z "$(container_id_for_service "$service")" ]; then
+    cmd_up >/dev/null
+    return 0
+  fi
+  if ! docker inspect -f '{{.State.Running}}' "$(container_id_for_service "$service")" 2>/dev/null | grep -qx true; then
+    cmd_up >/dev/null
+  fi
+}
+
 check_target_os_release() {
   local role service log os_release os_codename evidence
   role="${1:?role required}"
@@ -564,6 +581,7 @@ cmd_preflight() {
   require_baseline_label
   [ -f "$compose_file" ] || die "Missing Compose file: $compose_file"
   [ -f "$harness_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
+  [ -f "$harness_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
   [ -f "$harness_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
   write_rendered_env
   write_evidence preflight harness pass "docker-harness.sh preflight" "not-applicable" "Compose provider: $compose_kind; generated output paths are ignored local state" >/dev/null
@@ -615,6 +633,7 @@ cmd_prepare_artifacts() {
   role="$(parse_role "$@")"
   helper="$(helper_for_role "$role")"
   service="bundle-factory"
+  ensure_harness_up_for_role "$service"
   require_running_service "$service"
 
   # Guard the boundary-first model: artifact preparation runs only in the
@@ -673,6 +692,7 @@ cmd_stage_artifacts() {
   stage_dir="$HARNESS_STAGING_DIR/$role"
   log="$(bounded_log_path "stage-artifacts-$role")"
 
+  ensure_harness_up_for_role "$service"
   require_running_service "$service"
   [ -f "$artifact_dir/manifest.txt" ] || die "Missing bundle factory manifest for $role: $artifact_dir/manifest.txt"
   [ -f "$artifact_dir/checksums.sha256" ] || die "Missing bundle factory checksums for $role: $artifact_dir/checksums.sha256"
@@ -685,8 +705,13 @@ cmd_stage_artifacts() {
   fi
 
   mkdir -p "$stage_dir"
-  rm -rf "$stage_dir"/* "$stage_dir"/.[!.]* "$stage_dir"/..?*
-  if tar -C "$artifact_dir" -cf - . | tar -C "$stage_dir" -xf - >>"$log" 2>&1; then
+  if ! compose exec -T "$service" sh -c 'mkdir -p /harness/staged && find /harness/staged -mindepth 1 -maxdepth 1 -exec rm -rf {} +' >>"$log" 2>&1; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "docker-harness.sh stage-artifacts" "$log" "Failed to prepare target staging path in container")"
+    printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence"
+    return 1
+  fi
+
+  if tar -C "$artifact_dir" -cf - . | compose exec -T "$service" tar -C /harness/staged -xf - >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
@@ -733,11 +758,54 @@ assert_no_placeholder_success() {
   return 0
 }
 
+normalize_gerrit_role_evidence_logs() {
+  local log latest
+  log="${1:?log required}"
+  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name 'gerrit-readiness-*.json' -print | sort | tail -1)"
+  [ -n "$latest" ] || {
+    printf 'missing_role_evidence role=gerrit expected=gerrit-readiness-json\n' >>"$log"
+    return 1
+  }
+
+  require_command python3
+  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$HARNESS_STATE_DIR/gerrit" <<'PY' >>"$log" 2>&1
+import json
+import pathlib
+import sys
+
+evidence = pathlib.Path(sys.argv[1])
+normalized = pathlib.Path(sys.argv[2])
+host_log = pathlib.Path(sys.argv[3])
+host_state = pathlib.Path(sys.argv[4])
+data = json.loads(evidence.read_text())
+refs = data.get("bounded_log_references", "")
+mapped = []
+for ref in refs.split(";"):
+    if ref.startswith("/harness/logs/"):
+        mapped.append(str(host_log / ref.removeprefix("/harness/logs/")))
+    elif ref.startswith("/harness/state/"):
+        mapped.append(str(host_state / ref.removeprefix("/harness/state/")))
+    else:
+        mapped.append(ref)
+
+for ref in mapped:
+    path = pathlib.Path(ref)
+    if not path.is_file() or path.stat().st_size == 0:
+        raise SystemExit(f"bounded log reference missing or empty: {ref}")
+
+data["bounded_log_references"] = ";".join(mapped)
+normalized.write_text(json.dumps(data, indent=2) + "\n")
+print("normalized_role_evidence=" + str(normalized))
+print("normalized_bounded_log_references=" + data["bounded_log_references"])
+PY
+}
+
 cmd_run_role_gate() {
   local role helper service log rc evidence
   role="$(parse_role "$@")"
   helper="$(helper_for_role "$role")"
   service="$(service_for_role "$role")"
+  ensure_harness_up_for_role "$service"
   require_running_service "$service"
   check_target_os_release "$role"
 
@@ -750,11 +818,27 @@ cmd_run_role_gate() {
     return 1
   fi
 
-  if compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1; then
-    rc=0
-  else
-    rc=$?
-  fi
+  case "$role" in
+    gerrit)
+      if compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --yes configure >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --yes configure-integration >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
+        normalize_gerrit_role_evidence_logs "$log"; then
+        rc=0
+      else
+        rc=$?
+      fi
+      ;;
+    *)
+      if compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1; then
+        rc=0
+      else
+        rc=$?
+      fi
+      ;;
+  esac
 
   if [ "$rc" -eq 0 ]; then
     if ! validate_role_baseline_manifest "$role" "$HARNESS_STAGING_DIR/$role/manifest.txt" "$log"; then

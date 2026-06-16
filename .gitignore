@@ -1,5 +1,6 @@
 /logs/*
 !/logs/.gitkeep
 /simulation/state/
+/simulation/docker/state/
 /simulation/staging/
 /simulation/evidence/
