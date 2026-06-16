@@ -1,0 +1,41 @@
+# Template: Jenkins Gerrit Trigger server configuration
+#
+# Purpose:
+# - Configure Gerrit Trigger to connect as the Jenkins Gerrit integration
+#   account, not as a human Jenkins admin.
+# - Reference a Jenkins credential ID that holds the controller-owned private
+#   key.
+#
+# Replace placeholders before use. This is a declarative template shape for a
+# later JCasC/helper step, not standalone executable automation.
+
+unclassified:
+  gerrit-trigger:
+    servers:
+      - name: "{{GERRIT_TRIGGER_SERVER_NAME}}"
+        noConnectionOnStartup: false
+        config:
+          gerritHostName: "{{GERRIT_SSH_HOST}}"
+          gerritSshPort: {{GERRIT_SSH_PORT}}
+          gerritUserName: "{{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}"
+          gerritFrontEndUrl: "{{GERRIT_HTTP_URL}}"
+          gerritAuthKeyCredentialId: "{{JENKINS_GERRIT_CREDENTIAL_ID}}"
+          gerritBuildStartedVerifiedValue: 0
+          gerritBuildSuccessfulVerifiedValue: 1
+          gerritBuildFailedVerifiedValue: -1
+          gerritBuildUnstableVerifiedValue: -1
+          gerritVerifiedCmdBuildSuccessful: "gerrit review <CHANGE>,<PATCHSET> --label Verified=+1 --message '{{VERIFICATION_SUCCESS_MESSAGE}}'"
+          gerritVerifiedCmdBuildFailed: "gerrit review <CHANGE>,<PATCHSET> --label Verified=-1 --message '{{VERIFICATION_FAILURE_MESSAGE}}'"
+
+# Evidence may record:
+# - Gerrit Trigger server name.
+# - Jenkins credential ID only when it does not encode usernames, hostnames, or
+#   secret material.
+# - Public key fingerprint.
+# - Gerrit SSH and stream-events check result.
+# - Bounded log paths.
+#
+# Evidence must not record the private key material.
+# A private-key file path can be used only as a reviewed alternative after the
+# Jenkins helper verifies the installed Gerrit Trigger/JCasC syntax. Do not set
+# a live file-path field alongside the credential ID in this template.

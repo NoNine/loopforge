@@ -15,9 +15,9 @@ Authoritative sources remain:
 ## Current State
 
 - Branch: `master`
-- Current implementation step: Step 5, Define Gerrit Trigger Integration
-- Status: Step 4 accepted; Step 5 pending
-- Last accepted commit: Step 4 commit
+- Current implementation step: Step 6, Add Shared Docker Harness
+- Status: Step 5 accepted; Step 6 pending
+- Last accepted commit: Step 5 commit
 - Known local state: `docs/html/` is unrelated untracked local state and is
   ignored by user instruction.
 
@@ -29,7 +29,7 @@ Authoritative sources remain:
 | 2 | Accepted | Step 2 commit | `logs/execution-step-2.log` (`rg -n "runtime|admin|integration|test user|LDAP|bind" docs/account-model.md`; no offline-related matches) | Added v1 account model with source, purpose, separation rules, credential custody, and evidence redaction. Spec and quality reviews passed. |
 | 3 | Accepted | Step 3 commit | `logs/execution-step-3.log` (full Step 3 verification block from `docs/implementation-plan.md`) | Added simulation model docs for Docker and VM layers, generated output conventions, account mapping, source boundaries, and planned checkpoint ownership. Spec and quality reviews passed. |
 | 4 | Accepted | Step 4 commit | `logs/execution-step-4.log` (full Step 4 verification block from `docs/implementation-plan.md`) | Verified existing immutable implementation-plan contract covers workflow phases, staging, key handoffs, safety rules, and no runnable transcript. No Step 4 content edits were required. Spec and quality reviews passed. |
-| 5 | Pending |  |  | Add Gerrit Trigger integration contract. |
+| 5 | Accepted | Step 5 commit | `logs/execution-step-5.log` (`rg -n "Verified|Gerrit Trigger|stream-events|patchset-created|integration" docs templates scripts simulation`; removed-placeholder/private-key field check) | Added Gerrit Trigger integration contract and declarative templates for Verified label, Gerrit access, trigger server, disposable job, and disposable Gerrit change inputs. Spec and quality reviews passed. |
 | 6 | Pending |  |  | Add shared Docker harness. |
 | 7 | Pending |  |  | Add Gerrit manual/helper/templates. |
 | 8 | Pending |  |  | Add Jenkins controller manual/helper/templates. |
@@ -43,31 +43,31 @@ Authoritative sources remain:
 
 ## Active Step Notes
 
-### Step 5: Define Gerrit Trigger Integration
+### Step 6: Add Shared Docker Harness
 
-Implement exactly the Step 5 contract from `docs/implementation-plan.md`.
+Implement exactly the Step 6 contract from `docs/implementation-plan.md`.
 
 Required constraints:
 
-- Use the trigger behavior summarized in `docs/reference-digest.md`.
-- Create `docs/gerrit-trigger-integration.md`.
-- Add templates for Gerrit `Verified` label definition, Gerrit access
-  permissions for the Jenkins integration actor, Jenkins Gerrit Trigger server
-  configuration, disposable Jenkins verification job, and disposable Gerrit
-  verification project/change.
-- Jenkins must authenticate to Gerrit with the Jenkins Gerrit integration
-  actor, not a human Jenkins admin.
-- Gerrit must grant read, stream-events, and `Verified` voting permissions to
-  the integration actor or group.
-- Verification artifacts must be labeled as disposable verification artifacts.
-- Failed `Verified` voting must be surfaced separately from event-stream or
-  job-scheduling failures.
+- Create the reusable Docker harness for role-step readiness gates.
+- Add `simulation/docker/docker-harness.sh`.
+- Add Docker Compose assets under `simulation/docker/harness/`.
+- Add harness env examples under `simulation/docker/harness/examples/`.
+- Document generated harness state, staging, evidence, and bounded-log
+  directories as generated local output.
+- Harness command surface must include `preflight`, `render-config`, `up`,
+  role-scoped `prepare-artifacts`, role-scoped `stage-artifacts`, role-scoped
+  `run-role-gate`, and `down`.
+- Before role helpers exist, role-specific harness commands must fail nonzero
+  with clear missing-helper or unknown-role messages instead of reporting
+  success.
+- Do not add `bundle-factory-helper.sh` or any supported offline Ubuntu
+  dependency bundle workflow.
+- Do not commit generated Docker state or verbose logs.
 
-Step 5 verification:
+Step 6 verification:
 
-```bash
-rg -n "Verified|Gerrit Trigger|stream-events|patchset-created|integration" docs templates scripts simulation
-```
+See the Step 6 verification block in `docs/implementation-plan.md`.
 
 ## Resume Instructions
 

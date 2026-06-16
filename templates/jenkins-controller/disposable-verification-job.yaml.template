@@ -1,0 +1,53 @@
+# Template: disposable Jenkins Gerrit Trigger verification job contract
+#
+# Purpose:
+# - Define the disposable verification job behavior required for Step 5.
+# - Avoid relying on unverified Gerrit Trigger Job DSL or JCasC syntax here.
+# - Give later Jenkins helpers a syntax-neutral contract to translate after
+#   plugin syntax is verified.
+#
+# This is a declarative contract template, not executable Jenkins job config.
+
+job:
+  name: "verification-disposable-{{VERIFICATION_RUN_ID}}"
+  description: >
+    Disposable verification artifact for Gerrit Trigger run
+    {{VERIFICATION_RUN_ID}} in {{VERIFICATION_MODE}} mode.
+  labels:
+    - "verification-disposable"
+    - "{{VERIFICATION_MODE}}"
+
+trigger_contract:
+  server: "{{GERRIT_TRIGGER_SERVER_NAME}}"
+  event: "patchset-created"
+  project: "{{GERRIT_VERIFICATION_PROJECT}}"
+  branch: "{{GERRIT_VERIFICATION_BRANCH}}"
+
+execution_contract:
+  agent_label: "{{JENKINS_AGENT_LABEL}}"
+  required_behavior:
+    - "Schedule this disposable job when Gerrit Trigger receives patchset-created."
+    - "Run the job on the reviewed Jenkins agent label."
+    - "Keep controller built-in executors out of production-like verification unless explicitly approved."
+    - "Allow Gerrit Trigger to post Verified +1 only after the agent job succeeds."
+
+evidence_contract:
+  separate_results:
+    - "Gerrit Trigger received patchset-created."
+    - "Jenkins scheduled the disposable job."
+    - "The disposable job ran on {{JENKINS_AGENT_LABEL}}."
+    - "Jenkins posted Verified +1 to the Gerrit change."
+  recordable_fields:
+    - "verification mode"
+    - "verification run ID"
+    - "Gerrit project and change number"
+    - "Jenkins job name and build identifier"
+    - "Verified vote result"
+    - "bounded log paths"
+  forbidden_fields:
+    - "private keys"
+    - "passwords"
+    - "tokens"
+    - "LDAP bind secrets"
+    - "verbose logs"
+
