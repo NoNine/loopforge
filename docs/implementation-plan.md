@@ -330,8 +330,11 @@ Ownership rules:
 - Step 6 implements Docker harness ownership for role-step readiness gates.
 - Step 11 implements full Docker simulation ownership for end-to-end
   integration verification.
-- Step 12 implements VM simulation ownership for production-like,
-  systemd-oriented verification.
+- Step 12 implements the non-mutating VM verifier scaffold for command
+  contract, env parsing, approval guardrails, bounded logging, and evidence
+  schema integration.
+- Step 15 is the future real VM implementation and verification gate. It is
+  documented for later work and skipped in the current default plan.
 - Simulation wrappers orchestrate role helpers but must not replace role
   behavior with modeled success.
 - The Docker harness owns role-step readiness gates; the full Docker verifier
@@ -379,8 +382,8 @@ Acceptance criteria:
   integration verification gate.
 - Docker harness, full Docker verifier, and VM verifier responsibilities are
   distinguishable by checkpoint.
-- VM verification is documented as a follow-up gate, not a prerequisite for
-  early Docker milestones.
+- Real VM verification is documented as a future follow-up gate, not a
+  prerequisite for early Docker milestones or current default acceptance.
 - Ubuntu/OS dependency handling and application artifact handling are documented
   as separate lanes.
 - Any target-host public internet fallback wording is limited to Ubuntu/OS
@@ -401,7 +404,7 @@ Workflow contract:
 | --- | --- | --- | --- | --- | --- |
 | Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed role env files, removes all `CHANGE_ME` values, keeps secrets out of committed examples, reviews cross-role values, and confirms browser-visible URLs for simulation. | None beyond local env-file creation. | Reviewed env files exist for Gerrit, Jenkins controller, and Jenkins agent, and preflight failures are resolved before mutation. |
 | Artifacts | Bundle factory | `prepare-artifacts` | Consumes reviewed role env files and produces role artifact directories, manifests, and checksums. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
-| Artifact staging | Bundle factory and target hosts | Role-local checksum verification in `install` or `preflight` | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
+| Artifact staging | Bundle factory and target hosts | Operator-managed file transfer; role-local checksum verification in `install` or `preflight` | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Operator copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
 | Gerrit readiness | Gerrit host | `install`, `configure`, `validate` | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit. | Gerrit starts, uses LDAP, exposes HTTP/SSH, records bounded logs, and is ready for integration. |
 | Jenkins controller readiness | Jenkins controller | `install`, `configure-service`, `install-plugins`, `configure-jcasc`, `validate` | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, and JCasC evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files, installs plugins, and starts or restarts Jenkins. | Jenkins starts, uses LDAP/JCasC, has required plugins, records bounded logs, and is ready for integration. |
 | Gerrit integration | Jenkins controller and Gerrit host | `generate-integration-key`, Gerrit `configure-integration`, Jenkins `configure-integration` | Jenkins controller produces the Jenkins-to-Gerrit public key; Gerrit consumes that public key; Jenkins consumes Gerrit endpoint and account values. | Creates or updates the Jenkins Gerrit integration account key material on Jenkins, Gerrit integration permissions, the `Verified` label, and Jenkins Gerrit Trigger server config. | Jenkins-to-Gerrit SSH authentication, stream-events permission, `Verified` voting permission, and integration evidence are ready. |
@@ -412,9 +415,9 @@ Workflow contract:
 Operator sequencing rules:
 
 - Run `prepare-artifacts` from the bundle factory environment for each role.
-- Stage prepared artifacts from the bundle factory to each target host before
-  running target-host installation, then verify manifests and checksums on the
-  target host before mutation.
+- Stage prepared artifacts by operator-managed file transfer from the bundle
+  factory to each target host before running target-host installation, then
+  verify manifests and checksums on the target host before mutation.
 - Run `generate-integration-key` on the Jenkins controller before Gerrit
   integration, then provide the generated public key to the Gerrit helper input.
 - Run Gerrit `configure-integration` before Jenkins controller
@@ -1058,11 +1061,17 @@ Acceptance criteria:
   required real behavior and does not report
   `real_gerrit_jenkins_behavior_proven=false`.
 
-## Step 12: Build VM Simulation
+## Step 12: Add VM Verification Scaffold
 
-Use the VM simulation behavior summarized in `docs/reference-digest.md`.
+Step 12 is not a real VM implementation. VM infrastructure is not available by
+default, so this step creates only the non-mutating verifier scaffold needed to
+document and gate future VM work.
 
-Create VM simulation assets under `simulation/vm/` after Docker verification is
+Use the VM simulation behavior summarized in `docs/reference-digest.md` as the
+future command contract, but do not claim that real VM provisioning,
+configuration, or end-to-end verification is implemented in this step.
+
+Create scaffold assets under `simulation/vm/` after Docker verification is
 stable.
 
 Expected command surface:
@@ -1081,23 +1090,30 @@ simulation/vm/vm-verify.sh full
 
 Implementation notes:
 
-- VM simulation should use separate bundle factory, LDAP, Gerrit, Jenkins
-  controller, and Jenkins agent VMs.
-- `prepare-artifacts` runs role helper artifact preparation on the bundle
-  factory VM and records manifests, checksums, and any `simulation-only`
-  internet-use labels.
-- `stage-artifacts` transfers prepared artifacts to service VMs and verifies
-  manifests and checksums on each target VM before install or configuration.
-- `check` is an independently repeatable readiness gate for host tooling, env
-  values, SSH reachability, target addresses, service state, local OS runtime
-  accounts, LDAP, endpoints, Gerrit/Jenkins integration, and agent readiness.
-- VM verification must use the Step 10 evidence model for production-like or
-  simulation mode labels.
-- The VM model is production-like validation, not strict air-gap verification.
+- The scaffold must implement command dispatch, `--help`, env parsing,
+  `--preflight-only`, approval guardrails, bounded-log references, and evidence
+  record structure.
+- Non-preflight commands that would create VMs, transfer files, mutate remote
+  hosts, configure services, or run verification must exit nonzero with a clear
+  blocked or unsupported status unless real VM infrastructure support is added
+  in the future Step 15.
+- The future real VM model should use separate bundle factory, LDAP, Gerrit,
+  Jenkins controller, and Jenkins agent VMs.
+- Future VM `prepare-artifacts` will run role helper artifact preparation on
+  the bundle factory VM and record manifests, checksums, and any
+  `simulation-only` internet-use labels.
+- Future VM `stage-artifacts` will transfer prepared artifacts to service VMs
+  and verify manifests and checksums on each target VM before install or
+  configuration.
+- VM verification must use the Step 10 evidence model for scaffold,
+  production-like, or simulation mode labels.
+- The future VM model is production-like validation, not strict air-gap
+  verification.
 - Remove or rename reference workflow concepts that imply supported offline
   Ubuntu dependency bundles.
 - VM commands that mutate remote or host state require explicit operator
-  approval and must describe expected side effects.
+  approval and must describe expected side effects. In Step 12 they must not
+  perform those mutations by default.
 
 Verification:
 
@@ -1110,16 +1126,14 @@ simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
 
 Acceptance criteria:
 
-- VM preflight can validate host tooling, env values, SSH reachability, and
-  target addresses before mutation.
-- VM artifact preparation runs on the bundle factory VM, then staged artifacts
-  are verified by manifest and checksum on Gerrit, Jenkins controller, and
-  Jenkins agent VMs before service mutation.
-- Full VM verification repeats the Docker-proven LDAP, Gerrit, Jenkins,
-  Jenkins agent, Gerrit Trigger, agent scheduling, agent execution, and
-  `Verified` vote flow.
-- Evidence labels the mode as VM simulation or production-like validation,
-  depending on the run.
+- VM preflight can validate local host tooling, env shape, approval flags, and
+  target address syntax without mutating host or remote state.
+- The scaffold makes real VM lifecycle commands visible but blocks them with
+  clear nonzero statuses when real VM infrastructure support is absent.
+- Evidence labels the mode as VM scaffold/preflight and does not imply that VM
+  artifact preparation, service configuration, or end-to-end verification ran.
+- Real VM artifact preparation, staging, configuration, and full verification
+  are deferred to Step 15 and skipped in the current default plan.
 
 ## Step 13: Add Cross-Repository Boundary Checks
 
@@ -1154,17 +1168,18 @@ Run final acceptance in this order:
 
 1. Static docs and shell checks.
 2. Helper `--help`, `print-env-template`, and `--dry-run preflight` checks.
-3. Shared Docker harness preflight and role gates.
-4. Docker simulation preflight.
-5. Docker full verification.
-6. VM preflight.
-7. VM full verification when VM infrastructure is available.
+3. Docker simulation preflight and setup phases through `docker-verify.sh`.
+4. Docker full verification through `docker-verify.sh`.
+5. Global evidence aggregation.
+6. VM scaffold preflight-only checks.
+7. Real VM implementation and verification from Step 15 is skipped for the
+   current default plan.
 
 Retained rendered inputs, prepared artifacts, staged artifacts, and harness
 state may be reused only when manifests and checksums verify against the current
 reviewed inputs and implementation commit. If reusable state is absent or
-invalid, rerun rendering, artifact preparation, and artifact staging before role
-gates.
+invalid, rerun rendering, artifact preparation, and artifact staging before
+Docker verification.
 
 Minimum command set:
 
@@ -1174,19 +1189,17 @@ scripts/gerrit-setup.sh --help
 scripts/jenkins-controller-setup.sh --help
 scripts/jenkins-agent-setup.sh --help
 scripts/collect-evidence.sh --help
-simulation/docker/docker-harness.sh preflight
-simulation/docker/docker-harness.sh render-config
-simulation/docker/docker-harness.sh up
-simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
-simulation/docker/docker-harness.sh stage-artifacts --role gerrit
-simulation/docker/docker-harness.sh run-role-gate --role gerrit
-simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
-simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
-simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
-simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
-simulation/docker/docker-harness.sh stage-artifacts --role jenkins-agent
-simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
+simulation/docker/docker-verify.sh preflight
+simulation/docker/docker-verify.sh render-config
+simulation/docker/docker-verify.sh prepare-artifacts
+simulation/docker/docker-verify.sh stage-artifacts
+simulation/docker/docker-verify.sh up
+simulation/docker/docker-verify.sh check
 simulation/docker/docker-verify.sh full-verify
+scripts/collect-evidence.sh
+simulation/docker/docker-verify.sh down
+simulation/vm/vm-verify.sh --help
+simulation/vm/vm-verify.sh check --preflight-only --env simulation/vm/example.env
 simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
 ```
 
@@ -1200,6 +1213,41 @@ Final acceptance criteria:
 - Validation artifacts are produced and retained for review.
 - The package does not claim strict air-gapped support in v1.
 - The package does not support offline Ubuntu dependency bundles in v1.
+- Step 12 VM scaffold checks pass without claiming real VM implementation or
+  real VM end-to-end verification.
+- Step 15 real VM implementation and verification is documented as skipped for
+  now.
+
+## Step 15: Future Real VM Implementation And Verification
+
+Step 15 is future work and must be skipped in the current default plan. It
+exists to preserve the intended production-like VM verification path without
+claiming that the repository implements it now.
+
+When explicitly scheduled later, Step 15 should implement the real VM behavior
+behind the Step 12 scaffold:
+
+- Provision or identify separate bundle factory, LDAP, Gerrit, Jenkins
+  controller, and Jenkins agent VMs.
+- Run role helper artifact preparation on the bundle factory VM.
+- Stage prepared artifacts to service VMs and verify target-side manifests and
+  checksums before service mutation.
+- Configure LDAP, Gerrit, Jenkins controller, and Jenkins agent with
+  systemd-oriented service behavior.
+- Run readiness checks for host tooling, env values, SSH reachability, target
+  addresses, service state, runtime accounts, LDAP, endpoints,
+  Gerrit/Jenkins integration, and agent readiness.
+- Run the Docker-proven Gerrit Trigger, Jenkins scheduling, agent execution,
+  and `Verified +1` vote flow.
+- Collect and aggregate production-like or VM simulation evidence using the
+  Step 10 evidence model.
+
+Skip rule:
+
+- Do not run Step 15 as part of current default acceptance.
+- Do not claim real VM implementation, real VM readiness, or real VM
+  end-to-end verification until Step 15 is explicitly implemented and run in an
+  approved VM environment.
 
 ## Commit Strategy
 
@@ -1216,9 +1264,10 @@ Keep commits small and logical:
 9. Add Jenkins agent manual/helper/templates.
 10. Add validation and evidence collection.
 11. Add Docker simulation.
-12. Add VM simulation.
+12. Add VM verification scaffold.
 13. Add boundary checks.
 14. Add final acceptance docs.
+15. Document future real VM implementation.
 
 Use standard Git-style commit messages with concise imperative subjects, for
 example:
