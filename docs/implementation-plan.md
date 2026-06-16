@@ -50,6 +50,45 @@ before the role helpers. Artifact bundles are always produced in the bundle
 factory environment, then staged to target environments and verified by
 manifest and checksum on the target before any target mutation.
 
+## Evidence Contract
+
+Checkpoint-level evidence requirements define what must be proven at each
+workflow boundary. The common evidence record schema defines how that proof is
+recorded so role helpers, Docker/VM verifiers, and final audits can be compared
+consistently.
+
+Common evidence records must include:
+
+- Verification mode.
+- Timestamp.
+- Role or environment name.
+- Checkpoint name.
+- Command name.
+- Pass, fail, blocked, unsupported, or not-applicable status.
+- Reviewed input fingerprint or sanitized config input manifest.
+- Artifact manifest references.
+- Checksum references and verification result.
+- Observed checks for the checkpoint.
+- Bounded log references.
+- Redaction status.
+
+Producer rules:
+
+- Role-local `collect-evidence` commands emit role-scoped checkpoint records
+  using this schema.
+- Docker and VM verifiers aggregate role-local records and add simulation,
+  production-like, and end-to-end records.
+- Global evidence collection audits and combines role-local and verifier
+  records into the final evidence package.
+- Records may mark fields as not applicable when they are outside the producer's
+  scope, but required behavior must not be reported as success when it is
+  failed, unproven, dummy, modeled, operation-plan-only, or
+  `planned-checks-only`.
+- Evidence must not include secrets, private keys, tokens, passwords, LDAP bind
+  secrets, or full secret-bearing env values.
+- Verbose Docker, Jenkins, Gerrit, package-manager, SSH, VM, and verification
+  logs must be referenced as bounded log files, not streamed.
+
 ## Step 1: Establish The Repository Structure
 
 Create the package layout before porting behavior. Keep manuals, templates,
@@ -568,6 +607,8 @@ Implementation notes:
   functional against the Gerrit target container in the shared Docker harness.
 - `validate` must prove observable Gerrit behavior in the target container,
   not operation-plan-only or `planned-checks-only` output.
+- `collect-evidence` must emit role-local Gerrit checkpoint evidence using the
+  Evidence Contract defined above.
 - The helper must not expose `prepare-offline-deps-bundle`,
   `install-offline-deps`, or other supported offline Ubuntu dependency bundle
   commands.
@@ -586,8 +627,9 @@ scripts/gerrit-setup.sh --env examples/gerrit.env.example --dry-run preflight
 simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
 simulation/docker/docker-harness.sh stage-artifacts --role gerrit
 simulation/docker/docker-harness.sh run-role-gate --role gerrit
+find simulation/docker/state/evidence -type f -name '*gerrit*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*gerrit*')
 rg -n "prepare-artifacts|configure-integration|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
-rg -n "dummy|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ```
 
@@ -603,6 +645,8 @@ Acceptance criteria:
   access, plugin readiness, and integration account readiness.
 - Gerrit service commands pass the shared Docker harness role gate without
   dummy, placeholder, operation-plan-only, or modeled success.
+- Gerrit role-local evidence follows the Evidence Contract and includes
+  bounded log references without exposing secrets.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
 
@@ -677,6 +721,8 @@ Implementation notes:
   controller target in the shared Docker harness.
 - Validation and trigger commands must prove observable Jenkins and Gerrit
   behavior, not operation-plan-only or `planned-checks-only` output.
+- `collect-evidence` must emit role-local Jenkins controller checkpoint evidence
+  using the Evidence Contract defined above.
 - Do not run builds on the controller except for explicit simulation-only
   checks; production-like validation should use the Jenkins agent.
 
@@ -690,8 +736,9 @@ scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.exampl
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
+find simulation/docker/state/evidence -type f -name '*jenkins-controller*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-controller*')
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|generate-integration-key|generate-agent-key|configure-agent|validate-agent|verify-trigger|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
-rg -n "dummy|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ```
 
@@ -707,6 +754,8 @@ Acceptance criteria:
   scheduling, and Gerrit Trigger voting through separate helper commands.
 - Jenkins controller service commands pass the shared Docker harness role gate
   without dummy, placeholder, operation-plan-only, or modeled success.
+- Jenkins controller role-local evidence follows the Evidence Contract and
+  includes bounded log references without exposing secrets.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
 
@@ -764,6 +813,8 @@ Implementation notes:
   Jenkins agent target in the shared Docker harness.
 - Agent validation must prove observable SSH and filesystem behavior, not
   operation-plan-only or `planned-checks-only` output.
+- `collect-evidence` must emit role-local Jenkins agent checkpoint evidence
+  using the Evidence Contract defined above.
 
 Verification:
 
@@ -775,8 +826,9 @@ scripts/jenkins-agent-setup.sh --env examples/jenkins-agent.env.example --dry-ru
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
 simulation/docker/docker-harness.sh stage-artifacts --role jenkins-agent
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
+find simulation/docker/state/evidence -type f -name '*jenkins-agent*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-agent*')
 rg -n "agent|SSH|label|executor|collect-evidence" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
-rg -n "dummy|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 ```
 
@@ -790,29 +842,41 @@ Acceptance criteria:
   runtime account ownership, and authorized-key readiness.
 - Agent service commands pass the shared Docker harness role gate without
   dummy, placeholder, operation-plan-only, or modeled success.
+- Jenkins agent role-local evidence follows the Evidence Contract and includes
+  bounded log references without exposing secrets.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
 
-## Step 10: Add Validation And Evidence Collection
+## Step 10: Standardize Validation And Evidence Collection
 
 Create `docs/validation-and-evidence.md` and `scripts/collect-evidence.sh`.
+This step documents the Evidence Contract for operators and implements global
+evidence aggregation over role-local and verifier-produced records.
 
-Evidence must capture:
+The operator-facing evidence model must cover:
 
 - Verification mode.
-- Timestamp and package version.
+- Timestamp, package version, and helper command version or git commit.
+- Role or environment name.
+- Checkpoint and command names.
+- Pass, fail, blocked, unsupported, or not-applicable status.
 - Hostnames and service endpoints.
 - Sanitized config input manifest.
 - Artifact manifest and checksums.
-- Helper command versions or git commit.
-- Service startup and endpoint checks.
-- LDAP access checks.
-- Jenkins agent scheduling result.
-- Gerrit Trigger event, build, and `Verified` vote result.
+- Service startup, endpoint, LDAP, SSH, plugin, JCasC, and runtime-account
+  checks where applicable.
+- Jenkins agent scheduling and execution results where applicable.
+- Gerrit Trigger event, build, and `Verified` vote results where applicable.
 - Bounded log references.
+- Redaction status.
 
 Implementation notes:
 
+- Role-local `collect-evidence` commands from Steps 7, 8, and 9 produce
+  role-scoped records using the Evidence Contract.
+- `scripts/collect-evidence.sh` validates and aggregates role-local records,
+  Docker/VM verifier records, and end-to-end integration records into the final
+  evidence package.
 - Do not store secrets in evidence.
 - Do not stream verbose Docker, Jenkins, Gerrit, package-manager, SSH, VM, or
   verification logs into normal command output.
@@ -826,17 +890,21 @@ Verification:
 ```bash
 bash -n scripts/collect-evidence.sh
 scripts/collect-evidence.sh --help
-rg -n "simulation-only|production-like|checksums|Verified|LDAP|agent" docs/validation-and-evidence.md scripts/collect-evidence.sh
+rg -n "Evidence Contract|role-local|aggregate|simulation-only|production-like|checksums|Verified|LDAP|agent" docs/validation-and-evidence.md scripts/collect-evidence.sh
 ```
 
 Acceptance criteria:
 
-- Evidence collection can be run after role-specific validation and after
+- Global evidence collection can be run after role-specific validation and after
   full integration validation.
+- Global evidence collection consumes role-local evidence from Gerrit, Jenkins
+  controller, and Jenkins agent helpers, plus Docker/VM verifier evidence when
+  present.
 - Evidence collection can retain per-checkpoint summaries for inputs,
   artifacts, artifact staging, role readiness, integration, agent validation,
   end-to-end acceptance, and final evidence.
-- Evidence summaries include mode labels and checksum references.
+- Evidence summaries follow the Evidence Contract and include mode labels,
+  checksum references, bounded log references, and redaction status.
 - Secret-looking env values are omitted or redacted.
 
 ## Step 11: Build Docker Simulation
@@ -1029,6 +1097,12 @@ Run final acceptance in this order:
 6. VM preflight.
 7. VM full verification when VM infrastructure is available.
 
+Retained rendered inputs, prepared artifacts, staged artifacts, and harness
+state may be reused only when manifests and checksums verify against the current
+reviewed inputs and implementation commit. If reusable state is absent or
+invalid, rerun rendering, artifact preparation, and artifact staging before role
+gates.
+
 Minimum command set:
 
 ```bash
@@ -1038,8 +1112,16 @@ scripts/jenkins-controller-setup.sh --help
 scripts/jenkins-agent-setup.sh --help
 scripts/collect-evidence.sh --help
 simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh up
+simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
+simulation/docker/docker-harness.sh stage-artifacts --role gerrit
 simulation/docker/docker-harness.sh run-role-gate --role gerrit
+simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
+simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
+simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
+simulation/docker/docker-harness.sh stage-artifacts --role jenkins-agent
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
 simulation/docker/docker-verify.sh full-verify
 simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
