@@ -15,9 +15,9 @@ Authoritative sources remain:
 ## Current State
 
 - Branch: `master`
-- Current implementation step: Step 3, Define The Simulation Model
-- Status: Step 2 accepted; Step 3 pending
-- Last accepted commit: Step 2 commit
+- Current implementation step: Step 4, Define The Operator Workflow Contract
+- Status: Step 3 accepted; Step 4 pending
+- Last accepted commit: Step 3 commit
 - Known local state: `docs/html/` is unrelated untracked local state and is
   ignored by user instruction.
 
@@ -27,7 +27,7 @@ Authoritative sources remain:
 | --- | --- | --- | --- | --- |
 | 1 | Accepted | Step 1 commit | `logs/execution-step-1.log` (`test -f README.md`; package `find` checks; `rg -n "air-gapped|offline-bundle" docs examples scripts templates simulation`) | Added package scaffold, removed pre-existing `docs/html/` docs browser surface, and kept offline matches to authority/prohibition text. Spec and quality reviews passed. |
 | 2 | Accepted | Step 2 commit | `logs/execution-step-2.log` (`rg -n "runtime|admin|integration|test user|LDAP|bind" docs/account-model.md`; no offline-related matches) | Added v1 account model with source, purpose, separation rules, credential custody, and evidence redaction. Spec and quality reviews passed. |
-| 3 | Pending |  |  | Add simulation model docs. |
+| 3 | Accepted | Step 3 commit | `logs/execution-step-3.log` (full Step 3 verification block from `docs/implementation-plan.md`) | Added simulation model docs for Docker and VM layers, generated output conventions, account mapping, source boundaries, and planned checkpoint ownership. Spec and quality reviews passed. |
 | 4 | Pending |  |  | Add operator workflow contract. |
 | 5 | Pending |  |  | Add Gerrit Trigger integration contract. |
 | 6 | Pending |  |  | Add shared Docker harness. |
@@ -43,38 +43,28 @@ Authoritative sources remain:
 
 ## Active Step Notes
 
-### Step 3: Define The Simulation Model
+### Step 4: Define The Operator Workflow Contract
 
-Implement exactly the Step 3 contract from `docs/implementation-plan.md`.
+Implement exactly the Step 4 contract from `docs/implementation-plan.md`.
 
 Required constraints:
 
-- Create documentation and directory-model definition only.
-- Do not add executable verifier scripts in this step.
-- Describe Docker-based simulation first, with the bundle factory represented
-  as a container.
-- Describe VM-based simulation second.
-- Include five machines/environments: bundle factory, LDAP, Gerrit, Jenkins
-  controller, and Jenkins agent.
-- Derive account usage from `docs/account-model.md`; do not introduce a
-  separate account taxonomy.
-- Define generated-output locations for state, staged artifacts, evidence, and
-  bounded logs.
-- Keep the bundle factory as an environment, not a public helper API.
-- Keep Ubuntu/OS dependency handling and application artifact handling as
-  separate supply lanes.
-- Limit target-host public internet fallback wording to Ubuntu/OS dependency
-  installation and label it `simulation-only`.
+- Document the default operator workflow as a phase contract, not a full
+  runnable command transcript.
+- Define phase order, execution environment, helper command ownership, inputs
+  and outputs, side effects, and required checkpoints.
+- Include artifact staging from the bundle factory to target hosts and
+  target-side checksum verification before installation.
+- Define Jenkins-to-Gerrit and Jenkins-to-agent public-key handoffs, private
+  key custody, and evidence redaction requirements.
+- Identify mutating phases and require confirmation or reviewed `--yes`.
+- Separate agent host runtime setup from controller-side node registration and
+  scheduling validation.
+- Do not add a catch-all `run` command.
 
-Step 3-owned files:
+Step 4 verification:
 
-- `simulation/README.md`
-- `simulation/docker/README.md`
-- `simulation/vm/README.md`
-
-Step 3 verification:
-
-See the Step 3 verification block in `docs/implementation-plan.md`.
+See the Step 4 verification block in `docs/implementation-plan.md`.
 
 ## Resume Instructions
 
