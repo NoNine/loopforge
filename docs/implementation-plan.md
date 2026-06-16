@@ -51,6 +51,29 @@ before the role helpers. Artifact bundles are always produced in the bundle
 factory environment, then staged to target environments and verified by
 manifest and checksum on the target before any target mutation.
 
+## Version Baseline
+
+All role helpers, Docker harnesses, Docker simulation, VM verifier scaffolds,
+and future real VM verification must use the same default version combination
+unless a later reviewed change updates this baseline everywhere.
+
+- Ubuntu target baseline: Ubuntu 24.04.4 LTS, release `24.04`, codename
+  `noble`.
+- Java runtime: OpenJDK 21 for Gerrit, Jenkins controller, and Jenkins agent.
+- Gerrit: `3.13.6` for the default conservative production rollout.
+- Gerrit `3.14.0` is treated as a current/latest line noted by the reference
+  material, but it is not the v1 default because `.0` releases require careful
+  production testing.
+- Jenkins controller: `2.555.3 LTS`.
+- Jenkins Plugin Installation Manager Tool: `2.15.0`.
+- Jenkins agent: no standalone Jenkins core version; it uses OpenJDK 21,
+  SSH server/client tooling, and the Jenkins SSH Build Agents plugin from the
+  controller plugin bundle.
+
+Evidence records and verifier summaries must record this version combination.
+Docker and VM verification must fail or report blocked rather than claiming
+comparable verification when the environment does not match the baseline.
+
 ## Evidence Contract
 
 Checkpoint-level evidence requirements define what must be proven at each
@@ -294,6 +317,10 @@ Implementation notes:
   simulation-only and must be labeled `simulation-only` in docs, logs, and
   summaries. Target hosts must not download Gerrit/Jenkins application artifacts
   from the public internet as fallback.
+- Docker and VM simulation inputs must preserve the Version Baseline. A
+  simulation or verifier must fail or report blocked rather than claim
+  comparable readiness when the Ubuntu, Java, Gerrit, Jenkins controller,
+  plugin-manager, or Jenkins agent/plugin-bundle versions differ.
 - Do not port the reference repo's supported offline Ubuntu dependency bundle
   workflow into v1 simulation.
 
@@ -552,8 +579,10 @@ Harness implementation decisions:
 - Use a boundary-first target model. The Gerrit, Jenkins controller, and
   Jenkins agent targets are host-like target containers, not prebuilt
   Gerrit/Jenkins service images with embedded application artifacts.
-- Use `ubuntu:24.04` or another reviewed base OS image for the bundle factory,
-  Gerrit target, Jenkins controller target, and Jenkins agent target.
+- Use the Version Baseline for the bundle factory, Gerrit target, Jenkins
+  controller target, and Jenkins agent target. A Docker image tag such as
+  `ubuntu:24.04` may represent the Ubuntu 24.04.4 LTS `noble` baseline only
+  when the harness records the resolved image digest or OS release evidence.
 - Use a real LDAP service image for the LDAP environment so LDAP reachability
   and seeded directory assumptions can be checked by later role gates.
 - Do not use `gerritcodereview/gerrit` or `jenkins/jenkins` as Step 6 target
@@ -566,6 +595,9 @@ Harness implementation decisions:
 - Existing generated `simulation/docker/state/` and `simulation/docker/logs/`
   content is not source material. Treat those paths as generated output and do
   not commit retained state or verbose logs.
+- Harness evidence must record the Version Baseline values used by the run and
+  must not report comparable readiness when container OS or artifact versions
+  drift from that baseline.
 
 Expected command surface:
 
@@ -691,6 +723,9 @@ Implementation notes:
 - `prepare-artifacts` prepares version-pinned Gerrit artifacts, plugins,
   manifests, and checksums, and the readiness gate must run it in the shared
   Docker harness bundle factory environment.
+- Gerrit defaults to the Version Baseline: Gerrit `3.13.6` and OpenJDK 21 on
+  Ubuntu 24.04.4 LTS `noble`. Gerrit `3.14.0` is not the default and may be
+  used only after a reviewed baseline update.
 - Gerrit target commands consume only staged artifacts from the bundle factory
   output and must verify target-side manifests and checksums before install or
   configuration.
@@ -793,6 +828,9 @@ Implementation notes:
 
 - Preserve the reference repo's useful Jenkins plugin and JCasC patterns.
 - Treat plugin versions and checksums as curated artifacts.
+- Jenkins controller defaults to the Version Baseline: Jenkins `2.555.3 LTS`,
+  OpenJDK 21, and Jenkins Plugin Installation Manager Tool `2.15.0` on Ubuntu
+  24.04.4 LTS `noble`.
 - `prepare-artifacts` must run in the shared Docker harness bundle factory
   environment, and Jenkins controller target commands must consume only staged
   bundle factory output.
@@ -887,6 +925,9 @@ Implementation notes:
 
 - Jenkins connects out to the agent over SSH.
 - The agent must have a dedicated runtime user and remote filesystem path.
+- Jenkins agent defaults to the Version Baseline: Ubuntu 24.04.4 LTS `noble`,
+  OpenJDK 21, SSH server/client tooling, and the Jenkins SSH Build Agents
+  plugin from the controller plugin bundle.
 - `prepare-artifacts` must run in the shared Docker harness bundle factory
   environment, and Jenkins agent target commands must consume only staged
   bundle factory output.
@@ -1029,6 +1070,8 @@ Implementation notes:
 
 - Docker simulation reuses the shared Docker harness and the functional role
   helpers from Steps 7, 8, and 9.
+- Docker simulation must use the Version Baseline for rendered inputs, prepared
+  artifacts, staged artifacts, role helpers, and final evidence.
 - Docker simulation is the first full end-to-end integration gate for Gerrit
   Trigger behavior, Jenkins agent scheduling, and `Verified` voting.
 - `docker-verify.sh prepare-artifacts` runs role helper
@@ -1042,6 +1085,8 @@ Implementation notes:
   `docker-verify.sh full-verify`.
 - Docker verification must use the Step 10 evidence model for mode labels,
   checksums, and bounded log references.
+- Docker verification must fail or report blocked rather than claim comparable
+  verification when the run does not match the Version Baseline.
 - Docker verification must fail if any consumed role command reports dummy
   success, operation-plan-only success, `planned-checks-only`, modeled
   stream-events, modeled agent scheduling, modeled `Verified` voting, or
@@ -1118,6 +1163,9 @@ Implementation notes:
 - The scaffold must implement command dispatch, `--help`, env parsing,
   `--preflight-only`, approval guardrails, bounded-log references, and evidence
   record structure.
+- The scaffold must parse and report Version Baseline inputs. It must not claim
+  VM readiness or comparable verification when requested VM inputs differ from
+  the baseline.
 - Non-preflight commands that would create VMs, transfer files, mutate remote
   hosts, configure services, or run verification must exit nonzero with a clear
   blocked or unsupported status unless real VM infrastructure support is added
@@ -1132,6 +1180,11 @@ Implementation notes:
   configuration.
 - VM verification must use the Step 10 evidence model for scaffold,
   production-like, or simulation mode labels.
+- VM verification must use the same version combination as the Docker harness
+  and Docker simulation: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, Gerrit
+  `3.13.6`, Jenkins `2.555.3 LTS`, Jenkins Plugin Installation Manager Tool
+  `2.15.0`, and the Jenkins SSH Build Agents plugin from the controller plugin
+  bundle.
 - The future VM model is production-like validation, not strict air-gap
   verification.
 - Remove or rename reference workflow concepts that imply supported offline
@@ -1157,6 +1210,8 @@ Acceptance criteria:
   clear nonzero statuses when real VM infrastructure support is absent.
 - Evidence labels the mode as VM scaffold/preflight and does not imply that VM
   artifact preparation, service configuration, or end-to-end verification ran.
+- VM scaffold evidence records the requested Version Baseline values and blocks
+  non-matching VM verification inputs.
 - Real VM artifact preparation, staging, configuration, and full verification
   are deferred to Step 15 and skipped in the current default plan.
 
@@ -1254,6 +1309,8 @@ behind the Step 12 scaffold:
 
 - Provision or identify separate bundle factory, LDAP, Gerrit, Jenkins
   controller, and Jenkins agent VMs.
+- Verify that every VM matches the Version Baseline before artifact
+  preparation, staging, service configuration, or end-to-end verification.
 - Run role helper artifact preparation on the bundle factory VM.
 - Stage prepared artifacts to service VMs and verify target-side manifests and
   checksums before service mutation.
@@ -1266,6 +1323,8 @@ behind the Step 12 scaffold:
   and `Verified +1` vote flow.
 - Collect and aggregate production-like or VM simulation evidence using the
   Step 10 evidence model.
+- Record the Version Baseline in VM evidence and fail or block the run when the
+  VM version combination differs.
 
 Skip rule:
 

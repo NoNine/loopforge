@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Document Viewer</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="reader-shell">
+      <header class="reader-topbar">
+        <a class="back-link" href="./index.html">Docs</a>
+        <div class="reader-title">
+          <h1 id="docTitle">Loading</h1>
+          <p id="docPath"></p>
+        </div>
+        <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+          <span aria-hidden="true">◐</span>
+        </button>
+      </header>
+
+      <article class="markdown-body" id="content" aria-live="polite"></article>
+    </main>
+    <script type="module" src="./viewer.js"></script>
+  </body>
+</html>
