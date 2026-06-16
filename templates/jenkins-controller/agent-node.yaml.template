@@ -1,0 +1,18 @@
+jenkins:
+  nodes:
+    - permanent:
+        name: "{{JENKINS_AGENT_LABEL}}"
+        remoteFS: "{{JENKINS_AGENT_REMOTE_FS}}"
+        labelString: "{{JENKINS_AGENT_LABEL}}"
+        launcher:
+          ssh:
+            host: "{{JENKINS_AGENT_HOST}}"
+            port: {{JENKINS_AGENT_SSH_PORT}}
+            credentialsId: "{{JENKINS_AGENT_CREDENTIAL_ID}}"
+            sshHostKeyVerificationStrategy:
+              knownHostsFileKeyVerificationStrategy:
+                knownHostsFile: "{{JENKINS_AGENT_KNOWN_HOSTS_FILE}}"
+
+# Step 8 renders this as modeled controller configuration only. Step 11 or a
+# production-like verifier must populate the reviewed known_hosts file from an
+# approved Jenkins agent host-key fingerprint before real SSH agent execution.

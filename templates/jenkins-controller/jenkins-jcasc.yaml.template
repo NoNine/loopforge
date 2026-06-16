@@ -1,0 +1,19 @@
+jenkins:
+  systemMessage: "Managed by the Gerrit/Jenkins setup package."
+  numExecutors: 0
+  mode: NORMAL
+  securityRealm:
+    ldap:
+      configurations:
+        - server: "{{LDAP_URL}}"
+          rootDN: ""
+          managerDN: "{{LDAP_BIND_DN}}"
+          userSearchBase: "{{LDAP_USER_BASE}}"
+          groupSearchBase: "{{LDAP_GROUP_BASE}}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "{{JENKINS_URL}}"
