@@ -15,9 +15,9 @@ Authoritative sources remain:
 ## Current State
 
 - Branch: `master`
-- Current implementation step: Step 4, Define The Operator Workflow Contract
-- Status: Step 3 accepted; Step 4 pending
-- Last accepted commit: Step 3 commit
+- Current implementation step: Step 5, Define Gerrit Trigger Integration
+- Status: Step 4 accepted; Step 5 pending
+- Last accepted commit: Step 4 commit
 - Known local state: `docs/html/` is unrelated untracked local state and is
   ignored by user instruction.
 
@@ -28,7 +28,7 @@ Authoritative sources remain:
 | 1 | Accepted | Step 1 commit | `logs/execution-step-1.log` (`test -f README.md`; package `find` checks; `rg -n "air-gapped|offline-bundle" docs examples scripts templates simulation`) | Added package scaffold, removed pre-existing `docs/html/` docs browser surface, and kept offline matches to authority/prohibition text. Spec and quality reviews passed. |
 | 2 | Accepted | Step 2 commit | `logs/execution-step-2.log` (`rg -n "runtime|admin|integration|test user|LDAP|bind" docs/account-model.md`; no offline-related matches) | Added v1 account model with source, purpose, separation rules, credential custody, and evidence redaction. Spec and quality reviews passed. |
 | 3 | Accepted | Step 3 commit | `logs/execution-step-3.log` (full Step 3 verification block from `docs/implementation-plan.md`) | Added simulation model docs for Docker and VM layers, generated output conventions, account mapping, source boundaries, and planned checkpoint ownership. Spec and quality reviews passed. |
-| 4 | Pending |  |  | Add operator workflow contract. |
+| 4 | Accepted | Step 4 commit | `logs/execution-step-4.log` (full Step 4 verification block from `docs/implementation-plan.md`) | Verified existing immutable implementation-plan contract covers workflow phases, staging, key handoffs, safety rules, and no runnable transcript. No Step 4 content edits were required. Spec and quality reviews passed. |
 | 5 | Pending |  |  | Add Gerrit Trigger integration contract. |
 | 6 | Pending |  |  | Add shared Docker harness. |
 | 7 | Pending |  |  | Add Gerrit manual/helper/templates. |
@@ -43,28 +43,31 @@ Authoritative sources remain:
 
 ## Active Step Notes
 
-### Step 4: Define The Operator Workflow Contract
+### Step 5: Define Gerrit Trigger Integration
 
-Implement exactly the Step 4 contract from `docs/implementation-plan.md`.
+Implement exactly the Step 5 contract from `docs/implementation-plan.md`.
 
 Required constraints:
 
-- Document the default operator workflow as a phase contract, not a full
-  runnable command transcript.
-- Define phase order, execution environment, helper command ownership, inputs
-  and outputs, side effects, and required checkpoints.
-- Include artifact staging from the bundle factory to target hosts and
-  target-side checksum verification before installation.
-- Define Jenkins-to-Gerrit and Jenkins-to-agent public-key handoffs, private
-  key custody, and evidence redaction requirements.
-- Identify mutating phases and require confirmation or reviewed `--yes`.
-- Separate agent host runtime setup from controller-side node registration and
-  scheduling validation.
-- Do not add a catch-all `run` command.
+- Use the trigger behavior summarized in `docs/reference-digest.md`.
+- Create `docs/gerrit-trigger-integration.md`.
+- Add templates for Gerrit `Verified` label definition, Gerrit access
+  permissions for the Jenkins integration actor, Jenkins Gerrit Trigger server
+  configuration, disposable Jenkins verification job, and disposable Gerrit
+  verification project/change.
+- Jenkins must authenticate to Gerrit with the Jenkins Gerrit integration
+  actor, not a human Jenkins admin.
+- Gerrit must grant read, stream-events, and `Verified` voting permissions to
+  the integration actor or group.
+- Verification artifacts must be labeled as disposable verification artifacts.
+- Failed `Verified` voting must be surfaced separately from event-stream or
+  job-scheduling failures.
 
-Step 4 verification:
+Step 5 verification:
 
-See the Step 4 verification block in `docs/implementation-plan.md`.
+```bash
+rg -n "Verified|Gerrit Trigger|stream-events|patchset-created|integration" docs templates scripts simulation
+```
 
 ## Resume Instructions
 
