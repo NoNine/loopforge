@@ -34,16 +34,17 @@ Consumed inputs:
 - Gerrit host, HTTP port, SSH port, runtime account, and site path.
 - LDAP URL, read-only bind DN, user base, group base, and admin group.
 - Gerrit admin account or group.
-- Jenkins Gerrit integration account and group.
-- Jenkins-to-Gerrit public key file. Gerrit consumes only the public key.
+- LDAP bind password file or reviewed LDAP bind password value.
 - Artifact output and staged artifact paths.
 - Verification mode and evidence directory.
 - `GERRIT_PLUGIN_LIST` with comma-separated plugin identifiers using only
   letters, digits, underscore, dot, and dash.
+- Optional bundle-factory artifact source inputs: `GERRIT_WAR_SOURCE`,
+  `GERRIT_PLUGIN_SOURCE_DIR`, and `GERRIT_DOWNLOAD_ARTIFACTS`.
 - `GERRIT_OS_DEPENDENCIES`, which defaults to the Gerrit target OS package
   expectations from the reviewed Gerrit reference: `ca-certificates`, `curl`,
-  `git`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`, `tar`,
-  `unzip`, and `wget`.
+  `git`, `ldap-utils`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`,
+  `tar`, `unzip`, and `wget`.
 
 Produced outputs:
 
@@ -82,6 +83,11 @@ Produced outputs:
 - Readiness result showing required commands, reviewed values, baseline values,
   endpoint values, LDAP assumptions, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
+- Normal-mode disk-space, host-resolution, LDAP bind/search, and Gerrit
+  runtime account/group readiness checks.
+- Jenkins Gerrit integration account, group, and public-key handoff values are
+  not Step 7 prerequisites. They are reviewed and applied in the later
+  integration step.
 
 Side effects:
 
@@ -90,6 +96,9 @@ Side effects:
   hosts may use approved internal Ubuntu/OS package repositories. Public
   internet fallback for target-host Ubuntu/OS dependency installation is
   simulation-only.
+- Dry-run preflight validates reviewed values and reports planned checks
+  without requiring operator-workstation DNS, LDAP, disk, or account state to
+  match the target.
 
 Helper:
 
@@ -121,13 +130,15 @@ Produced outputs:
 
 - `manifest.txt`.
 - `checksums.sha256`.
-- Curated Gerrit WAR marker for the Docker harness role gate.
-- Curated Gerrit plugin markers.
-- Gerrit config, secure config, `Verified` label, and integration access
-  templates.
-- Jenkins-to-Gerrit public key handoff file for the Docker harness role gate.
-  The handoff file must be a syntactically valid SSH public key accepted by
-  `ssh-keygen -l -f`.
+- Real Gerrit WAR artifact, normally `gerrit-3.13.6.war`.
+- Selected Gerrit plugin jar artifacts matching the Gerrit 3.13 line.
+- Plugin seed and artifact manifests proving the selected plugin set.
+- Gerrit config and secure config templates for this role.
+- `Verified` label and integration access templates for the later integration
+  step. Step 7 stages them as reviewed artifacts but does not apply them to
+  Gerrit project or account state.
+- No Jenkins-to-Gerrit public key handoff. Jenkins key generation and Gerrit
+  public-key installation are deferred to the later integration step.
 
 Staged artifact paths:
 
@@ -141,11 +152,22 @@ Side effects:
 
 - Writes artifact files only in the bundle factory output path.
 - Does not install, configure, or start Gerrit.
+- Does not prepare Ubuntu dependency bundles. Target hosts use approved
+  internal Ubuntu/OS repositories for OS dependencies.
+- Public artifact downloads are allowed only in the bundle factory or staging
+  context. In Docker simulation, helper output labels that public internet use
+  as `simulation-only`.
+- If the real Gerrit WAR or selected plugin jars are unavailable or invalid,
+  `prepare-artifacts` exits nonzero with a blocked reason instead of writing
+  placeholder files.
+- Because it writes new bundle-factory artifacts, `prepare-artifacts` is a
+  mutating helper command and requires `--yes` after reviewed env
+  confirmation.
 
 Helper:
 
 ```bash
-scripts/gerrit-setup.sh --env <reviewed-gerrit.env> prepare-artifacts
+scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes prepare-artifacts
 ```
 
 Harness:
@@ -180,6 +202,7 @@ Mutation side effects:
 
 - Creates or updates Gerrit role-local site files.
 - Does not download application artifacts on the target.
+- Fails before mutation if the staged Gerrit WAR is not a valid archive.
 
 Helper:
 
@@ -200,15 +223,17 @@ Consumed inputs:
 Produced outputs:
 
 - `etc/gerrit.config`.
-- `etc/secure.config` with redacted placeholder secret metadata only.
+- `etc/secure.config` written from reviewed LDAP bind secret input.
 - Real Gerrit site runtime configuration ready to start from the staged Gerrit
   WAR, rendered config, plugin set, and reviewed HTTP/SSH ports.
 
 Mutation side effects:
 
 - Creates or updates Gerrit role-local config files.
-- Records non-secret LDAP metadata. Operators must provide real bind secrets
-  through reviewed secret handling outside evidence.
+- Records non-secret LDAP metadata and writes `secure.config` from reviewed
+  secret input without committing the secret to evidence.
+- Does not start a local responder or any synthetic substitute for Gerrit.
+  Real daemon startup is part of validation.
 
 Helper:
 
@@ -226,6 +251,7 @@ Consumed inputs:
 
 - LDAP URL.
 - Read-only LDAP bind DN.
+- LDAP bind password file or reviewed LDAP bind password value.
 - User and group bases.
 - Gerrit admin group.
 - Test-user account assumptions from `docs/account-model.md`.
@@ -233,41 +259,54 @@ Consumed inputs:
 Produced outputs:
 
 - LDAP configuration in Gerrit config.
-- LDAP readiness evidence from a target-local TCP connection to the reviewed
-  LDAP endpoint.
+- LDAP readiness evidence from an LDAP bind/search against the reviewed user
+  and group bases.
 
 Validation evidence:
 
 - LDAP config exists.
-- The Gerrit target container can open a TCP connection to the LDAP endpoint.
+- The Gerrit target can bind and search the configured LDAP user and group
+  bases with `ldapsearch`.
 - Evidence records LDAP endpoint and input fingerprint, not bind secrets.
+- If `ldapsearch` or reviewed LDAP bind/search credentials are unavailable,
+  validation blocks. TCP reachability alone is not LDAP access proof.
 
-## Phase 7: Jenkins Integration Prerequisites
+## Phase 7: Deferred Jenkins Integration Prerequisites
 
-Gerrit must be ready for Jenkins before the Jenkins controller configures
-Gerrit Trigger.
+Jenkins integration prerequisites are intentionally deferred to the later
+integration step. Step 7 remains a Gerrit-only runtime proof and must not
+configure Gerrit-side Jenkins integration access or state.
 
 Consumed inputs:
 
 - Jenkins Gerrit integration account.
 - Jenkins Gerrit integration group.
 - Jenkins-to-Gerrit public key file.
+- LDAP bind password file or reviewed LDAP bind password value for Gerrit
+  local secret handling and LDAP bind/search proof.
+- Integration configuration mode, normally `site-git` in the Docker harness or
+  another reviewed Gerrit-native admin path in production.
+- Gerrit integration account id when site-Git bootstrap is used.
 - `Verified` label template.
 - Gerrit integration access template.
 - Verification ref pattern.
 
-Produced outputs:
+Deferred outputs:
 
 - Gerrit-held Jenkins public key.
 - `etc/verified-label.config`.
 - `etc/jenkins-integration-access.config`.
-- Integration readiness marker with account, group, `stream-events`, and
-  `Verified -1..+1` readiness.
+- Real Gerrit site Git state under `All-Projects.git` and `All-Users.git` when
+  `GERRIT_INTEGRATION_CONFIG_MODE=site-git`.
+- Integration applied status recording the account, group, and configuration
+  mode.
 
 Mutation side effects:
 
-- Registers or updates the Gerrit-side public key handoff.
-- Renders access and label configuration for reviewed Gerrit application.
+- None in Step 7. The helper command is retained as an explicit blocked entry
+  point so Step 7 role gates cannot mutate `All-Projects.git`, `All-Users.git`,
+  Gerrit labels, Jenkins service groups, public keys, stream-events grants, or
+  vote permissions.
 
 Helper:
 
@@ -275,9 +314,12 @@ Helper:
 scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes configure-integration
 ```
 
-Gerrit receives only the public key. Jenkins owns the matching private key.
-The helper rejects private-key or PEM material before copying and then requires
-`ssh-keygen -l -f` to fingerprint the OpenSSH public key.
+Expected Step 7 result: `BLOCKED: Step 7 defers Jenkins integration
+prerequisites to the later integration step`. Gerrit receives only the public
+key when that later step is implemented. Jenkins owns the matching private key.
+LDAP bind secrets are still read from reviewed secret input and written to
+`etc/secure.config` during Gerrit configuration; they are not recorded in
+evidence.
 
 ## Phase 8: Validation
 
@@ -301,18 +343,25 @@ Validation evidence covers:
   the running Gerrit service.
 - Artifact freshness: validation compares the installed WAR, rendered config,
   and plugin-set digest to the staged manifest and checksum inputs.
-- LDAP access: the Gerrit target container opens a TCP connection to the
-  reviewed LDAP endpoint.
+- LDAP access: the Gerrit target binds and searches the reviewed LDAP user and
+  group bases using reviewed bind secret input that is also written to
+  `etc/secure.config`.
 - SSH access: a TCP connection to the reviewed SSH port returns a Gerrit SSH
   response from the running Gerrit service.
 - Plugin readiness: at least one staged Gerrit plugin is installed.
-- Integration account readiness: public key, `Verified` label, access config,
-  `stream-events`, and vote readiness marker exist.
+- Jenkins integration prerequisites: explicitly deferred. Validation must not
+  require or apply Gerrit-owned `All-Projects.git`/`All-Users.git` Jenkins
+  access state, `Verified` voting grants, or stream-events grants.
+
+If Gerrit cannot be initialized or started from the staged WAR and rendered
+site configuration, validation fails or reports `BLOCKED:` in the bounded log.
+It must not stand up a local TCP responder, synthetic HTTP service, or marker
+process to satisfy readiness.
 
 Helper:
 
 ```bash
-scripts/gerrit-setup.sh --env <reviewed-gerrit.env> validate
+scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes validate
 ```
 
 Harness gate:
@@ -328,7 +377,6 @@ Consumed inputs:
 - Reviewed Gerrit env values.
 - Staged artifact manifest and checksums.
 - Gerrit site readiness markers.
-- Public key file for fingerprinting.
 - Bounded log directory.
 
 Produced outputs:
@@ -357,15 +405,17 @@ Evidence Contract fields:
 - Redaction status.
 
 `collect-evidence` is fail-closed. It verifies staged artifacts and checksums,
-the target-local service process, HTTP endpoint, SSH banner, LDAP TCP access,
-plugin files, integration permissions, and the SSH public-key fingerprint
-before it writes passing evidence. Passing evidence references concrete
-bounded log files that exist.
+the real Gerrit daemon process, HTTP endpoint, SSH banner, LDAP bind/search
+access, and plugin files before it writes passing evidence. Passing evidence
+references concrete bounded log files that exist and records that Jenkins
+integration prerequisites are deferred. Because it can start Gerrit and writes
+new evidence files, it is a mutating helper command and requires `--yes`
+after reviewed env confirmation.
 
 Helper:
 
 ```bash
-scripts/gerrit-setup.sh --env <reviewed-gerrit.env> collect-evidence
+scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes collect-evidence
 ```
 
 Evidence must not expose private keys, passwords, tokens, LDAP bind secrets,

@@ -139,6 +139,13 @@ compose() {
   "${compose_cmd[@]}" --project-name "$HARNESS_PROJECT_NAME" --file "$compose_file" "$@"
 }
 
+compose_v1_recreate_bug_detected() {
+  local log
+  log="${1:?log required}"
+  [ "$compose_kind" = "docker-compose v1" ] || return 1
+  rg -q "KeyError: 'ContainerConfig'" "$log"
+}
+
 ensure_dirs() {
   validate_harness_inputs
   mkdir -p \
@@ -148,10 +155,13 @@ ensure_dirs() {
     "$HARNESS_LEGACY_EVIDENCE_DIR" \
     "$HARNESS_LOG_DIR" \
     "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
+    "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
+    "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
     "$HARNESS_STATE_DIR/rendered" \
     "$HARNESS_STAGING_DIR/gerrit" \
     "$HARNESS_STAGING_DIR/jenkins-controller" \
     "$HARNESS_STAGING_DIR/jenkins-agent"
+  chmod 0700 "$HARNESS_STATE_DIR/gerrit-validation-secrets"
 }
 
 bounded_log_path() {
@@ -250,6 +260,92 @@ checksum_reference_for_evidence() {
       printf '%s\n' "not-applicable"
       ;;
   esac
+}
+
+ensure_gerrit_validation_key() {
+  local log private_key public_key bundle_public_key secret_dir
+  log="${1:?log required}"
+  secret_dir="$HARNESS_STATE_DIR/gerrit-validation-secrets"
+  private_key="$HARNESS_STATE_DIR/gerrit-validation-secrets/jenkins-gerrit"
+  public_key="$HARNESS_STATE_DIR/gerrit-validation-secrets/jenkins-gerrit.pub"
+  bundle_public_key="$HARNESS_STATE_DIR/bundle-factory/validation-public/jenkins-gerrit.pub"
+  if [ -d "$secret_dir" ] && [ ! -w "$secret_dir" ]; then
+    rm -rf "$secret_dir"
+  fi
+  mkdir -p "$secret_dir" "$(dirname "$bundle_public_key")"
+  chmod 0700 "$secret_dir"
+  if [ ! -s "$private_key" ]; then
+    ssh-keygen -q -t ed25519 -N '' -C jenkins-gerrit-validation-simulation \
+      -f "$private_key" >>"$log" 2>&1
+  fi
+  chmod 0600 "$private_key"
+  ssh-keygen -y -f "$private_key" >"$public_key"
+  cp "$public_key" "$bundle_public_key"
+  printf 'validation_secret_ready role=gerrit private_key_path=redacted public_key_path=%s custody=harness-owned-simulation-not-gerrit-artifact\n' \
+    "$bundle_public_key" >>"$log"
+}
+
+ensure_gerrit_ldap_bind_secret() {
+  local log secret_file secret_dir
+  log="${1:?log required}"
+  secret_dir="$HARNESS_STATE_DIR/gerrit-validation-secrets"
+  secret_file="$HARNESS_STATE_DIR/gerrit-validation-secrets/ldap-bind-password"
+  if [ -d "$secret_dir" ] && [ ! -w "$secret_dir" ]; then
+    rm -rf "$secret_dir"
+  fi
+  mkdir -p "$secret_dir"
+  chmod 0700 "$secret_dir"
+  printf '%s' "$HARNESS_LDAP_BIND_PASSWORD" >"$secret_file"
+  chmod 0600 "$secret_file"
+  printf 'validation_secret_ready role=gerrit secret_kind=ldap-bind-password custody=harness-owned-simulation-not-gerrit-artifact public_value_redacted=true\n' >>"$log"
+}
+
+gerrit_target_secret_env() {
+  printf '%s\n' "LDAP_BIND_PASSWORD_FILE=/harness/validation-secrets/ldap-bind-password"
+}
+
+reset_gerrit_site_state() {
+  local service log
+  service="${1:?service required}"
+  log="${2:?log required}"
+  compose exec -T -u root "$service" sh -lc '
+    pidfile=/harness/state/site/logs/gerrit.pid
+    pids="$(ps -eo pid=,args= | awk '\''index($0, "/harness/state/site") && (index($0, "GerritCodeReview") || index($0, "gerrit.war")) {print $1}'\'')"
+    if [ -n "$pids" ]; then
+      kill $pids 2>/dev/null || true
+      sleep 2
+      kill -9 $pids 2>/dev/null || true
+    fi
+    if [ -s "$pidfile" ]; then
+      pid="$(cat "$pidfile" 2>/dev/null || true)"
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 2
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+    if [ -x /harness/state/site/bin/gerrit.sh ]; then
+      timeout 10 su -s /bin/sh gerrit -c "/harness/state/site/bin/gerrit.sh stop" >/dev/null 2>&1 || true
+    fi
+    rm -rf /harness/state/site
+    mkdir -p /harness/state/site
+  ' >>"$log" 2>&1
+  printf 'site_reset role=gerrit path=%s reason=clean-step7-role-gate-runtime-state\n' "/harness/state/site" >>"$log"
+}
+
+gerrit_bundle_factory_env_file() {
+  printf '%s\n' "/harness/state/rendered/gerrit-bundle-factory.env"
+}
+
+write_gerrit_bundle_factory_env() {
+  local env_file host_env_file
+  env_file="$(gerrit_bundle_factory_env_file)"
+  host_env_file="$HARNESS_STATE_DIR/bundle-factory/rendered/gerrit-bundle-factory.env"
+  mkdir -p "$(dirname "$host_env_file")"
+  sed \
+    -e 's|^GERRIT_DOWNLOAD_ARTIFACTS=.*|GERRIT_DOWNLOAD_ARTIFACTS="1"|' \
+    "$repo_root/examples/gerrit.env.example" >"$host_env_file"
+  printf '%s\n' "$env_file"
 }
 
 manifest_get() {
@@ -606,6 +702,18 @@ cmd_up() {
     rc=0
   else
     rc=$?
+    if compose_v1_recreate_bug_detected "$log"; then
+      {
+        printf 'compose_recovery=docker-compose-v1-containerconfig\n'
+        printf 'recovery_action=down-remove-orphans-and-retry-up\n'
+      } >>"$log"
+      compose down --remove-orphans >>"$log" 2>&1 || true
+      if compose up -d --build >>"$log" 2>&1; then
+        rc=0
+      else
+        rc=$?
+      fi
+    fi
   fi
   if [ "$rc" -ne 0 ]; then
     evidence="$(write_evidence up harness fail "docker-harness.sh up" "$log" "Compose up failed")"
@@ -629,7 +737,7 @@ role_helper_present_in_container() {
 }
 
 cmd_prepare_artifacts() {
-  local role helper service log rc evidence artifact_dir
+  local role helper service log rc evidence artifact_dir gerrit_env_file
   role="$(parse_role "$@")"
   helper="$(helper_for_role "$role")"
   service="bundle-factory"
@@ -651,7 +759,19 @@ cmd_prepare_artifacts() {
     return 1
   fi
 
-  if compose exec -T "$service" "/workspace/$helper" prepare-artifacts >"$log" 2>&1; then
+  : >"$log"
+  if [ "$role" = "gerrit" ]; then
+    ensure_gerrit_ldap_bind_secret "$log"
+    gerrit_env_file="$(write_gerrit_bundle_factory_env)"
+  fi
+
+  if [ "$role" = "gerrit" ]; then
+    if compose exec -T "$service" "/workspace/$helper" --env "$gerrit_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif compose exec -T "$service" "/workspace/$helper" prepare-artifacts >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
@@ -896,20 +1016,21 @@ ensure_gerrit_ready_for_jenkins_controller() {
   ensure_harness_up_for_role "$gerrit_service"
   require_running_service "$gerrit_service"
 
-  if compose exec -T "$gerrit_service" sh -c 'test -f /harness/state/site/run/gerrit-observable.pid && kill -0 "$(cat /harness/state/site/run/gerrit-observable.pid)" 2>/dev/null' >>"$log" 2>&1; then
-    printf 'dependency_ready role=gerrit reason=observable-service-already-running\n' >>"$log"
+  if compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes validate >>"$log" 2>&1; then
+    printf 'dependency_ready role=gerrit reason=real-gerrit-validation-already-passing\n' >>"$log"
+    normalize_gerrit_role_evidence_logs "$log"
     return 0
   fi
 
-  printf 'dependency_prepare role=gerrit reason=jenkins-controller-gerrit-ssh-validation\n' >>"$log"
-  cmd_prepare_artifacts --role gerrit >>"$log" 2>&1
-  cmd_stage_artifacts --role gerrit >>"$log" 2>&1
-  compose exec -T "$gerrit_service" "/workspace/$gerrit_helper" --yes install >>"$log" 2>&1
-  compose exec -T "$gerrit_service" "/workspace/$gerrit_helper" --yes configure >>"$log" 2>&1
-  compose exec -T "$gerrit_service" "/workspace/$gerrit_helper" --yes configure-integration >>"$log" 2>&1
-  compose exec -T "$gerrit_service" "/workspace/$gerrit_helper" validate >>"$log" 2>&1
-  compose exec -T "$gerrit_service" "/workspace/$gerrit_helper" collect-evidence >>"$log" 2>&1
-  normalize_gerrit_role_evidence_logs "$log"
+  printf 'dependency_prepare role=gerrit reason=jenkins-controller-real-gerrit-ssh-validation\n' >>"$log"
+  cmd_prepare_artifacts --role gerrit >>"$log" 2>&1 &&
+    cmd_stage_artifacts --role gerrit >>"$log" 2>&1 &&
+    ensure_gerrit_ldap_bind_secret "$log" &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes install >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes configure >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes validate >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes collect-evidence >>"$log" 2>&1 &&
+    normalize_gerrit_role_evidence_logs "$log"
 }
 
 cmd_run_role_gate() {
@@ -932,11 +1053,14 @@ cmd_run_role_gate() {
 
   case "$role" in
     gerrit)
-      if compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure-integration >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
+      ensure_gerrit_ldap_bind_secret "$log"
+      if cmd_prepare_artifacts --role gerrit >>"$log" 2>&1 &&
+        cmd_stage_artifacts --role gerrit >>"$log" 2>&1 &&
+        reset_gerrit_site_state "$service" "$log" &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes configure >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes validate >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes collect-evidence >>"$log" 2>&1 &&
         normalize_gerrit_role_evidence_logs "$log"; then
         rc=0
       else

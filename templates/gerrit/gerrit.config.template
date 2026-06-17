@@ -2,12 +2,16 @@
 
 [gerrit]
 	canonicalWebUrl = {{GERRIT_CANONICAL_WEB_URL}}
+	basePath = git
 
 [httpd]
 	listenUrl = {{GERRIT_HTTP_LISTEN_URL}}
 
 [sshd]
 	listenAddress = {{GERRIT_SSH_LISTEN_ADDRESS}}
+
+[container]
+	javaHome = {{GERRIT_JAVA_HOME}}
 
 [auth]
 	type = LDAP

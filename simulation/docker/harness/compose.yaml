@@ -63,11 +63,13 @@ services:
       HARNESS_MODE: "${HARNESS_MODE}"
       HARNESS_STATE_DIR: "${HARNESS_STATE_DIR}"
       HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
+      LDAP_BIND_PASSWORD_FILE: /harness/validation-secrets/ldap-bind-password
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/gerrit:/harness/state"
       - "${HARNESS_STAGING_DIR}/gerrit:/harness/staged"
+      - "${HARNESS_STATE_DIR}/gerrit-validation-secrets:/harness/validation-secrets"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
       - "${HARNESS_LOG_DIR}:/harness/logs"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"

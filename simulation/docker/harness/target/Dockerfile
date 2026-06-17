@@ -8,11 +8,15 @@ RUN printf 'public_internet_fallback=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LA
       ca-certificates \
       curl \
       git \
+      ldap-utils \
       openjdk-21-jre \
       openssh-client \
       openssh-server \
+      procps \
       rsync \
       tar \
       unzip \
       wget && \
+    groupadd --system gerrit && \
+    useradd --system --gid gerrit --home-dir /harness/state/site --shell /bin/bash gerrit && \
     rm -rf /var/lib/apt/lists/*

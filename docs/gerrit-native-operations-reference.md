@@ -127,6 +127,7 @@ apt install -y \
   ca-certificates \
   curl \
   git \
+  ldap-utils \
   openssh-client \
   openjdk-21-jre-headless \
   rsync \
@@ -266,17 +267,8 @@ install -d -o gerrit -g gerrit -m 0750 /srv/gerrit
 install -d -o gerrit -g gerrit -m 0755 /opt/gerrit
 ```
 
-Place the Gerrit WAR.
-
-Online:
-
-```bash
-wget -O /opt/gerrit/gerrit.war \
-  https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
-chown gerrit:gerrit /opt/gerrit/gerrit.war
-```
-
-Offline:
+Place the Gerrit WAR from the staged bundle-factory artifact bundle. Target
+hosts must not download Gerrit application artifacts as fallback.
 
 ```bash
 cp /opt/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
@@ -417,7 +409,11 @@ journalctl -u gerrit -n 100 --no-pager
 tail -n 100 /srv/gerrit/logs/gerrit.log
 ```
 
-## 4. Jenkins Integration Prerequisites
+## 4. Later Jenkins Integration Prerequisites
+
+The Gerrit-only runtime validation step stops before this section. Apply these
+prerequisites only in the later integration step that coordinates Gerrit and
+Jenkins together.
 
 Create or confirm the Gerrit-internal `jenkins-gerrit` Jenkins Gerrit
 integration account. This account is not an LDAP user and is not a Unix runtime
@@ -469,11 +465,8 @@ systemctl is-enabled gerrit
 systemctl is-active gerrit
 curl -I http://GERRIT_HOST:8080/
 ssh -p 29418 USER@GERRIT_HOST gerrit version
-ssh -p 29418 jenkins-gerrit@GERRIT_HOST gerrit stream-events
 tail -n 100 /srv/gerrit/logs/gerrit.log
 ```
-
-The `stream-events` command is expected to stay open while waiting for events. Stop it with `Ctrl-C` after confirming it connects without an authorization error.
 
 Acceptance checks:
 
@@ -483,8 +476,8 @@ Acceptance checks:
 - LDAP users can log in.
 - Gerrit SSH works on port `29418`.
 - Required plugins load successfully.
-- `jenkins-gerrit` can read projects, stream events, and vote on `Verified`.
-- A Jenkins-triggered test change receives a Jenkins-authored `Verified +1` or `Verified -1` message in Gerrit.
+- Jenkins integration prerequisites from Section 4 are deferred until the later
+  integration validation step.
 
 ## 6. Backup and Operations
 

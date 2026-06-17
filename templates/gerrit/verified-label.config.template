@@ -8,9 +8,8 @@
 # This is a declarative template, not an executable script.
 
 [label "Verified"]
-	function = MaxWithBlock
+	function = NoBlock
 	value = -1 Fails
 	value =  0 No score
 	value = +1 Verified
 	defaultValue = 0
-	copyCondition = changekind:NO_CHANGE OR changekind:TRIVIAL_REBASE OR is:MIN
