@@ -197,8 +197,8 @@ Produced outputs:
 
 - `etc/gerrit.config`.
 - `etc/secure.config` with redacted placeholder secret metadata only.
-- A Docker-harness simulation target-local observable service tied to the
-  installed WAR, rendered config, plugin set, and reviewed HTTP/SSH ports.
+- Real Gerrit site runtime configuration ready to start from the staged Gerrit
+  WAR, rendered config, plugin set, and reviewed HTTP/SSH ports.
 
 Mutation side effects:
 
@@ -277,12 +277,10 @@ The helper rejects private-key or PEM material before copying and then requires
 
 ## Phase 8: Validation
 
-Validation must prove observable Gerrit behavior in the target environment.
-For Step 7 Docker-harness role gates, this is a simulation-only target-local
-observable service tied to the installed Gerrit artifact, rendered config,
-plugin set, and reviewed endpoints. It is not production-like Gerrit daemon
-readiness. Production-like modes must not pass through this Step 7 service.
-Validation must not report operation-plan-only, planned-checks-only, modeled,
+Validation must pass real Gerrit runtime checks in the target environment.
+For Step 7 Docker-harness role gates, Gerrit must be initialized and started
+from the staged Gerrit artifact in the Gerrit target container. Validation must
+not report operation-plan-only, planned-checks-only, modeled, local-responder,
 or dummy success.
 
 Consumed inputs:
@@ -293,18 +291,16 @@ Consumed inputs:
 
 Validation evidence covers:
 
-- Startup readiness: installed WAR exists and the Docker-harness target-local
-  observable service process is running in Docker harness simulation mode.
-- Endpoint reachability: a TCP HTTP request to the reviewed Gerrit endpoint
-  returns Gerrit 3.13.6 readiness derived from the installed artifact.
-- Artifact freshness: the Docker-harness target-local service reports the WAR
-  hash, Gerrit config hash, and a deterministic plugin-set digest based on
-  sorted plugin filenames and file hashes. Validation compares those values to
-  the currently installed files.
+- Startup readiness: Gerrit is running from the installed WAR and writes real
+  Gerrit startup logs under the configured site log path.
+- Endpoint reachability: a request to the reviewed Gerrit HTTP endpoint reaches
+  the running Gerrit service.
+- Artifact freshness: validation compares the installed WAR, rendered config,
+  and plugin-set digest to the staged manifest and checksum inputs.
 - LDAP access: the Gerrit target container opens a TCP connection to the
   reviewed LDAP endpoint.
 - SSH access: a TCP connection to the reviewed SSH port returns a Gerrit SSH
-  banner.
+  response from the running Gerrit service.
 - Plugin readiness: at least one staged Gerrit plugin is installed.
 - Integration account readiness: public key, `Verified` label, access config,
   `stream-events`, and vote readiness marker exist.
@@ -335,7 +331,7 @@ Produced outputs:
 
 - Role-local Gerrit evidence JSON under `GERRIT_EVIDENCE_DIR`.
 - A helper bounded log file under `GERRIT_LOG_DIR`.
-- The observable service bounded log under `GERRIT_SITE_PATH/logs/`.
+- Gerrit daemon startup and runtime logs under `GERRIT_SITE_PATH/logs/`.
 - In the shared Docker harness, canonical evidence under
   `simulation/evidence/docker/harness/<run-id>/`.
 - For Step 7 compatibility, the harness also mirrors evidence to ignored

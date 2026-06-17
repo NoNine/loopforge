@@ -37,14 +37,18 @@ lifecycle phase before the step that introduces it can be accepted.
 - `--dry-run` may describe intended mutation, but non-dry-run output must not
   report only "would do" behavior.
 - Readiness gates fail on dummy success, operation-plan-only success,
-  `planned-checks-only`, model-only proof for required real behavior, or
+  `planned-checks-only`, model-only proof for required runtime checks, or
   unsupported behavior that exits 0.
 - `print-env-template`, `preflight`, `prepare-artifacts`, and
   `collect-evidence` must be functional for their own lifecycle phases even
   though they do not directly configure a running service.
 - Commands that install, configure, validate, or exercise Gerrit, Jenkins, the
   Jenkins agent, LDAP integration, Gerrit Trigger, SSH connectivity, or
-  `Verified` voting must prove observable behavior in the target environment.
+  `Verified` voting must pass real runtime checks in the target environment.
+  Role readiness requires the relevant service process or daemon to be started
+  from staged artifacts and checked through its runtime protocol, API, or
+  filesystem state. Local responders, marker files, synthetic transcripts, and
+  model-only records are not acceptable readiness proof.
 
 Role-step readiness gates must run against the shared Docker harness introduced
 before the role helpers. Artifact bundles are always produced in the bundle
@@ -635,7 +639,7 @@ Implementation notes:
 - `run-role-gate --role ...` runs the role helper readiness gate in the
   corresponding target container. It must fail on dummy success,
   `planned-checks-only`, operation-plan-only success, or modeled proof for
-  required real behavior.
+  required runtime checks.
 - Because this step precedes the role helpers, harness verification checks the
   harness infrastructure, command surface, role validation, and missing-helper
   failure behavior. Steps 7, 8, and 9 run the role-specific gates after each
@@ -674,7 +678,7 @@ Acceptance criteria:
 - Staged artifacts are verified by manifest and checksum in target
   environments before mutation.
 - Role-gate wrappers fail on dummy, placeholder, operation-plan-only, or
-  modeled success for required real behavior.
+  modeled success for required runtime checks.
 - Harness evidence includes mode labels, checksum references, role names,
   container names, and bounded log references.
 - The harness is reusable by the Gerrit, Jenkins controller, Jenkins agent,
@@ -731,8 +735,9 @@ Implementation notes:
   configuration.
 - `install`, `configure`, `configure-integration`, and `validate` must be
   functional against the Gerrit target container in the shared Docker harness.
-- `validate` must prove observable Gerrit behavior in the target container,
-  not operation-plan-only or `planned-checks-only` output.
+- `validate` must pass real Gerrit runtime checks in the target container,
+  including daemon startup and protocol checks, not local responder output,
+  operation-plan-only output, or `planned-checks-only` output.
 - `collect-evidence` must emit role-local Gerrit checkpoint evidence using the
   Evidence Contract defined above.
 - The helper must not expose `prepare-offline-deps-bundle`,
@@ -848,8 +853,10 @@ Implementation notes:
   `configure-integration`, `configure-agent`, `validate-agent`,
   `verify-trigger`, and `validate` must be functional against the Jenkins
   controller target in the shared Docker harness.
-- Validation and trigger commands must prove observable Jenkins and Gerrit
-  behavior, not operation-plan-only or `planned-checks-only` output.
+- Validation and trigger commands must pass real Jenkins, Gerrit, and agent
+  runtime checks for the lifecycle phase they claim. They must not report
+  local responder output, operation-plan-only output, or `planned-checks-only`
+  output as success.
 - `collect-evidence` must emit role-local Jenkins controller checkpoint evidence
   using the Evidence Contract defined above.
 - Do not run builds on the controller except for explicit simulation-only
@@ -943,8 +950,8 @@ Implementation notes:
   configured label.
 - `install`, `configure-runtime`, and `validate` must be functional against the
   Jenkins agent target in the shared Docker harness.
-- Agent validation must prove observable SSH and filesystem behavior, not
-  operation-plan-only or `planned-checks-only` output.
+- Agent validation must pass real SSH daemon and filesystem readiness checks,
+  not operation-plan-only or `planned-checks-only` output.
 - `collect-evidence` must emit role-local Jenkins agent checkpoint evidence
   using the Evidence Contract defined above.
 
@@ -1089,9 +1096,9 @@ Implementation notes:
   verification when the run does not match the Version Baseline.
 - Docker verification must fail if any consumed role command reports dummy
   success, operation-plan-only success, `planned-checks-only`, modeled
-  stream-events, modeled agent scheduling, modeled `Verified` voting, or
-  `real_gerrit_jenkins_behavior_proven=false` in a successful full
-  verification summary.
+  stream-events, modeled agent scheduling, modeled `Verified` voting, or a
+  successful full verification summary without runtime proof from the real
+  Gerrit, Jenkins controller, and Jenkins agent services.
 - Docker logs must be written to bounded log files, not streamed verbosely into
   normal operator output.
 - Any internet use during Docker artifact preparation or fallback must be
@@ -1128,8 +1135,8 @@ Acceptance criteria:
   scheduling, agent execution, and Gerrit `Verified +1` vote posting.
 - Verification writes a summary that labels the mode as Docker simulation.
 - A successful full verification summary does not use modeled pass results for
-  required real behavior and does not report
-  `real_gerrit_jenkins_behavior_proven=false`.
+  required runtime outcomes and must include proof from the real Gerrit,
+  Jenkins controller, and Jenkins agent services.
 
 ## Step 12: Add VM Verification Scaffold
 

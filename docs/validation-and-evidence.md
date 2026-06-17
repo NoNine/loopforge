@@ -57,14 +57,18 @@ possible.
 
 Use mode labels consistently:
 
-- `simulation-only` for modeled or simulated verification.
+- `simulation-only` for Docker or VM simulation environment evidence and for
+  explicitly labeled bundle-factory public-download fallback in simulation.
 - `production-like` for realistic but non-production verification.
 - `docker-harness-simulation` for the shared Docker harness path.
 - `vm-simulation` for VM-scaffold or VM-simulation evidence.
 
 Summaries must clearly distinguish simulation-only runs from production-like
-runs. Do not imply real Jenkins scheduling, Gerrit Trigger delivery, or
-`Verified` voting unless the source record actually proves it.
+runs. A `pass` status must be backed by real runtime checks for the claimed
+checkpoint. Use `blocked`, `unsupported`, or `not-applicable` for lifecycle
+work that did not run; do not use modeled records as passing service
+readiness, Jenkins scheduling, Gerrit Trigger delivery, or `Verified` voting
+proof.
 
 ## Checkpoints
 
@@ -92,7 +96,7 @@ own scope.
 - Gerrit evidence covers startup, HTTP, SSH, LDAP, plugin, and integration
   readiness.
 - Jenkins controller evidence covers startup, HTTP, LDAP, plugins, JCasC,
-  Gerrit SSH, modeled or real agent scheduling checks, and Gerrit Trigger
+  Gerrit SSH, real agent scheduling checks when claimed, and Gerrit Trigger
   checks.
 - Jenkins agent evidence covers SSH readiness, runtime-account ownership,
   remote filesystem readiness, and authorized-key readiness.

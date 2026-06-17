@@ -13,6 +13,5 @@ jenkins:
               knownHostsFileKeyVerificationStrategy:
                 knownHostsFile: "{{JENKINS_AGENT_KNOWN_HOSTS_FILE}}"
 
-# Step 8 renders this as modeled controller configuration only. Step 11 or a
-# production-like verifier must populate the reviewed known_hosts file from an
-# approved Jenkins agent host-key fingerprint before real SSH agent execution.
+# This node config is valid only after the reviewed known_hosts file is
+# populated from an approved Jenkins agent host-key fingerprint.

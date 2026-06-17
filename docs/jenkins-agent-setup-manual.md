@@ -267,9 +267,10 @@ Jenkins controller scope:
 - `scripts/jenkins-controller-setup.sh configure-agent` registers the node,
   label, credential, remote filesystem, and executor policy on the controller.
 - `scripts/jenkins-controller-setup.sh validate-agent` covers controller-side
-  scheduling in its Step 8 role gate as modeled simulation-only proof.
-- Real end-to-end scheduling, trigger execution, and `Verified` voting belong
-  to Step 11.
+  scheduling in its Step 8 role gate and must pass only with real
+  controller-to-agent scheduling evidence.
+- Real cross-role trigger execution and `Verified` voting are aggregated by
+  Step 11 after the role helpers are compliant.
 
 ## Phase 7: Evidence Collection
 

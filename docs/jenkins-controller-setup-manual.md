@@ -198,8 +198,8 @@ Produced outputs:
 
 - Rendered service environment file.
 - Service configuration marker.
-- In Docker harness simulation, a target-local observable Jenkins service is
-  started later by trigger verification after all readiness facts exist.
+- Real Jenkins controller runtime configuration ready to start from the staged
+  Jenkins WAR, plugin set, JCasC material, and reviewed HTTP port.
 
 Mutation side effects:
 
@@ -351,19 +351,17 @@ Produced outputs:
 
 - Rendered Jenkins agent node config.
 - Agent registration marker.
-- Step 8 modeled scheduling record labeled `simulation-only`,
-  `step8-modeled`, `real_execution=false`, and
-  `step11_required_for_real_execution=true`.
-- Step 11 must provide the real Jenkins controller-to-agent scheduling
-  transcript.
+- Jenkins controller-side node registration state.
+- `validate-agent` must either run a real controller-to-agent scheduling check
+  against the configured SSH agent or exit nonzero with a clear blocked or
+  unsupported status.
 
 Mutation side effects:
 
 - Creates or updates Jenkins role-local node configuration.
-- `validate-agent` in Step 8 proves the helper and harness contract with a
-  modeled record only. It must label the result as simulation-only and must not
-  claim production-like or real Jenkins scheduling. Production-like validation
-  should run on the Jenkins agent, not on the controller.
+- `validate-agent` must not pass with a modeled scheduling record. Real
+  scheduling belongs to the Jenkins controller helper, while the agent helper
+  owns only host-side SSH readiness.
 
 Helpers:
 
@@ -384,18 +382,18 @@ Consumed inputs:
 Produced outputs:
 
 - Disposable verification job config and trigger inputs.
-- Step 8 modeled trigger verification record labeled `simulation-only`,
-  `step8-modeled`, `real_execution=false`, and
-  `step11_required_for_real_execution=true`.
+- Gerrit Trigger verification evidence from real Jenkins/Gerrit interaction,
+  or a nonzero blocked/unsupported result when the real interaction cannot run.
 
 Mutation side effects:
 
-- Creates disposable verification templates and modeled verification records
-  labeled with the verification run ID.
-- Docker harness mode for Step 8 does not claim real Gerrit Trigger behavior.
-  It records modeled `patchset-created`, modeled agent build execution, and
-  modeled `Verified +1` voting so the helper command surface can be gated.
-  Step 11 owns real Docker end-to-end Gerrit Trigger execution.
+- Creates disposable verification templates and records the real verification
+  result for the reviewed run ID.
+- Docker harness mode must not pass with modeled `patchset-created`, agent
+  build, or `Verified +1` voting. If the role gate cannot complete the real
+  verification at this step, it must fail or report blocked. Step 11 remains
+  the full cross-role Docker gate that aggregates the same real workflow across
+  all five environments.
 
 Helper:
 
@@ -409,12 +407,13 @@ and `Verified` voting failures must remain distinct.
 
 ## Phase 12: Validation
 
-Validation in Step 8 proves the Jenkins controller helper and harness contract.
-It verifies staged artifacts, rendered configuration, curated plugins, keys,
-LDAP reachability, Gerrit SSH reachability, and explicitly modeled
-simulation-only agent scheduling and Gerrit Trigger voting. It does not claim
-real Jenkins controller-to-agent scheduling or real Gerrit Trigger voting.
-Step 11 owns that real Docker end-to-end execution.
+Validation in Step 8 proves Jenkins controller role readiness with real runtime
+checks for the lifecycle phases that report success. It verifies staged
+artifacts, rendered configuration, curated plugins, keys, LDAP reachability,
+Gerrit SSH reachability, Jenkins controller startup, Gerrit Trigger readiness,
+agent scheduling when `validate-agent` reports success, and trigger voting when
+`verify-trigger` reports success. Unimplemented lifecycle phases must exit
+nonzero with a clear blocked or unsupported status.
 
 Consumed inputs:
 
@@ -424,10 +423,8 @@ Consumed inputs:
 
 Validation evidence covers:
 
-- Startup readiness: Step 8 uses a simulation-only target-local observable
-  service tied to installed artifacts and rendered config.
-- Endpoint reachability: Step 8 uses the simulation-only target-local
-  observable service. Step 11 must prove real Jenkins endpoint behavior.
+- Startup readiness: Jenkins starts from the staged WAR and writes runtime logs.
+- Endpoint reachability: HTTP checks reach the running Jenkins controller.
 - Artifact freshness: staged artifacts and rendered config are verified by
   manifest/checksum before mutation.
 - LDAP access: the Jenkins controller target can open a TCP connection to the
@@ -439,11 +436,11 @@ Validation evidence covers:
   reviewed Gerrit SSH endpoint.
 - Gerrit Trigger readiness: server config references the integration account
   and reviewed credential ID.
-- Agent readiness: Step 8 records modeled scheduling proof only, labeled
-  simulation-only and not real execution.
-- Trigger voting readiness: Step 8 records modeled `patchset-created`, agent
-  build, and `Verified +1` proof only, labeled simulation-only and not real
-  execution.
+- Agent readiness: successful `validate-agent` evidence comes from real
+  controller-to-agent scheduling.
+- Trigger voting readiness: successful `verify-trigger` evidence comes from
+  real Gerrit event, Jenkins build, agent execution, and `Verified +1`
+  verification.
 
 Helper:
 
@@ -495,8 +492,8 @@ Evidence Contract fields:
 - Redaction status.
 
 `collect-evidence` is fail-closed. In Step 8 it emits passing evidence only
-when the modeled proof records are present and explicitly labeled
-`simulation-only`, `step8-modeled`, and `real_execution=false`. The evidence
+when real runtime proof records are present and explicitly tied to the
+reviewed run ID, staged artifacts, and bounded logs. The evidence
 must state that real Jenkins/Gerrit/agent end-to-end execution is deferred to
 Step 11.
 
