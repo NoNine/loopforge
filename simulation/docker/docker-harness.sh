@@ -337,6 +337,10 @@ gerrit_bundle_factory_env_file() {
   printf '%s\n' "/harness/state/rendered/gerrit-bundle-factory.env"
 }
 
+jenkins_controller_bundle_factory_env_file() {
+  printf '%s\n' "/harness/state/rendered/jenkins-controller-bundle-factory.env"
+}
+
 write_gerrit_bundle_factory_env() {
   local env_file host_env_file
   env_file="$(gerrit_bundle_factory_env_file)"
@@ -345,6 +349,17 @@ write_gerrit_bundle_factory_env() {
   sed \
     -e 's|^GERRIT_DOWNLOAD_ARTIFACTS=.*|GERRIT_DOWNLOAD_ARTIFACTS="1"|' \
     "$repo_root/examples/gerrit.env.example" >"$host_env_file"
+  printf '%s\n' "$env_file"
+}
+
+write_jenkins_controller_bundle_factory_env() {
+  local env_file host_env_file
+  env_file="$(jenkins_controller_bundle_factory_env_file)"
+  host_env_file="$HARNESS_STATE_DIR/bundle-factory/rendered/jenkins-controller-bundle-factory.env"
+  mkdir -p "$(dirname "$host_env_file")"
+  sed \
+    -e 's|^JENKINS_DOWNLOAD_ARTIFACTS=.*|JENKINS_DOWNLOAD_ARTIFACTS="1"|' \
+    "$repo_root/examples/jenkins-controller.env.example" >"$host_env_file"
   printf '%s\n' "$env_file"
 }
 
@@ -737,7 +752,7 @@ role_helper_present_in_container() {
 }
 
 cmd_prepare_artifacts() {
-  local role helper service log rc evidence artifact_dir gerrit_env_file
+  local role helper service log rc evidence artifact_dir gerrit_env_file jenkins_env_file
   role="$(parse_role "$@")"
   helper="$(helper_for_role "$role")"
   service="bundle-factory"
@@ -763,10 +778,18 @@ cmd_prepare_artifacts() {
   if [ "$role" = "gerrit" ]; then
     ensure_gerrit_ldap_bind_secret "$log"
     gerrit_env_file="$(write_gerrit_bundle_factory_env)"
+  elif [ "$role" = "jenkins-controller" ]; then
+    jenkins_env_file="$(write_jenkins_controller_bundle_factory_env)"
   fi
 
   if [ "$role" = "gerrit" ]; then
     if compose exec -T "$service" "/workspace/$helper" --env "$gerrit_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif [ "$role" = "jenkins-controller" ]; then
+    if compose exec -T "$service" "/workspace/$helper" --env "$jenkins_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
@@ -872,10 +895,10 @@ cmd_stage_artifacts() {
 assert_no_placeholder_success() {
   local log
   log="${1:?log required}"
-  if grep -Eiq "dummy success|operation-plan-only|planned-checks-only|placeholder success|would validate|would run" "$log"; then
+    if grep -Eiq "dummy success|operation-plan-only|planned-checks-only|placeholder success|would validate|would run|target-local observable" "$log"; then
     return 1
   fi
-  if grep -Eiq "modeled" "$log" && ! grep -Eq "proof=modeled|proof_scope=step8-modeled|real_execution=false|simulation-only" "$log"; then
+  if grep -Eiq "proof=modeled|proof_scope=step8-modeled|real_execution=false|modeled_(scheduling|patchset|agent_build|verified)" "$log"; then
     return 1
   fi
   return 0
@@ -1068,17 +1091,10 @@ cmd_run_role_gate() {
       fi
       ;;
     jenkins-controller)
-      if ensure_gerrit_ready_for_jenkins_controller "$log" &&
-        compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
+      if compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --yes configure-service >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --yes install-plugins >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --yes configure-jcasc >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes generate-integration-key >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes generate-agent-key >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure-integration >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure-agent >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes validate-agent >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes verify-trigger >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
@@ -1120,11 +1136,8 @@ cmd_run_role_gate() {
       return 1
     fi
     case "$role" in
-      jenkins-controller)
-        evidence="$(write_evidence run-role-gate "$role" pass "docker-harness.sh run-role-gate" "$log" "Role helper validated Step 8 modeled/simulation-only Jenkins controller proof; real end-to-end Jenkins/Gerrit/agent execution is deferred to Step 11")"
-        ;;
       *)
-        evidence="$(write_evidence run-role-gate "$role" pass "docker-harness.sh run-role-gate" "$log" "Role helper validated required real behavior without placeholder success markers")"
+      evidence="$(write_evidence run-role-gate "$role" pass "docker-harness.sh run-role-gate" "$log" "Role helper validated required real behavior without placeholder success markers")"
         ;;
     esac
     printf 'exit=0 log=%s evidence=%s\n' "$log" "$evidence"

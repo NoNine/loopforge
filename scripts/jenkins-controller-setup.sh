@@ -106,7 +106,17 @@ file_set_digest() {
 }
 
 plugin_set_digest() {
-  file_set_digest "$JENKINS_HOME/plugins" "*.jpi"
+  [ -d "$JENKINS_HOME/plugins" ] || die "Missing Jenkins plugin directory: $JENKINS_HOME/plugins"
+  (
+    cd "$JENKINS_HOME/plugins"
+    find . -type f \( -name '*.jpi' -o -name '*.hpi' \) -print0 |
+      sort -z |
+      while IFS= read -r -d '' file; do
+        printf '%s %s\n' "${file#./}" "$(sha256_file "$file")"
+      done |
+      sha256sum |
+      awk '{print $1}'
+  )
 }
 
 template_set_digest() {
@@ -200,6 +210,7 @@ JENKINS_HOME
 JENKINS_STAGED_ARTIFACT_DIR
 JENKINS_ARTIFACT_OUTPUT_DIR
 JENKINS_PLUGIN_LIST
+JENKINS_DOWNLOAD_ARTIFACTS
 LDAP_URL
 LDAP_BIND_DN
 LDAP_USER_BASE
@@ -212,8 +223,6 @@ GERRIT_SSH_PORT
 GERRIT_TRIGGER_SERVER_NAME
 JENKINS_GERRIT_INTEGRATION_ACCOUNT
 JENKINS_GERRIT_CREDENTIAL_ID
-JENKINS_GERRIT_PRIVATE_KEY_FILE
-JENKINS_GERRIT_PUBLIC_KEY_FILE
 JENKINS_AGENT_HOST
 JENKINS_AGENT_SSH_PORT
 JENKINS_AGENT_ACCOUNT
@@ -221,8 +230,6 @@ JENKINS_AGENT_LABEL
 JENKINS_AGENT_REMOTE_FS
 JENKINS_AGENT_KNOWN_HOSTS_FILE
 JENKINS_AGENT_CREDENTIAL_ID
-JENKINS_AGENT_PRIVATE_KEY_FILE
-JENKINS_AGENT_PUBLIC_KEY_FILE
 GERRIT_VERIFICATION_PROJECT
 GERRIT_VERIFICATION_BRANCH
 VERIFICATION_RUN_ID
@@ -236,6 +243,11 @@ JENKINS_EVIDENCE_DIR
       require_reviewed_value "$name"
     fi
   done
+  if [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" != "1" ]; then
+    require_reviewed_value JENKINS_WAR_SOURCE
+    require_reviewed_value JENKINS_PLUGIN_MANAGER_SOURCE
+    require_reviewed_value JENKINS_PLUGIN_SOURCE_DIR
+  fi
 }
 
 require_account_separation() {
@@ -265,8 +277,12 @@ apply_env_defaults() {
   JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/harness/evidence}"
   JENKINS_LOG_DIR="${JENKINS_LOG_DIR:-/harness/logs}"
   JENKINS_VERIFICATION_MODE="${JENKINS_VERIFICATION_MODE:-docker-harness-simulation}"
+  JENKINS_DOWNLOAD_ARTIFACTS="${JENKINS_DOWNLOAD_ARTIFACTS:-0}"
+  JENKINS_WAR_SOURCE="${JENKINS_WAR_SOURCE:-}"
+  JENKINS_PLUGIN_MANAGER_SOURCE="${JENKINS_PLUGIN_MANAGER_SOURCE:-}"
+  JENKINS_PLUGIN_SOURCE_DIR="${JENKINS_PLUGIN_SOURCE_DIR:-}"
   JENKINS_OS_DEPENDENCIES="${JENKINS_OS_DEPENDENCIES:-ca-certificates,curl,fontconfig,git,net-tools,netcat-openbsd,openjdk-21-jre,openssh-client,rsync,tar,unzip,wget}"
-  JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2006.v001a_2ca_6b_574,credentials:1415.v831096eb_5534,git:5.7.0,gerrit-trigger:2.43.0,ldap:780.vcb_33c9a_e4332,matrix-auth:3.2.6,ssh-credentials:361.vb_f6760818e8c,ssh-slaves:3.1031.v72c6b_883b_869,workflow-aggregator:608.v67378e9d3db_1,job-dsl:1.93,timestamper:1.30,ws-cleanup:0.48}"
+  JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2006.v001a_2ca_6b_574,credentials:1415.v831096eb_5534,git:5.7.0,gerrit-trigger:2.42.0,ldap:780.vcb_33c9a_e4332,matrix-auth:3.2.6,ssh-credentials:361.vb_f6760818e8c,ssh-slaves:3.1031.v72c6b_883b_869,workflow-aggregator:608.v67378e9d3db_1,job-dsl:1.93,timestamper:1.30,ws-cleanup:0.48}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
   LDAP_USER_BASE="${LDAP_USER_BASE:-ou=people,dc=example,dc=test}"
@@ -279,8 +295,6 @@ apply_env_defaults() {
   GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-gerrit-primary}"
   JENKINS_GERRIT_INTEGRATION_ACCOUNT="${JENKINS_GERRIT_INTEGRATION_ACCOUNT:-jenkins-gerrit}"
   JENKINS_GERRIT_CREDENTIAL_ID="${JENKINS_GERRIT_CREDENTIAL_ID:-gerrit-jenkins-ssh}"
-  JENKINS_GERRIT_PRIVATE_KEY_FILE="${JENKINS_GERRIT_PRIVATE_KEY_FILE:-$JENKINS_HOME/keys/gerrit_ed25519}"
-  JENKINS_GERRIT_PUBLIC_KEY_FILE="${JENKINS_GERRIT_PUBLIC_KEY_FILE:-$JENKINS_HOME/public-handoff/jenkins-gerrit.pub}"
   JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
   JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
@@ -288,8 +302,6 @@ apply_env_defaults() {
   JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/home/jenkins-agent/workspace}"
   JENKINS_AGENT_KNOWN_HOSTS_FILE="${JENKINS_AGENT_KNOWN_HOSTS_FILE:-$JENKINS_HOME/ssh/agent-known-hosts}"
   JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
-  JENKINS_AGENT_PRIVATE_KEY_FILE="${JENKINS_AGENT_PRIVATE_KEY_FILE:-$JENKINS_HOME/keys/agent_ed25519}"
-  JENKINS_AGENT_PUBLIC_KEY_FILE="${JENKINS_AGENT_PUBLIC_KEY_FILE:-$JENKINS_HOME/public-handoff/jenkins-agent.pub}"
   GERRIT_VERIFICATION_PROJECT="${GERRIT_VERIFICATION_PROJECT:-verification-disposable-jenkins}"
   GERRIT_VERIFICATION_BRANCH="${GERRIT_VERIFICATION_BRANCH:-master}"
   VERIFICATION_RUN_ID="${VERIFICATION_RUN_ID:-docker-harness-jenkins-controller}"
@@ -309,6 +321,23 @@ print_env_template() {
 
 ensure_dirs() {
   mkdir -p "$JENKINS_HOME" "$JENKINS_EVIDENCE_DIR" "$JENKINS_LOG_DIR"
+}
+
+runtime_account_exists() {
+  getent passwd "$JENKINS_RUNTIME_ACCOUNT" >/dev/null 2>&1 ||
+    die "Missing Jenkins runtime account: $JENKINS_RUNTIME_ACCOUNT"
+}
+
+run_as_runtime() {
+  local command
+  command="${1:?command required}"
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$JENKINS_RUNTIME_ACCOUNT" -- sh -lc "$command"
+  elif command -v su >/dev/null 2>&1; then
+    su -s /bin/sh "$JENKINS_RUNTIME_ACCOUNT" -c "$command"
+  else
+    die "Missing runuser or su for Jenkins runtime execution"
+  fi
 }
 
 for_each_csv_value() {
@@ -335,11 +364,11 @@ for_each_csv_value() {
 
 require_docker_harness_simulation() {
   [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] ||
-    die "Target-local observable service is supported only in Docker harness simulation mode"
+    die "Controller runtime proof is supported only in Docker harness simulation mode"
   [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-controller-target" ] ||
-    die "Target-local observable service is supported only in the Jenkins controller Docker harness target"
+    die "Controller runtime proof is supported only in the Jenkins controller Docker harness target"
   [ "$JENKINS_VERIFICATION_MODE" = "docker-harness-simulation" ] ||
-    die "JENKINS_VERIFICATION_MODE must be docker-harness-simulation for target-local observable service validation"
+    die "JENKINS_VERIFICATION_MODE must be docker-harness-simulation for controller runtime proof"
 }
 
 is_docker_harness_simulation() {
@@ -445,12 +474,102 @@ plugin_version() {
 }
 
 write_plugin_artifact() {
-  local spec name version
+  local spec name version source_file dest_file plugin_url
   spec="${1:?plugin spec required}"
   name="$(plugin_name "$spec")"
   version="$(plugin_version "$spec")"
-  write_text_file "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${name}.jpi" \
-    "Jenkins plugin marker: $name version $version for Jenkins 2.555.3."
+  dest_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${name}.jpi"
+  if [ -n "${JENKINS_PLUGIN_SOURCE_DIR:-}" ]; then
+    source_file=""
+    for candidate in "$JENKINS_PLUGIN_SOURCE_DIR/${name}.jpi" "$JENKINS_PLUGIN_SOURCE_DIR/${name}.hpi"; do
+      if [ -f "$candidate" ]; then
+        source_file="$candidate"
+        break
+      fi
+    done
+    [ -n "$source_file" ] || die "Missing reviewed Jenkins plugin artifact for $name in $JENKINS_PLUGIN_SOURCE_DIR"
+    cp "$source_file" "$dest_file"
+  elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
+    require_command wget
+    plugin_url="https://updates.jenkins.io/download/plugins/$name/$version/${name}.hpi"
+    printf 'simulation-only public internet use: downloading Jenkins plugin artifact %s:%s\n' "$name" "$version" >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 -O "$dest_file" "$plugin_url"
+  else
+    printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_SOURCE_DIR or JENKINS_DOWNLOAD_ARTIFACTS=1 for selected Jenkins plugin artifacts\n' >&2
+    exit 2
+  fi
+  unzip -p "$dest_file" META-INF/MANIFEST.MF >/dev/null 2>&1 ||
+    die "Jenkins plugin artifact is not a valid archive: $dest_file"
+}
+
+prepare_plugins() {
+  local seed_file spec name
+  seed_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.seed.txt"
+  : >"$seed_file"
+  for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
+    printf '%s\n' "$spec" >>"$seed_file"
+  done
+
+  if [ -n "${JENKINS_PLUGIN_SOURCE_DIR:-}" ]; then
+    find "$JENKINS_PLUGIN_SOURCE_DIR" -maxdepth 1 -type f \( -name '*.jpi' -o -name '*.hpi' \) -exec cp {} "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/" \;
+  elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
+    require_command java
+    printf 'simulation-only public internet use: resolving and downloading Jenkins plugin artifacts with dependencies\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    java -jar "$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-plugin-manager-2.15.0.jar" \
+      --war "$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-2.555.3.war" \
+      --plugin-file "$seed_file" \
+      --latest false \
+      --plugin-download-directory "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" \
+      >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-resolution-report.txt" 2>&1
+  else
+    printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_SOURCE_DIR or JENKINS_DOWNLOAD_ARTIFACTS=1 for selected Jenkins plugin artifacts\n' >&2
+    exit 2
+  fi
+
+  for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
+    name="$(plugin_name "$spec")"
+    [ -s "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${name}.jpi" ] ||
+      [ -s "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${name}.hpi" ] ||
+      die "Curated Jenkins plugin artifact is missing after preparation: $name"
+  done
+  find "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" -type f \( -name '*.jpi' -o -name '*.hpi' \) -print |
+    sort >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-artifacts.manifest"
+}
+
+prepare_jenkins_war() {
+  local dest url
+  dest="$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-2.555.3.war"
+  if [ -n "${JENKINS_WAR_SOURCE:-}" ]; then
+    cp "$JENKINS_WAR_SOURCE" "$dest"
+  elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
+    require_command wget
+    url="https://get.jenkins.io/war-stable/2.555.3/jenkins.war"
+    printf 'simulation-only public internet use: downloading Jenkins controller WAR\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
+  else
+    printf 'BLOCKED: prepare-artifacts requires JENKINS_WAR_SOURCE or JENKINS_DOWNLOAD_ARTIFACTS=1 in the bundle factory; target hosts never download Jenkins application artifacts as fallback\n' >&2
+    exit 2
+  fi
+  unzip -p "$dest" META-INF/MANIFEST.MF >/dev/null 2>&1 ||
+    die "Jenkins WAR is not a valid archive and cannot support real controller startup: $dest"
+}
+
+prepare_plugin_manager() {
+  local dest url
+  dest="$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-plugin-manager-2.15.0.jar"
+  if [ -n "${JENKINS_PLUGIN_MANAGER_SOURCE:-}" ]; then
+    cp "$JENKINS_PLUGIN_MANAGER_SOURCE" "$dest"
+  elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
+    require_command wget
+    url="https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar"
+    printf 'simulation-only public internet use: downloading Jenkins Plugin Installation Manager artifact\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
+  else
+    printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_MANAGER_SOURCE or JENKINS_DOWNLOAD_ARTIFACTS=1 in the bundle factory\n' >&2
+    exit 2
+  fi
+  unzip -p "$dest" META-INF/MANIFEST.MF >/dev/null 2>&1 ||
+    die "Jenkins Plugin Installation Manager artifact is not a valid archive: $dest"
 }
 
 validate_os_dependency_identifier() {
@@ -612,15 +731,15 @@ cmd_prepare_artifacts() {
   load_env normal
   apply_env_defaults
   require_command sha256sum
+  require_command unzip
   validate_plugins
   validate_artifact_output_dir
   rm -rf "$JENKINS_ARTIFACT_OUTPUT_DIR"
   mkdir -p "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates"
-  write_text_file "$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-2.555.3.war" \
-    "Jenkins 2.555.3 curated controller artifact marker for Docker harness validation."
-  write_text_file "$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-plugin-manager-2.15.0.jar" \
-    "Jenkins Plugin Installation Manager 2.15.0 curated artifact marker."
-  for_each_csv_value "$JENKINS_PLUGIN_LIST" write_plugin_artifact "JENKINS_PLUGIN_LIST"
+  : >"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  prepare_jenkins_war
+  prepare_plugin_manager
+  prepare_plugins
   cp "$repo_root/templates/jenkins-controller/jenkins-service.env.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-service.env.template"
   cp "$repo_root/templates/jenkins-controller/jenkins-jcasc.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-jcasc.yaml.template"
   cp "$repo_root/templates/jenkins-controller/jenkins-credentials.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-credentials.yaml.template"
@@ -641,85 +760,81 @@ cmd_prepare_artifacts() {
 }
 
 cmd_install() {
+  local pids
   load_env normal
   require_env_values
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
+  if [ -f "$JENKINS_HOME/run/jenkins.pid" ] && kill -0 "$(cat "$JENKINS_HOME/run/jenkins.pid")" 2>/dev/null; then
+    kill "$(cat "$JENKINS_HOME/run/jenkins.pid")" 2>/dev/null || true
+  fi
+  pids="$(ps -eo pid=,args= | awk -v home="$JENKINS_HOME" 'index($0, home) && index($0, "jenkins.war") {print $1}')"
+  if [ -n "$pids" ]; then
+    kill $pids 2>/dev/null || true
+    sleep 2
+    kill -9 $pids 2>/dev/null || true
+  fi
+  rm -rf \
+    "$JENKINS_HOME/war" \
+    "$JENKINS_HOME/war-cache" \
+    "$JENKINS_HOME/plugins" \
+    "$JENKINS_HOME/templates" \
+    "$JENKINS_HOME/state" \
+    "$JENKINS_HOME/etc" \
+    "$JENKINS_HOME/jcasc" \
+    "$JENKINS_HOME/credentials" \
+    "$JENKINS_HOME/gerrit-trigger" \
+    "$JENKINS_HOME/nodes" \
+    "$JENKINS_HOME/jobs" \
+    "$JENKINS_HOME/keys" \
+    "$JENKINS_HOME/public-handoff" \
+    "$JENKINS_HOME/run"
   mkdir -p "$JENKINS_HOME/war" "$JENKINS_HOME/plugins" "$JENKINS_HOME/templates" "$JENKINS_HOME/state" "$JENKINS_HOME/logs"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-plugin-manager-2.15.0.jar" "$JENKINS_HOME/war/jenkins-plugin-manager.jar"
   cp -R "$JENKINS_STAGED_ARTIFACT_DIR/templates/." "$JENKINS_HOME/templates/"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_HOME/artifact-manifest.txt"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_HOME/artifact-checksums.sha256"
+  runtime_account_exists
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME"
   write_text_file "$JENKINS_HOME/state/install.status" "installed"
   printf 'status=pass command=install home=%s staged=%s\n' "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR"
 }
 
-start_observable_service() {
-  local service_script pidfile log_file war_sha jcasc_sha plugin_digest agent_digest trigger_digest pid
+start_real_jenkins() {
+  local pidfile log_file pid deadline response
   require_docker_harness_simulation
-  service_script="$JENKINS_HOME/bin/jenkins-observable-service.pl"
-  pidfile="$JENKINS_HOME/run/jenkins-observable.pid"
-  log_file="$JENKINS_HOME/logs/jenkins-observable.log"
-  mkdir -p "$JENKINS_HOME/bin" "$JENKINS_HOME/run" "$JENKINS_HOME/logs"
-  war_sha="$(sha256_file "$JENKINS_HOME/war/jenkins.war")"
-  jcasc_sha="$(sha256_file "$JENKINS_HOME/jcasc/jenkins.yaml")"
-  plugin_digest="$(plugin_set_digest)"
-  agent_digest="$(sha256_file "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml")"
-  trigger_digest="$(sha256_file "$JENKINS_HOME/gerrit-trigger/server.yaml")"
-  {
-    printf 'timestamp=%s\n' "$(iso_timestamp_utc)"
-    printf 'service=jenkins-controller-observable\n'
-    printf 'mode=docker-harness-simulation\n'
-    printf 'war_sha256=%s\n' "$war_sha"
-    printf 'jcasc_sha256=%s\n' "$jcasc_sha"
-    printf 'plugin_set_digest=%s\n' "$plugin_digest"
-    printf 'agent_digest=%s\n' "$agent_digest"
-    printf 'trigger_digest=%s\n' "$trigger_digest"
-  } >"$log_file"
-  cat >"$service_script" <<'PERL'
-#!/usr/bin/env perl
-use strict;
-use warnings;
-use IO::Socket::INET;
-use IO::Handle;
-
-my ($http_port, $war_sha, $jcasc_sha, $plugin_digest, $agent_digest, $trigger_digest) = @ARGV;
-my $listener = IO::Socket::INET->new(
-  LocalAddr => '0.0.0.0',
-  LocalPort => $http_port,
-  Proto => 'tcp',
-  Listen => 16,
-  ReuseAddr => 1,
-) or die "jenkins http listen failed: $!";
-
-while (my $client = $listener->accept()) {
-  $client->autoflush(1);
-  print {$client} "HTTP/1.1 200 OK\r\n";
-  print {$client} "X-Jenkins: 2.555.3\r\n";
-  print {$client} "Content-Type: text/plain\r\n";
-  print {$client} "Connection: close\r\n\r\n";
-  print {$client} "Jenkins 2.555.3\n";
-  print {$client} "war_sha256=$war_sha\n";
-  print {$client} "jcasc_sha256=$jcasc_sha\n";
-  print {$client} "plugin_set_digest=$plugin_digest\n";
-  print {$client} "agent_digest=$agent_digest\n";
-  print {$client} "trigger_digest=$trigger_digest\n";
-  close $client;
-}
-PERL
-  chmod +x "$service_script"
+  runtime_account_exists
+  pidfile="$JENKINS_HOME/run/jenkins.pid"
+  log_file="$JENKINS_HOME/logs/jenkins-controller.log"
+  mkdir -p "$JENKINS_HOME/run" "$JENKINS_HOME/logs"
   if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-    kill "$(cat "$pidfile")" 2>/dev/null || true
+    return 0
   fi
-  "$service_script" "$JENKINS_HTTP_PORT" "$war_sha" "$jcasc_sha" "$plugin_digest" "$agent_digest" "$trigger_digest" >>"$log_file" 2>&1 &
-  pid="$!"
-  printf '%s\n' "$pid" >"$pidfile"
-  sleep 1
-  if ! kill -0 "$pid" 2>/dev/null; then
-    die "Jenkins observable service failed to start; log=$log_file"
-  fi
+  export JENKINS_HOME
+  export CASC_JENKINS_CONFIG="$JENKINS_HOME/jcasc/jenkins.yaml"
+  export JAVA_OPTS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config=$JENKINS_HOME/jcasc/jenkins.yaml"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME"
+  mkdir -p "$JENKINS_HOME/war-cache"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/war-cache"
+  run_as_runtime "JENKINS_HOME=$(printf '%q' "$JENKINS_HOME") CASC_JENKINS_CONFIG=$(printf '%q' "$CASC_JENKINS_CONFIG") nohup java $JAVA_OPTS -jar $(printf '%q' "$JENKINS_HOME/war/jenkins.war") --httpPort=$(printf '%q' "$JENKINS_HTTP_PORT") --webroot=$(printf '%q' "$JENKINS_HOME/war-cache") >$(printf '%q' "$log_file") 2>&1 & echo \$!" >"$pidfile"
+  pid="$(cat "$pidfile")"
+  deadline=$((SECONDS + 240))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      tail -40 "$log_file" >&2 || true
+      die "Jenkins controller process exited before readiness; log=$log_file"
+    fi
+    response="$(check_http_endpoint || true)"
+    if printf '%s' "$response" | grep -Fq "X-Jenkins: 2.555.3"; then
+      write_text_file "$JENKINS_HOME/state/runtime.status" "pid=$pid endpoint=http://$JENKINS_HOST:$JENKINS_HTTP_PORT/ log=$log_file"
+      return 0
+    fi
+    sleep 3
+  done
+  tail -40 "$log_file" >&2 || true
+  die "Jenkins controller did not become ready before timeout; log=$log_file"
 }
 
 cmd_configure_service() {
@@ -745,6 +860,8 @@ cmd_install_plugins() {
   mkdir -p "$JENKINS_HOME/plugins" "$JENKINS_HOME/state"
   cp -R "$JENKINS_STAGED_ARTIFACT_DIR/plugins/." "$JENKINS_HOME/plugins/"
   plugin_set_digest >/dev/null
+  runtime_account_exists
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/plugins"
   write_text_file "$JENKINS_HOME/state/plugins.status" "installed plugins=$JENKINS_PLUGIN_LIST digest=$(plugin_set_digest)"
   printf 'status=pass command=install-plugins plugin_digest=%s\n' "$(plugin_set_digest)"
 }
@@ -759,89 +876,10 @@ cmd_configure_jcasc() {
   assert_no_unresolved_placeholders "$JENKINS_HOME/jcasc/jenkins.yaml"
   grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC must keep built-in node executors at zero"
   grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP security realm is missing"
+  runtime_account_exists
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/jcasc"
   write_text_file "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
   printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$JENKINS_HOME/jcasc/jenkins.yaml"
-}
-
-generate_keypair() {
-  local private_file comment public_file
-  private_file="${1:?private key file required}"
-  comment="${2:?comment required}"
-  public_file="${private_file}.pub"
-  mkdir -p "$(dirname "$private_file")"
-  rm -f "$private_file" "$public_file"
-  ssh-keygen -q -t ed25519 -N '' -C "$comment" -f "$private_file"
-  chmod 0600 "$private_file"
-  chmod 0644 "$public_file"
-}
-
-cmd_generate_integration_key() {
-  load_env normal
-  require_env_values
-  confirm_mutation generate-integration-key || return 0
-  verify_staged_artifacts
-  require_command ssh-keygen
-  generate_keypair "$JENKINS_GERRIT_PRIVATE_KEY_FILE" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT"
-  mkdir -p "$(dirname "$JENKINS_GERRIT_PUBLIC_KEY_FILE")"
-  cp "${JENKINS_GERRIT_PRIVATE_KEY_FILE}.pub" "$JENKINS_GERRIT_PUBLIC_KEY_FILE"
-  validate_private_key_file "$JENKINS_GERRIT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_GERRIT_PUBLIC_KEY_FILE"
-  write_text_file "$JENKINS_HOME/state/gerrit-key.status" "public_key=$JENKINS_GERRIT_PUBLIC_KEY_FILE fingerprint=$(public_key_fingerprint "$JENKINS_GERRIT_PUBLIC_KEY_FILE")"
-  printf 'status=pass command=generate-integration-key public_key=%s fingerprint=%s private_key=redacted\n' \
-    "$JENKINS_GERRIT_PUBLIC_KEY_FILE" "$(public_key_fingerprint "$JENKINS_GERRIT_PUBLIC_KEY_FILE")"
-}
-
-cmd_generate_agent_key() {
-  load_env normal
-  require_env_values
-  confirm_mutation generate-agent-key || return 0
-  verify_staged_artifacts
-  require_command ssh-keygen
-  generate_keypair "$JENKINS_AGENT_PRIVATE_KEY_FILE" "$JENKINS_AGENT_ACCOUNT"
-  mkdir -p "$(dirname "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-  cp "${JENKINS_AGENT_PRIVATE_KEY_FILE}.pub" "$JENKINS_AGENT_PUBLIC_KEY_FILE"
-  validate_private_key_file "$JENKINS_AGENT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_AGENT_PUBLIC_KEY_FILE"
-  write_text_file "$JENKINS_HOME/state/agent-key.status" "public_key=$JENKINS_AGENT_PUBLIC_KEY_FILE fingerprint=$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-  printf 'status=pass command=generate-agent-key public_key=%s fingerprint=%s private_key=redacted\n' \
-    "$JENKINS_AGENT_PUBLIC_KEY_FILE" "$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-}
-
-cmd_configure_integration() {
-  load_env normal
-  require_env_values
-  confirm_mutation configure-integration || return 0
-  verify_staged_artifacts
-  validate_private_key_file "$JENKINS_GERRIT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_GERRIT_PUBLIC_KEY_FILE"
-  mkdir -p "$JENKINS_HOME/credentials" "$JENKINS_HOME/gerrit-trigger" "$JENKINS_HOME/state"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-credentials.yaml.template" "$JENKINS_HOME/credentials/credentials.yaml"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/gerrit-trigger-server.yaml.template" "$JENKINS_HOME/gerrit-trigger/server.yaml"
-  assert_no_unresolved_placeholders "$JENKINS_HOME/credentials/credentials.yaml"
-  assert_no_unresolved_placeholders "$JENKINS_HOME/gerrit-trigger/server.yaml"
-  grep -Fq -- "$JENKINS_GERRIT_CREDENTIAL_ID" "$JENKINS_HOME/gerrit-trigger/server.yaml" || die "Gerrit Trigger credential ID is missing"
-  grep -Fq -- "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_HOME/gerrit-trigger/server.yaml" || die "Gerrit Trigger integration account is missing"
-  write_text_file "$JENKINS_HOME/state/gerrit-trigger.status" \
-    "server=$GERRIT_TRIGGER_SERVER_NAME account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT credential=$JENKINS_GERRIT_CREDENTIAL_ID ssh=$GERRIT_SSH_HOST:$GERRIT_SSH_PORT"
-  printf 'status=pass command=configure-integration server=%s account=%s credential=%s\n' \
-    "$GERRIT_TRIGGER_SERVER_NAME" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_CREDENTIAL_ID"
-}
-
-cmd_configure_agent() {
-  load_env normal
-  require_env_values
-  confirm_mutation configure-agent || return 0
-  verify_staged_artifacts
-  validate_private_key_file "$JENKINS_AGENT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_AGENT_PUBLIC_KEY_FILE"
-  mkdir -p "$JENKINS_HOME/nodes" "$JENKINS_HOME/state"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/agent-node.yaml.template" "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml"
-  assert_no_unresolved_placeholders "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml"
-  grep -Fq -- "$JENKINS_AGENT_CREDENTIAL_ID" "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml" || die "Agent credential ID is missing from node config"
-  write_text_file "$JENKINS_HOME/state/agent-configured.status" \
-    "agent=$JENKINS_AGENT_HOST label=$JENKINS_AGENT_LABEL credential=$JENKINS_AGENT_CREDENTIAL_ID remote_fs=$JENKINS_AGENT_REMOTE_FS"
-  printf 'status=pass command=configure-agent host=%s label=%s credential=%s\n' \
-    "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_LABEL" "$JENKINS_AGENT_CREDENTIAL_ID"
 }
 
 ldap_host_port() {
@@ -875,40 +913,26 @@ tcp_exchange() {
 check_http_endpoint() {
   local response attempt
   response=""
-  for attempt in 1 2 3 4 5; do
+  for attempt in $(seq 1 60); do
     response="$(timeout 5 bash -c 'exec 3<>"/dev/tcp/$0/$1"; printf "GET /login HTTP/1.0\r\nHost: $0\r\n\r\n" >&3; cat <&3 2>/dev/null || true' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" || true)"
     if grep -Fq -- 'HTTP/1.1 200 OK' <<<"$response" &&
       grep -Fq -- 'X-Jenkins: 2.555.3' <<<"$response"; then
       printf '%s\n' "$response"
       return 0
     fi
-    sleep 1
+    sleep 2
   done
   grep -Fq -- 'HTTP/1.1 200 OK' <<<"$response" || die "Jenkins HTTP endpoint did not return 200"
   grep -Fq -- 'X-Jenkins: 2.555.3' <<<"$response" || die "Jenkins HTTP endpoint did not report Jenkins 2.555.3"
 }
 
-response_field() {
-  local field response
-  field="${1:?field required}"
-  response="${2:?response required}"
-  awk -F= -v field="$field" '$1 == field { print substr($0, length(field) + 2); found = 1; exit } END { exit !found }' <<<"$response"
-}
-
-check_observable_service_matches_install() {
-  local response reported_war reported_jcasc reported_plugins reported_agent reported_trigger
-  require_docker_harness_simulation
-  response="$(check_http_endpoint)"
-  reported_war="$(response_field war_sha256 "$response")" || die "Observable service did not report war_sha256"
-  reported_jcasc="$(response_field jcasc_sha256 "$response")" || die "Observable service did not report jcasc_sha256"
-  reported_plugins="$(response_field plugin_set_digest "$response")" || die "Observable service did not report plugin_set_digest"
-  reported_agent="$(response_field agent_digest "$response")" || die "Observable service did not report agent_digest"
-  reported_trigger="$(response_field trigger_digest "$response")" || die "Observable service did not report trigger_digest"
-  [ "$reported_war" = "$(sha256_file "$JENKINS_HOME/war/jenkins.war")" ] || die "Observable service WAR hash does not match installed Jenkins WAR"
-  [ "$reported_jcasc" = "$(sha256_file "$JENKINS_HOME/jcasc/jenkins.yaml")" ] || die "Observable service JCasC hash does not match installed config"
-  [ "$reported_plugins" = "$(plugin_set_digest)" ] || die "Observable service plugin digest does not match installed plugins"
-  [ "$reported_agent" = "$(sha256_file "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml")" ] || die "Observable service agent digest does not match node config"
-  [ "$reported_trigger" = "$(sha256_file "$JENKINS_HOME/gerrit-trigger/server.yaml")" ] || die "Observable service trigger digest does not match Gerrit Trigger config"
+check_jenkins_api() {
+  local response
+  response="$(timeout 10 bash -c 'exec 3<>"/dev/tcp/$0/$1"; printf "GET /api/json HTTP/1.0\r\nHost: $0\r\n\r\n" >&3; cat <&3 2>/dev/null || true' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" || true)"
+  grep -Eq 'HTTP/1\.[01] (200|403)' <<<"$response" ||
+    die "Jenkins API endpoint did not return a controller HTTP response"
+  grep -Fq -- 'X-Jenkins: 2.555.3' <<<"$response" ||
+    die "Jenkins API endpoint did not report Jenkins 2.555.3"
 }
 
 check_ldap_access() {
@@ -919,17 +943,15 @@ EOF
   check_tcp_connect "$host" "$port" || die "LDAP endpoint is not reachable: $host:$port"
 }
 
-check_gerrit_ssh_connectivity() {
-  check_tcp_connect "$GERRIT_SSH_HOST" "$GERRIT_SSH_PORT" || die "Gerrit SSH endpoint is not reachable: $GERRIT_SSH_HOST:$GERRIT_SSH_PORT"
-}
-
 check_plugin_readiness() {
   local spec name missing
   validate_plugins
   missing=0
   for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
     name="$(plugin_name "$spec")"
-    [ -f "$JENKINS_HOME/plugins/${name}.jpi" ] || missing=1
+    [ -f "$JENKINS_HOME/plugins/${name}.jpi" ] ||
+      [ -f "$JENKINS_HOME/plugins/${name}.hpi" ] ||
+      missing=1
   done
   [ "$missing" -eq 0 ] || die "One or more curated Jenkins plugins are not installed"
   [ -s "$JENKINS_HOME/state/plugins.status" ] || die "Plugin readiness marker is missing"
@@ -941,63 +963,6 @@ check_jcasc_readiness() {
   grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC built-in executor policy is missing"
 }
 
-check_gerrit_trigger_readiness() {
-  [ -s "$JENKINS_HOME/gerrit-trigger/server.yaml" ] || die "Gerrit Trigger server config is missing"
-  grep -Fq -- 'gerrit-trigger:' "$JENKINS_HOME/gerrit-trigger/server.yaml" || die "Gerrit Trigger JCasC block is missing"
-  grep -Fq -- "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_HOME/gerrit-trigger/server.yaml" || die "Gerrit Trigger integration account missing"
-  [ -s "$JENKINS_HOME/state/gerrit-trigger.status" ] || die "Gerrit Trigger readiness marker is missing"
-}
-
-check_agent_registration() {
-  [ -s "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml" ] || die "Jenkins agent node config is missing"
-  grep -Fq -- "$JENKINS_AGENT_LABEL" "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml" || die "Jenkins agent label is missing from node config"
-  grep -Fq -- "$JENKINS_AGENT_CREDENTIAL_ID" "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml" || die "Jenkins agent credential is missing from node config"
-  [ -s "$JENKINS_HOME/state/agent-configured.status" ] || die "Agent configured marker is missing"
-}
-
-check_agent_observed_status() {
-  local file key_fp node_sha
-  file="$JENKINS_HOME/state/agent-validation.status"
-  [ -s "$file" ] || die "Step 8 modeled agent validation record is missing"
-  key_fp="$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-  node_sha="$(sha256_file "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml")"
-  grep -Fqx "proof_scope=step8-modeled" "$file" || die "Agent validation is not labeled step8-modeled"
-  grep -Fqx "verification_mode=simulation-only" "$file" || die "Agent validation is not labeled simulation-only"
-  grep -Fqx "real_execution=false" "$file" || die "Agent validation must state real_execution=false"
-  grep -Fqx "step11_required_for_real_execution=true" "$file" || die "Agent validation must defer real execution to Step 11"
-  grep -Fqx "run_id=$VERIFICATION_RUN_ID" "$file" || die "Agent validation run ID mismatch"
-  grep -Fqx "label=$JENKINS_AGENT_LABEL" "$file" || die "Agent validation label mismatch"
-  grep -Fqx "account=$JENKINS_AGENT_ACCOUNT" "$file" || die "Agent validation account mismatch"
-  grep -Fqx "public_key_fingerprint=$key_fp" "$file" || die "Agent validation key fingerprint mismatch"
-  grep -Fqx "node_config_sha256=$node_sha" "$file" || die "Agent validation node config hash mismatch"
-  grep -Fqx "modeled_scheduling=pass" "$file" || die "Modeled agent scheduling result is missing"
-}
-
-check_trigger_observed_status() {
-  local file gerrit_key_fp agent_key_fp node_sha trigger_sha
-  file="$JENKINS_HOME/state/trigger-verification.status"
-  [ -s "$file" ] || die "Step 8 modeled trigger verification record is missing"
-  gerrit_key_fp="$(public_key_fingerprint "$JENKINS_GERRIT_PUBLIC_KEY_FILE")"
-  agent_key_fp="$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-  node_sha="$(sha256_file "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml")"
-  trigger_sha="$(sha256_file "$JENKINS_HOME/gerrit-trigger/server.yaml")"
-  grep -Fqx "proof_scope=step8-modeled" "$file" || die "Trigger verification is not labeled step8-modeled"
-  grep -Fqx "verification_mode=simulation-only" "$file" || die "Trigger verification is not labeled simulation-only"
-  grep -Fqx "real_execution=false" "$file" || die "Trigger verification must state real_execution=false"
-  grep -Fqx "step11_required_for_real_execution=true" "$file" || die "Trigger verification must defer real execution to Step 11"
-  grep -Fqx "run_id=$VERIFICATION_RUN_ID" "$file" || die "Trigger verification run ID mismatch"
-  grep -Fqx "project=$GERRIT_VERIFICATION_PROJECT" "$file" || die "Trigger verification project mismatch"
-  grep -Fqx "branch=$GERRIT_VERIFICATION_BRANCH" "$file" || die "Trigger verification branch mismatch"
-  grep -Fqx "agent_label=$JENKINS_AGENT_LABEL" "$file" || die "Trigger verification agent label mismatch"
-  grep -Fqx "gerrit_public_key_fingerprint=$gerrit_key_fp" "$file" || die "Trigger verification Gerrit key fingerprint mismatch"
-  grep -Fqx "agent_public_key_fingerprint=$agent_key_fp" "$file" || die "Trigger verification agent key fingerprint mismatch"
-  grep -Fqx "node_config_sha256=$node_sha" "$file" || die "Trigger verification node config hash mismatch"
-  grep -Fqx "trigger_config_sha256=$trigger_sha" "$file" || die "Trigger verification config hash mismatch"
-  grep -Fqx "modeled_patchset_created=pass" "$file" || die "Modeled patchset-created result is missing"
-  grep -Fqx "modeled_agent_build=pass" "$file" || die "Modeled agent build result is missing"
-  grep -Fqx "modeled_verified_vote=pass" "$file" || die "Modeled Verified vote result is missing"
-}
-
 verify_base_readiness_facts() {
   verify_staged_artifacts
   [ -s "$JENKINS_HOME/state/install.status" ] || die "Install marker missing"
@@ -1006,142 +971,53 @@ verify_base_readiness_facts() {
   [ -s "$JENKINS_HOME/war/jenkins-plugin-manager.jar" ] || die "Jenkins plugin manager is not installed"
   check_plugin_readiness
   check_jcasc_readiness
-  validate_private_key_file "$JENKINS_GERRIT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_GERRIT_PUBLIC_KEY_FILE"
-  validate_private_key_file "$JENKINS_AGENT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_AGENT_PUBLIC_KEY_FILE"
-  check_gerrit_trigger_readiness
-  check_agent_registration
-  check_agent_observed_status
-  check_trigger_observed_status
+  [ -s "$JENKINS_HOME/state/runtime.status" ] || die "Jenkins runtime status marker is missing"
   check_ldap_access
-  check_gerrit_ssh_connectivity
-}
-
-cmd_validate_agent() {
-  local key_fp node_sha
-  load_env normal
-  require_env_values
-  confirm_mutation validate-agent || return 0
-  verify_staged_artifacts
-  check_agent_registration
-  validate_private_key_file "$JENKINS_AGENT_PRIVATE_KEY_FILE"
-  validate_public_key_file "$JENKINS_AGENT_PUBLIC_KEY_FILE"
-  key_fp="$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-  node_sha="$(sha256_file "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml")"
-  mkdir -p "$JENKINS_HOME/state"
-  {
-    printf 'proof_scope=step8-modeled\n'
-    printf 'verification_mode=simulation-only\n'
-    printf 'real_execution=false\n'
-    printf 'step11_required_for_real_execution=true\n'
-    printf 'run_id=%s\n' "$VERIFICATION_RUN_ID"
-    printf 'label=%s\n' "$JENKINS_AGENT_LABEL"
-    printf 'account=%s\n' "$JENKINS_AGENT_ACCOUNT"
-    printf 'public_key_fingerprint=%s\n' "$key_fp"
-    printf 'node_config_sha256=%s\n' "$node_sha"
-    printf 'remote_fs=%s\n' "$JENKINS_AGENT_REMOTE_FS"
-    printf 'modeled_scheduling=pass\n'
-  } >"$JENKINS_HOME/state/agent-validation.status"
-  check_agent_observed_status
-  printf 'status=pass command=validate-agent proof=modeled verification_mode=simulation-only real_execution=false step11_required=true label=%s\n' "$JENKINS_AGENT_LABEL"
-}
-
-cmd_verify_trigger() {
-  local gerrit_key_fp agent_key_fp node_sha trigger_sha modeled_change
-  load_env normal
-  require_env_values
-  confirm_mutation verify-trigger || return 0
-  verify_staged_artifacts
-  check_gerrit_trigger_readiness
-  check_agent_observed_status
-  mkdir -p "$JENKINS_HOME/jobs" "$JENKINS_HOME/state"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/disposable-verification-job.yaml.template" "$JENKINS_HOME/jobs/verification-disposable-${VERIFICATION_RUN_ID}.yaml"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/trigger-verification.env.template" "$JENKINS_HOME/jobs/trigger-verification-${VERIFICATION_RUN_ID}.env"
-  assert_no_unresolved_placeholders "$JENKINS_HOME/jobs/verification-disposable-${VERIFICATION_RUN_ID}.yaml"
-  assert_no_unresolved_placeholders "$JENKINS_HOME/jobs/trigger-verification-${VERIFICATION_RUN_ID}.env"
-  gerrit_key_fp="$(public_key_fingerprint "$JENKINS_GERRIT_PUBLIC_KEY_FILE")"
-  agent_key_fp="$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
-  node_sha="$(sha256_file "$JENKINS_HOME/nodes/$JENKINS_AGENT_LABEL.yaml")"
-  trigger_sha="$(sha256_file "$JENKINS_HOME/gerrit-trigger/server.yaml")"
-  modeled_change="modeled-${VERIFICATION_RUN_ID}"
-  {
-    printf 'proof_scope=step8-modeled\n'
-    printf 'verification_mode=simulation-only\n'
-    printf 'real_execution=false\n'
-    printf 'step11_required_for_real_execution=true\n'
-    printf 'run_id=%s\n' "$VERIFICATION_RUN_ID"
-    printf 'project=%s\n' "$GERRIT_VERIFICATION_PROJECT"
-    printf 'branch=%s\n' "$GERRIT_VERIFICATION_BRANCH"
-    printf 'modeled_change=%s\n' "$modeled_change"
-    printf 'agent_label=%s\n' "$JENKINS_AGENT_LABEL"
-    printf 'gerrit_public_key_fingerprint=%s\n' "$gerrit_key_fp"
-    printf 'agent_public_key_fingerprint=%s\n' "$agent_key_fp"
-    printf 'node_config_sha256=%s\n' "$node_sha"
-    printf 'trigger_config_sha256=%s\n' "$trigger_sha"
-    printf 'modeled_patchset_created=pass\n'
-    printf 'modeled_agent_build=pass\n'
-    printf 'modeled_verified_vote=pass\n'
-  } >"$JENKINS_HOME/state/trigger-verification.status"
-  check_trigger_observed_status
-  if is_docker_harness_simulation; then
-    start_observable_service
-  fi
-  printf 'status=pass command=verify-trigger proof=modeled verification_mode=simulation-only real_execution=false step11_required=true modeled_event=patchset-created modeled_vote=Verified+1 modeled_change=%s\n' "$modeled_change"
 }
 
 cmd_validate() {
   load_env normal
   require_env_values
-  require_command ssh-keygen
+  start_real_jenkins
   verify_base_readiness_facts
-  [ -f "$JENKINS_HOME/run/jenkins-observable.pid" ] || die "Jenkins observable service pid is missing"
-  kill -0 "$(cat "$JENKINS_HOME/run/jenkins-observable.pid")" 2>/dev/null || die "Jenkins observable service process is not running"
-  check_observable_service_matches_install
+  check_http_endpoint >/dev/null
+  check_jenkins_api
   cmd_collect_evidence >/dev/null
-  printf 'status=pass command=validate proof=modeled verification_mode=simulation-only real_execution=false startup=simulation-only endpoint=simulation-only ldap=pass plugins=pass JCasC=pass gerrit_ssh=pass Gerrit_Trigger=modeled agent=modeled trigger_vote=modeled evidence_dir=%s\n' "$JENKINS_EVIDENCE_DIR"
+  printf 'status=pass command=validate proof=real-controller-runtime startup=pass endpoint=pass api=pass ldap=pass plugins=pass JCasC=pass integration=deferred evidence_dir=%s\n' "$JENKINS_EVIDENCE_DIR"
 }
 
 cmd_collect_evidence() {
   load_env normal
   apply_env_defaults
   require_env_values
-  require_command ssh-keygen
   verify_base_readiness_facts
-  [ -f "$JENKINS_HOME/run/jenkins-observable.pid" ] || die "Jenkins observable service pid is missing"
-  kill -0 "$(cat "$JENKINS_HOME/run/jenkins-observable.pid")" 2>/dev/null || die "Jenkins observable service process is not running"
-  check_observable_service_matches_install
   ensure_dirs
-  local evidence input_fingerprint manifest checksum bounded_log service_log agent_status trigger_status gerrit_fp agent_fp
+  local evidence input_fingerprint manifest checksum bounded_log service_log runtime_status jenkins_pid
   local q_mode q_time q_role q_checkpoint q_command q_status q_input q_manifest q_checksum q_checks q_log q_redaction q_proof q_real q_step11
   evidence="$JENKINS_EVIDENCE_DIR/jenkins-controller-readiness-$(timestamp_utc).json"
   bounded_log="$JENKINS_LOG_DIR/jenkins-controller-collect-evidence-$(timestamp_utc).log"
-  service_log="$JENKINS_HOME/logs/jenkins-observable.log"
-  agent_status="$JENKINS_HOME/state/agent-validation.status"
-  trigger_status="$JENKINS_HOME/state/trigger-verification.status"
-  input_fingerprint="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$LDAP_URL" "$GERRIT_SSH_HOST:$GERRIT_SSH_PORT" "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_LABEL" | sha256sum | awk '{print $1}')"
+  service_log="$JENKINS_HOME/logs/jenkins-controller.log"
+  runtime_status="$JENKINS_HOME/state/runtime.status"
+  jenkins_pid="$JENKINS_HOME/run/jenkins.pid"
+  input_fingerprint="$(printf '%s\n%s\n%s\n%s\n' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$LDAP_URL" "$JENKINS_HOME" | sha256sum | awk '{print $1}')"
   manifest="$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt"
   checksum="$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256"
-  gerrit_fp="$(public_key_fingerprint "$JENKINS_GERRIT_PUBLIC_KEY_FILE")"
-  agent_fp="$(public_key_fingerprint "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
   {
     printf 'timestamp=%s\n' "$(iso_timestamp_utc)"
     printf 'command=collect-evidence\n'
-    printf 'proof_scope=step8-modeled\n'
-    printf 'verification_mode=simulation-only\n'
-    printf 'real_execution=false\n'
-    printf 'step11_required_for_real_execution=true\n'
+    printf 'proof_scope=controller-runtime\n'
+    printf 'verification_mode=%s\n' "$JENKINS_VERIFICATION_MODE"
+    printf 'real_execution=true\n'
+    printf 'step11_required_for_real_execution=false\n'
     printf 'artifact_manifest=%s\n' "$manifest"
     printf 'checksum_reference=%s\n' "$checksum"
-    printf 'observed=startup-simulation-only,http-simulation-only,ldap,plugins,JCasC,gerrit-ssh,Gerrit Trigger modeled,agent scheduling modeled,patchset-created modeled,agent build modeled,Verified+1 modeled\n'
-    printf 'gerrit_public_key_fingerprint=%s\n' "$gerrit_fp"
-    printf 'agent_public_key_fingerprint=%s\n' "$agent_fp"
+    printf 'observed=staged-artifacts,real-jenkins-startup,http-endpoint,api-json,ldap,plugins,JCasC\n'
     printf 'redaction=secrets-not-recorded\n'
   } >"$bounded_log"
   [ -s "$bounded_log" ] || die "Bounded evidence log was not written: $bounded_log"
-  [ -s "$service_log" ] || die "Observable service bounded log is missing: $service_log"
-  [ -s "$agent_status" ] || die "Modeled agent validation record is missing: $agent_status"
-  [ -s "$trigger_status" ] || die "Modeled trigger verification record is missing: $trigger_status"
+  [ -s "$service_log" ] || die "Jenkins controller log is missing: $service_log"
+  [ -s "$runtime_status" ] || die "Jenkins runtime status marker is missing: $runtime_status"
+  [ -s "$jenkins_pid" ] || die "Jenkins PID marker is missing: $jenkins_pid"
   q_mode="$(json_quote "$JENKINS_VERIFICATION_MODE")"
   q_time="$(json_quote "$(iso_timestamp_utc)")"
   q_role="$(json_quote "jenkins-controller")"
@@ -1151,12 +1027,12 @@ cmd_collect_evidence() {
   q_input="$(json_quote "$input_fingerprint")"
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
-  q_checks="$(json_quote "Step 8 modeled/simulation-only proof: staged artifacts, checksums, rendered JCasC, curated plugins, key custody, Gerrit SSH reachability, modeled agent scheduling, modeled patchset-created, modeled agent build, modeled Verified+1 vote. Real Jenkins/Gerrit/agent end-to-end execution is deferred to Step 11; gerrit_public_key_fingerprint=$gerrit_fp agent_public_key_fingerprint=$agent_fp")"
-  q_log="$(json_quote "$bounded_log;$service_log;$agent_status;$trigger_status")"
+  q_checks="$(json_quote "Real Jenkins controller process started from staged WAR, responded on /login and /api/json, retained plugin and JCasC readiness, and wrote bounded logs without secrets.")"
+  q_log="$(json_quote "$bounded_log;$service_log;$runtime_status")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"
-  q_proof="$(json_quote "step8-modeled")"
-  q_real="$(json_quote "false")"
-  q_step11="$(json_quote "true")"
+  q_proof="$(json_quote "controller-runtime")"
+  q_real="$(json_quote "true")"
+  q_step11="$(json_quote "false")"
   cat >"$evidence" <<EOF
 {
   "verification_mode": $q_mode,
@@ -1177,7 +1053,41 @@ cmd_collect_evidence() {
   "redaction_status": $q_redaction
 }
 EOF
-  printf 'status=pass command=collect-evidence proof=modeled verification_mode=simulation-only real_execution=false evidence=%s\n' "$evidence"
+  printf 'status=pass command=collect-evidence proof=real-controller-runtime verification_mode=%s real_execution=true evidence=%s\n' "$JENKINS_VERIFICATION_MODE" "$evidence"
+}
+
+deferred_command() {
+  local command_name
+  command_name="${1:?command required}"
+  load_env normal
+  require_env_values
+  verify_staged_artifacts
+  printf 'BLOCKED: %s is deferred to the later integration step and must not mutate Step 8 controller-only state\n' "$command_name" >&2
+  return 2
+}
+
+cmd_generate_integration_key() {
+  deferred_command generate-integration-key
+}
+
+cmd_generate_agent_key() {
+  deferred_command generate-agent-key
+}
+
+cmd_configure_integration() {
+  deferred_command configure-integration
+}
+
+cmd_configure_agent() {
+  deferred_command configure-agent
+}
+
+cmd_validate_agent() {
+  deferred_command validate-agent
+}
+
+cmd_verify_trigger() {
+  deferred_command verify-trigger
 }
 
 parse_args() {

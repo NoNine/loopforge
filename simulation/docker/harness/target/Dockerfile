@@ -7,8 +7,11 @@ RUN printf 'public_internet_fallback=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LA
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
+      fontconfig \
       git \
       ldap-utils \
+      net-tools \
+      netcat-openbsd \
       openjdk-21-jre \
       openssh-client \
       openssh-server \
@@ -19,4 +22,6 @@ RUN printf 'public_internet_fallback=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LA
       wget && \
     groupadd --system gerrit && \
     useradd --system --gid gerrit --home-dir /harness/state/site --shell /bin/bash gerrit && \
+    groupadd --system jenkins && \
+    useradd --system --gid jenkins --home-dir /harness/state/jenkins-home --shell /bin/bash jenkins && \
     rm -rf /var/lib/apt/lists/*

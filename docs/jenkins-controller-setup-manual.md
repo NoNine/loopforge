@@ -127,15 +127,21 @@ Consumed inputs:
 - Version baseline: Jenkins 2.555.3 LTS, OpenJDK 21, Jenkins Plugin
   Installation Manager Tool 2.15.0, Ubuntu release `24.04`, codename `noble`.
 - Curated Jenkins plugin list with versions.
+- Reviewed controller artifact source paths, or `JENKINS_DOWNLOAD_ARTIFACTS=1`
+  in the bundle-factory Docker simulation path. Any public internet use here
+  is labeled `simulation-only` and remains outside target-host application
+  artifact installation.
 - Jenkins controller templates under `templates/jenkins-controller/`.
 
 Produced outputs:
 
 - `manifest.txt`.
 - `checksums.sha256`.
-- Curated Jenkins WAR marker for the Docker harness role gate.
-- Curated Jenkins Plugin Installation Manager Tool marker.
-- Curated Jenkins plugin markers named from reviewed plugin IDs.
+- Curated Jenkins WAR artifact for real controller startup.
+- Curated Jenkins Plugin Installation Manager Tool artifact.
+- Curated Jenkins plugin artifacts, including resolved dependency plugins,
+  staged from reviewed sources or resolved in the bundle factory.
+- Plugin seed, artifact manifest, and plugin resolution report.
 - Controller-only JCasC and service templates.
 - Deferred integration templates for credentials, Gerrit Trigger, agent-node,
   and disposable verification workflows. These retained templates are staged
