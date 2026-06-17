@@ -4,6 +4,11 @@ This manual is the authority for the Jenkins controller role. The helper
 `scripts/jenkins-controller-setup.sh` is a repeatable accelerator for reviewed
 env files; it does not replace operator review.
 
+Maintain this manual with
+`docs/jenkins-controller-native-operations-reference.md`. The native reference
+is the strong reference for direct OS and Jenkins controller operations and
+must remain free of repository helper commands.
+
 The v1 boundary is unchanged: Jenkins application artifacts, plugin artifacts,
 JCasC templates, job templates, manifests, and checksums are prepared in the
 bundle factory, staged to the Jenkins controller target, and verified by

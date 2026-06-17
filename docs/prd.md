@@ -118,9 +118,9 @@ The product must help engineers and operators install and validate:
 ## Source Materials
 This PRD is based on the current repo materials, especially:
 
-- `docs/gerrit-install-air-gapped.md`
-- `docs/jenkins-install-air-gapped.md`
-- `docs/jenkins-agent-install-air-gapped.md`
+- `docs/gerrit-native-operations-reference.md`
+- `docs/jenkins-controller-native-operations-reference.md`
+- `docs/jenkins-agent-native-operations-reference.md`
 - `docs/offline-bundle-verification.md`
 - `docs/gerrit-jenkins-identity-model.md`
 - `docs/air-gapped-ubuntu-package-strategy.md`

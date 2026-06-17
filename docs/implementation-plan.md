@@ -10,9 +10,10 @@ known-working draft repository behavior without allowing implementation agents
 to copy code, docs, templates, scripts, config files, command bodies, or
 verbatim implementation from `/home/ubuntu/ai-assisted/gerrit-jenkins`.
 
-Implementation agents must use `docs/reference-digest.md`, `docs/prd.md`, and
-this plan as their reference set. Do not open or copy from the draft repository
-unless a human explicitly approves a new reference review.
+Implementation agents must use `docs/reference-digest.md`, `docs/prd.md`, the
+role native-operations references, and this plan as their reference set. Do not
+open or copy from the draft repository unless a human explicitly approves a
+new reference review.
 
 The draft behavior was originally framed around air-gapped installation. This
 package must adapt the behavior to the v1 boundary:
@@ -693,6 +694,7 @@ Use the Gerrit helper and integration behavior summarized in
 Create:
 
 - `docs/gerrit-setup-manual.md`
+- `docs/gerrit-native-operations-reference.md`
 - `scripts/gerrit-setup.sh`
 - `examples/gerrit.env.example`
 - Gerrit templates under `templates/gerrit/`
@@ -745,6 +747,9 @@ Implementation notes:
   commands.
 - The manual remains the authority; helper commands are repeatable
   accelerators for reviewed env files.
+- `docs/gerrit-native-operations-reference.md` is the strong reference for
+  direct OS and Gerrit operations. Keep it consistent with the Gerrit manual
+  and helper behavior, but never add repository helper commands to it.
 - Mutating helper commands should require explicit confirmation unless a
   reviewed `--yes` flag is provided.
 
@@ -762,6 +767,7 @@ find simulation/docker/state/evidence -type f -name '*gerrit*' -print -quit | rg
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*gerrit*')
 rg -n "prepare-artifacts|configure-integration|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
+! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/gerrit-native-operations-reference.md
 ```
 
 Acceptance criteria:
@@ -780,6 +786,8 @@ Acceptance criteria:
   bounded log references without exposing secrets.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
+- Gerrit native operations remain helper-free and consistent with the role
+  manual's OS, Gerrit, validation, backup, and recovery operations.
 
 ## Step 8: Create The Jenkins Controller Manual And Helper
 
@@ -789,6 +797,7 @@ Use the Jenkins controller helper and integration behavior summarized in
 Create:
 
 - `docs/jenkins-controller-setup-manual.md`
+- `docs/jenkins-controller-native-operations-reference.md`
 - `scripts/jenkins-controller-setup.sh`
 - `examples/jenkins-controller.env.example`
 - Jenkins controller templates under `templates/jenkins-controller/`
@@ -832,6 +841,10 @@ collect-evidence
 Implementation notes:
 
 - Preserve the reference repo's useful Jenkins plugin and JCasC patterns.
+- `docs/jenkins-controller-native-operations-reference.md` is the strong
+  reference for direct OS and Jenkins controller operations. Keep it
+  consistent with the controller manual and helper behavior, but never add
+  repository helper commands to it.
 - Treat plugin versions and checksums as curated artifacts.
 - Jenkins controller defaults to the Version Baseline: Jenkins `2.555.3 LTS`,
   OpenJDK 21, and Jenkins Plugin Installation Manager Tool `2.15.0` on Ubuntu
@@ -876,6 +889,7 @@ find simulation/docker/state/evidence -type f -name '*jenkins-controller*' -prin
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-controller*')
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|generate-integration-key|generate-agent-key|configure-agent|validate-agent|verify-trigger|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
+! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/jenkins-controller-native-operations-reference.md
 ```
 
 Acceptance criteria:
@@ -894,6 +908,9 @@ Acceptance criteria:
   includes bounded log references without exposing secrets.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
+- Jenkins controller native operations remain helper-free and consistent with
+  the role manual's OS, Jenkins, plugin, JCasC, validation, backup, and
+  recovery operations.
 
 ## Step 9: Create The Jenkins Agent Manual And Helper
 
@@ -902,6 +919,7 @@ Use the Jenkins agent helper behavior summarized in `docs/reference-digest.md`.
 Create:
 
 - `docs/jenkins-agent-setup-manual.md`
+- `docs/jenkins-agent-native-operations-reference.md`
 - `scripts/jenkins-agent-setup.sh`
 - `examples/jenkins-agent.env.example`
 - Jenkins agent templates under `templates/jenkins-agent/`
@@ -931,6 +949,10 @@ collect-evidence
 Implementation notes:
 
 - Jenkins connects out to the agent over SSH.
+- `docs/jenkins-agent-native-operations-reference.md` is the strong reference
+  for direct OS, OpenSSH, and Jenkins agent operations. Keep it consistent with
+  the agent manual and helper behavior, but never add repository helper
+  commands to it.
 - The agent must have a dedicated runtime user and remote filesystem path.
 - Jenkins agent defaults to the Version Baseline: Ubuntu 24.04.4 LTS `noble`,
   OpenJDK 21, SSH server/client tooling, and the Jenkins SSH Build Agents
@@ -969,6 +991,7 @@ find simulation/docker/state/evidence -type f -name '*jenkins-agent*' -print -qu
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-agent*')
 rg -n "agent|SSH|label|executor|collect-evidence" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
+! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes|configure-" docs/jenkins-agent-native-operations-reference.md
 ```
 
 Acceptance criteria:
@@ -985,6 +1008,9 @@ Acceptance criteria:
   bounded log references without exposing secrets.
 - Unsupported offline dependency bundle commands are absent from helper command
   dispatch and documented only as unsupported v1 behavior if mentioned.
+- Jenkins agent native operations remain helper-free and consistent with the
+  role manual's OS, OpenSSH, authorized-key, validation, backup, and recovery
+  operations.
 
 ## Step 10: Standardize Validation And Evidence Collection
 

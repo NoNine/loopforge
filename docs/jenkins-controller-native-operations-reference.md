@@ -1,0 +1,731 @@
+# Jenkins Controller Native Operations Reference
+
+This document is a native operations reference. It uses OS and
+application-native operations only, not repository automation commands.
+
+Repository v1 boundary: v1 is not a strict air-gapped installer and does not
+support installing OS dependencies from locally bundled Ubuntu packages. Target
+hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
+Public internet fallback on target hosts is simulation-only and must be labeled
+as such in docs, logs, and verification summaries.
+
+
+Audience: production operators installing Jenkins on Ubuntu 24.04 LTS without Docker.
+
+Use this controller manual with `jenkins-agent-native-operations-reference.md`
+when the deployment includes outbound SSH build agents.
+
+Assumptions:
+
+- Jenkins runs on its own Ubuntu 24.04 LTS host.
+- Gerrit runs on a separate host and is reachable from Jenkins.
+- Identity is integrated with LDAP/Active Directory.
+- Jenkins exposes a direct service port on a trusted/internal network.
+- Staging can use an internet-connected Ubuntu 24.04 machine to prepare
+  reviewed Jenkins controller application artifacts.
+- Production host commands are run with `sudo` or equivalent delegated administrator privileges unless noted.
+
+Recommended versions as of 2026-06-09:
+
+- Jenkins: `2.555.3 LTS` from the official `debian-stable` package repository.
+- Java: OpenJDK 21.
+
+Production warning: direct HTTP service ports are documented because that is the selected deployment model. For production environments outside a trusted network, terminate TLS with a reverse proxy or enterprise load balancer before exposing Jenkins to users.
+
+Privilege warning: a production Jenkins install cannot be completed by an unprivileged user alone. Package installation, `/etc`, `/opt`, `/var/lib/jenkins`, file ownership, systemd overrides, service restarts, and root-owned secret files require root or delegated sudo.
+
+Manual authority: this manual is the reference procedure. It intentionally
+contains only native OS and Jenkins operations. Do not add repository
+automation commands or automation-equivalent command tables to this document.
+
+
+## 1. Operator Inputs and Current Status
+
+Record these values before installation:
+
+| Item | Value |
+| --- | --- |
+| Hostname | `JENKINS_HOST` |
+| IP address | `JENKINS_IP` |
+| DNS name | `jenkins.example.internal` |
+| HTTP port | `8080` or chosen port |
+| Gerrit host | `GERRIT_HOST` |
+| Gerrit HTTP port | `8080` or chosen port |
+| Gerrit SSH port | `29418` |
+| LDAP URL | `ldap://LDAP_HOST:389` or `ldaps://LDAP_HOST:636` |
+| LDAP bind DN | `uid=jenkins-ldap-bind,LDAP_USER_BASE` or provided bind DN |
+| LDAP user base | `LDAP_USER_BASE` |
+| LDAP group base | `LDAP_GROUP_BASE` |
+| Network mode | Approved internal OS repositories for target-host OS dependencies |
+| Jenkins runtime user | `jenkins`, local OS account |
+| Jenkins runtime group | `jenkins`, local OS group |
+| Jenkins Gerrit integration account | `jenkins-gerrit`, Gerrit-internal account |
+| Jenkins home | `/var/lib/jenkins`, owned by `jenkins:jenkins` |
+
+Run on the Jenkins host:
+
+```bash
+lsb_release -a
+hostnamectl
+timedatectl
+ip addr
+ip route
+df -h
+free -h
+java -version || true
+apt policy
+dpkg -l | egrep 'openjdk|jenkins|git|curl|wget|openssh|fontconfig|netcat' || true
+systemctl --failed
+ss -lntup
+getent hosts JENKINS_HOST GERRIT_HOST
+getent passwd jenkins
+getent group jenkins
+nc -vz GERRIT_HOST 8080 || true
+nc -vz GERRIT_HOST 29418 || true
+nc -vz LDAP_HOST 389 || true
+nc -vz LDAP_HOST 636 || true
+```
+
+Use port `389` for LDAP with StartTLS if required. Use port `636` for LDAPS.
+
+The Jenkins runtime user and group are local OS identities. If the Jenkins
+package creates `jenkins:jenkins`, use that account. If your site requires a
+different local account, create it before configuring the service and use that
+same value everywhere this manual shows `jenkins`.
+
+The LDAP bind DN used by Jenkins should be a dedicated read-only Jenkins bind
+account. It must have permission to search the configured user and group bases.
+A bind account that can authenticate but cannot search those subtrees will
+still cause Jenkins login and group resolution failures.
+
+### 1.1 If You Do Not Have Root Privileges
+
+Use this manual as an administrator handoff. Without root, you can prepare
+Jenkins controller application artifacts on a permitted staging machine, draft
+JCasC and Gerrit Trigger settings, collect required host/DNS/LDAP values, and
+run network checks that your account is allowed to run.
+
+Ask an administrator to perform or delegate these production-host tasks:
+
+- Install OS packages, configure the Jenkins package repository, install `jenkins=2.555.3`, and apply package holds.
+- Confirm the local Jenkins runtime account and group exist on the Jenkins host.
+- Create and own `/var/lib/jenkins`, `/var/lib/jenkins/plugins`,
+  `/var/lib/jenkins/casc`, and any staged `/opt/jenkins-artifacts-bundle`
+  content as documented.
+- Create `/etc/jenkins-casc.env`, set `0600`, and keep it owned by `root:root`.
+- Create or edit the Jenkins systemd override, reload systemd, and start, stop, restart, or enable Jenkins.
+- Run any `chown`, `chmod`, `apt`, `dpkg`, `systemctl`, or writes under `/etc`, `/opt`, or `/var/lib`.
+
+A home-directory Jenkins process can be useful for lab validation, but it is not this production deployment. It will not match the documented package lifecycle, systemd service management, ownership model, backup paths, or secret handling.
+
+## 2. Dependencies And Jenkins Controller Artifact Bundle
+
+### 2.1 OS Dependency And Repository Setup
+
+Run on the Jenkins host:
+
+```bash
+apt update
+apt install -y \
+  ca-certificates \
+  curl \
+  fontconfig \
+  git \
+  net-tools \
+  netcat-openbsd \
+  openjdk-21-jre \
+  openssh-client \
+  rsync \
+  tar \
+  unzip \
+  wget
+java -version
+```
+
+Configure the official Jenkins stable package repository:
+
+```bash
+install -d -m 0755 /etc/apt/keyrings
+wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+  https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" \
+  > /etc/apt/sources.list.d/jenkins.list
+apt update
+```
+
+### 2.2 Jenkins Controller Artifact Bundle
+
+v1 does not support installing OS dependencies from locally bundled Ubuntu
+packages. Use approved internal Ubuntu/OS package repositories for OS packages
+on target hosts.
+
+Prepare Jenkins controller application artifacts in staging or a bundle-factory
+environment, then stage only the reviewed application artifact archive to the
+Jenkins controller host.
+
+Official source references:
+
+```text
+https://pkg.jenkins.io/debian-stable/binary/jenkins_2.555.3_all.deb
+https://get.jenkins.io/war-stable/2.555.3/jenkins.war
+https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar
+https://updates.jenkins.io/update-center.json
+https://updates.jenkins.io/current/plugin-versions.json
+https://updates.jenkins.io/download/plugins
+```
+
+#### 2.2.1 Create the Controller Artifact Bundle
+
+Run on the bundle-factory VM:
+
+```bash
+mkdir -p ~/jenkins-artifacts-bundle/{jenkins/plugins,checksums,tools}
+cd ~/jenkins-artifacts-bundle/jenkins
+wget https://pkg.jenkins.io/debian-stable/binary/jenkins_2.555.3_all.deb
+wget -O jenkins-2.555.3.war \
+  https://get.jenkins.io/war-stable/2.555.3/jenkins.war
+cat > plugins.seed.txt <<'EOF'
+gerrit-trigger
+git
+workflow-aggregator
+pipeline-groovy-lib
+pipeline-stage-view
+credentials
+ssh-credentials
+ssh-slaves
+credentials-binding
+matrix-auth
+configuration-as-code
+job-dsl
+timestamper
+ws-cleanup
+build-timeout
+lockable-resources
+mailer
+email-ext
+prometheus
+metrics
+ldap
+EOF
+```
+
+`pipeline-groovy-lib` is listed explicitly so a development-stage bundle
+rebuild selects a current fixed version instead of keeping an older transitive
+Pipeline Groovy Libraries dependency. `ldap` is required for the JCasC security
+realm.
+
+Download and verify the Jenkins Plugin Installation Manager Tool:
+
+```bash
+cd ~/jenkins-artifacts-bundle/tools
+wget https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar
+wget https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar.sha256
+if grep -q '[[:space:]]' jenkins-plugin-manager-2.15.0.jar.sha256; then
+  sha256sum -c jenkins-plugin-manager-2.15.0.jar.sha256
+else
+  printf '%s  jenkins-plugin-manager-2.15.0.jar\n' \
+    "$(cat jenkins-plugin-manager-2.15.0.jar.sha256)" | sha256sum -c -
+fi
+```
+
+Resolve and download the seed plugin set for Jenkins `2.555.3`:
+
+```bash
+rm -rf ~/jenkins-artifacts-bundle/jenkins/plugins
+mkdir -p ~/jenkins-artifacts-bundle/jenkins/plugins
+rm -f \
+  ~/jenkins-artifacts-bundle/jenkins/plugins.lock.txt \
+  ~/jenkins-artifacts-bundle/jenkins/plugin-artifacts.manifest \
+  ~/jenkins-artifacts-bundle/jenkins/plugin-resolution-report.txt \
+  ~/jenkins-artifacts-bundle/jenkins/plugin-review-report.txt
+java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
+  --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
+  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.seed.txt \
+  --latest false \
+  --plugin-download-directory ~/jenkins-artifacts-bundle/jenkins/plugins
+```
+
+Generate and review the locked plugin set:
+
+```bash
+cd ~/jenkins-artifacts-bundle/jenkins
+for plugin in plugins/*.hpi plugins/*.jpi; do
+  [ -e "$plugin" ] || continue
+  short_name=$(unzip -p "$plugin" META-INF/MANIFEST.MF | tr -d '\r' | awk -F': ' '/^Short-Name:/ {print $2; exit}')
+  plugin_version=$(unzip -p "$plugin" META-INF/MANIFEST.MF | tr -d '\r' | awk -F': ' '/^Plugin-Version:/ {print $2; exit}')
+  printf '%s:%s\n' "$short_name" "$plugin_version"
+done | sort -u > plugins.lock.txt
+```
+
+Every `plugins.lock.txt` entry must include `plugin-name:version`. Treat any
+blank name, blank version, missing expected plugin, or unexpected plugin as a
+release-blocking issue.
+
+Verify the locked set can be resolved against Jenkins `2.555.3` and check
+update/security metadata:
+
+```bash
+java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
+  --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
+  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.lock.txt \
+  --latest false \
+  --no-download \
+  --list \
+  > ~/jenkins-artifacts-bundle/jenkins/plugin-resolution-report.txt
+
+java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
+  --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
+  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.lock.txt \
+  --latest false \
+  --available-updates \
+  --view-all-security-warnings \
+  --no-download \
+  > ~/jenkins-artifacts-bundle/jenkins/plugin-review-report.txt
+```
+
+Review `plugin-resolution-report.txt` and `plugin-review-report.txt`, then
+record approval before moving the bundle into the offline environment.
+
+Create manifests, checksums, and archive:
+
+```bash
+cd ~/jenkins-artifacts-bundle
+find jenkins/plugins -type f -printf '%f\n' \
+  | sort > jenkins/plugin-artifacts.manifest
+printf 'bundle_kind=jenkins-controller-artifacts\njenkins_version=2.555.3\njenkins_core_deb=jenkins_2.555.3_all.deb\njenkins_war=jenkins-2.555.3.war\nplugin_lock=plugins.lock.txt\nplugin_resolution_report=plugin-resolution-report.txt\nplugin_review_report=plugin-review-report.txt\nplugin_artifacts=plugin-artifacts.manifest\n' \
+  > jenkins/release-unit.manifest
+find . -type f ! -path './checksums/SHA256SUMS' -print0 \
+  | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
+tar -czf ~/jenkins-artifacts-bundle.tar.gz -C ~ jenkins-artifacts-bundle
+sha256sum ~/jenkins-artifacts-bundle.tar.gz > ~/jenkins-artifacts-bundle.tar.gz.sha256
+```
+
+The approved controller release unit is the combination of the artifact
+archive, its `.sha256` file, the internal `SHA256SUMS` file,
+`plugins.seed.txt`, `plugins.lock.txt`, plugin review reports,
+`plugin-artifacts.manifest`, and `release-unit.manifest`.
+
+#### 2.2.2 Install the Controller Artifact Bundle Manually
+
+Transfer the artifact archive and `.sha256` file to the Jenkins host with
+approved media or an approved internal transfer path. Run on the Jenkins host:
+
+```bash
+cd /home/operator
+sha256sum -c jenkins-artifacts-bundle.tar.gz.sha256
+sudo rm -rf /opt/jenkins-artifacts-bundle
+sudo tar -xzf jenkins-artifacts-bundle.tar.gz -C /opt
+cd /opt/jenkins-artifacts-bundle
+sha256sum -c checksums/SHA256SUMS
+sudo apt install -y /opt/jenkins-artifacts-bundle/jenkins/jenkins_2.555.3_all.deb
+sudo apt-mark hold jenkins
+java -version
+```
+
+Install or refresh controller plugins from the artifact bundle:
+
+```bash
+sudo systemctl stop jenkins || true
+sudo install -d -o jenkins -g jenkins /var/lib/jenkins/plugins
+sudo cp /opt/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
+sudo chown -R jenkins:jenkins /var/lib/jenkins/plugins
+sudo systemctl start jenkins || true
+```
+
+For artifact recovery, rerun only the artifact archive checksum, extraction,
+Jenkins `.deb` install, package hold, and plugin copy commands. OS package
+recovery uses the approved internal Ubuntu/OS package repository path.
+
+## 3. Jenkins Installation
+
+### 3.1 Install Jenkins
+
+```bash
+apt update
+apt install -y fontconfig openjdk-21-jre
+apt install -y jenkins=2.555.3
+apt-mark hold jenkins
+```
+
+Verify:
+
+```bash
+systemctl status jenkins
+journalctl -u jenkins -n 100 --no-pager
+```
+
+### 3.2 Configure Jenkins Runtime
+
+Create a systemd override:
+
+```bash
+systemctl edit jenkins
+```
+
+Add:
+
+```ini
+[Service]
+User=jenkins
+Group=jenkins
+Environment="JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"
+Environment="JENKINS_PORT=8080"
+Environment="JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"
+```
+
+Reload and restart:
+
+```bash
+systemctl daemon-reload
+chown -R jenkins:jenkins /var/lib/jenkins
+systemctl restart jenkins
+```
+
+If setup wizard is used instead of JCasC, remove `-Djenkins.install.runSetupWizard=false` until initial setup is complete.
+
+### 3.3 Install Jenkins Plugins
+
+Recommended plugins:
+
+- `gerrit-trigger`: primary event-driven Gerrit integration.
+- `gerrit-code-review`: optional alternative for multibranch/Jenkinsfile-style Gerrit workflows.
+- `git`
+- `workflow-aggregator`
+- `pipeline-groovy-lib`
+- `pipeline-stage-view`
+- `credentials`
+- `ssh-credentials`
+- `credentials-binding`
+- `matrix-auth` or `role-strategy`
+- `configuration-as-code`
+- `job-dsl`
+- `timestamper`
+- `ws-cleanup`
+- `build-timeout`
+- `lockable-resources`
+- `mailer` or `email-ext`
+- `prometheus`
+- `metrics`
+
+Plugin download and resolution belong to the bundle-factory workflow in section
+2.2.1. The Jenkins controller host installs only reviewed plugin artifacts from
+the staged controller artifact bundle.
+
+Install staged plugin artifacts:
+
+```bash
+systemctl stop jenkins
+install -d -o jenkins -g jenkins /var/lib/jenkins/plugins
+cp /opt/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
+chown -R jenkins:jenkins /var/lib/jenkins/plugins
+systemctl start jenkins
+```
+
+## 4. Jenkins Configuration
+
+### 4.1 Configuration as Code Baseline
+
+Create `/var/lib/jenkins/casc/jenkins.yaml`:
+
+```yaml
+jenkins:
+  systemMessage: "Production Jenkins controller for Gerrit CI"
+  numExecutors: 0
+  securityRealm:
+    ldap:
+      configurations:
+        - server: "ldap://LDAP_HOST:389"
+          rootDN: "LDAP_ROOT_DN"
+          managerDN: "LDAP_BIND_DN"
+          managerPasswordSecret: "${LDAP_BIND_PASSWORD}"
+          userSearchBase: "LDAP_USER_BASE"
+          userSearch: "uid={0}"
+          groupSearchBase: "LDAP_GROUP_BASE"
+  authorizationStrategy:
+    globalMatrix:
+      entries:
+        - group:
+            name: "jenkins-admins"
+            permissions:
+              - "Overall/Administer"
+        - group:
+            name: "authenticated"
+            permissions:
+              - "Overall/Read"
+              - "Job/Read"
+        - group:
+            name: "gerrit-ci-users"
+            permissions:
+              - "Job/Build"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "gerrit-jenkins-ssh"
+              username: "jenkins-gerrit"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${GERRIT_SSH_PRIVATE_KEY}"
+              description: "SSH key for Gerrit integration account"
+
+unclassified:
+  location:
+    url: "http://JENKINS_HOST:8080/"
+  prometheusConfiguration:
+    collectDiskUsage: false
+    collectingMetricsPeriodInSeconds: 1800
+```
+
+Set the Jenkins location URL to the URL users enter in their browser. In
+production behind a reverse proxy or load balancer, this should normally be the
+external HTTPS URL, for example `https://jenkins.example.internal/`, even when
+Jenkins listens internally on plain HTTP.
+
+If `rootDN` is set, `userSearchBase` and `groupSearchBase` should normally be relative to that root, for example `ou=people` and `ou=groups`. If your organization provides absolute base DNs such as `ou=people,dc=example,dc=internal`, either remove `rootDN` or convert the search bases to relative values. Mixing `rootDN` with absolute search bases can make LDAP searches target the wrong DN.
+
+Store secrets in an environment file readable only by root:
+
+```bash
+cat > /etc/jenkins-casc.env <<'EOF'
+LDAP_BIND_PASSWORD=REPLACE_WITH_SECRET
+GERRIT_SSH_PRIVATE_KEY=REPLACE_WITH_MULTILINE_PRIVATE_KEY
+COLLECTING_METRICS_PERIOD_IN_SECONDS=1800
+EOF
+chmod 0600 /etc/jenkins-casc.env
+chown root:root /etc/jenkins-casc.env
+```
+
+Update the systemd override:
+
+```ini
+[Service]
+EnvironmentFile=/etc/jenkins-casc.env
+Environment="CASC_JENKINS_CONFIG=/var/lib/jenkins/casc/jenkins.yaml"
+```
+
+Apply:
+
+```bash
+chown -R jenkins:jenkins /var/lib/jenkins/casc
+systemctl daemon-reload
+systemctl restart jenkins
+```
+
+### 4.2 Outbound SSH Build Agent
+
+Do not run builds on the Jenkins controller. Keep the built-in node at zero
+executors and provide build capacity through agents. This deployment uses
+Jenkins' SSH launcher: the controller connects out to the build server over
+SSH. It is not an inbound/remoting agent setup.
+
+Prepare the build server, offline agent bundles, SSH account, and recovery
+steps with `jenkins-agent-native-operations-reference.md`. After the build
+server is prepared, use this controller manual to create the Jenkins SSH credential,
+configure the permanent SSH node, validate the smoke job, and verify Gerrit
+Trigger voting.
+
+Use stable inventory-style node names and composable labels:
+
+```bash
+JENKINS_AGENT_NAME=build-linux-x86-01
+JENKINS_AGENT_LABELS="linux x86_64 general-build gerrit-ci"
+JENKINS_AGENT_EXECUTORS=5
+JENKINS_AGENT_HOST=192.168.122.209
+JENKINS_AGENT_PORT=22
+JENKINS_AGENT_SSH_KEY=/var/lib/jenkins/.ssh/agent_ed25519
+```
+
+`JENKINS_AGENT_HOST` and `JENKINS_AGENT_PORT` are the endpoint Jenkins uses to
+launch the SSH agent. The Jenkins controller keeps the private key at
+`JENKINS_AGENT_SSH_KEY`; copy only `${JENKINS_AGENT_SSH_KEY}.pub` to the build
+server and set `JENKINS_AGENT_PUBLIC_KEY_FILE` in the agent-host env.
+
+Practical sequence:
+
+```bash
+# Prepare the build server with jenkins-agent-native-operations-reference.md.
+```
+
+For key rotation, run:
+
+```bash
+```
+
+### 4.3 UI-Driven Fallback
+
+If not using JCasC:
+
+1. Browse to `http://JENKINS_HOST:8080/`.
+2. Use the initial admin password:
+
+   ```bash
+   cat /var/lib/jenkins/secrets/initialAdminPassword
+   ```
+
+3. Install the recommended plugins plus Gerrit integration plugins.
+4. Configure LDAP under `Manage Jenkins` > `Security`.
+5. Configure authorization with `matrix-auth` or `role-strategy`.
+6. Add the `jenkins-gerrit` Gerrit integration account SSH key under `Manage Jenkins` > `Credentials`.
+7. Configure Gerrit Trigger under `Manage Jenkins` > `Gerrit Trigger`.
+
+## 5. Gerrit Integration
+
+### 5.1 Create Jenkins SSH Key
+
+Generate an SSH key on the Jenkins host:
+
+```bash
+sudo -u jenkins install -d -m 0700 /var/lib/jenkins/.ssh
+sudo -u jenkins ssh-keygen -t ed25519 -f /var/lib/jenkins/.ssh/gerrit_ed25519 -C jenkins-gerrit -N ''
+```
+
+Ask the Gerrit operator to create or confirm the Gerrit-internal
+`jenkins-gerrit` integration account, add
+`/var/lib/jenkins/.ssh/gerrit_ed25519.pub` to that Gerrit account, and grant:
+
+- Stream events permission for Gerrit Trigger.
+- Read access to target projects.
+- Permission to vote on the `Verified` label.
+
+The `jenkins-gerrit` account is a Gerrit-internal service account. It does not
+need an LDAP identity or a registered email address for normal Gerrit Trigger
+operation, and it should not need `Forge Author` or `Forge Committer`. Upload
+manual or scripted test changes with a human or dedicated LDAP-backed test
+uploader account; Jenkins should only receive the event and post the vote.
+
+Validate SSH manually:
+
+```bash
+sudo -u jenkins ssh -i /var/lib/jenkins/.ssh/gerrit_ed25519 \
+  -p 29418 jenkins-gerrit@GERRIT_HOST gerrit version
+```
+
+Validate Gerrit event streaming manually:
+
+```bash
+sudo -u jenkins ssh -i /var/lib/jenkins/.ssh/gerrit_ed25519 \
+  -p 29418 jenkins-gerrit@GERRIT_HOST gerrit stream-events
+```
+
+The `stream-events` command is expected to stay open while waiting for Gerrit events. Stop it with `Ctrl-C` after confirming it connects without an authorization error.
+
+### 5.2 Configure Gerrit Trigger
+
+In Jenkins:
+
+1. Go to `Manage Jenkins` > `Gerrit Trigger`.
+2. Add a Gerrit server.
+3. Set hostname to `GERRIT_HOST`.
+4. Set frontend URL to `http://GERRIT_HOST:8080/`.
+5. Set SSH port to `29418`.
+6. Set username to `jenkins-gerrit`.
+7. Select the `gerrit-jenkins-ssh` credential.
+8. Test SSH connection.
+9. Enable missed-event playback only if Gerrit `events-log` is installed and REST access is configured.
+
+Create a test job triggered by Gerrit events.
+
+Minimum pipeline:
+
+```groovy
+pipeline {
+  agent any
+  stages {
+    stage('Verify') {
+      steps {
+        sh 'git --version'
+      }
+    }
+  }
+}
+```
+
+Configure Gerrit Trigger for:
+
+- Event: patchset created
+- Project: a test Gerrit project
+- Branch: target branch, for example `master` or `main`
+
+Expected result: uploading a change to Gerrit triggers Jenkins and Jenkins posts a `Verified` vote.
+
+Verify the complete trigger loop before accepting the integration:
+
+- Upload a real patch set to the test Gerrit project as a human or dedicated
+  LDAP-backed test uploader, not as `jenkins-gerrit`.
+- Confirm the Jenkins job is triggered by a `PatchsetCreated` event, not by a manual build.
+- Confirm the job receives Gerrit environment values such as `GERRIT_PROJECT`, `GERRIT_BRANCH`, `GERRIT_CHANGE_NUMBER`, `GERRIT_PATCHSET_NUMBER`, and `GERRIT_REFSPEC`.
+- Confirm Gerrit receives Jenkins feedback on the same patch set, including `Verified +1` for a successful job or `Verified -1` for a failed job.
+
+If Jenkins logs show Gerrit rejecting `--verified`, the Gerrit project hierarchy does not define a usable `Verified` label for that change. Create the label and grant the Jenkins integration account permission to vote on it before retesting.
+
+## 6. Validation
+
+Run:
+
+```bash
+java -version
+systemctl is-enabled jenkins
+systemctl is-active jenkins
+curl -I http://JENKINS_HOST:8080/
+journalctl -u jenkins -n 100 --no-pager
+```
+
+Acceptance checks:
+
+- OpenJDK 21 is active.
+- Jenkins starts under systemd.
+- Jenkins survives reboot.
+- LDAP users can log in.
+- Required plugins load successfully.
+- `jenkins-gerrit` can SSH to Gerrit.
+- Jenkins can stream Gerrit events.
+- A Gerrit test change triggers a Jenkins job.
+- Jenkins posts `Verified +1` or `Verified -1` to Gerrit.
+- Gerrit shows the Jenkins message and vote on the same patch set that triggered the job.
+
+## 7. Backup and Operations
+
+Back up:
+
+- `/var/lib/jenkins/config.xml`
+- `/var/lib/jenkins/jobs`
+- `/var/lib/jenkins/plugins`
+- `/var/lib/jenkins/users`
+- `/var/lib/jenkins/credentials.xml`
+- `/var/lib/jenkins/secrets`
+- `/var/lib/jenkins/casc`
+- `/etc/jenkins-casc.env`
+
+Example:
+
+```bash
+rsync -aH --numeric-ids /var/lib/jenkins/ BACKUP_HOST:/backups/jenkins/
+```
+
+Protect `/var/lib/jenkins/secrets` and `/etc/jenkins-casc.env`; losing them can break credential decryption or service authentication.
+
+Upgrade principles:
+
+- Pin Jenkins core and plugin versions together.
+- Back up before every upgrade.
+- Test upgrades in staging before production.
+- Upgrade Jenkins LTS first, then plugins compatible with that LTS.
+- Do not mix latest plugins with an older pinned Jenkins controller unless plugin requirements have been checked.
+- Rebuild the Jenkins controller artifact bundle and record checksums for every
+  approved application artifact upgrade.
+
+## 8. References
+
+- Jenkins agent native operations:
+  `jenkins-agent-native-operations-reference.md`
+- Jenkins Linux installation: https://www.jenkins.io/doc/book/installing/linux/
+- Jenkins Java support policy: https://www.jenkins.io/doc/book/platform-information/support-policy-java/
+- Jenkins offline installation: https://www.jenkins.io/doc/book/installing/offline/
+- Jenkins Plugin Installation Manager Tool: https://github.com/jenkinsci/plugin-installation-manager-tool
+- Jenkins Gerrit Trigger plugin: https://plugins.jenkins.io/gerrit-trigger/
+- Jenkins Gerrit Code Review plugin: https://plugins.jenkins.io/gerrit-code-review/
+- Jenkins stable Debian package metadata: https://pkg.jenkins.io/debian-stable/binary/Packages
+- Jenkins stable update center: https://updates.jenkins.io/stable/update-center.actual.json
