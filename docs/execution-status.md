@@ -15,10 +15,10 @@ Authoritative sources remain:
 ## Current State
 
 - Branch: `master`
-- Current implementation step: Step 7 rework
-- Status: Step 10 accepted; Step 11 reverted; native operation references are
-  committed and Steps 7, 8, and 9 helper/manual behavior must be reworked next
-  against those references, starting with Step 7.
+- Current documentation step: Step 7/8/9 role-boundary clarification
+- Status: Step 7 rework accepted; Step 8 and Step 9 rework remain required;
+  current uncommitted work is documentation-only scope clarification for the
+  Step 7/8/9 role boundaries.
 - Last accepted commit: `bfdb8a2` (native operation reference docs)
 - Known local state: `docs/execution-status.md` is intentionally uncommitted
   ledger state per user instruction.
@@ -61,7 +61,7 @@ Authoritative sources remain:
 - Verification: `logs/execution-step-4.log` (full Step 4 verification block
   from `docs/implementation-plan.md`)
 - Notes: Verified existing immutable implementation-plan contract covers
-  workflow phases, staging, key handoffs, safety rules, and no runnable
+  workflow phases, staging, credential transfers, safety rules, and no runnable
   transcript. No Step 4 content edits were required. Spec and quality reviews
   passed.
 
@@ -90,7 +90,7 @@ Authoritative sources remain:
 ### Step 7: Create The Gerrit Manual And Helper
 
 - Status: Accepted after rework
-- Commit: `0f79bdf`
+- Commit: `3466678`
 - Verification: `logs/execution-step-7-rework-final-20260618010005.log`
   (syntax checks; help/template output; dry-run preflight; Gerrit artifact
   preparation; staging; fresh Gerrit role gate; evidence existence and
@@ -149,12 +149,13 @@ Authoritative sources remain:
   boundary scan, and diff whitespace check)
 - Notes: Added the Jenkins agent setup manual, env example, helper,
   templates, and Docker harness role-gate integration. Step 9 proves real
-  agent-host-side readiness only: OpenSSH reachability, remote filesystem
-  readiness, runtime account ownership, and authorized-key readiness. It
-  does not claim Jenkins controller node registration, controller scheduling,
-  Gerrit Trigger voting, or end-to-end behavior. The helper consumes only
-  the Jenkins-to-agent public key, verifies staged manifests/checksums before
-  target mutation, fails closed outside the Jenkins agent Docker harness
+  agent-host-side readiness only: OS/tooling readiness, OpenSSH reachability,
+  remote filesystem readiness, runtime account ownership, staged artifact
+  checks, bounded logs, and evidence. It does not claim Jenkins controller key
+  handoff, Jenkins controller node registration, controller scheduling,
+  Gerrit Trigger voting, or end-to-end behavior. The helper verifies staged
+  manifests/checksums before target mutation, fails closed outside the Jenkins
+  agent Docker harness
   target for runtime mutation, rejects unsafe remote filesystem/account/port
   values, handles helper-owned zombie `sshd` pidfiles idempotently, and
   records bounded redacted evidence. Spec and quality reviews passed. Rework is
@@ -293,6 +294,18 @@ Required constraints:
 - Do not resume Step 11 until Steps 7, 8, and 9 rework are accepted or the user
   explicitly changes scope.
 - Do not start Step 8 until the user explicitly instructs continuation.
+- Per user clarification, role rework boundaries are now:
+  - Step 7 is Gerrit-only bringup.
+  - Step 8 is Jenkins controller-only bringup.
+  - Step 9 is Jenkins agent host-only bringup.
+  - Gerrit/Jenkins/agent integration, including credential transfers, Gerrit
+    Trigger, Jenkins node registration, agent scheduling, and `Verified`
+    voting, belongs to the later integration/end-to-end step.
+- Documentation clarification applied: Step 8 accepted outputs are limited to
+  controller-only readiness plus blocked/deferred statuses for retained
+  integration commands. Step 9 accepted outputs are limited to agent host-only
+  readiness and exclude credential transfers or controller-key installation.
+  Integration command effects remain later workflow outputs.
 
 Step 7 rework verification:
 

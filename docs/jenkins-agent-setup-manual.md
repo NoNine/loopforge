@@ -16,10 +16,12 @@ fallback for target-host Ubuntu/OS dependency installation is simulation-only
 and must be labeled that way in logs and evidence.
 
 Jenkins connects out to the agent over SSH. The agent helper owns only the
-agent host side: runtime account readiness, remote filesystem readiness, and
-authorized-key readiness. Jenkins controller node registration, credential
-storage, executor count, label assignment, and scheduling validation remain in
-`scripts/jenkins-controller-setup.sh configure-agent` and `validate-agent`.
+agent host side: OS/tooling readiness, runtime account readiness, remote
+filesystem readiness, SSH daemon reachability, staged artifact checks, bounded
+logs, and evidence. Jenkins key generation, key transfer, agent
+`authorized_keys` updates, controller node registration, credential storage,
+executor count, label assignment, and scheduling validation remain in the
+later integration step.
 
 Default baseline:
 
@@ -38,8 +40,6 @@ Consumed inputs:
 - Agent host, SSH port, dedicated runtime account, remote filesystem path,
   Jenkins label, staged artifact path, artifact output path, verification
   mode, evidence directory, and bounded log directory.
-- Jenkins-to-agent public-key handoff file. The agent consumes only this
-  public key and rejects private-key or PEM material.
 - `JENKINS_AGENT_OS_DEPENDENCIES`, which defaults to agent target OS package
   expectations from the approved agent reference adapted to v1:
   `ca-certificates`, `curl`, `git`, `openssh-client`, `openssh-server`,
@@ -64,9 +64,8 @@ Secret-redaction expectations:
 
 - Evidence must not record private keys, passwords, tokens, LDAP bind secrets,
   or full secret-bearing env values.
-- Evidence may record public key fingerprints, account names, labels,
-  endpoints, remote filesystem paths, manifest paths, checksum paths, and
-  bounded log references.
+- Evidence may record account names, labels, endpoints, remote filesystem
+  paths, manifest paths, checksum paths, and bounded log references.
 
 ## Phase 2: Prerequisite Readiness
 
@@ -75,7 +74,7 @@ Consumed inputs:
 - Reviewed Jenkins agent env file.
 - Target host baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21 expectation,
   OpenSSH server/client tooling, approved internal Ubuntu/OS package
-  repositories, and the Jenkins-to-agent public key handoff.
+  repositories, and agent host inventory values.
 - Jenkins controller-side assumption that the SSH Build Agents plugin is in
   the curated controller plugin bundle.
 
@@ -117,9 +116,6 @@ Consumed inputs:
 - Reviewed Jenkins agent env values.
 - Version baseline: OpenJDK 21, Ubuntu release `24.04`, codename `noble`.
 - Jenkins agent templates under `templates/jenkins-agent/`.
-- Jenkins-to-agent public-key handoff intent. In the Docker harness, the
-  bundle includes a reviewed public key fixture only; the agent helper never
-  creates, stores, or implies custody of the controller-owned private key.
 
 Produced outputs:
 
@@ -129,8 +125,6 @@ Produced outputs:
 - Package intent manifest describing OS package expectations without creating
   an Ubuntu dependency bundle.
 - Runtime profile and SSH daemon policy templates.
-- Jenkins-to-agent public key handoff file. The target verifies the handoff as
-  a public key before using it.
 
 Staged artifact paths:
 
@@ -191,23 +185,21 @@ Helper:
 scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> --yes install
 ```
 
-## Phase 5: Agent Runtime Account And SSH Setup
+## Phase 5: Agent Runtime Account And SSH Daemon Setup
 
 Runtime configuration verifies staged artifacts again before mutation. The
-agent consumes only the Jenkins-to-agent public key and writes it into the
-runtime account's `authorized_keys`.
+agent host setup does not consume controller key material or update
+`authorized_keys`; those actions are later integration work.
 
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
 - Staged artifact manifest and checksums.
-- Jenkins-to-agent public-key handoff file.
 - Dedicated runtime account name and remote filesystem path.
 
 Produced outputs:
 
 - Runtime filesystem at `JENKINS_AGENT_REMOTE_FS`.
-- `.ssh/authorized_keys` containing the reviewed Jenkins-to-agent public key.
 - Runtime profile rendered from the staged template.
 - SSH daemon policy rendered from the staged template.
 - Runtime readiness marker under `state/runtime.status`.
@@ -215,10 +207,14 @@ Produced outputs:
 Mutation side effects:
 
 - Creates or verifies the dedicated local runtime account.
-- Creates or updates the remote filesystem and `.ssh` directory.
-- Writes the public authorized key with restrictive permissions.
+- Creates or updates the remote filesystem.
 - Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
   SSH reachability without claiming Jenkins controller scheduling.
+
+Deferred integration side effects:
+
+- Adding the Jenkins controller's agent access key to the runtime account's
+  `authorized_keys` is performed only in the later integration step.
 
 Helper:
 
@@ -226,11 +222,12 @@ Helper:
 scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> --yes configure-runtime
 ```
 
-Public-key handoff rules:
+Later integration key rules:
 
-- The handoff must be exactly one OpenSSH public-key line.
+- The transferred key material must be exactly one OpenSSH public-key line.
 - Private key, PEM block, token, and password material are rejected.
-- Evidence may include the public key fingerprint, never private-key content.
+- Integration evidence may include the public key fingerprint, never
+  private-key content.
 
 ## Phase 6: Agent Host Validation
 
@@ -242,12 +239,12 @@ Consumed inputs:
 
 - Reviewed Jenkins agent env file.
 - Staged manifest and checksums.
-- Runtime account, remote filesystem, authorized key, and SSH readiness state.
+- Runtime account, remote filesystem, and SSH readiness state.
 
 Produced outputs:
 
 - Validation result for SSH reachability, remote filesystem readiness, runtime
-  account ownership, and authorized-key readiness.
+  account ownership, staged artifact checks, and bounded logs.
 - Role-local evidence from `collect-evidence`.
 
 Validation checks:
@@ -256,8 +253,6 @@ Validation checks:
   `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the Docker harness.
 - The dedicated runtime account exists.
 - `JENKINS_AGENT_REMOTE_FS` exists and is owned by the runtime account.
-- `.ssh/authorized_keys` exists, is owned by the runtime account, has
-  restrictive permissions, and contains the exact reviewed public key.
 - Staged artifact checksums still verify before readiness is reported.
 
 Helper:
@@ -268,13 +263,14 @@ scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> validate
 
 Jenkins controller scope:
 
-- `scripts/jenkins-controller-setup.sh configure-agent` registers the node,
-  label, credential, remote filesystem, and executor policy on the controller.
-- `scripts/jenkins-controller-setup.sh validate-agent` covers controller-side
-  scheduling in its Step 8 role gate and must pass only with real
-  controller-to-agent scheduling evidence.
+- Jenkins controller node registration, credential selection, label/executor
+  policy, controller-to-agent scheduling, and later integration validation
+  jobs are deferred to the later integration step.
+- Step 9 proves only agent host-side readiness: SSH daemon reachability,
+  runtime account ownership, remote filesystem readiness, staged artifact
+  checks, bounded logs, and evidence.
 - Real cross-role trigger execution and `Verified` voting are aggregated by
-  Step 11 after the role helpers are compliant.
+  the later end-to-end integration step after role helpers are compliant.
 
 ## Phase 7: Evidence Collection
 
@@ -284,7 +280,7 @@ Consumed inputs:
 
 - Reviewed Jenkins agent env file.
 - Staged artifact manifest and checksums.
-- Runtime account, remote filesystem, authorized key, and SSH readiness state.
+- Runtime account, remote filesystem, and SSH readiness state.
 - Bounded validation logs.
 
 Produced outputs:
@@ -306,9 +302,7 @@ Observed checks recorded:
 - SSH reachability.
 - Runtime account ownership.
 - Remote filesystem readiness.
-- Authorized-key readiness.
 - Jenkins agent label and executor context as controller-owned metadata only.
-- Public key fingerprint.
 - Bounded log references.
 - Redaction status.
 

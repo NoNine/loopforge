@@ -39,10 +39,6 @@ Consumed inputs:
   Gerrit integration account, and Jenkins credential ID.
 - Jenkins build-agent host, SSH port, runtime account, label, remote
   filesystem, and Jenkins credential ID.
-- Controller-owned Jenkins-to-Gerrit private-key path and public-key handoff
-  path.
-- Controller-owned Jenkins-to-agent private-key path and public-key handoff
-  path.
 - Artifact output path, staged artifact path, verification mode, evidence
   directory, and bounded log directory.
 - `JENKINS_PLUGIN_LIST`, with curated `name:version` plugin entries.
@@ -50,6 +46,13 @@ Consumed inputs:
   expectations from the approved Jenkins reference: `ca-certificates`, `curl`,
   `fontconfig`, `git`, `net-tools`, `netcat-openbsd`, `openjdk-21-jre`,
   `openssh-client`, `rsync`, `tar`, `unzip`, and `wget`.
+
+Deferred integration inputs:
+
+- Jenkins-to-Gerrit credential file locations and public key delivery paths.
+- Jenkins-to-agent credential file locations and public key delivery paths.
+- These values are not required for controller-only bringup and are consumed
+  only by later integration commands.
 
 Produced outputs:
 
@@ -79,15 +82,17 @@ Consumed inputs:
 
 - Reviewed Jenkins controller env file.
 - Target host baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21 expectation,
-  approved internal Ubuntu/OS package repositories, reachable LDAP, reachable
-  Gerrit SSH, and reachable Jenkins agent SSH assumptions.
+  approved internal Ubuntu/OS package repositories, and reachable LDAP.
+- Gerrit and Jenkins agent endpoint values as inventory for deferred later
+  integration commands only; Step 8 preflight does not require Gerrit or agent
+  SSH reachability.
 - Jenkins OS dependency expectations listed in Phase 1.
 
 Produced outputs:
 
 - Readiness result showing required commands, reviewed values, baseline
-  values, endpoint values, LDAP assumptions, Gerrit SSH assumptions, agent
-  values, and artifact paths.
+  values, controller endpoint values, LDAP assumptions, deferred integration
+  inventory values, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
 
 Side effects:
@@ -131,8 +136,10 @@ Produced outputs:
 - Curated Jenkins WAR marker for the Docker harness role gate.
 - Curated Jenkins Plugin Installation Manager Tool marker.
 - Curated Jenkins plugin markers named from reviewed plugin IDs.
-- JCasC, credential, Gerrit Trigger, agent-node, service, and disposable
-  verification templates.
+- Controller-only JCasC and service templates.
+- Deferred integration templates for credentials, Gerrit Trigger, agent-node,
+  and disposable verification workflows. These retained templates are staged
+  for later integration command surfaces and are not accepted Step 8 outputs.
 
 Staged artifact paths:
 
@@ -254,7 +261,12 @@ Plugins are installed from staged curated artifacts before JCasC validation:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes install-plugins
 ```
 
-## Phase 7: Gerrit Trigger Base Configuration
+## Phase 7: Deferred Gerrit Trigger Base Configuration
+
+Gerrit Trigger configuration is deferred to the later integration step. Step 8
+is Jenkins controller-only bringup and must not require Gerrit-side mutation,
+Jenkins-to-Gerrit SSH proof, Gerrit event streaming, agent scheduling, or
+`Verified` voting.
 
 Consumed inputs:
 
@@ -262,18 +274,24 @@ Consumed inputs:
 - Jenkins Gerrit credential ID.
 - Gerrit HTTP URL, SSH host, SSH port, and Gerrit Trigger server name.
 - Staged credentials and Gerrit Trigger templates.
-- Controller-owned Jenkins-to-Gerrit private key and public key generated in
-  Phase 8.
+- Jenkins-to-Gerrit private key and public key for the later integration
+  workflow.
 
-Produced outputs:
+Later integration-step outputs, not Step 8 accepted outputs:
 
 - Rendered Jenkins credentials material referencing the credential IDs.
 - Rendered Gerrit Trigger server configuration.
 - Gerrit Trigger readiness marker.
 
-Mutation side effects:
+Step 8 accepted output:
 
-- Creates or updates Jenkins role-local credential and Gerrit Trigger config.
+- A blocked or deferred status if `configure-integration` is invoked before the
+  later integration step, with no Gerrit Trigger config or credential mutation.
+
+Deferred mutation side effects:
+
+- Creates or updates Jenkins role-local credential and Gerrit Trigger config in
+  the later integration step.
 - Does not write private key material into evidence.
 
 Helper:
@@ -282,19 +300,28 @@ Helper:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes configure-integration
 ```
 
-## Phase 8: Jenkins-To-Gerrit SSH Key Generation
+## Phase 8: Deferred Jenkins-To-Gerrit SSH Key Generation
+
+Jenkins-to-Gerrit key generation is deferred to the later integration step.
+Controller-only validation must not require this credential material.
 
 Consumed inputs:
 
-- Reviewed controller-owned private-key path.
-- Public-key handoff path for Gerrit.
+- Reviewed controller-owned credential path.
+- Public key delivery path for Gerrit.
 - Jenkins Gerrit integration account name.
 
-Produced outputs:
+Later integration-step outputs, not Step 8 accepted outputs:
 
 - Jenkins-to-Gerrit private key owned by the Jenkins controller workflow.
-- Jenkins-to-Gerrit public key handoff file for Gerrit.
+- Jenkins-to-Gerrit public key delivery file for Gerrit.
 - Public key fingerprint in status and evidence.
+
+Step 8 accepted output:
+
+- A blocked or deferred status if `generate-integration-key` is invoked before
+  the later integration step, with no keypair required for controller-only
+  readiness.
 
 Key handoff:
 
@@ -302,9 +329,10 @@ Key handoff:
 - Gerrit consumes only the public key through the Gerrit helper integration
   workflow.
 
-Mutation side effects:
+Deferred mutation side effects:
 
-- Creates or rotates the controller-held Jenkins-to-Gerrit keypair.
+- Creates or rotates the controller-held Jenkins-to-Gerrit keypair in the later
+  integration step.
 
 Helper:
 
@@ -312,19 +340,28 @@ Helper:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes generate-integration-key
 ```
 
-## Phase 9: Build-Agent SSH Key Generation
+## Phase 9: Deferred Build-Agent SSH Key Generation
+
+Jenkins-to-agent key generation is deferred to the later integration step.
+Step 8 controller-only validation must not require a configured build agent.
 
 Consumed inputs:
 
-- Reviewed controller-owned agent private-key path.
-- Public-key handoff path for the Jenkins agent host.
+- Reviewed controller-owned agent credential path.
+- Public key transfer path for the Jenkins agent host.
 - Jenkins agent account name.
 
-Produced outputs:
+Later integration-step outputs, not Step 8 accepted outputs:
 
 - Jenkins-to-agent private key owned by the Jenkins controller workflow.
-- Jenkins-to-agent public key handoff file for the agent helper.
+- Public key transfer file for the later agent integration workflow.
 - Public key fingerprint in status and evidence.
+
+Step 8 accepted output:
+
+- A blocked or deferred status if `generate-agent-key` is invoked before the
+  later integration step, with no agent keypair required for controller-only
+  readiness.
 
 Key handoff:
 
@@ -332,9 +369,10 @@ Key handoff:
 - Jenkins agent consumes only the public key through the agent helper runtime
   workflow.
 
-Mutation side effects:
+Deferred mutation side effects:
 
-- Creates or rotates the controller-held Jenkins-to-agent keypair.
+- Creates or rotates the controller-held Jenkins-to-agent keypair in the later
+  integration step.
 
 Helper:
 
@@ -342,17 +380,21 @@ Helper:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes generate-agent-key
 ```
 
-## Phase 10: Build-Agent Registration And Scheduling Validation
+## Phase 10: Deferred Build-Agent Registration And Scheduling Validation
+
+Build-agent registration and scheduling validation are deferred to the later
+integration step, after Jenkins controller and Jenkins agent host-only bringup
+are both accepted.
 
 Consumed inputs:
 
 - Jenkins agent host, SSH port, runtime account, label, remote filesystem, and
   credential ID.
 - Controller-held Jenkins-to-agent private key.
-- Public-key handoff path for the agent host.
+- Public key delivery path for the agent host.
 - Staged agent-node template.
 
-Produced outputs:
+Later integration-step outputs, not Step 8 accepted outputs:
 
 - Rendered Jenkins agent node config.
 - Agent registration marker.
@@ -361,12 +403,19 @@ Produced outputs:
   against the configured SSH agent or exit nonzero with a clear blocked or
   unsupported status.
 
-Mutation side effects:
+Step 8 accepted output:
 
-- Creates or updates Jenkins role-local node configuration.
-- `validate-agent` must not pass with a modeled scheduling record. Real
-  scheduling belongs to the Jenkins controller helper, while the agent helper
-  owns only host-side SSH readiness.
+- A blocked or deferred status if `configure-agent` or `validate-agent` is
+  invoked before the later integration step, with no Jenkins node registration
+  or scheduling evidence accepted as controller-only readiness.
+
+Deferred mutation side effects:
+
+- Creates or updates Jenkins role-local node configuration in the later
+  integration step.
+- `validate-agent` must not pass with a modeled scheduling record when the
+  later integration step runs. The agent helper owns only host-side SSH
+  readiness.
 
 Helpers:
 
@@ -375,25 +424,35 @@ scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes configure
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes validate-agent
 ```
 
-## Phase 11: End-To-End Gerrit Trigger Verification
+## Phase 11: Deferred End-To-End Gerrit Trigger Verification
+
+End-to-end Gerrit Trigger verification is deferred to the later integration
+step. Step 8 controller-only validation must not claim patchset-created event
+streaming, agent execution, or `Verified` vote proof.
 
 Consumed inputs:
 
 - Gerrit Trigger server configuration.
-- Step 8 modeled agent scheduling record from Phase 10.
+- Later integration-step agent scheduling evidence.
 - Disposable Gerrit project, branch, and verification run ID.
 - Disposable verification job template.
 
-Produced outputs:
+Later integration-step outputs, not Step 8 accepted outputs:
 
 - Disposable verification job config and trigger inputs.
 - Gerrit Trigger verification evidence from real Jenkins/Gerrit interaction,
   or a nonzero blocked/unsupported result when the real interaction cannot run.
 
-Mutation side effects:
+Step 8 accepted output:
+
+- A blocked or deferred status if `verify-trigger` is invoked before the later
+  integration step, with no trigger, agent execution, or `Verified` vote proof
+  accepted as controller-only readiness.
+
+Deferred mutation side effects:
 
 - Creates disposable verification templates and records the real verification
-  result for the reviewed run ID.
+  result for the reviewed run ID in the later integration step.
 - Docker harness mode must not pass with modeled `patchset-created`, agent
   build, or `Verified +1` voting. If the role gate cannot complete the real
   verification at this step, it must fail or report blocked. Step 11 remains
@@ -412,13 +471,14 @@ and `Verified` voting failures must remain distinct.
 
 ## Phase 12: Validation
 
-Validation in Step 8 proves Jenkins controller role readiness with real runtime
-checks for the lifecycle phases that report success. It verifies staged
-artifacts, rendered configuration, curated plugins, keys, LDAP reachability,
-Gerrit SSH reachability, Jenkins controller startup, Gerrit Trigger readiness,
-agent scheduling when `validate-agent` reports success, and trigger voting when
-`verify-trigger` reports success. Unimplemented lifecycle phases must exit
-nonzero with a clear blocked or unsupported status.
+Validation in Step 8 proves Jenkins controller-only readiness with real runtime
+checks for controller lifecycle phases. It verifies staged artifacts, rendered
+configuration, curated plugins, LDAP/JCasC configuration, LDAP reachability,
+Jenkins controller startup, endpoint reachability, bounded logs, and evidence.
+Gerrit SSH reachability, Gerrit Trigger readiness, agent scheduling, and
+trigger voting are deferred to the later integration step. Deferred lifecycle
+commands must exit nonzero with a clear blocked or unsupported status when run
+before that step.
 
 Consumed inputs:
 
@@ -437,15 +497,10 @@ Validation evidence covers:
 - Plugin readiness: every curated plugin from `JENKINS_PLUGIN_LIST` is
   installed from staged artifacts.
 - JCasC readiness: LDAP realm exists and the built-in node has zero executors.
-- Gerrit SSH connectivity: the controller can open a TCP connection to the
-  reviewed Gerrit SSH endpoint.
-- Gerrit Trigger readiness: server config references the integration account
-  and reviewed credential ID.
-- Agent readiness: successful `validate-agent` evidence comes from real
-  controller-to-agent scheduling.
-- Trigger voting readiness: successful `verify-trigger` evidence comes from
-  real Gerrit event, Jenkins build, agent execution, and `Verified +1`
-  verification.
+- Gerrit SSH connectivity: deferred to the later integration step.
+- Gerrit Trigger readiness: deferred to the later integration step.
+- Agent readiness: deferred to the later integration step.
+- Trigger voting readiness: deferred to the later integration step.
 
 Helper:
 
@@ -466,10 +521,9 @@ Consumed inputs:
 - Reviewed Jenkins controller env values.
 - Staged artifact manifest and checksums.
 - Jenkins home readiness files.
-- Step 8 modeled agent scheduling and trigger-vote records.
-- Real agent scheduling and trigger-vote evidence from the Step 11
-  runtime-capable Docker simulation.
-- Public key files for fingerprinting.
+- Controller-only readiness state.
+- Deferred integration commands, if invoked before the integration step, must
+  record blocked or unsupported status rather than passing modeled evidence.
 - Bounded log directory.
 
 Produced outputs:
@@ -497,10 +551,10 @@ Evidence Contract fields:
 - Redaction status.
 
 `collect-evidence` is fail-closed. In Step 8 it emits passing evidence only
-when real runtime proof records are present and explicitly tied to the
-reviewed run ID, staged artifacts, and bounded logs. The evidence
-must state that real Jenkins/Gerrit/agent end-to-end execution is deferred to
-Step 11.
+when real controller runtime proof records are present and explicitly tied to
+the reviewed run ID, staged artifacts, and bounded logs. The evidence must
+state that real Jenkins/Gerrit/agent end-to-end execution is deferred to the
+later integration step.
 
 Helper:
 

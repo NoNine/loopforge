@@ -14,10 +14,11 @@ Audience: production operators preparing a Jenkins outbound SSH build agent on
 Ubuntu 24.04 LTS without Docker.
 
 Use this manual with `jenkins-controller-native-operations-reference.md`. The
-Jenkins controller manual covers controller installation, Jenkins
-configuration, Gerrit integration, and controller-side node registration. This
-manual covers the build server baseline, agent application artifacts, SSH access,
-recovery, and agent validation.
+Jenkins controller manual covers controller installation and controller-only
+configuration. Controller-side node registration, Gerrit integration, and
+Jenkins scheduling proof are later integration-step work. This manual covers
+the build server baseline, agent application artifacts, SSH access, recovery,
+and agent host-only validation.
 
 Assumptions:
 
@@ -40,9 +41,9 @@ Production warning: do not run builds on the Jenkins controller. Keep the
 built-in node at zero executors and provide build capacity through agents.
 
 Privilege warning: agent setup cannot be completed by an unprivileged user
-alone. Package installation, local runtime accounts, SSH service control,
-authorized keys, and remote filesystem ownership require root or delegated
-sudo on the build server.
+alone. Package installation, local runtime accounts, SSH service control, and
+remote filesystem ownership require root or delegated sudo on the build
+server.
 
 Manual authority: this manual is the reference procedure. It intentionally
 contains only native OS, OpenSSH, and Jenkins UI/application operations. Do not
@@ -64,8 +65,6 @@ Record these values before installation:
 | Agent node name | `JENKINS_AGENT_NAME`, for example `build-linux-x86-01` |
 | Agent labels | `JENKINS_AGENT_LABELS`, for example `linux x86_64 general-build gerrit-ci` |
 | Agent executors | `JENKINS_AGENT_EXECUTORS`, for example `5` |
-| Controller agent SSH key | `JENKINS_AGENT_SSH_KEY`, normally `/var/lib/jenkins/.ssh/agent_ed25519` |
-| Controller agent public key on the agent host | `JENKINS_AGENT_PUBLIC_KEY_FILE`, for example `/home/operator/agent_ed25519.pub` |
 | Network mode | Approved internal OS repositories for target-host OS dependencies |
 
 Run on the agent host:
@@ -92,8 +91,6 @@ Ask an administrator to perform or delegate these build-server tasks:
 - Install OS packages and Java dependencies.
 - Confirm or create the local `jenkins-agent` runtime account and group.
 - Create and own `/var/lib/jenkins-agent`.
-- Install the Jenkins controller public key in the agent user's
-  `authorized_keys`.
 - Enable and start `ssh` or `sshd`.
 - Run any `apt`, `dpkg`, `systemctl`, `groupadd`, `useradd`, `chown`, `chmod`,
   or writes under system-owned paths.
@@ -103,8 +100,9 @@ Ask an administrator to perform or delegate these build-server tasks:
 ### 2.1 OS Dependency Setup
 
 OS dependency setup installs the minimal build base from the build server's
-approved apt repositories, creates the dedicated `jenkins-agent` account,
-installs the Jenkins-generated public key, and enables SSH.
+approved apt repositories, creates the dedicated `jenkins-agent` account, and
+enables SSH. It does not install Jenkins controller keys; key transfer and
+agent access authorization are later integration work.
 
 Manual package baseline on the build server:
 
@@ -151,18 +149,17 @@ sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz > ~/jenkins-agent-artifacts-bu
 
 ### 2.3 Install the Agent Artifact Bundle Manually
 
-Transfer the agent artifact archive, `.sha256` file, and the Jenkins
-controller agent public key to the build-agent host. Set
-`JENKINS_AGENT_PUBLIC_KEY_FILE` in the agent host env to the staged public key
-path.
+Transfer the agent artifact archive and `.sha256` file to the build-agent
+host. Do not transfer or install the Jenkins controller agent public key during
+host-only setup.
 
 Verify the artifact archive and internal checksums on the build server, then
-configure the runtime account and SSH key:
+configure the runtime account and SSH service:
 
 ```bash
 sha256sum -c /home/operator/jenkins-agent-artifacts-bundle.tar.gz.sha256
 
-sudo AGENT_PUBLIC_KEY="$(cat "${JENKINS_AGENT_PUBLIC_KEY_FILE}")" bash -s <<'EOF'
+sudo bash -s <<'EOF'
 set -euo pipefail
 agent_user=jenkins-agent
 remote_fs=/var/lib/jenkins-agent
@@ -171,7 +168,6 @@ trap 'rm -rf "$workdir"' EXIT
 tar -xzf /home/operator/jenkins-agent-artifacts-bundle.tar.gz -C "$workdir"
 cd "$workdir/jenkins-agent-artifacts-bundle"
 sha256sum -c checksums/SHA256SUMS
-agent_public_key="${AGENT_PUBLIC_KEY}"
 if ! getent group "${agent_user}" >/dev/null; then
   groupadd --system "${agent_user}"
 fi
@@ -180,29 +176,23 @@ if ! getent passwd "${agent_user}" >/dev/null; then
 fi
 install -d -o "${agent_user}" -g "${agent_user}" -m 0750 "${remote_fs}"
 rm -f "${remote_fs}/remoting.jar"
-install -d -o "${agent_user}" -g "${agent_user}" -m 0700 "${remote_fs}/.ssh"
-authorized_keys="${remote_fs}/.ssh/authorized_keys"
-touch "${authorized_keys}"
-chown "${agent_user}:${agent_user}" "${authorized_keys}"
-chmod 0600 "${authorized_keys}"
-if ! grep -qxF "${agent_public_key}" "${authorized_keys}"; then
-  printf '%s\n' "${agent_public_key}" >> "${authorized_keys}"
-fi
-chown "${agent_user}:${agent_user}" "${authorized_keys}"
 systemctl enable --now ssh || systemctl enable --now sshd || true
 EOF
 ```
 
 For artifact recovery, rerun only the artifact archive checksum, transfer,
-internal checksum, account, key, and SSH service commands. OS package recovery
-uses the approved internal Ubuntu/OS package repository path.
+internal checksum, account, remote filesystem, and SSH service commands. OS
+package recovery uses the approved internal Ubuntu/OS package repository path.
 
 ## 3. Jenkins Agent Installation
 
-### 3.1 Prepare Controller SSH Key
+### 3.1 Later Controller SSH Public Key Integration
 
-The Jenkins controller uses this key to launch the SSH agent. Generate or
-confirm it on the Jenkins controller:
+The Jenkins controller will use its private key to launch the SSH agent during
+the later integration step. Agent host-only bringup does not consume
+controller key material, write `authorized_keys`, or validate controller SSH
+access. Generate or confirm the keypair on the Jenkins controller during that
+later integration workflow:
 
 ```bash
 sudo install -d -o jenkins -g jenkins -m 0700 /var/lib/jenkins/.ssh
@@ -216,14 +206,15 @@ sudo chmod 0600 /var/lib/jenkins/.ssh/agent_ed25519
 sudo chmod 0644 /var/lib/jenkins/.ssh/agent_ed25519.pub
 ```
 
-Copy only `/var/lib/jenkins/.ssh/agent_ed25519.pub` to the agent host and set
-`JENKINS_AGENT_PUBLIC_KEY_FILE` to that staged public key.
+During the later integration step, copy only
+`/var/lib/jenkins/.ssh/agent_ed25519.pub` to the agent host and append it to
+the runtime account's `authorized_keys`.
 
 ### 3.2 Configure Build Server Runtime Account
 
 The build server needs a dedicated local runtime account, a remote filesystem,
-the Jenkins controller public key in `authorized_keys`, and a running SSH
-service. The artifact install in section 2.3 performs those steps.
+a running SSH service, and host-side tooling. The artifact install in section
+2.3 performs those host-only steps. Controller key installation is deferred.
 
 Install OS packages only from configured apt repositories. Stage Jenkins agent
 application artifacts with section 2.3.
@@ -246,14 +237,15 @@ JENKINS_AGENT_USER=jenkins-agent
 JENKINS_AGENT_REMOTE_FS=/var/lib/jenkins-agent
 ```
 
-If configuring through the UI, create an SSH credential for
+During the later integration step, create an SSH credential for
 `JENKINS_AGENT_USER` using `JENKINS_AGENT_SSH_KEY`, then create a permanent SSH
 agent with the configured host, port, remote FS, executor count, and labels.
+Do not treat that controller-side node registration as agent host-only
+bringup.
 
 ## 4. Validation
 
-Run on the agent host, then run the Jenkins-side validation from the controller
-host:
+Run on the agent host:
 
 ```bash
 java -version
@@ -268,9 +260,9 @@ Acceptance checks:
 - The `jenkins-agent` runtime account exists.
 - The agent remote FS exists and is owned by `jenkins-agent`.
 - SSH service is active on the build server.
-- Jenkins can connect to the configured node.
-- The `jenkins-agent-smoke-test` job runs on the expected label.
-- Gerrit-triggered verification jobs can schedule on the configured labels.
+- Jenkins controller node registration, controller-side SSH launch,
+  scheduling, later integration validation jobs, Gerrit Trigger execution, and
+  `Verified` vote proof are deferred to the later integration step.
 
 ## 5. Backup and Operations
 
@@ -284,20 +276,15 @@ sudo ls -l /var/lib/jenkins/.ssh/agent_ed25519
 sudo chmod 0600 /var/lib/jenkins/.ssh/agent_ed25519
 ```
 
-For key rotation, run:
-
-```bash
-```
-
-When rotating the controller key, copy the new `.pub` file to the agent host
-and update `authorized_keys` there so the authorized key is refreshed.
-Coordinate this with a quiet build window because running builds can lose their
-agent connection.
+When rotating the controller key during later integration, copy the new `.pub`
+file to the agent host and update `authorized_keys` there so the authorized key
+is refreshed. Coordinate this with a quiet build window because running builds
+can lose their agent connection.
 
 For package baseline changes, update the approved internal Ubuntu/OS package
-repository state and reinstall agent dependencies before validating the smoke
-job. For account, key, or SSH service recovery, reinstall only the agent
-artifact bundle.
+repository state and reinstall agent dependencies before repeating host-only
+validation. Smoke-job validation remains later integration work. For account,
+key, or SSH service recovery, reinstall only the agent artifact bundle.
 
 ## 6. References
 
