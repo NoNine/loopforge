@@ -40,6 +40,9 @@ Every evidence record must include:
 - Runtime-account checks where applicable.
 - Jenkins agent scheduling and execution results where applicable.
 - Gerrit Trigger event, build, and `Verified` vote results where applicable.
+- Gerrit ACL reviewed-workflow planning or blocked results where applicable.
+- Target project, inherited scope, apply mode, Gerrit version, review change
+  identifier, and actor/group references where applicable.
 - Bounded log references.
 - Redaction status.
 
@@ -112,9 +115,23 @@ These records are the primary inputs to global aggregation.
 
 The shared integration helper owns cross-role evidence for Jenkins-to-Gerrit
 SSH, Jenkins-to-agent SSH, Gerrit Trigger configuration, agent scheduling,
-trigger delivery, and `Verified` voting. These records are not substitutes for
-role-local readiness records and are not the final evidence package. They are
-additional inputs consumed by Docker/VM verifiers and by global aggregation.
+trigger delivery, `Verified` voting, and Gerrit ACL reviewed-workflow
+planning. These records are not substitutes for role-local readiness records
+and are not the final evidence package. They are additional inputs consumed by
+Docker/VM verifiers and by global aggregation.
+
+ACL planning records must include:
+
+- `target_project`
+- `inherited_scope`
+- `apply_mode`
+- `gerrit_version`
+- `review_change_id` or `not-created`
+- `integration_actor_or_group`
+- validation result summaries
+
+Blocked or dry-run records must not claim mutation success, auto-submit, or a
+real Gerrit review when none occurred.
 
 ## Global Aggregation
 

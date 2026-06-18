@@ -5,8 +5,8 @@ Jenkins and Gerrit. It is based on the behavior digest in
 `docs/reference-digest.md` and stays within the product boundary in
 `docs/prd.md`.
 
-The contract covers the integration account, SSH key custody, Gerrit
-permissions, the `Verified` label, Gerrit Trigger controller settings,
+The contract covers the integration account, SSH key custody, the reviewed
+Gerrit ACL workflow, the `Verified` label, Gerrit Trigger controller settings,
 disposable verification artifacts, failure classification, and the Docker
 simulation acceptance contract. It does not execute the Docker simulation.
 
@@ -34,24 +34,27 @@ connectivity, `stream-events`, or `Verified` voting.
    through the controller integration-key workflow.
 2. Gerrit receives only the Jenkins-to-Gerrit public key and associates it with
    the Jenkins Gerrit integration account.
-3. Gerrit defines the `Verified` label in project configuration.
-4. Gerrit grants read access, `stream-events`, and `Verified` voting permission
-   to the Jenkins Gerrit integration actor or group.
-5. Jenkins stores the controller-held private key as a credential. The
+3. The operator chooses an explicit Gerrit ACL target project. There is no
+   implicit `All-Projects` default.
+4. Gerrit defines the `Verified` label in reviewed project configuration.
+5. Gerrit grants read access, `stream-events`, and `Verified` voting permission
+   to the Jenkins Gerrit integration actor or group through a reviewed Gerrit
+   configuration change created through the REST API.
+6. Jenkins stores the controller-held private key as a credential. The
    credential ID may be recorded in evidence only when it does not encode a
    username, hostname, secret value, or other sensitive material.
-6. Jenkins configures a Gerrit Trigger server that connects as the Jenkins
+7. Jenkins configures a Gerrit Trigger server that connects as the Jenkins
    Gerrit integration account.
-7. Jenkins registers a disposable verification job that responds to
+8. Jenkins registers a disposable verification job that responds to
    `patchset-created`.
-8. Verification creates a disposable Gerrit project and change labeled as
+9. Verification creates a disposable Gerrit project and change labeled as
    verification artifacts.
-9. The disposable change emits a `patchset-created` event.
-10. Jenkins receives the event and schedules the verification job on the
+10. The disposable change emits a `patchset-created` event.
+11. Jenkins receives the event and schedules the verification job on the
     Jenkins agent label.
-11. The job runs on the Jenkins agent and Jenkins posts `Verified +1` to the
+12. The job runs on the Jenkins agent and Jenkins posts `Verified +1` to the
     Gerrit change.
-12. Evidence records the change, build, vote, and verification mode.
+13. Evidence records the change, build, vote, and verification mode.
 
 ## Templates
 
@@ -72,6 +75,34 @@ using these templates in later helper steps.
 
 ## Gerrit Permissions
 
+REST API is the selected Gerrit configuration interface for the package.
+Production-like ACL setup must create a reviewable Gerrit config change
+through REST and must not auto-submit it. Direct editing of
+`All-Projects.git` is not the automation path, even though
+`refs/meta/config/project.config` remains Gerrit's underlying storage model.
+Dashboard or remote-management integrations should use REST for the same
+reason.
+
+The shared integration helper will expose the ACL surface in the deferred
+Step 11/shared integration implementation. It is not implemented in the
+current helper yet.
+
+Apply modes:
+
+- `--dry-run` reads reviewed inputs and renders a bounded planned ACL summary
+  without mutation.
+- `--create-review` is the production-like path. It creates a Gerrit config
+  review through REST when real implementation is available, and it never
+  auto-submits.
+- `--apply-direct` is allowed only for explicitly labeled
+  `simulation-only`, `docker-harness-simulation`, or `vm-simulation` lab
+  modes and requires `--yes`. It must fail closed in `production-like` mode
+  even when credentials would permit direct mutation.
+
+Until the reviewed REST mutation is implemented and verified in Step 11 or a
+later approved shared integration step, repository helpers must not claim ACL
+success, real review creation, or Gerrit mutation.
+
 Gerrit must grant the Jenkins Gerrit integration actor or group:
 
 - Read access on the verification project and any project pattern under test.
@@ -82,6 +113,17 @@ Gerrit must grant the Jenkins Gerrit integration actor or group:
 The Gerrit admin account may apply the access configuration, but the granted
 actor must be the Jenkins Gerrit integration account or group. The human admin
 account must not be configured as the Gerrit Trigger identity.
+
+The ACL workflow treats Gerrit `3.13.6` as the v1 REST baseline. Later Gerrit
+versions may be used only when runtime REST compatibility checks pass. If the
+server version or REST behavior is unsupported, the helper must fail closed
+before any configuration mutation.
+
+Evidence planning for ACL configuration records the target project, inherited
+scope, apply mode, Gerrit version, Gerrit review change and revision when one
+exists, Jenkins integration actor or group, validation results, bounded log
+references, and redaction status. Planned or blocked records must use
+`not-created` for review identifiers rather than implying a review was opened.
 
 ## Disposable Verification Artifacts
 

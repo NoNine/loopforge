@@ -192,6 +192,9 @@ Agent behavior notes:
 
 The helper may fail closed until the later Docker or VM integration
 implementation exists. Role helpers must not expose these cross-role commands.
+The reviewed Gerrit ACL REST workflow is planned for the deferred Step 11 or
+later approved shared integration implementation; it is not part of the
+current helper command surface.
 
 ### Docker Simulation Helpers
 

@@ -145,6 +145,10 @@ Produced outputs:
   helper.
 - No Jenkins-to-Gerrit public key handoff. Jenkins key generation and Gerrit
   public-key installation are deferred to the later integration step.
+- The reviewed Gerrit ACL workflow later uses the shared integration
+  implementation with an explicit target project and REST-created reviewable
+  config change. This role helper still does not perform that cross-role
+  mutation.
 - `manifest.txt` records `artifact_source=curated-bundle-factory`,
   `os_dependency_source=approved-internal-os-repos`,
   `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
@@ -296,9 +300,9 @@ Later integration inputs, not Gerrit role-local inputs:
 - Jenkins Gerrit integration account.
 - Jenkins Gerrit integration group.
 - Jenkins-to-Gerrit public key file.
-- Integration configuration mode, normally a site-Git bootstrap in the Docker
-  harness or another reviewed Gerrit-native admin path in production.
-- Gerrit integration account id when site-Git bootstrap is used.
+- Explicit Gerrit ACL target project.
+- Production-like reviewed REST configuration mode.
+- Gerrit integration account or group id for reviewed REST ACL changes.
 - `Verified` label template.
 - Gerrit integration access template.
 - Verification ref pattern.
@@ -306,12 +310,14 @@ Later integration inputs, not Gerrit role-local inputs:
 Later integration outputs, not Gerrit role-local outputs:
 
 - Gerrit-held Jenkins public key.
-- `etc/verified-label.config`.
-- `etc/jenkins-integration-access.config`.
-- Real Gerrit site Git state under `All-Projects.git` and `All-Users.git` when
-  a later integration workflow uses a site-Git bootstrap path.
-- Integration applied status recording the account, group, and configuration
-  mode.
+- Reviewed Gerrit config change created through REST for the explicit target
+  project.
+- Gerrit review change and revision identifiers when a review is created.
+- Planned or blocked evidence when the REST workflow cannot be executed.
+- Integration status recording the account or group, target project, inherited
+  scope, apply mode, Gerrit version, review change, and validation results.
+- Direct REST apply evidence only for explicitly labeled simulation or lab
+  behavior. Production-like mode must fail closed instead of applying directly.
 
 Mutation side effects:
 
@@ -336,6 +342,12 @@ later step is implemented. Jenkins owns the matching private key. LDAP bind
 secrets are still read from reviewed secret input and written to
 `etc/secure.config` during Gerrit configuration; they are not recorded in
 evidence.
+
+Reviewed ACL setup is deferred to the Step 11/shared integration
+implementation. That future implementation must use production-like reviewed
+REST config changes, require an explicit target project, allow direct REST
+apply only for explicitly labeled simulation or lab runs, fail closed in
+production-like mode, and must not auto-submit reviewed ACL changes.
 
 ## Phase 8: Validation
 
