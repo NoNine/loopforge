@@ -673,7 +673,12 @@ verify_war_artifact() {
   fi
   war_entries="$(unzip -Z1 "$war")" ||
     die "BLOCKED: Gerrit WAR entries could not be listed for artifact validation: $war"
-  if ! printf '%s\n' "$war_entries" | grep -Eq '^(Main\.class|WEB-INF/web\.xml|com/google/gerrit/launcher/GerritLauncher\.class)$'; then
+  if ! printf '%s\n' "$war_entries" | awk '
+    $0 == "Main.class" { main = 1 }
+    $0 == "WEB-INF/web.xml" { web = 1 }
+    $0 == "com/google/gerrit/launcher/GerritLauncher.class" { launcher = 1 }
+    END { exit !(main && web && launcher) }
+  '; then
     die "BLOCKED: Gerrit WAR does not look like a real Gerrit application artifact: $war"
   fi
 }
@@ -1140,10 +1145,13 @@ check_installed_artifact_freshness() {
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" sshd.listenAddress
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" container.javaHome
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" auth.type
+  assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" auth.gitBasicAuthPolicy
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.server
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.username
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.accountBase
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.groupBase
+  assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.groupMemberPattern
+  assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.groupName
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" ldap.adminGroup
   rm -rf "$rendered_dir"
 

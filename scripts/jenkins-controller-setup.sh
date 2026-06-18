@@ -223,6 +223,9 @@ JENKINS_EVIDENCE_DIR
     require_reviewed_value JENKINS_PLUGIN_MANAGER_SOURCE
     require_reviewed_value JENKINS_PLUGIN_SOURCE_DIR
   fi
+  if [ -z "${LDAP_BIND_PASSWORD_FILE:-}" ] && [ -z "${LDAP_BIND_PASSWORD:-}" ]; then
+    die "Missing reviewed LDAP bind password input: set LDAP_BIND_PASSWORD_FILE or LDAP_BIND_PASSWORD"
+  fi
 }
 
 require_account_separation() {
@@ -254,6 +257,8 @@ apply_env_defaults() {
   JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2006.v001a_2ca_6b_574,credentials:1415.v831096eb_5534,git:5.7.0,gerrit-trigger:2.42.0,ldap:780.vcb_33c9a_e4332,matrix-auth:3.2.6,ssh-credentials:361.vb_f6760818e8c,ssh-slaves:3.1031.v72c6b_883b_869,workflow-aggregator:608.v67378e9d3db_1,job-dsl:1.93,timestamper:1.30,ws-cleanup:0.48}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
+  LDAP_BIND_PASSWORD_FILE="${LDAP_BIND_PASSWORD_FILE:-}"
+  LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-}"
   LDAP_USER_BASE="${LDAP_USER_BASE:-ou=people,dc=example,dc=test}"
   LDAP_GROUP_BASE="${LDAP_GROUP_BASE:-ou=groups,dc=example,dc=test}"
   JENKINS_ADMIN_ACCOUNT="${JENKINS_ADMIN_ACCOUNT:-jenkins-admin}"
@@ -352,21 +357,38 @@ write_text_file() {
 }
 
 render_template() {
-  local source target text
+  local source target text ldap_bind_password
   source="${1:?source required}"
   target="${2:?target required}"
   text="$(cat "$source")"
+  ldap_bind_password="$(ldap_bind_password_value)"
   text="${text//\{\{JENKINS_HOME\}\}/$JENKINS_HOME}"
   text="${text//\{\{JENKINS_HTTP_PORT\}\}/$JENKINS_HTTP_PORT}"
   text="${text//\{\{JENKINS_RUNTIME_ACCOUNT\}\}/$JENKINS_RUNTIME_ACCOUNT}"
   text="${text//\{\{JENKINS_URL\}\}/$JENKINS_URL}"
   text="${text//\{\{LDAP_URL\}\}/$LDAP_URL}"
   text="${text//\{\{LDAP_BIND_DN\}\}/$LDAP_BIND_DN}"
+  text="${text//\{\{LDAP_BIND_PASSWORD\}\}/$ldap_bind_password}"
   text="${text//\{\{LDAP_USER_BASE\}\}/$LDAP_USER_BASE}"
   text="${text//\{\{LDAP_GROUP_BASE\}\}/$LDAP_GROUP_BASE}"
   text="${text//\{\{VERIFICATION_MODE\}\}/$JENKINS_VERIFICATION_MODE}"
   mkdir -p "$(dirname "$target")"
   printf '%s\n' "$text" >"$target"
+  chmod 0600 "$target"
+}
+
+ldap_bind_password_value() {
+  local secret
+  if [ -n "${LDAP_BIND_PASSWORD_FILE:-}" ]; then
+    [ -r "$LDAP_BIND_PASSWORD_FILE" ] || die "LDAP bind password file is not readable: $LDAP_BIND_PASSWORD_FILE"
+    secret="$(tr -d '\r\n' <"$LDAP_BIND_PASSWORD_FILE")"
+  else
+    secret="${LDAP_BIND_PASSWORD:-}"
+  fi
+  [ -n "$secret" ] || die "LDAP bind password is required for Jenkins LDAP authenticated bind"
+  is_placeholder "$secret" &&
+    die "LDAP bind password must be reviewed and must not be a placeholder"
+  printf '%s\n' "$secret"
 }
 
 assert_no_unresolved_placeholders() {
@@ -803,12 +825,16 @@ cmd_configure_jcasc() {
   confirm_mutation configure-jcasc || return 0
   verify_staged_artifacts
   mkdir -p "$JENKINS_HOME/jcasc" "$JENKINS_HOME/state"
+  chmod 0700 "$JENKINS_HOME/jcasc"
   render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$JENKINS_HOME/jcasc/jenkins.yaml"
   assert_no_unresolved_placeholders "$JENKINS_HOME/jcasc/jenkins.yaml"
   grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC must keep built-in node executors at zero"
   grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP security realm is missing"
+  grep -Fq -- 'managerPasswordSecret:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP manager password secret is missing"
   runtime_account_exists
   chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/jcasc"
+  chmod 0700 "$JENKINS_HOME/jcasc"
+  chmod 0600 "$JENKINS_HOME/jcasc/jenkins.yaml"
   write_text_file "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
   printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$JENKINS_HOME/jcasc/jenkins.yaml"
 }
@@ -891,6 +917,7 @@ check_plugin_readiness() {
 check_jcasc_readiness() {
   [ -s "$JENKINS_HOME/jcasc/jenkins.yaml" ] || die "JCasC file is missing"
   grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP realm is missing"
+  grep -Fq -- 'managerPasswordSecret:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP manager password secret is missing"
   grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC built-in executor policy is missing"
 }
 

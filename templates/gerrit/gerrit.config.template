@@ -15,10 +15,13 @@
 
 [auth]
 	type = LDAP
+	gitBasicAuthPolicy = LDAP
 
 [ldap]
 	server = {{LDAP_URL}}
 	username = {{LDAP_BIND_DN}}
 	accountBase = {{LDAP_USER_BASE}}
 	groupBase = {{LDAP_GROUP_BASE}}
+	groupMemberPattern = (&(objectClass=groupOfNames)(member=${dn}))
+	groupName = cn
 	adminGroup = {{GERRIT_ADMIN_GROUP}}

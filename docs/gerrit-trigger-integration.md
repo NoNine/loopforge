@@ -36,10 +36,13 @@ connectivity, `stream-events`, or `Verified` voting.
    the Jenkins Gerrit integration account.
 3. The operator chooses an explicit Gerrit ACL target project. There is no
    implicit `All-Projects` default.
-4. Gerrit defines the `Verified` label in reviewed project configuration.
+4. Gerrit defines the `Verified` label. Production-like setup does this in
+   reviewed project configuration; Docker and VM simulation may do it through
+   labeled direct Gerrit REST test automation.
 5. Gerrit grants read access, `stream-events`, and `Verified` voting permission
-   to the Jenkins Gerrit integration actor or group through a reviewed Gerrit
-   configuration change created through the REST API.
+   to the Jenkins Gerrit integration actor or group. Production-like setup uses
+   a reviewed Gerrit configuration change created through the REST API; Docker
+   and VM simulation may use labeled direct Gerrit REST test automation.
 6. Jenkins stores the controller-held private key as a credential. The
    credential ID may be recorded in evidence only when it does not encode a
    username, hostname, secret value, or other sensitive material.
@@ -83,10 +86,6 @@ through REST and must not auto-submit it. Direct editing of
 Dashboard or remote-management integrations should use REST for the same
 reason.
 
-The shared integration helper will expose the ACL surface in the deferred
-Step 11/shared integration implementation. It is not implemented in the
-current helper yet.
-
 Apply modes:
 
 - `--dry-run` reads reviewed inputs and renders a bounded planned ACL summary
@@ -99,9 +98,38 @@ Apply modes:
   modes and requires `--yes`. It must fail closed in `production-like` mode
   even when credentials would permit direct mutation.
 
-Until the reviewed REST mutation is implemented and verified in Step 11 or a
-later approved shared integration step, repository helpers must not claim ACL
-success, real review creation, or Gerrit mutation.
+Docker and VM simulation may use direct Gerrit REST calls for test automation,
+including label, access, disposable project, and disposable verification setup,
+when the run is explicitly labeled as simulation-only. Direct REST simulation
+automation must be recorded in logs and evidence as simulation behavior and
+must not be presented as production-like reviewed ACL proof. This simulation
+allowance does not permit direct `All-Projects.git` editing, direct site-Git
+mutation, direct `refs/meta/config` Git editing, or `gerrit set-account`
+fallbacks.
+
+Docker and VM simulation may also configure Gerrit Trigger to post build
+review results through Gerrit REST when the Gerrit server no longer accepts the
+plugin's legacy SSH review flags for labels such as `Verified`. The event
+stream still proves Jenkins-to-Gerrit SSH and `stream-events`; the review post
+is labeled as simulation-only direct REST automation in logs and evidence.
+
+### Docker Simulation Waiver: Gerrit Admin LDAP Group Resolution
+
+Scope: Docker Step 11 only.
+
+The Docker simulation seeds an LDAP `gerrit-admins` group, but the observed
+Step 11 Docker run did not expose that LDAP group in `gerrit-admin` REST group
+membership. For Step 11 Docker simulation only, Gerrit admin rights may be
+bootstrapped through Gerrit's documented first-registered-user internal
+`Administrators` behavior and repaired through Gerrit REST group membership.
+
+This waiver does not accept LDAP admin-group resolution as production-like
+proof. It also does not waive Jenkins integration group validation,
+`stream-events`, `Verified` label and voting proof, or the prohibition on
+direct `All-Projects.git`, direct site-Git mutation, and `gerrit set-account`
+fallbacks. Gerrit LDAP admin-group mapping must be fixed or separately
+verified before LDAP admin-group resolution can be treated as production-like
+evidence.
 
 Gerrit must grant the Jenkins Gerrit integration actor or group:
 

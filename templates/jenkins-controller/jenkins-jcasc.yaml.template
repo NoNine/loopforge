@@ -8,6 +8,7 @@ jenkins:
         - server: "{{LDAP_URL}}"
           rootDN: ""
           managerDN: "{{LDAP_BIND_DN}}"
+          managerPasswordSecret: "{{LDAP_BIND_PASSWORD}}"
           userSearchBase: "{{LDAP_USER_BASE}}"
           groupSearchBase: "{{LDAP_GROUP_BASE}}"
   authorizationStrategy:

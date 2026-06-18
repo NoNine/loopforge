@@ -1095,12 +1095,12 @@ cmd_run_role_gate() {
       fi
       ;;
     jenkins-controller)
-      if compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure-service >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes install-plugins >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure-jcasc >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
+      if compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes configure-service >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes install-plugins >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes configure-jcasc >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
         rc=0
       else

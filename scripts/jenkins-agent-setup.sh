@@ -615,6 +615,20 @@ create_runtime_account_if_needed() {
   die "Runtime account $JENKINS_AGENT_ACCOUNT does not exist and useradd is unavailable"
 }
 
+ensure_runtime_account_accepts_publickey() {
+  local shadow_marker
+  shadow_marker="$(awk -F: -v user="$JENKINS_AGENT_ACCOUNT" '$1 == user {print $2}' /etc/shadow 2>/dev/null || true)"
+  case "$shadow_marker" in
+    ""|"!"|"!!"|"\!"*)
+      if command -v usermod >/dev/null 2>&1; then
+        usermod -p '*' "$JENKINS_AGENT_ACCOUNT"
+      else
+        die "Runtime account $JENKINS_AGENT_ACCOUNT is locked and usermod is unavailable"
+      fi
+      ;;
+  esac
+}
+
 runtime_account_home() {
   getent passwd "$JENKINS_AGENT_ACCOUNT" | awk -F: '{print $6}'
 }
@@ -731,6 +745,7 @@ cmd_configure_runtime() {
   require_command ssh-keygen
   check_os_dependency_expectations
   create_runtime_account_if_needed
+  ensure_runtime_account_accepts_publickey
   ensure_dirs
   mkdir -p "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_STATE_DIR/etc" "$JENKINS_AGENT_STATE_DIR/state"
   chown -R "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_REMOTE_FS"
