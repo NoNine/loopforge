@@ -10,16 +10,17 @@ Jenkins agent operations and must remain free of repository helper commands.
 
 The v1 boundary is unchanged: agent bootstrap artifacts, templates, manifests,
 and checksums are prepared in the bundle factory, staged to the Jenkins agent
-target, and verified by manifest and checksum before target mutation. v1 does
-not support offline Ubuntu dependency bundle workflows. Any public internet
-fallback for target-host Ubuntu/OS dependency installation is simulation-only
-and must be labeled that way in logs and evidence.
+target, and verified by manifest and checksum before target mutation. The
+staged bootstrap artifacts own the agent-side public-key handoff for host-side
+readiness; controller key handoff stays deferred to the later integration
+step. v1 does not support offline Ubuntu dependency bundle workflows. Any
+public internet fallback for target-host Ubuntu/OS dependency installation is
+simulation-only and must be labeled that way in logs and evidence.
 
 Jenkins connects out to the agent over SSH. The agent helper owns only the
 agent host side: OS/tooling readiness, runtime account readiness, remote
 filesystem readiness, SSH daemon reachability, staged artifact checks, bounded
-logs, and evidence. Jenkins key generation, key transfer, agent
-`authorized_keys` updates, controller node registration, credential storage,
+logs, and evidence. Jenkins controller node registration, credential storage,
 executor count, label assignment, and scheduling validation remain in the
 later integration step.
 
@@ -40,8 +41,8 @@ Consumed inputs:
 - Agent host, SSH port, dedicated runtime account, remote filesystem path,
   Jenkins label, staged artifact path, artifact output path, verification
   mode, evidence directory, and bounded log directory.
-- `JENKINS_AGENT_OS_DEPENDENCIES`, which defaults to agent target OS package
-  expectations from the approved agent reference adapted to v1:
+- `JENKINS_AGENT_OS_DEPENDENCIES`, which defaults to the static agent target
+  OS package baseline from the approved agent reference adapted to v1:
   `ca-certificates`, `curl`, `git`, `openssh-client`, `openssh-server`,
   `openjdk-21-jre`, `rsync`, `tar`, `unzip`, and `wget`.
 
@@ -122,9 +123,9 @@ Produced outputs:
 - `manifest.txt`.
 - `checksums.sha256`.
 - Agent bootstrap marker for the Docker harness role gate.
-- Package intent manifest describing OS package expectations without creating
-  an Ubuntu dependency bundle.
-- Runtime profile and SSH daemon policy templates.
+- Package intent manifest describing the static OS package baseline without
+  creating an Ubuntu dependency bundle.
+- Runtime profile, SSH daemon policy, and staged agent public-key templates.
 
 Staged artifact paths:
 
@@ -188,14 +189,17 @@ scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> --yes install
 ## Phase 5: Agent Runtime Account And SSH Daemon Setup
 
 Runtime configuration verifies staged artifacts again before mutation. The
-agent host setup does not consume controller key material or update
-`authorized_keys`; those actions are later integration work.
+agent host setup does not consume controller key material. It updates
+`authorized_keys` only from the staged bootstrap public-key artifact so a real
+SSH daemon can be proven during Step 9; controller key handoff remains later
+integration work.
 
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
 - Staged artifact manifest and checksums.
 - Dedicated runtime account name and remote filesystem path.
+- Staged bootstrap public-key artifact.
 
 Produced outputs:
 
@@ -208,13 +212,10 @@ Mutation side effects:
 
 - Creates or verifies the dedicated local runtime account.
 - Creates or updates the remote filesystem.
+- Creates or updates the host-side `authorized_keys` file from staged
+  bootstrap key material.
 - Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
   SSH reachability without claiming Jenkins controller scheduling.
-
-Deferred integration side effects:
-
-- Adding the Jenkins controller's agent access key to the runtime account's
-  `authorized_keys` is performed only in the later integration step.
 
 Helper:
 
@@ -253,6 +254,8 @@ Validation checks:
   `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the Docker harness.
 - The dedicated runtime account exists.
 - `JENKINS_AGENT_REMOTE_FS` exists and is owned by the runtime account.
+- `authorized_keys` is owned by the runtime account and matches the staged
+  bootstrap key artifact.
 - Staged artifact checksums still verify before readiness is reported.
 
 Helper:
@@ -268,7 +271,7 @@ Jenkins controller scope:
   jobs are deferred to the later integration step.
 - Step 9 proves only agent host-side readiness: SSH daemon reachability,
   runtime account ownership, remote filesystem readiness, staged artifact
-  checks, bounded logs, and evidence.
+  checks, `authorized_keys` readiness, bounded logs, and evidence.
 - Real cross-role trigger execution and `Verified` voting are aggregated by
   the later end-to-end integration step after role helpers are compliant.
 
@@ -303,6 +306,7 @@ Observed checks recorded:
 - Runtime account ownership.
 - Remote filesystem readiness.
 - Jenkins agent label and executor context as controller-owned metadata only.
+- Bootstrap public-key fingerprint.
 - Bounded log references.
 - Redaction status.
 

@@ -34,9 +34,9 @@ Options:
   -h, --help     Show this help.
 
 The manual remains the authority. This helper configures only the Jenkins
-agent host runtime account, remote filesystem, and SSH authorized-key side.
-Jenkins controller node registration and executor scheduling stay with the
-controller helper.
+agent host runtime account, remote filesystem, staged bootstrap authorized-key
+file, and real SSH daemon readiness. Jenkins controller node registration and
+executor scheduling stay with later integration work.
 USAGE
 }
 
@@ -559,6 +559,8 @@ os_dependencies=$JENKINS_AGENT_OS_DEPENDENCIES
 controller_plugin=$JENKINS_AGENT_CONTROLLER_PLUGIN
 controller_plugin_source=$JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE
 bootstrap=jenkins-agent-bootstrap.txt
+bootstrap_public_key=jenkins-agent.pub
+os_dependency_baseline_owner=jenkins-agent-host
 EOF
 }
 
@@ -575,7 +577,8 @@ cmd_prepare_artifacts() {
   write_text_file "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/package-intent.manifest" \
     "packages=$JENKINS_AGENT_OS_DEPENDENCIES
 source_boundary=approved-internal-os-repos
-public_internet_fallback=simulation-only"
+public_internet_fallback=simulation-only
+baseline_owner=jenkins-agent-host"
   cp "$repo_root/templates/jenkins-agent/jenkins-agent.pub" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/jenkins-agent.pub"
   validate_public_key_file "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/jenkins-agent.pub"
   cp "$repo_root/templates/jenkins-agent/agent-runtime-profile.env.template" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/templates/agent-runtime-profile.env.template"
@@ -588,7 +591,7 @@ public_internet_fallback=simulation-only"
       sort -z |
       xargs -0 sha256sum >checksums.sha256
   )
-  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s public_key=%s\n' \
+  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s bootstrap_public_key=%s\n' \
     "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/manifest.txt" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/checksums.sha256" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/jenkins-agent.pub"
 }
 
@@ -679,7 +682,6 @@ stop_helper_owned_sshd() {
     sleep 1
   done
   die "Helper-owned sshd pid $pid did not stop"
-  rm -f "$pidfile"
 }
 
 start_sshd_service() {
@@ -730,7 +732,7 @@ EOF
 }
 
 cmd_configure_runtime() {
-  local key_source authorized_keys account_home
+  local key_source account_home
   load_env normal
   require_env_values
   validate_agent_render_inputs
@@ -740,8 +742,8 @@ cmd_configure_runtime() {
   require_command ssh-keygen
   check_os_dependency_expectations
   create_runtime_account_if_needed
-  key_source="$JENKINS_AGENT_PUBLIC_KEY_FILE"
-  [ -f "$key_source" ] || key_source="$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent.pub"
+  key_source="$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent.pub"
+  [ -f "$key_source" ] || die "Missing staged bootstrap public key artifact: $key_source"
   validate_public_key_file "$key_source"
   ensure_dirs
   mkdir -p "$JENKINS_AGENT_REMOTE_FS/.ssh" "$JENKINS_AGENT_STATE_DIR/etc" "$JENKINS_AGENT_STATE_DIR/state"
@@ -787,9 +789,9 @@ check_authorized_key() {
   authorized_keys="$JENKINS_AGENT_REMOTE_FS/.ssh/authorized_keys"
   [ -s "$authorized_keys" ] || die "authorized_keys is missing or empty: $authorized_keys"
   validate_public_key_file "$authorized_keys"
-  expected="$(sed -n '1p' "$JENKINS_AGENT_PUBLIC_KEY_FILE")"
+  expected="$(sed -n '1p' "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent.pub")"
   actual="$(sed -n '1p' "$authorized_keys")"
-  [ "$actual" = "$expected" ] || die "authorized_keys does not match reviewed Jenkins-to-agent public key"
+  [ "$actual" = "$expected" ] || die "authorized_keys does not match staged bootstrap public key"
   mode="$(stat -c '%a' "$authorized_keys")"
   owner="$(stat -c '%U' "$authorized_keys")"
   [ "$mode" = "600" ] || die "authorized_keys mode must be 600, got $mode"
@@ -804,7 +806,7 @@ check_runtime_readiness() {
   [ -s "$JENKINS_AGENT_STATE_DIR/state/runtime.status" ] || die "Runtime marker missing"
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" ] || die "Agent bootstrap marker is missing"
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest" ] || die "Agent package intent manifest is missing"
-  validate_public_key_file "$JENKINS_AGENT_PUBLIC_KEY_FILE"
+  validate_public_key_file "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent.pub"
   check_runtime_account
   check_remote_fs_ownership
   check_authorized_key
@@ -821,7 +823,7 @@ cmd_validate() {
   require_command ssh-keygen
   check_runtime_readiness
   cmd_collect_evidence >/dev/null
-  printf 'status=pass command=validate proof=real-agent-host-side SSH=pass remote_fs=pass runtime_account=pass authorized_key=pass label=%s executor_context=%s evidence_dir=%s\n' \
+  printf 'status=pass command=validate proof=real-agent-host-side SSH=pass ssh_daemon_banner=pass remote_fs=pass runtime_account=pass authorized_key=staged-bootstrap label=%s executor_context=%s evidence_dir=%s\n' \
     "$JENKINS_AGENT_LABEL" "$JENKINS_AGENT_EXECUTOR_CONTEXT" "$JENKINS_AGENT_EVIDENCE_DIR"
 }
 
@@ -848,7 +850,7 @@ cmd_collect_evidence() {
     printf 'verification_mode=%s\n' "$JENKINS_AGENT_VERIFICATION_MODE"
     printf 'artifact_manifest=%s\n' "$manifest"
     printf 'checksum_reference=%s\n' "$checksum"
-    printf 'observed=dependency-commands,ssh-reachability,remote-filesystem,runtime-account-ownership,authorized-key-readiness\n'
+    printf 'observed=static-os-dependency-baseline,dependency-commands,ssh-reachability,real-sshd-banner,remote-filesystem,runtime-account-ownership,staged-bootstrap-authorized-key-readiness\n'
     printf 'account=%s\n' "$JENKINS_AGENT_ACCOUNT"
     printf 'label=%s\n' "$JENKINS_AGENT_LABEL"
     printf 'executor_context=%s\n' "$JENKINS_AGENT_EXECUTOR_CONTEXT"
@@ -867,7 +869,7 @@ cmd_collect_evidence() {
   q_input="$(json_quote "$input_fingerprint")"
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
-  q_checks="$(json_quote "real agent-host-side readiness: dependency commands including java, ssh, and sshd, SSH reachability, remote filesystem ownership, runtime account ownership, authorized-key readiness; label=$JENKINS_AGENT_LABEL executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT public_key_fingerprint=$public_key_fp")"
+  q_checks="$(json_quote "real agent-host-side readiness: static OS dependency baseline, dependency commands including java, ssh, and sshd, SSH reachability, real sshd banner, remote filesystem ownership, runtime account ownership, staged bootstrap authorized-key readiness; label=$JENKINS_AGENT_LABEL executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT public_key_fingerprint=$public_key_fp")"
   q_log="$(json_quote "$bounded_log;$service_log")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"
   cat >"$evidence" <<EOF

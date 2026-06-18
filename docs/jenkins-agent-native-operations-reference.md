@@ -6,8 +6,10 @@ application-native operations only, not repository automation commands.
 Repository v1 boundary: v1 is not a strict air-gapped installer and does not
 support installing OS dependencies from locally bundled Ubuntu packages. Target
 hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
-Public internet fallback on target hosts is simulation-only and must be labeled
-as such in docs, logs, and verification summaries.
+Agent bootstrap artifacts, including the agent-side public key artifact, are
+prepared in the bundle-factory environment and staged to the target before any
+mutation. Public internet fallback on target hosts is simulation-only and must
+be labeled as such in docs, logs, and verification summaries.
 
 
 Audience: production operators preparing a Jenkins outbound SSH build agent on
@@ -101,8 +103,9 @@ Ask an administrator to perform or delegate these build-server tasks:
 
 OS dependency setup installs the minimal build base from the build server's
 approved apt repositories, creates the dedicated `jenkins-agent` account, and
-enables SSH. It does not install Jenkins controller keys; key transfer and
-agent access authorization are later integration work.
+enables SSH. The build server package baseline is owned by this agent-host
+reference. It does not install Jenkins controller keys; controller credential
+selection, node registration, and scheduling proof are later integration work.
 
 Manual package baseline on the build server:
 
@@ -139,7 +142,7 @@ Run on the bundle-factory VM:
 ```bash
 mkdir -p ~/jenkins-agent-artifacts-bundle/{jenkins-agent,checksums}
 cd ~/jenkins-agent-artifacts-bundle
-printf 'bundle_kind=jenkins-agent-artifacts\nbootstrap=manual-native-operations\n' \
+printf 'bundle_kind=jenkins-agent-artifacts\nbootstrap=bundle-factory-owned\n' \
   > jenkins-agent/release-unit.manifest
 find . -type f ! -path './checksums/SHA256SUMS' -print0 \
   | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
@@ -150,8 +153,8 @@ sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz > ~/jenkins-agent-artifacts-bu
 ### 2.3 Install the Agent Artifact Bundle Manually
 
 Transfer the agent artifact archive and `.sha256` file to the build-agent
-host. Do not transfer or install the Jenkins controller agent public key during
-host-only setup.
+host. The staged archive already carries the agent-side public key artifact;
+do not treat that as Jenkins controller key handoff during host-only setup.
 
 Verify the artifact archive and internal checksums on the build server, then
 configure the runtime account and SSH service:
@@ -190,9 +193,9 @@ package recovery uses the approved internal Ubuntu/OS package repository path.
 
 The Jenkins controller will use its private key to launch the SSH agent during
 the later integration step. Agent host-only bringup does not consume
-controller key material, write `authorized_keys`, or validate controller SSH
-access. Generate or confirm the keypair on the Jenkins controller during that
-later integration workflow:
+controller key material, validate controller SSH access, or prove controller
+scheduling. Generate or confirm the keypair on the Jenkins controller during
+that later integration workflow:
 
 ```bash
 sudo install -d -o jenkins -g jenkins -m 0700 /var/lib/jenkins/.ssh
@@ -260,6 +263,7 @@ Acceptance checks:
 - The `jenkins-agent` runtime account exists.
 - The agent remote FS exists and is owned by `jenkins-agent`.
 - SSH service is active on the build server.
+- The SSH daemon returns a real OpenSSH banner on the agent port.
 - Jenkins controller node registration, controller-side SSH launch,
   scheduling, later integration validation jobs, Gerrit Trigger execution, and
   `Verified` vote proof are deferred to the later integration step.
