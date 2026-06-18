@@ -6,10 +6,12 @@ application-native operations only, not repository automation commands.
 Repository v1 boundary: v1 is not a strict air-gapped installer and does not
 support installing OS dependencies from locally bundled Ubuntu packages. Target
 hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
-Agent bootstrap artifacts, including the agent-side public key artifact, are
-prepared in the bundle-factory environment and staged to the target before any
-mutation. Public internet fallback on target hosts is simulation-only and must
-be labeled as such in docs, logs, and verification summaries.
+Agent application/bootstrap artifacts are prepared in the bundle-factory
+environment and staged to the target before any mutation. Application artifacts
+and SSH credential material are separate from OS dependencies: artifact bundles
+must not include Gerrit, Jenkins, or agent SSH key material. Public internet
+fallback for target-host Ubuntu/OS dependency installation is simulation-only
+and must be labeled as such in docs, logs, and verification summaries.
 
 
 Audience: production operators preparing a Jenkins outbound SSH build agent on
@@ -142,7 +144,7 @@ Run on the bundle-factory VM:
 ```bash
 mkdir -p ~/jenkins-agent-artifacts-bundle/{jenkins-agent,checksums}
 cd ~/jenkins-agent-artifacts-bundle
-printf 'bundle_kind=jenkins-agent-artifacts\nbootstrap=bundle-factory-owned\n' \
+printf 'bundle_kind=jenkins-agent-artifacts\nbootstrap=bundle-factory-owned\nbundle_contains_keys=no\n' \
   > jenkins-agent/release-unit.manifest
 find . -type f ! -path './checksums/SHA256SUMS' -print0 \
   | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
@@ -153,8 +155,9 @@ sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz > ~/jenkins-agent-artifacts-bu
 ### 2.3 Install the Agent Artifact Bundle Manually
 
 Transfer the agent artifact archive and `.sha256` file to the build-agent
-host. The staged archive already carries the agent-side public key artifact;
-do not treat that as Jenkins controller key handoff during host-only setup.
+host. The staged archive must not carry Gerrit, Jenkins, or agent SSH key
+material. Jenkins controller keypair generation and public-key installation are
+later integration-step work.
 
 Verify the artifact archive and internal checksums on the build server, then
 configure the runtime account and SSH service:
@@ -217,7 +220,8 @@ the runtime account's `authorized_keys`.
 
 The build server needs a dedicated local runtime account, a remote filesystem,
 a running SSH service, and host-side tooling. The artifact install in section
-2.3 performs those host-only steps. Controller key installation is deferred.
+2.3 performs those host-only steps. Controller key installation and
+`authorized_keys` mutation are deferred.
 
 Install OS packages only from configured apt repositories. Stage Jenkins agent
 application artifacts with section 2.3.

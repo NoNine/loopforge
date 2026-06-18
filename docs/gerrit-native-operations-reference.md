@@ -9,6 +9,12 @@ hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
 Public internet fallback on target hosts is simulation-only and must be labeled
 as such in docs, logs, and verification summaries.
 
+Gerrit application artifact bundles are key-free. They may contain reviewed
+Gerrit application files, plugin jars, templates, manifests, and checksums, but
+not SSH private keys, public keys, `authorized_keys`, or generated public-key
+handoff files. Jenkins-to-Gerrit keypair generation and public-key handoff are
+integration operations after Gerrit role-local readiness is proven.
+
 
 Audience: production operators installing Gerrit on Ubuntu 24.04 LTS without Docker.
 

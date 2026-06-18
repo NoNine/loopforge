@@ -157,6 +157,37 @@ validate_private_key_file() {
   public_key_fingerprint "${file}.pub" >/dev/null || die "Matching public key cannot be fingerprinted: ${file}.pub"
 }
 
+assert_no_artifact_key_material() {
+  local dir bad_path
+  dir="${1:?artifact directory required}"
+  [ -d "$dir" ] || die "Missing artifact directory for key-material scan: $dir"
+  bad_path="$(
+    find "$dir" -type f \( \
+      -name 'authorized_keys' -o \
+      -name '*.pub' -o \
+      -name '*_rsa' -o \
+      -name '*_dsa' -o \
+      -name '*_ecdsa' -o \
+      -name '*_ed25519' -o \
+      -name 'id_rsa' -o \
+      -name 'id_dsa' -o \
+      -name 'id_ecdsa' -o \
+      -name 'id_ed25519' -o \
+      -name 'jenkins-gerrit.pub' -o \
+      -name 'jenkins-agent.pub' \
+    \) -print -quit
+  )"
+  [ -z "$bad_path" ] || die "Artifact bundle must not contain SSH key handoff or authorized_keys files: $bad_path"
+  if grep -RIlE --exclude='*.template' --exclude='*.md' --exclude='checksums.sha256' \
+    '(^-----BEGIN (OPENSSH |RSA |DSA |EC |)PRIVATE KEY-----|^ssh-(ed25519|rsa) |^ecdsa-sha2-nistp(256|384|521) )' \
+    "$dir" >/tmp/jenkins-controller-artifact-key-scan.$$ 2>/dev/null; then
+    bad_path="$(sed -n '1p' "/tmp/jenkins-controller-artifact-key-scan.$$")"
+    rm -f "/tmp/jenkins-controller-artifact-key-scan.$$"
+    die "Artifact bundle must not contain SSH key material: $bad_path"
+  fi
+  rm -f "/tmp/jenkins-controller-artifact-key-scan.$$"
+}
+
 load_env_file() {
   local file
   file="${env_file:-$default_env_file}"
@@ -680,8 +711,13 @@ verify_staged_artifacts() {
     $1 == "java_version" && $2 == "21" { j=1 }
     $1 == "ubuntu_release" && $2 == "24.04" { u=1 }
     $1 == "ubuntu_codename" && $2 == "noble" { n=1 }
-    END { exit !(h && r && g && jn && pm && j && u && n) }
+    $1 == "artifact_source" && $2 == "curated-bundle-factory" { a=1 }
+    $1 == "os_dependency_source" && $2 == "approved-internal-os-repos" { o=1 }
+    $1 == "public_internet_fallback" && $2 == "simulation-only" { p=1 }
+    $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
+    END { exit !(h && r && g && jn && pm && j && u && n && a && o && p && k) }
   ' "$manifest" || die "Staged manifest does not match the Jenkins controller Version Baseline"
+  assert_no_artifact_key_material "$JENKINS_STAGED_ARTIFACT_DIR"
 }
 
 cmd_preflight() {
@@ -720,7 +756,9 @@ gerrit_version=not-applicable
 jenkins_version=2.555.3
 jenkins_plugin_manager_version=2.15.0
 artifact_source=curated-bundle-factory
+os_dependency_source=approved-internal-os-repos
 public_internet_fallback=simulation-only
+bundle_contains_keys=no
 plugins=$JENKINS_PLUGIN_LIST
 war=jenkins-2.555.3.war
 plugin_manager=jenkins-plugin-manager-2.15.0.jar
@@ -748,6 +786,7 @@ cmd_prepare_artifacts() {
   cp "$repo_root/templates/jenkins-controller/disposable-verification-job.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/disposable-verification-job.yaml.template"
   cp "$repo_root/templates/jenkins-controller/trigger-verification.env.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/trigger-verification.env.template"
   write_manifest
+  assert_no_artifact_key_material "$JENKINS_ARTIFACT_OUTPUT_DIR"
   (
     cd "$JENKINS_ARTIFACT_OUTPUT_DIR"
     rm -f checksums.sha256

@@ -126,6 +126,37 @@ validate_public_key_file() {
   public_key_fingerprint "$file" >/dev/null || die "ssh-keygen could not fingerprint public key file: $file"
 }
 
+assert_no_artifact_key_material() {
+  local dir bad_path
+  dir="${1:?artifact directory required}"
+  [ -d "$dir" ] || die "Missing artifact directory for key-material scan: $dir"
+  bad_path="$(
+    find "$dir" -type f \( \
+      -name 'authorized_keys' -o \
+      -name '*.pub' -o \
+      -name '*_rsa' -o \
+      -name '*_dsa' -o \
+      -name '*_ecdsa' -o \
+      -name '*_ed25519' -o \
+      -name 'id_rsa' -o \
+      -name 'id_dsa' -o \
+      -name 'id_ecdsa' -o \
+      -name 'id_ed25519' -o \
+      -name 'jenkins-gerrit.pub' -o \
+      -name 'jenkins-agent.pub' \
+    \) -print -quit
+  )"
+  [ -z "$bad_path" ] || die "Artifact bundle must not contain SSH key handoff or authorized_keys files: $bad_path"
+  if grep -RIlE --exclude='*.template' --exclude='*.md' --exclude='checksums.sha256' \
+    '(^-----BEGIN (OPENSSH |RSA |DSA |EC |)PRIVATE KEY-----|^ssh-(ed25519|rsa) |^ecdsa-sha2-nistp(256|384|521) )' \
+    "$dir" >/tmp/gerrit-artifact-key-scan.$$ 2>/dev/null; then
+    bad_path="$(sed -n '1p' "/tmp/gerrit-artifact-key-scan.$$")"
+    rm -f "/tmp/gerrit-artifact-key-scan.$$"
+    die "Artifact bundle must not contain SSH key material: $bad_path"
+  fi
+  rm -f "/tmp/gerrit-artifact-key-scan.$$"
+}
+
 load_env_file() {
   local file prior_ldap_bind_password_file prior_ldap_bind_password
   file="${env_file:-$default_env_file}"
@@ -574,8 +605,13 @@ verify_staged_artifacts() {
     $1 == "java_version" && $2 == "21" { j=1 }
     $1 == "ubuntu_release" && $2 == "24.04" { u=1 }
     $1 == "ubuntu_codename" && $2 == "noble" { n=1 }
-    END { exit !(h && r && g && j && u && n) }
+    $1 == "artifact_source" && $2 == "curated-bundle-factory" { a=1 }
+    $1 == "os_dependency_source" && $2 == "approved-internal-os-repos" { o=1 }
+    $1 == "public_internet_fallback" && $2 == "simulation-only" { p=1 }
+    $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
+    END { exit !(h && r && g && j && u && n && a && o && p && k) }
   ' "$manifest" || die "Staged manifest does not match the Gerrit Version Baseline"
+  assert_no_artifact_key_material "$GERRIT_STAGED_ARTIFACT_DIR"
 }
 
 cmd_preflight() {
@@ -619,7 +655,9 @@ gerrit_version=3.13.6
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
 artifact_source=curated-bundle-factory
+os_dependency_source=approved-internal-os-repos
 public_internet_fallback=simulation-only
+bundle_contains_keys=no
 plugins=$GERRIT_PLUGIN_LIST
 war=gerrit-3.13.6.war
 plugin_artifacts=plugin-artifacts.manifest
@@ -701,6 +739,7 @@ cmd_prepare_artifacts() {
   cp "$repo_root/templates/gerrit/verified-label.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/verified-label.config.template"
   cp "$repo_root/templates/gerrit/jenkins-integration-access.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/jenkins-integration-access.config.template"
   write_manifest
+  assert_no_artifact_key_material "$GERRIT_ARTIFACT_OUTPUT_DIR"
   (
     cd "$GERRIT_ARTIFACT_OUTPUT_DIR"
     rm -f checksums.sha256

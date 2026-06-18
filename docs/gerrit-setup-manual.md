@@ -15,6 +15,12 @@ workflows. Any public internet fallback for target-host Ubuntu/OS dependency
 installation is simulation-only and must be labeled that way in logs and
 evidence.
 
+Gerrit application artifact bundles are key-free. They may contain reviewed
+templates, manifests, checksums, WAR files, and plugin jars, but they must not
+contain SSH private keys, public keys, `authorized_keys`, or generated
+public-key handoff files. Jenkins-to-Gerrit keypair generation and public-key
+handoff are later integration-step work.
+
 Default baseline:
 
 | Item | Default |
@@ -139,6 +145,9 @@ Produced outputs:
   Gerrit project or account state.
 - No Jenkins-to-Gerrit public key handoff. Jenkins key generation and Gerrit
   public-key installation are deferred to the later integration step.
+- `manifest.txt` records `artifact_source=curated-bundle-factory`,
+  `os_dependency_source=approved-internal-os-repos`,
+  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
 
 Staged artifact paths:
 
@@ -152,6 +161,9 @@ Side effects:
 
 - Writes artifact files only in the bundle factory output path.
 - Does not install, configure, or start Gerrit.
+- Does not write SSH private keys, public keys, `authorized_keys`, or
+  generated key handoff files into the artifact bundle. Artifact preparation
+  fails if key material is detected.
 - Does not prepare Ubuntu dependency bundles. Target hosts use approved
   internal Ubuntu/OS repositories for OS dependencies.
 - Public artifact downloads are allowed only in the bundle factory or staging

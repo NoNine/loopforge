@@ -9,6 +9,14 @@ hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
 Public internet fallback on target hosts is simulation-only and must be labeled
 as such in docs, logs, and verification summaries.
 
+Jenkins controller application artifact bundles are key-free. They may contain
+reviewed Jenkins application files, plugin artifacts, JCasC/config templates,
+job definitions, manifests, and checksums, but not SSH private keys, public
+keys, `authorized_keys`, or generated public-key handoff files.
+Jenkins-to-Gerrit and Jenkins-to-agent keypair generation and public-key
+handoff are integration operations after controller role-local readiness is
+proven.
+
 
 Audience: production operators installing Jenkins on Ubuntu 24.04 LTS without Docker.
 

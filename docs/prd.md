@@ -62,8 +62,11 @@ The product must help engineers and operators install and validate:
   package tooling, such as Java, SSH tools, service prerequisites, and OS
   libraries.
 - Application artifacts include Gerrit WAR, Jenkins WAR, Gerrit/Jenkins
-  plugins, JCasC/config templates, job definitions, generated key/public-key
-  handoff files, manifests, and checksums.
+  plugins, JCasC/config templates, job definitions, manifests, and checksums.
+  Application artifact bundles must not include actual SSH private keys,
+  public keys, `authorized_keys`, or generated key/public-key handoff files.
+  Jenkins-to-Gerrit and Jenkins-to-agent keypair generation and public-key
+  handoff are integration-step work.
 - Target hosts may use approved internal Ubuntu/OS package repositories for
   OS dependencies during setup.
 - Public internet fallback for target-host Ubuntu/OS dependency installation is

@@ -451,6 +451,15 @@ Operator sequencing rules:
 - Stage prepared artifacts by operator-managed file transfer from the bundle
   factory to each target host before running target-host installation, then
   verify manifests and checksums on the target host before mutation.
+- Application artifact bundles for Gerrit, Jenkins controller, and Jenkins
+  agent are key-free. They must not contain SSH private keys, public keys,
+  `authorized_keys`, or generated key/public-key handoff files. Keypair
+  generation and public-key handoff between Gerrit, Jenkins controller, and
+  agent are integration-step work.
+- Target-host OS dependencies come from approved internal Ubuntu/OS package
+  repositories. Public internet fallback for target-host OS dependency
+  installation is simulation-only and must be labeled in docs, logs, manifests,
+  and verification summaries.
 - Complete Gerrit, Jenkins controller, and Jenkins agent role-only bringup
   before running cross-role integration commands.
 - The integration rows above are later workflow phases, not role gate
@@ -735,6 +744,13 @@ Implementation notes:
 - `prepare-artifacts` prepares version-pinned Gerrit artifacts, plugins,
   manifests, and checksums, and the readiness gate must run it in the shared
   Docker harness bundle factory environment.
+- Gerrit artifact bundles must be key-free. `prepare-artifacts` must not write
+  Jenkins-to-Gerrit public keys, private keys, `authorized_keys`, or generated
+  key handoff files, and staged artifact verification must reject them before
+  target mutation.
+- Gerrit manifests must record `artifact_source=curated-bundle-factory`,
+  `os_dependency_source=approved-internal-os-repos`,
+  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
 - Gerrit defaults to the Version Baseline: Gerrit `3.13.6` and OpenJDK 21 on
   Ubuntu 24.04.4 LTS `noble`. Gerrit `3.14.0` is not the default and may be
   used only after a reviewed baseline update.
@@ -773,6 +789,8 @@ simulation/docker/docker-harness.sh stage-artifacts --role gerrit
 simulation/docker/docker-harness.sh run-role-gate --role gerrit
 find simulation/docker/state/evidence -type f -name '*gerrit*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*gerrit*')
+rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/docker/state/artifacts/gerrit/manifest.txt simulation/docker/state/staged/gerrit/manifest.txt
+! find simulation/docker/state/artifacts/gerrit simulation/docker/state/staged/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "prepare-artifacts|configure-integration|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/gerrit-native-operations-reference.md
@@ -786,6 +804,9 @@ Acceptance criteria:
   expectations.
 - Gerrit artifact checksums and manifests are produced by the helper in the
   bundle factory environment and verified after staging to the Gerrit target.
+- Gerrit artifact bundles contain no SSH key material, public-key handoff
+  files, or `authorized_keys`; keypair generation and Gerrit public-key
+  installation remain later integration-step work.
 - Gerrit validation covers startup, endpoint reachability, LDAP access, SSH
   access, and plugin readiness. Jenkins integration account readiness,
   `Verified` grants, stream-events grants, and Gerrit-owned
@@ -863,6 +884,15 @@ Implementation notes:
 - `prepare-artifacts` must run in the shared Docker harness bundle factory
   environment, and Jenkins controller target commands must consume only staged
   bundle factory output.
+- Jenkins controller artifact bundles must be key-free. `prepare-artifacts`
+  must not write Jenkins-to-Gerrit or Jenkins-to-agent private keys, public
+  keys, `authorized_keys`, or generated key handoff files, and staged artifact
+  verification must reject them before target mutation. Placeholder-only
+  integration templates may be staged.
+- Jenkins controller manifests must record
+  `artifact_source=curated-bundle-factory`,
+  `os_dependency_source=approved-internal-os-repos`,
+  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
 - Target-side manifests and checksums must be verified in the Jenkins
   controller target before install, plugin installation, JCasC configuration,
   credential setup, node setup, or verification jobs mutate Jenkins state.
@@ -907,6 +937,8 @@ simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
 find simulation/docker/state/evidence -type f -name '*jenkins-controller*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-controller*')
+rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/docker/state/artifacts/jenkins-controller/manifest.txt simulation/docker/state/staged/jenkins-controller/manifest.txt
+! find simulation/docker/state/artifacts/jenkins-controller simulation/docker/state/staged/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|generate-integration-key|generate-agent-key|configure-agent|validate-agent|verify-trigger|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/jenkins-controller-native-operations-reference.md
@@ -918,6 +950,9 @@ Acceptance criteria:
 - The manual lists consumed inputs, produced outputs, staged artifact paths,
   mutation side effects, validation evidence, deferred integration credential
   boundaries, and secret-redaction expectations.
+- Jenkins controller artifact bundles contain no SSH key material, public-key
+  handoff files, or `authorized_keys`; Jenkins-to-Gerrit and Jenkins-to-agent
+  keypair generation and public-key handoff remain later integration-step work.
 - Jenkins controller validation covers startup, endpoint reachability, LDAP,
   plugins, JCasC, controller runtime configuration, artifact freshness, bounded
   logs, and role-local evidence.
@@ -982,6 +1017,13 @@ Implementation notes:
 - `prepare-artifacts` must run in the shared Docker harness bundle factory
   environment, and Jenkins agent target commands must consume only staged
   bundle factory output.
+- Jenkins agent artifact bundles must be key-free. `prepare-artifacts` must
+  not write Jenkins-to-agent public keys, private keys, `authorized_keys`, or
+  generated key handoff files, and staged artifact verification must reject
+  them before target mutation.
+- Jenkins agent manifests must record `artifact_source=curated-bundle-factory`,
+  `os_dependency_source=approved-internal-os-repos`,
+  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
 - Target-side manifests and checksums must be verified in the Jenkins agent
   target before install or runtime configuration mutates the agent host.
 - The agent helper configures only the agent host runtime and SSH access side.
@@ -1030,6 +1072,9 @@ Acceptance criteria:
 - The manual lists consumed inputs, produced outputs, staged artifact paths,
   mutation side effects, validation evidence, host-only readiness checks, and
   secret-redaction expectations.
+- Jenkins agent artifact bundles contain no SSH key material, public-key
+  handoff files, or `authorized_keys`; Jenkins-to-agent keypair generation and
+  public-key handoff remain later integration-step work.
 - Agent validation covers OS/tooling readiness, SSH daemon reachability, remote
   filesystem readiness, runtime account ownership, staged artifact checks,
   bounded logs, and role-local evidence.

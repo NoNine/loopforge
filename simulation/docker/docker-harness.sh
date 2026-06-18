@@ -419,6 +419,10 @@ validate_role_baseline_manifest() {
   validate_manifest_value "$role" "$manifest" "$log" "ubuntu_release" "$HARNESS_UBUNTU_BASELINE_RELEASE" || return 1
   validate_manifest_value "$role" "$manifest" "$log" "ubuntu_codename" "$HARNESS_UBUNTU_BASELINE_CODENAME" || return 1
   validate_manifest_value "$role" "$manifest" "$log" "java_version" "$HARNESS_JAVA_BASELINE" || return 1
+  validate_manifest_value "$role" "$manifest" "$log" "artifact_source" "curated-bundle-factory" || return 1
+  validate_manifest_value "$role" "$manifest" "$log" "os_dependency_source" "approved-internal-os-repos" || return 1
+  validate_manifest_value "$role" "$manifest" "$log" "public_internet_fallback" "simulation-only" || return 1
+  validate_manifest_value "$role" "$manifest" "$log" "bundle_contains_keys" "no" || return 1
 
   case "$role" in
     gerrit)

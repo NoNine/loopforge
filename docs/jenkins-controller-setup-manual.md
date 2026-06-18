@@ -17,6 +17,13 @@ Ubuntu dependency bundle workflows. Any public internet fallback for
 target-host Ubuntu/OS dependency installation is simulation-only and must be
 labeled that way in logs and evidence.
 
+Jenkins controller application artifact bundles are key-free. They may contain
+reviewed templates, manifests, checksums, WAR files, plugin artifacts, and job
+definitions, but they must not contain SSH private keys, public keys,
+`authorized_keys`, or generated public-key handoff files. Jenkins-to-Gerrit
+and Jenkins-to-agent keypair generation and public-key handoff are later
+integration-step work.
+
 Default baseline:
 
 | Item | Default |
@@ -146,6 +153,9 @@ Produced outputs:
 - Deferred integration templates for credentials, Gerrit Trigger, agent-node,
   and disposable verification workflows. These retained templates are staged
   for later integration command surfaces and are not accepted Step 8 outputs.
+- `manifest.txt` records `artifact_source=curated-bundle-factory`,
+  `os_dependency_source=approved-internal-os-repos`,
+  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
 
 Staged artifact paths:
 
@@ -159,6 +169,9 @@ Side effects:
 
 - Writes artifact files only in the bundle factory output path.
 - Does not install, configure, or start Jenkins.
+- Does not write SSH private keys, public keys, `authorized_keys`, or
+  generated key handoff files into the artifact bundle. Artifact preparation
+  fails if key material is detected.
 
 Helper:
 

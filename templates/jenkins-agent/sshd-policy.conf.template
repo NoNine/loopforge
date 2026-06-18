@@ -4,4 +4,3 @@ PubkeyAuthentication yes
 PasswordAuthentication no
 PermitRootLogin no
 AllowUsers {{JENKINS_AGENT_ACCOUNT}}
-AuthorizedKeysFile {{JENKINS_AGENT_REMOTE_FS}}/.ssh/authorized_keys
