@@ -140,9 +140,9 @@ Produced outputs:
 - Selected Gerrit plugin jar artifacts matching the Gerrit 3.13 line.
 - Plugin seed and artifact manifests proving the selected plugin set.
 - Gerrit config and secure config templates for this role.
-- `Verified` label and integration access templates for the later integration
-  step. Step 7 stages them as reviewed artifacts but does not apply them to
-  Gerrit project or account state.
+- No `Verified` label or Jenkins integration access templates. Those are
+  cross-role integration artifacts and are not staged by the Gerrit role
+  helper.
 - No Jenkins-to-Gerrit public key handoff. Jenkins key generation and Gerrit
   public-key installation are deferred to the later integration step.
 - `manifest.txt` records `artifact_source=curated-bundle-factory`,
@@ -283,53 +283,57 @@ Validation evidence:
 - If `ldapsearch` or reviewed LDAP bind/search credentials are unavailable,
   validation blocks. TCP reachability alone is not LDAP access proof.
 
-## Phase 7: Deferred Jenkins Integration Prerequisites
+## Phase 7: Shared Integration Handoff
 
 Jenkins integration prerequisites are intentionally deferred to the later
 integration step. Step 7 remains a Gerrit-only runtime proof and must not
-configure Gerrit-side Jenkins integration access or state.
+configure Gerrit-side Jenkins integration access or state. Cross-role SSH,
+Gerrit permissions, `Verified` label application, trigger setup, validation,
+and integration evidence belong to `scripts/integration-setup.sh`.
 
-Consumed inputs:
+Later integration inputs, not Gerrit role-local inputs:
 
 - Jenkins Gerrit integration account.
 - Jenkins Gerrit integration group.
 - Jenkins-to-Gerrit public key file.
-- LDAP bind password file or reviewed LDAP bind password value for Gerrit
-  local secret handling and LDAP bind/search proof.
-- Integration configuration mode, normally `site-git` in the Docker harness or
-  another reviewed Gerrit-native admin path in production.
+- Integration configuration mode, normally a site-Git bootstrap in the Docker
+  harness or another reviewed Gerrit-native admin path in production.
 - Gerrit integration account id when site-Git bootstrap is used.
 - `Verified` label template.
 - Gerrit integration access template.
 - Verification ref pattern.
 
-Deferred outputs:
+Later integration outputs, not Gerrit role-local outputs:
 
 - Gerrit-held Jenkins public key.
 - `etc/verified-label.config`.
 - `etc/jenkins-integration-access.config`.
 - Real Gerrit site Git state under `All-Projects.git` and `All-Users.git` when
-  `GERRIT_INTEGRATION_CONFIG_MODE=site-git`.
+  a later integration workflow uses a site-Git bootstrap path.
 - Integration applied status recording the account, group, and configuration
   mode.
 
 Mutation side effects:
 
-- None in Step 7. The helper command is retained as an explicit blocked entry
-  point so Step 7 role gates cannot mutate `All-Projects.git`, `All-Users.git`,
+- None in Step 7. The Gerrit role helper does not expose cross-role
+  integration commands and cannot mutate `All-Projects.git`, `All-Users.git`,
   Gerrit labels, Jenkins service groups, public keys, stream-events grants, or
-  vote permissions.
+  vote permissions as a role-local phase.
 
-Helper:
+Later shared helper:
 
 ```bash
-scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes configure-integration
+scripts/integration-setup.sh \
+  --gerrit-env <reviewed-gerrit.env> \
+  --jenkins-controller-env <reviewed-jenkins-controller.env> \
+  --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  configure-gerrit-ssh
 ```
 
-Expected Step 7 result: `BLOCKED: Step 7 defers Jenkins integration
-prerequisites to the later integration step`. Gerrit receives only the public
-key when that later step is implemented. Jenkins owns the matching private key.
-LDAP bind secrets are still read from reviewed secret input and written to
+The shared helper may fail closed until the later real integration
+implementation is approved. Gerrit receives only the public key when that
+later step is implemented. Jenkins owns the matching private key. LDAP bind
+secrets are still read from reviewed secret input and written to
 `etc/secure.config` during Gerrit configuration; they are not recorded in
 evidence.
 

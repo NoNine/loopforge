@@ -114,8 +114,8 @@ still cause Jenkins login and group resolution failures.
 
 Use this manual as an administrator handoff. Without root, you can prepare
 Jenkins controller application artifacts on a permitted staging machine, draft
-JCasC and Gerrit Trigger settings, collect required host/DNS/LDAP values, and
-run network checks that your account is allowed to run.
+JCasC settings, collect required host/DNS/LDAP values, and run network checks
+that your account is allowed to run.
 
 Ask an administrator to perform or delegate these production-host tasks:
 
@@ -523,36 +523,15 @@ Prepare the build server, agent artifacts, SSH account, and recovery steps
 with `jenkins-agent-native-operations-reference.md`. Controller-only bringup
 stops before node registration, smoke-job scheduling, Gerrit Trigger live
 connection, and `Verified` voting. These values are inventory inputs for the
-later integration step, not controller-only validation requirements. Perform
-the cross-role operations only after the Jenkins controller and agent host are
-both ready.
+later shared integration workflow, not controller-only validation
+requirements. Perform the cross-role operations only after the Jenkins
+controller and agent host are both ready.
 
-Use stable inventory-style node names and composable labels:
-
-```bash
-JENKINS_AGENT_NAME=build-linux-x86-01
-JENKINS_AGENT_LABELS="linux x86_64 general-build gerrit-ci"
-JENKINS_AGENT_EXECUTORS=5
-JENKINS_AGENT_HOST=192.168.122.209
-JENKINS_AGENT_PORT=22
-JENKINS_AGENT_SSH_KEY=/var/lib/jenkins/.ssh/agent_ed25519
-```
-
-`JENKINS_AGENT_HOST` and `JENKINS_AGENT_PORT` are the endpoint Jenkins uses to
-launch the SSH agent. The Jenkins controller keeps the private key at
-`JENKINS_AGENT_SSH_KEY`. Transfer the matching public key to the build server
-only during the later integration workflow, after controller-only and
-agent-host-only bringup are both accepted.
-
-Practical sequence:
-
-```bash
-# Prepare the build server with jenkins-agent-native-operations-reference.md.
-```
-
-Rotate the controller-to-agent key only during the later integration workflow,
-after coordinating a quiet build window and updating the agent host access
-state.
+Agent endpoint inventory, credential creation, public-key handoff, executor
+counts, labels, scheduling, and node registration belong to the later shared
+integration workflow, not this controller role-local native reference. The
+Jenkins controller owns the private key; the agent host consumes only the
+matching public key during that later workflow.
 
 ### 4.3 UI-Driven Fallback
 
@@ -569,108 +548,37 @@ If not using JCasC:
 4. Configure LDAP under `Manage Jenkins` > `Security`.
 5. Configure authorization with `matrix-auth` or `role-strategy`.
 6. Defer the `jenkins-gerrit` Gerrit integration account SSH key until the
-   later integration step.
-7. Defer Gerrit Trigger configuration until the later integration step.
+   later shared integration workflow.
+7. Defer Gerrit Trigger configuration until the later shared integration
+   workflow.
 
-## 5. Later Gerrit And Agent Integration
+## 5. Shared Integration Handoff
 
-Controller-only bringup stops before this section. Apply these steps only in
-the later integration workflow that coordinates Gerrit, Jenkins controller, and
-the Jenkins agent together.
+Controller-only bringup stops before cross-role Gerrit and agent integration.
+The Jenkins controller role proves Jenkins startup, HTTP reachability,
+curated plugin installation, LDAP/JCasC configuration, zero built-in
+executors, runtime configuration, staged artifacts, bounded logs, and
+role-local evidence. It does not generate integration keypairs, configure
+Gerrit Trigger, register an SSH agent node, prove stream-events, run agent
+scheduling checks, or prove a `Verified` vote.
 
-### 5.1 Create Jenkins SSH Key
+Later cross-role work belongs to the separate integration workflow, not this
+controller role-local native reference. That later workflow owns
+Jenkins-to-Gerrit SSH setup, Jenkins-to-agent SSH setup, Gerrit Trigger
+configuration, integration validation, trigger verification, and integration
+evidence. Until that workflow is implemented, this native reference remains
+limited to Jenkins controller role-local readiness.
 
-Generate an SSH key on the Jenkins host:
+Credential custody remains fixed:
 
-```bash
-sudo -u jenkins install -d -m 0700 /var/lib/jenkins/.ssh
-sudo -u jenkins ssh-keygen -t ed25519 -f /var/lib/jenkins/.ssh/gerrit_ed25519 -C jenkins-gerrit -N ''
-```
-
-Ask the Gerrit operator to create or confirm the Gerrit-internal
-`jenkins-gerrit` integration account, add
-`/var/lib/jenkins/.ssh/gerrit_ed25519.pub` to that Gerrit account, and grant:
-
-- Stream events permission for Gerrit Trigger.
-- Read access to target projects.
-- Permission to vote on the `Verified` label.
-
-The `jenkins-gerrit` account is a Gerrit-internal service account. It does not
-need an LDAP identity or a registered email address for normal Gerrit Trigger
-operation, and it should not need `Forge Author` or `Forge Committer`. Upload
-manual or scripted test changes with a human or dedicated LDAP-backed test
-uploader account; Jenkins should only receive the event and post the vote.
-
-Validate SSH manually:
-
-```bash
-sudo -u jenkins ssh -i /var/lib/jenkins/.ssh/gerrit_ed25519 \
-  -p 29418 jenkins-gerrit@GERRIT_HOST gerrit version
-```
-
-Validate Gerrit event streaming manually:
-
-```bash
-sudo -u jenkins ssh -i /var/lib/jenkins/.ssh/gerrit_ed25519 \
-  -p 29418 jenkins-gerrit@GERRIT_HOST gerrit stream-events
-```
-
-The `stream-events` command is expected to stay open while waiting for Gerrit events. Stop it with `Ctrl-C` after confirming it connects without an authorization error.
-
-If using JCasC for the later integration workflow, add the Jenkins credential
-for the `jenkins-gerrit` account only after the Jenkins-to-Gerrit key exists
-and Gerrit has accepted the public key. Keep this credential and any matching
-secret environment value out of the controller-only JCasC baseline.
-
-### 5.2 Configure Gerrit Trigger
-
-In Jenkins:
-
-1. Go to `Manage Jenkins` > `Gerrit Trigger`.
-2. Add a Gerrit server.
-3. Set hostname to `GERRIT_HOST`.
-4. Set frontend URL to `http://GERRIT_HOST:8080/`.
-5. Set SSH port to `29418`.
-6. Set username to `jenkins-gerrit`.
-7. Select the Jenkins credential created for the `jenkins-gerrit` account.
-8. Test SSH connection.
-9. Enable missed-event playback only if Gerrit `events-log` is installed and REST access is configured.
-
-Create a test job triggered by Gerrit events.
-
-Minimum pipeline:
-
-```groovy
-pipeline {
-  agent any
-  stages {
-    stage('Verify') {
-      steps {
-        sh 'git --version'
-      }
-    }
-  }
-}
-```
-
-Configure Gerrit Trigger for:
-
-- Event: patchset created
-- Project: a test Gerrit project
-- Branch: target branch, for example `master` or `main`
-
-Expected result during the later integration step: uploading a change to Gerrit
-triggers Jenkins and Jenkins posts a `Verified` vote.
-
-Verify the complete trigger loop before accepting the integration:
-
-- Upload a real patch set to the test Gerrit project as a human or dedicated
-  LDAP-backed test uploader, not as `jenkins-gerrit`.
-- Confirm the Jenkins job is triggered by a `PatchsetCreated` event, not by a manual build.
-- Confirm the job receives Gerrit environment values such as `GERRIT_PROJECT`, `GERRIT_BRANCH`, `GERRIT_CHANGE_NUMBER`, `GERRIT_PATCHSET_NUMBER`, and `GERRIT_REFSPEC`.
-- Confirm Gerrit receives Jenkins feedback on the same patch set, including `Verified +1` for a successful job or `Verified -1` for a failed job.
-
-If Jenkins logs show Gerrit rejecting `--verified`, the Gerrit project hierarchy does not define a usable `Verified` label for that change. Create the label and grant the Jenkins integration account permission to vote on it before retesting.
+- The Jenkins controller owns the Jenkins-to-Gerrit private key.
+- The Jenkins controller owns the Jenkins-to-agent private key.
+- Gerrit and the Jenkins agent consume only matching public keys.
+- Controller role-local evidence may record public key fingerprints, accounts,
+  endpoints, bounded log paths, and redaction status.
+- Controller role-local and integration evidence must not contain private
+  keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env
+  values.
 
 ## 6. Controller-Only Validation
 
@@ -692,7 +600,7 @@ Acceptance checks:
 - LDAP users can log in.
 - Required plugins load successfully.
 - Gerrit SSH, Gerrit event streaming, Jenkins agent scheduling, and `Verified`
-  vote checks are deferred to the later integration step.
+  vote checks are deferred to the later shared integration workflow.
 - Do not accept rendered Gerrit Trigger config, keypairs, node registration,
   scheduling records, or trigger/vote proof as controller-only validation
   evidence.

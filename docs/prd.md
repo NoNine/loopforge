@@ -66,7 +66,8 @@ The product must help engineers and operators install and validate:
   Application artifact bundles must not include actual SSH private keys,
   public keys, `authorized_keys`, or generated key/public-key handoff files.
   Jenkins-to-Gerrit and Jenkins-to-agent keypair generation and public-key
-  handoff are integration-step work.
+  handoff are integration-step work owned by the shared integration command
+  surface, not by role-local artifact preparation.
 - Target hosts may use approved internal Ubuntu/OS package repositories for
   OS dependencies during setup.
 - Public internet fallback for target-host Ubuntu/OS dependency installation is
@@ -91,6 +92,9 @@ The product must help engineers and operators install and validate:
   workflows in v1.
 - The installation flow must keep runtime, admin, and integration identities
   separate.
+- Role helpers must stay role-local. Cross-role SSH, trigger setup,
+  integration validation, trigger verification, and integration evidence are
+  owned by `scripts/integration-setup.sh`.
 
 ### 4. Integration Configuration
 - The package must configure LDAP-backed authentication assumptions.
@@ -99,6 +103,9 @@ The product must help engineers and operators install and validate:
 - The package must support Jenkins build-agent registration and validation.
 - The package must support Gerrit Trigger behavior that posts back a
   `Verified` vote.
+- The shared integration surface must preserve key custody: the Jenkins
+  controller owns Jenkins-to-Gerrit and Jenkins-to-agent private keys; Gerrit
+  and the Jenkins agent consume only the matching public keys.
 
 ### 5. Validation And Evidence
 - The product must verify install and integration readiness.
@@ -107,6 +114,9 @@ The product must help engineers and operators install and validate:
 - Validation must record checksums, package versions, config inputs, and the
   verification mode used.
 - Evidence must distinguish production-like runs from simulation-only runs.
+- Integration evidence must record public key fingerprints, credential IDs,
+  accounts, endpoints, bounded logs, and redaction status only. It must not
+  contain private keys, passwords, tokens, or LDAP bind secrets.
 
 ## Acceptance Criteria
 - A new operator can follow the package docs and complete a repeatable setup

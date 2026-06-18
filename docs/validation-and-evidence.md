@@ -47,6 +47,13 @@ Records must not include private keys, passwords, tokens, LDAP bind secrets,
 or full secret-bearing env values. Secret-looking values should be omitted or
 redacted.
 
+Integration-scoped records from `scripts/integration-setup.sh` are distinct
+from role-local readiness records and from the final global aggregation. They
+may record public key fingerprints, Jenkins credential IDs, account names,
+service endpoints, bounded log paths, trigger/build/change identifiers, and
+redaction status. They must not record private keys, tokens, passwords, LDAP
+bind secrets, or full secret-bearing env values.
+
 The global collector accepts legacy Step 7-9 records that do not yet carry
 explicit `package_version` or `helper_command_version` fields. It enriches
 those records in the final package with collector metadata and marks the source
@@ -93,15 +100,21 @@ Recommended checkpoints:
 Role helpers from Steps 7, 8, and 9 emit checkpoint-level evidence for their
 own scope.
 
-- Gerrit evidence covers startup, HTTP, SSH, LDAP, plugin, and integration
-  readiness.
-- Jenkins controller evidence covers startup, HTTP, LDAP, plugins, JCasC,
-  Gerrit SSH, real agent scheduling checks when claimed, and Gerrit Trigger
-  checks.
-- Jenkins agent evidence covers SSH readiness, runtime-account ownership,
-  remote filesystem readiness, and authorized-key readiness.
+- Gerrit evidence covers startup, HTTP, SSH, LDAP, and plugin readiness.
+- Jenkins controller evidence covers startup, HTTP, LDAP, plugins, JCasC, and
+  controller runtime readiness.
+- Jenkins agent evidence covers SSH readiness, runtime-account ownership, and
+  remote filesystem readiness.
 
 These records are the primary inputs to global aggregation.
+
+## Integration-Local Evidence
+
+The shared integration helper owns cross-role evidence for Jenkins-to-Gerrit
+SSH, Jenkins-to-agent SSH, Gerrit Trigger configuration, agent scheduling,
+trigger delivery, and `Verified` voting. These records are not substitutes for
+role-local readiness records and are not the final evidence package. They are
+additional inputs consumed by Docker/VM verifiers and by global aggregation.
 
 ## Global Aggregation
 

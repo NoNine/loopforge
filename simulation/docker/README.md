@@ -25,6 +25,7 @@ implemented by Step 3. Every command surface uses one owning script plus a
 subcommand.
 
 - Role helpers use `scripts/<role>-setup.sh <command>`.
+- Cross-role integration uses `scripts/integration-setup.sh <command>`.
 - Docker role gates use `simulation/docker/docker-harness.sh <command>`.
 - Full Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
 
@@ -40,9 +41,9 @@ Checkpoint ownership for Docker is:
 | Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh prepare-artifacts` for full Docker simulation aggregation. |
 | Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh stage-artifacts` for full Docker simulation aggregation. |
 | Service configuration | `simulation/docker/docker-harness.sh up` for role-gate containers; `simulation/docker/docker-verify.sh up` for full Docker simulation. |
-| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` for full Docker readiness. |
-| End-to-end execution | `simulation/docker/docker-verify.sh full-verify`. |
-| Evidence audit | Role-local `collect-evidence`, Docker harness evidence, and `docker-verify.sh` summaries. |
+| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` plus `scripts/integration-setup.sh validate-integration` for full Docker readiness. |
+| End-to-end execution | `simulation/docker/docker-verify.sh full-verify` orchestrating `scripts/integration-setup.sh verify-trigger`. |
+| Evidence audit | Role-local `collect-evidence`, integration-local `scripts/integration-setup.sh collect-evidence`, Docker harness evidence, and `docker-verify.sh` summaries. |
 
 ## Model Requirements
 
@@ -104,6 +105,13 @@ Trigger workflow:
 - event streaming readiness
 - agent readiness
 - disposable change, Jenkins trigger, agent job, and `Verified +1`
+
+Docker Step 11 should call role helpers for role-local lifecycle only, then
+call `scripts/integration-setup.sh` for Jenkins-to-Gerrit SSH,
+Jenkins-to-agent SSH, trigger configuration, integration validation, trigger
+verification, and integration evidence. Until that real implementation exists,
+the shared integration helper must fail closed rather than claim Docker
+integration success.
 
 Future Docker verifiers must fail or report blocked rather than claim
 comparable readiness when the Ubuntu, Java, Gerrit, Jenkins controller,

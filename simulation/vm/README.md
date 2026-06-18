@@ -24,6 +24,7 @@ implemented by Step 3. Every command surface uses one owning script plus a
 subcommand.
 
 - Role helpers use `scripts/<role>-setup.sh <command>`.
+- Cross-role integration uses `scripts/integration-setup.sh <command>`.
 - VM simulation uses `simulation/vm/vm-verify.sh <command>`.
 
 Do not add standalone VM phase scripts such as `simulation/vm/check.sh`.
@@ -37,9 +38,9 @@ Checkpoint ownership for VM is:
 | Artifact preparation | `simulation/vm/vm-verify.sh prepare-artifacts`. |
 | Artifact staging | `simulation/vm/vm-verify.sh stage-artifacts`. |
 | Service configuration | `simulation/vm/vm-verify.sh configure`. |
-| Readiness checks | `simulation/vm/vm-verify.sh check`. |
-| End-to-end execution | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full`. |
-| Evidence audit | `simulation/vm/vm-verify.sh audit`. |
+| Readiness checks | `simulation/vm/vm-verify.sh check` plus `scripts/integration-setup.sh validate-integration` when VM support exists. |
+| End-to-end execution | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full` orchestrating the shared integration helper. |
+| Evidence audit | `simulation/vm/vm-verify.sh audit` and integration-local evidence from `scripts/integration-setup.sh collect-evidence`. |
 
 ## Model Requirements
 
@@ -99,3 +100,7 @@ Future VM verifiers must preserve the version baseline from
 `simulation/README.md` and must fail or report blocked rather than claim
 comparable readiness when the Ubuntu, Java, Gerrit, Jenkins controller,
 plugin-manager, or Jenkins agent/plugin-bundle versions differ.
+
+The VM scaffold should reference the same shared integration surface used by
+Docker and fail closed for cross-role SSH, trigger, validation, verification,
+and integration evidence until VM support exists.

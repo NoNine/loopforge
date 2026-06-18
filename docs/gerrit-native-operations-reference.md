@@ -415,51 +415,30 @@ journalctl -u gerrit -n 100 --no-pager
 tail -n 100 /srv/gerrit/logs/gerrit.log
 ```
 
-## 4. Later Jenkins Integration Prerequisites
+## 4. Shared Integration Handoff
 
-The Gerrit-only runtime validation step stops before this section. Apply these
-prerequisites only in the later integration step that coordinates Gerrit and
-Jenkins together.
+Gerrit-native role readiness stops before cross-role Jenkins integration.
+The Gerrit role proves the Gerrit service, LDAP configuration, HTTP endpoint,
+SSH endpoint, plugin loading, runtime account, staged artifacts, and bounded
+evidence. It does not register Jenkins public keys, create Gerrit Trigger
+credentials, grant stream-events permission, apply `Verified` voting grants,
+or prove trigger delivery.
 
-Create or confirm the Gerrit-internal `jenkins-gerrit` Jenkins Gerrit
-integration account. This account is not an LDAP user and is not a Unix runtime
-account; it exists in Gerrit so Jenkins can authenticate over Gerrit SSH.
-It does not require a registered email address for normal Jenkins Gerrit Trigger
-operation.
+Later cross-role work belongs to the separate integration workflow, not this
+role-local native reference. That later workflow owns Jenkins-to-Gerrit
+public-key registration, Gerrit integration permissions, `Verified`
+label/grant application, stream-events validation, trigger validation, and
+integration evidence. Until that workflow is implemented, this native
+reference remains limited to Gerrit role-local readiness.
 
-This account is distinct from the Jenkins runtime account and any Jenkins administrator account.
+Credential custody remains fixed:
 
-After Jenkins generates its SSH key, add the Jenkins public key to the
-`jenkins-gerrit` Jenkins Gerrit integration account in Gerrit.
-
-Grant the `jenkins-gerrit` Jenkins Gerrit integration account:
-
-- Membership in a service-user group.
-- Permission to stream events if Jenkins uses Gerrit Trigger.
-- Permission to read target projects.
-- Permission to vote on the `Verified` label.
-
-Do not grant `Forge Author` or `Forge Committer` to the Jenkins integration
-account for normal CI trigger and vote workflows. Upload test changes with a
-human or dedicated LDAP-backed test uploader account instead; the Jenkins
-integration account should receive the event and post the Jenkins vote.
-
-Create or confirm the `Verified` label in Gerrit project config. Gerrit 3.13
-rejects new blocking label functions through REST, so use `NoBlock` semantics
-for now.
-
-```ini
-[label "Verified"]
-  function = NoBlock
-  defaultValue = 0
-  value = -1 Fails
-  value =  0 No score
-  value = +1 Verified
-```
-
-Grant the Jenkins integration account `label-Verified = -1..+1` on the refs where CI jobs are expected to vote. Without this label and permission, Jenkins Gerrit Trigger can still receive events and run builds, but Gerrit will reject the result command when Jenkins tries to report `--verified`.
-
-If Jenkins will use missed-event playback, install and configure Gerrit `events-log`.
+- The Jenkins controller owns the Jenkins-to-Gerrit private key.
+- Gerrit consumes only the matching public key.
+- Gerrit evidence may record public-key fingerprints, accounts, endpoints,
+  bounded log paths, and redaction status.
+- Gerrit evidence must not contain private keys, passwords, tokens, LDAP bind
+  secrets, or full secret-bearing env values.
 
 ## 5. Validation
 

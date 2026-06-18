@@ -26,12 +26,6 @@ Commands:
   configure-service
   install-plugins
   configure-jcasc
-  generate-integration-key
-  generate-agent-key
-  configure-integration
-  configure-agent
-  validate-agent
-  verify-trigger
   validate
   collect-evidence
 
@@ -121,40 +115,6 @@ plugin_set_digest() {
 
 template_set_digest() {
   file_set_digest "$JENKINS_HOME/templates" "*"
-}
-
-public_key_fingerprint() {
-  local file
-  file="${1:?public key file required}"
-  ssh-keygen -l -f "$file" | awk '{print $2}'
-}
-
-validate_public_key_file() {
-  local file first_line line_count
-  file="${1:?public key file required}"
-  [ -s "$file" ] || die "Public key file is empty or missing: $file"
-  if grep -Eq 'PRIVATE KEY|^-----BEGIN |^-----END ' "$file"; then
-    die "Refusing private-key or PEM material where a public key is required: $file"
-  fi
-  first_line="$(sed -n '1p' "$file")"
-  line_count="$(wc -l <"$file" | tr -d ' ')"
-  [ "$line_count" -eq 1 ] || die "Public key file must contain exactly one OpenSSH public key line: $file"
-  case "$first_line" in
-    ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-nistp256\ *|ecdsa-sha2-nistp384\ *|ecdsa-sha2-nistp521\ *)
-      ;;
-    *)
-      die "Public key file does not start with a supported OpenSSH public key type: $file"
-      ;;
-  esac
-  public_key_fingerprint "$file" >/dev/null || die "ssh-keygen could not fingerprint public key file: $file"
-}
-
-validate_private_key_file() {
-  local file
-  file="${1:?private key file required}"
-  [ -s "$file" ] || die "Private key file is empty or missing: $file"
-  grep -Eq 'PRIVATE KEY' "$file" || die "Expected private key material is missing: $file"
-  public_key_fingerprint "${file}.pub" >/dev/null || die "Matching public key cannot be fingerprinted: ${file}.pub"
 }
 
 assert_no_artifact_key_material() {
@@ -248,22 +208,6 @@ LDAP_USER_BASE
 LDAP_GROUP_BASE
 JENKINS_ADMIN_ACCOUNT
 JENKINS_ADMIN_GROUP
-GERRIT_HTTP_URL
-GERRIT_SSH_HOST
-GERRIT_SSH_PORT
-GERRIT_TRIGGER_SERVER_NAME
-JENKINS_GERRIT_INTEGRATION_ACCOUNT
-JENKINS_GERRIT_CREDENTIAL_ID
-JENKINS_AGENT_HOST
-JENKINS_AGENT_SSH_PORT
-JENKINS_AGENT_ACCOUNT
-JENKINS_AGENT_LABEL
-JENKINS_AGENT_REMOTE_FS
-JENKINS_AGENT_KNOWN_HOSTS_FILE
-JENKINS_AGENT_CREDENTIAL_ID
-GERRIT_VERIFICATION_PROJECT
-GERRIT_VERIFICATION_BRANCH
-VERIFICATION_RUN_ID
 JENKINS_VERIFICATION_MODE
 JENKINS_EVIDENCE_DIR
 "
@@ -282,14 +226,8 @@ JENKINS_EVIDENCE_DIR
 }
 
 require_account_separation() {
-  [ "$JENKINS_ADMIN_ACCOUNT" != "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" ] ||
-    die "Jenkins admin account must not match Jenkins Gerrit integration account"
   [ "$JENKINS_RUNTIME_ACCOUNT" != "$JENKINS_ADMIN_ACCOUNT" ] ||
     die "Jenkins runtime account must not match Jenkins admin account"
-  [ "$JENKINS_RUNTIME_ACCOUNT" != "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" ] ||
-    die "Jenkins runtime account must not match Jenkins Gerrit integration account"
-  [ "$JENKINS_AGENT_ACCOUNT" != "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" ] ||
-    die "Jenkins agent account must not match Jenkins Gerrit integration account"
 }
 
 apply_env_defaults() {
@@ -320,22 +258,6 @@ apply_env_defaults() {
   LDAP_GROUP_BASE="${LDAP_GROUP_BASE:-ou=groups,dc=example,dc=test}"
   JENKINS_ADMIN_ACCOUNT="${JENKINS_ADMIN_ACCOUNT:-jenkins-admin}"
   JENKINS_ADMIN_GROUP="${JENKINS_ADMIN_GROUP:-jenkins-admins}"
-  GERRIT_HTTP_URL="${GERRIT_HTTP_URL:-http://gerrit-target:8080/}"
-  GERRIT_SSH_HOST="${GERRIT_SSH_HOST:-gerrit-target}"
-  GERRIT_SSH_PORT="${GERRIT_SSH_PORT:-29418}"
-  GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-gerrit-primary}"
-  JENKINS_GERRIT_INTEGRATION_ACCOUNT="${JENKINS_GERRIT_INTEGRATION_ACCOUNT:-jenkins-gerrit}"
-  JENKINS_GERRIT_CREDENTIAL_ID="${JENKINS_GERRIT_CREDENTIAL_ID:-gerrit-jenkins-ssh}"
-  JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
-  JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
-  JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
-  JENKINS_AGENT_LABEL="${JENKINS_AGENT_LABEL:-review-agent}"
-  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/home/jenkins-agent/workspace}"
-  JENKINS_AGENT_KNOWN_HOSTS_FILE="${JENKINS_AGENT_KNOWN_HOSTS_FILE:-$JENKINS_HOME/ssh/agent-known-hosts}"
-  JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
-  GERRIT_VERIFICATION_PROJECT="${GERRIT_VERIFICATION_PROJECT:-verification-disposable-jenkins}"
-  GERRIT_VERIFICATION_BRANCH="${GERRIT_VERIFICATION_BRANCH:-master}"
-  VERIFICATION_RUN_ID="${VERIFICATION_RUN_ID:-docker-harness-jenkins-controller}"
 }
 
 load_env() {
@@ -442,25 +364,7 @@ render_template() {
   text="${text//\{\{LDAP_BIND_DN\}\}/$LDAP_BIND_DN}"
   text="${text//\{\{LDAP_USER_BASE\}\}/$LDAP_USER_BASE}"
   text="${text//\{\{LDAP_GROUP_BASE\}\}/$LDAP_GROUP_BASE}"
-  text="${text//\{\{GERRIT_HTTP_URL\}\}/$GERRIT_HTTP_URL}"
-  text="${text//\{\{GERRIT_SSH_HOST\}\}/$GERRIT_SSH_HOST}"
-  text="${text//\{\{GERRIT_SSH_PORT\}\}/$GERRIT_SSH_PORT}"
-  text="${text//\{\{GERRIT_TRIGGER_SERVER_NAME\}\}/$GERRIT_TRIGGER_SERVER_NAME}"
-  text="${text//\{\{JENKINS_GERRIT_INTEGRATION_ACCOUNT\}\}/$JENKINS_GERRIT_INTEGRATION_ACCOUNT}"
-  text="${text//\{\{JENKINS_GERRIT_CREDENTIAL_ID\}\}/$JENKINS_GERRIT_CREDENTIAL_ID}"
-  text="${text//\{\{JENKINS_AGENT_HOST\}\}/$JENKINS_AGENT_HOST}"
-  text="${text//\{\{JENKINS_AGENT_SSH_PORT\}\}/$JENKINS_AGENT_SSH_PORT}"
-  text="${text//\{\{JENKINS_AGENT_ACCOUNT\}\}/$JENKINS_AGENT_ACCOUNT}"
-  text="${text//\{\{JENKINS_AGENT_LABEL\}\}/$JENKINS_AGENT_LABEL}"
-  text="${text//\{\{JENKINS_AGENT_REMOTE_FS\}\}/$JENKINS_AGENT_REMOTE_FS}"
-  text="${text//\{\{JENKINS_AGENT_KNOWN_HOSTS_FILE\}\}/$JENKINS_AGENT_KNOWN_HOSTS_FILE}"
-  text="${text//\{\{JENKINS_AGENT_CREDENTIAL_ID\}\}/$JENKINS_AGENT_CREDENTIAL_ID}"
-  text="${text//\{\{GERRIT_VERIFICATION_PROJECT\}\}/$GERRIT_VERIFICATION_PROJECT}"
-  text="${text//\{\{GERRIT_VERIFICATION_BRANCH\}\}/$GERRIT_VERIFICATION_BRANCH}"
-  text="${text//\{\{VERIFICATION_RUN_ID\}\}/$VERIFICATION_RUN_ID}"
   text="${text//\{\{VERIFICATION_MODE\}\}/$JENKINS_VERIFICATION_MODE}"
-  text="${text//\{\{VERIFICATION_SUCCESS_MESSAGE\}\}/Jenkins verification succeeded}"
-  text="${text//\{\{VERIFICATION_FAILURE_MESSAGE\}\}/Jenkins verification failed}"
   mkdir -p "$(dirname "$target")"
   printf '%s\n' "$text" >"$target"
 }
@@ -724,7 +628,6 @@ cmd_preflight() {
   load_env normal
   require_env_values
   require_command sha256sum
-  require_command ssh-keygen
   require_command awk
   require_command sed
   require_command perl
@@ -780,11 +683,6 @@ cmd_prepare_artifacts() {
   prepare_plugins
   cp "$repo_root/templates/jenkins-controller/jenkins-service.env.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-service.env.template"
   cp "$repo_root/templates/jenkins-controller/jenkins-jcasc.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-jcasc.yaml.template"
-  cp "$repo_root/templates/jenkins-controller/jenkins-credentials.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-credentials.yaml.template"
-  cp "$repo_root/templates/jenkins-controller/gerrit-trigger-server.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/gerrit-trigger-server.yaml.template"
-  cp "$repo_root/templates/jenkins-controller/agent-node.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/agent-node.yaml.template"
-  cp "$repo_root/templates/jenkins-controller/disposable-verification-job.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/disposable-verification-job.yaml.template"
-  cp "$repo_root/templates/jenkins-controller/trigger-verification.env.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/trigger-verification.env.template"
   write_manifest
   assert_no_artifact_key_material "$JENKINS_ARTIFACT_OUTPUT_DIR"
   (
@@ -822,12 +720,6 @@ cmd_install() {
     "$JENKINS_HOME/state" \
     "$JENKINS_HOME/etc" \
     "$JENKINS_HOME/jcasc" \
-    "$JENKINS_HOME/credentials" \
-    "$JENKINS_HOME/gerrit-trigger" \
-    "$JENKINS_HOME/nodes" \
-    "$JENKINS_HOME/jobs" \
-    "$JENKINS_HOME/keys" \
-    "$JENKINS_HOME/public-handoff" \
     "$JENKINS_HOME/run"
   mkdir -p "$JENKINS_HOME/war" "$JENKINS_HOME/plugins" "$JENKINS_HOME/templates" "$JENKINS_HOME/state" "$JENKINS_HOME/logs"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war"
@@ -1095,40 +987,6 @@ EOF
   printf 'status=pass command=collect-evidence proof=real-controller-runtime verification_mode=%s real_execution=true evidence=%s\n' "$JENKINS_VERIFICATION_MODE" "$evidence"
 }
 
-deferred_command() {
-  local command_name
-  command_name="${1:?command required}"
-  load_env normal
-  require_env_values
-  verify_staged_artifacts
-  printf 'BLOCKED: %s is deferred to the later integration step and must not mutate Step 8 controller-only state\n' "$command_name" >&2
-  return 2
-}
-
-cmd_generate_integration_key() {
-  deferred_command generate-integration-key
-}
-
-cmd_generate_agent_key() {
-  deferred_command generate-agent-key
-}
-
-cmd_configure_integration() {
-  deferred_command configure-integration
-}
-
-cmd_configure_agent() {
-  deferred_command configure-agent
-}
-
-cmd_validate_agent() {
-  deferred_command validate-agent
-}
-
-cmd_verify_trigger() {
-  deferred_command verify-trigger
-}
-
 parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -1153,7 +1011,7 @@ parse_args() {
         usage
         exit 0
         ;;
-      print-env-template|preflight|prepare-artifacts|install|configure-service|install-plugins|configure-jcasc|generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|verify-trigger|validate|collect-evidence)
+      print-env-template|preflight|prepare-artifacts|install|configure-service|install-plugins|configure-jcasc|validate|collect-evidence)
         command_name="$1"
         shift
         [ "$#" -eq 0 ] || die_usage "Unexpected arguments after command: $*"
@@ -1183,12 +1041,6 @@ main() {
     configure-service) cmd_configure_service ;;
     install-plugins) cmd_install_plugins ;;
     configure-jcasc) cmd_configure_jcasc ;;
-    generate-integration-key) cmd_generate_integration_key ;;
-    generate-agent-key) cmd_generate_agent_key ;;
-    configure-integration) cmd_configure_integration ;;
-    configure-agent) cmd_configure_agent ;;
-    validate-agent) cmd_validate_agent ;;
-    verify-trigger) cmd_verify_trigger ;;
     validate) cmd_validate ;;
     collect-evidence) cmd_collect_evidence ;;
     *) die_usage "Unknown command: $command_name" ;;

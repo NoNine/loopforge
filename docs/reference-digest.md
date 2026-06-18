@@ -95,6 +95,7 @@ intentionally omitted.
 Every command surface uses one owning script plus a subcommand:
 
 - Role helpers use `scripts/<role>-setup.sh <command>`.
+- Cross-role integration uses `scripts/integration-setup.sh <command>`.
 - Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
 - VM simulation uses `simulation/vm/vm-verify.sh <command>`.
 
@@ -113,8 +114,7 @@ phase scripts such as `simulation/docker/check.sh`, or VM phase scripts such as
 | `prepare-artifacts` | Prepare version-pinned Gerrit application artifacts, plugin inputs, release manifests, and checksums from approved sources. |
 | `install` | Verify staged artifacts and install Gerrit runtime inputs after confirmation or `--yes`. |
 | `configure` | Render Gerrit service and LDAP configuration from reviewed env values, separating secret config from non-secret config. |
-| `configure-integration` | Register the Jenkins integration public key, define the `Verified` label, and grant read, stream-events, and vote permissions to the integration account or group. |
-| `validate` | Check service startup, HTTP reachability, SSH reachability, LDAP readiness, plugin readiness, and integration account readiness. |
+| `validate` | Check role-local service startup, HTTP reachability, SSH reachability, LDAP readiness, and plugin readiness. |
 | `collect-evidence` | Emit sanitized Gerrit readiness evidence with manifests, checksums, fingerprints, endpoints, mode labels, and bounded log references. |
 
 Gerrit behavior notes:
@@ -141,14 +141,8 @@ Gerrit behavior notes:
 | `configure-service` | Configure Jenkins runtime service settings, Jenkins home, and startup environment. |
 | `install-plugins` | Install curated plugins from prepared artifacts and record plugin evidence. |
 | `configure-jcasc` | Configure LDAP security realm, admin authorization, controller executor policy, and baseline Jenkins settings from reviewed env values. |
-| `generate-integration-key` | Create or rotate the Jenkins-to-Gerrit SSH keypair and expose only the public key for Gerrit. |
-| `generate-agent-key` | Create or rotate the Jenkins-to-agent SSH keypair and expose only the public key for the agent host. |
-| `configure-integration` | Configure Jenkins credentials and Gerrit Trigger server settings for the Jenkins Gerrit integration account. |
-| `configure-agent` | Register or update the SSH build-agent node and Jenkins credential using controller-held private key material. |
-| `validate-agent` | Confirm Jenkins sees the agent online and can run a smoke job on the configured label. |
-| `verify-trigger` | Create disposable verification inputs, push a change, observe a triggered build, and verify `Verified +1`. |
-| `validate` | Check Jenkins startup, endpoint response, plugin/JCasC readiness, LDAP assumptions, and Gerrit SSH connectivity. |
-| `collect-evidence` | Emit sanitized Jenkins evidence with plugin state, JCasC fingerprints, integration checks, agent checks, mode labels, and bounded log references. |
+| `validate` | Check Jenkins startup, endpoint response, plugin/JCasC readiness, LDAP assumptions, and controller runtime readiness only. |
+| `collect-evidence` | Emit sanitized role-local Jenkins evidence with plugin state, JCasC fingerprints, controller runtime checks, mode labels, and bounded log references. |
 
 Jenkins controller behavior notes:
 
@@ -167,20 +161,37 @@ Jenkins controller behavior notes:
 
 | Command | Behavior intent |
 | --- | --- |
-| `print-env-template` | Emit a reviewed env template for agent host, SSH port, runtime user, remote filesystem, labels, public-key handoff, and artifact paths. |
+| `print-env-template` | Emit a reviewed env template for agent host, SSH port, runtime user, remote filesystem, labels, and artifact paths. |
 | `preflight` | Check required commands, disk space, host resolution, SSH readiness assumptions, runtime account values, and env completeness. |
 | `prepare-artifacts` | Prepare agent bootstrap artifacts, package intent manifests, and checksums without exposing an offline dependency bundle workflow. |
 | `install` | Verify staged artifacts and install the agent host baseline after confirmation or `--yes`. |
-| `configure-runtime` | Create or update the agent runtime filesystem and authorized key using only the Jenkins-to-agent public key. |
-| `validate` | Check SSH reachability, runtime account ownership, remote filesystem readiness, and authorized-key readiness. |
-| `collect-evidence` | Emit sanitized agent evidence with SSH status, filesystem ownership, public-key fingerprint, mode labels, and bounded log references. |
+| `configure-runtime` | Create or update the agent runtime filesystem and real SSH daemon readiness without installing controller-owned key material. |
+| `validate` | Check SSH daemon reachability, runtime account ownership, remote filesystem readiness, and staged artifact checks. |
+| `collect-evidence` | Emit sanitized agent evidence with SSH status, filesystem ownership, mode labels, and bounded log references. |
 
 Agent behavior notes:
 
 - Jenkins connects out to the agent over SSH.
 - The agent helper owns only the agent host side.
-- Jenkins node registration belongs to the controller helper.
-- Controller-side scheduling validation belongs to `validate-agent`.
+- Jenkins-to-agent public-key authorization, Jenkins node registration, and
+  controller-side scheduling validation belong to the shared integration
+  helper.
+
+### Shared Integration Helper
+
+`scripts/integration-setup.sh` should support:
+
+| Command | Behavior intent |
+| --- | --- |
+| `configure-gerrit-ssh` | Create or rotate the Jenkins-to-Gerrit SSH keypair on the Jenkins controller, expose only the public key to Gerrit, register Gerrit integration access, and record fingerprints. |
+| `configure-agent-ssh` | Create or rotate the Jenkins-to-agent SSH keypair on the Jenkins controller, expose only the public key to the agent, authorize agent access, and configure the Jenkins node credential. |
+| `configure-trigger` | Configure Jenkins Gerrit Trigger server and disposable verification job inputs after Gerrit permissions and credentials exist. |
+| `validate-integration` | Validate Jenkins-to-Gerrit SSH, stream-events permission, Jenkins-to-agent SSH, node readiness, and agent scheduling without accepting modeled proof. |
+| `verify-trigger` | Create disposable verification inputs, push a change, observe a triggered build, and verify `Verified +1`. |
+| `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, bounded logs, and redaction status. |
+
+The helper may fail closed until the later Docker or VM integration
+implementation exists. Role helpers must not expose these cross-role commands.
 
 ### Docker Simulation Helpers
 
@@ -194,7 +205,7 @@ Docker simulation should expose:
 | `simulation/docker/docker-verify.sh stage-artifacts` | Stage prepared artifacts from bundle factory output to Gerrit, Jenkins controller, and Jenkins agent containers, then verify target-side manifests and checksums. |
 | `simulation/docker/docker-verify.sh up` | Start the five-environment simulation after artifacts/configs exist. |
 | `simulation/docker/docker-verify.sh check` | Check LDAP, service availability, runtime accounts, Gerrit HTTP auth, Jenkins-to-Gerrit SSH auth, event streaming, and agent readiness before end-to-end verification. |
-| `simulation/docker/docker-verify.sh full-verify` | Run the full Docker gate including agent provisioning, agent smoke job, disposable Gerrit change, triggered Jenkins build, and `Verified +1`. |
+| `simulation/docker/docker-verify.sh full-verify` | Run the full Docker gate by calling the shared integration helper for agent provisioning, agent smoke job, disposable Gerrit change, triggered Jenkins build, and `Verified +1`. |
 | `simulation/docker/docker-verify.sh down` | Stop the simulation without deleting retained evidence unless explicitly requested. |
 
 Docker simulation behavior notes:
@@ -228,7 +239,7 @@ VM simulation should expose:
 | `simulation/vm/vm-verify.sh stage-artifacts` | Transfer prepared artifacts from the bundle factory VM to service VMs and verify target-side manifests and checksums. |
 | `simulation/vm/vm-verify.sh configure` | Configure LDAP, Gerrit, Jenkins controller, and Jenkins agent according to the reviewed flow. |
 | `simulation/vm/vm-verify.sh check` | Validate host tooling, env values, SSH reachability, target addresses, service state, local OS runtime accounts, LDAP, endpoints, Gerrit/Jenkins integration, and agent readiness. |
-| `simulation/vm/vm-verify.sh execute` | Run role helpers and integration validation in order. |
+| `simulation/vm/vm-verify.sh execute` | Run role helpers and the shared integration helper in order. |
 | `simulation/vm/vm-verify.sh audit` | Collect retained evidence, checksums, summaries, and bounded log references. |
 | `simulation/vm/vm-verify.sh full` | Run the approved end-to-end VM verification sequence. |
 

@@ -217,7 +217,7 @@ Mutation side effects:
 - Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
   SSH reachability without claiming Jenkins controller scheduling.
 - Leaves `authorized_keys` creation and Jenkins public-key installation to the
-  later integration step.
+  later shared integration workflow.
 
 Helper:
 
@@ -228,7 +228,7 @@ scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> --yes configure-runtim
 Later integration key rules:
 
 - Jenkins-to-agent keypair generation and public-key transfer are performed
-  only during the later integration step.
+  only during the later shared integration workflow.
 - The transferred public-key material must be exactly one OpenSSH public-key
   line.
 - Private key, PEM block, token, and password material are rejected by the
@@ -272,12 +272,12 @@ Jenkins controller scope:
 
 - Jenkins controller node registration, credential selection, label/executor
   policy, controller-to-agent scheduling, and later integration validation
-  jobs are deferred to the later integration step.
+  jobs are deferred to `scripts/integration-setup.sh`.
 - Step 9 proves only agent host-side readiness: SSH daemon reachability,
   runtime account ownership, remote filesystem readiness, staged artifact
   checks, bounded logs, and evidence.
 - Real cross-role trigger execution and `Verified` voting are aggregated by
-  the later end-to-end integration step after role helpers are compliant.
+  the later shared integration step after role helpers are compliant.
 
 ## Phase 7: Evidence Collection
 

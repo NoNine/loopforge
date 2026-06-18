@@ -24,7 +24,6 @@ Commands:
   prepare-artifacts
   install
   configure
-  configure-integration
   validate
   collect-evidence
 
@@ -98,32 +97,6 @@ plugin_set_digest() {
       sha256sum |
       awk '{print $1}'
   )
-}
-
-public_key_fingerprint() {
-  local file
-  file="${1:?public key file required}"
-  ssh-keygen -l -f "$file" | awk '{print $2}'
-}
-
-validate_public_key_file() {
-  local file first_line line_count
-  file="${1:?public key file required}"
-  [ -s "$file" ] || die "Public key file is empty or missing: $file"
-  if grep -Eq 'PRIVATE KEY|^-----BEGIN |^-----END ' "$file"; then
-    die "Refusing private-key or PEM material where a public key is required: $file"
-  fi
-  first_line="$(sed -n '1p' "$file")"
-  line_count="$(wc -l <"$file" | tr -d ' ')"
-  [ "$line_count" -eq 1 ] || die "Public key file must contain exactly one OpenSSH public key line: $file"
-  case "$first_line" in
-    ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-nistp256\ *|ecdsa-sha2-nistp384\ *|ecdsa-sha2-nistp521\ *)
-      ;;
-    *)
-      die "Public key file does not start with a supported OpenSSH public key type: $file"
-      ;;
-  esac
-  public_key_fingerprint "$file" >/dev/null || die "ssh-keygen could not fingerprint public key file: $file"
 }
 
 assert_no_artifact_key_material() {
@@ -278,11 +251,6 @@ apply_env_defaults() {
   LDAP_GROUP_BASE="${LDAP_GROUP_BASE:-ou=groups,dc=example,dc=test}"
   GERRIT_ADMIN_ACCOUNT="${GERRIT_ADMIN_ACCOUNT:-gerrit-admin}"
   GERRIT_ADMIN_GROUP="${GERRIT_ADMIN_GROUP:-gerrit-admins}"
-  GERRIT_INTEGRATION_CONFIG_MODE="${GERRIT_INTEGRATION_CONFIG_MODE:-site-git}"
-  GERRIT_INTEGRATION_ACCOUNT_ID="${GERRIT_INTEGRATION_ACCOUNT_ID:-1000001}"
-  GERRIT_INTEGRATION_GROUP_ID="${GERRIT_INTEGRATION_GROUP_ID:-1000001}"
-  GERRIT_ADMIN_SSH_ACCOUNT="${GERRIT_ADMIN_SSH_ACCOUNT:-$GERRIT_ADMIN_ACCOUNT}"
-  GERRIT_ADMIN_PRIVATE_KEY_FILE="${GERRIT_ADMIN_PRIVATE_KEY_FILE:-}"
   GERRIT_VERIFICATION_PROJECT="${GERRIT_VERIFICATION_PROJECT:-verification-disposable-gerrit}"
   GERRIT_VERIFICATION_REF_PATTERN="${GERRIT_VERIFICATION_REF_PATTERN:-refs/*}"
   case "${HARNESS_ENVIRONMENT:-}" in
@@ -295,7 +263,6 @@ apply_env_defaults() {
       GERRIT_SITE_PATH="/harness/state/site"
       GERRIT_STAGED_ARTIFACT_DIR="/harness/staged"
       GERRIT_ARTIFACT_OUTPUT_DIR="/harness/state/artifacts/gerrit"
-      JENKINS_GERRIT_PUBLIC_KEY_FILE="/harness/staged/jenkins-gerrit.pub"
       GERRIT_EVIDENCE_DIR="/harness/evidence"
       GERRIT_LOG_DIR="/harness/logs"
       ;;
@@ -399,8 +366,6 @@ render_template() {
   text="${text//\{\{GERRIT_ADMIN_GROUP\}\}/$GERRIT_ADMIN_GROUP}"
   text="${text//\{\{GERRIT_REF_PATTERN\}\}/$GERRIT_VERIFICATION_REF_PATTERN}"
   text="${text//\{\{GERRIT_VERIFICATION_REF_PATTERN\}\}/$GERRIT_VERIFICATION_REF_PATTERN}"
-  text="$(replace_optional_placeholder "$text" "{{JENKINS_GERRIT_INTEGRATION_GROUP}}" JENKINS_GERRIT_INTEGRATION_GROUP "$source")"
-  text="$(replace_optional_placeholder "$text" "{{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}" JENKINS_GERRIT_INTEGRATION_ACCOUNT "$source")"
   mkdir -p "$(dirname "$target")"
   printf '%s\n' "$text" >"$target"
 }
@@ -736,8 +701,6 @@ cmd_prepare_artifacts() {
   rm -f "$GERRIT_ARTIFACT_OUTPUT_DIR/jenkins-gerrit.pub"
   cp "$repo_root/templates/gerrit/gerrit.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/gerrit.config.template"
   cp "$repo_root/templates/gerrit/secure.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/secure.config.template"
-  cp "$repo_root/templates/gerrit/verified-label.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/verified-label.config.template"
-  cp "$repo_root/templates/gerrit/jenkins-integration-access.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/jenkins-integration-access.config.template"
   write_manifest
   assert_no_artifact_key_material "$GERRIT_ARTIFACT_OUTPUT_DIR"
   (
@@ -804,133 +767,6 @@ commit_if_changed() {
   if ! git diff --cached --quiet; then
     git commit -m "${1:?commit message required}" >/dev/null
   fi
-}
-
-seed_all_projects_config() {
-  local repo_dir work_dir project_config groups_config group_uuid
-  repo_dir="$GERRIT_SITE_PATH/git/All-Projects.git"
-  work_dir="$GERRIT_SITE_PATH/tmp/all-projects-work"
-  group_uuid="$(integration_group_uuid)"
-  ensure_site_repo_worktree "$repo_dir" "$work_dir"
-  run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && if git ls-remote --exit-code origin refs/meta/config >/dev/null 2>&1; then git fetch origin refs/meta/config:refs/remotes/origin/meta-config >/dev/null 2>&1 && git checkout -B setup-meta-config refs/remotes/origin/meta-config >/dev/null; else git checkout --orphan setup-meta-config >/dev/null && { git rm -rf . >/dev/null 2>&1 || true; } && find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +; fi"
-  project_config="$work_dir/project.config"
-  groups_config="$work_dir/groups"
-  [ -f "$project_config" ] || : >"$project_config"
-  [ -f "$groups_config" ] || printf '# UUID\tGroup Name\n#\n' >"$groups_config"
-  git config -f "$project_config" --replace-all label.Verified.function NoBlock
-  git config -f "$project_config" --replace-all label.Verified.defaultValue 0
-  git config -f "$project_config" --unset-all label.Verified.value >/dev/null 2>&1 || true
-  git config -f "$project_config" --add label.Verified.value "-1 Fails"
-  git config -f "$project_config" --add label.Verified.value " 0 No score"
-  git config -f "$project_config" --add label.Verified.value "+1 Verified"
-  git config -f "$project_config" --replace-all "access.$GERRIT_VERIFICATION_REF_PATTERN.read" "group $JENKINS_GERRIT_INTEGRATION_GROUP"
-  git config -f "$project_config" --replace-all "access.$GERRIT_VERIFICATION_REF_PATTERN.label-Verified" "-1..+1 group $JENKINS_GERRIT_INTEGRATION_GROUP"
-  git config -f "$project_config" --replace-all capability.streamEvents "group $JENKINS_GERRIT_INTEGRATION_GROUP"
-  awk -v uuid="$group_uuid" '$1 != uuid { print }' "$groups_config" >"$groups_config.tmp"
-  mv "$groups_config.tmp" "$groups_config"
-  printf '%s\t%s\n' "$group_uuid" "$JENKINS_GERRIT_INTEGRATION_GROUP" >>"$groups_config"
-  run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && git add project.config groups && if ! git diff --cached --quiet; then git commit -m $(shell_quote "Configure Jenkins Gerrit integration access") >/dev/null; fi && git push origin HEAD:refs/meta/config >/dev/null"
-}
-
-account_ref_for_id() {
-  local account_id suffix
-  account_id="${1:?account id required}"
-  suffix="$(printf '%02d' "$((account_id % 100))")"
-  printf 'refs/users/%s/%s\n' "$suffix" "$account_id"
-}
-
-integration_group_uuid() {
-  printf 'gerrit-internal-group:%s\n' "$JENKINS_GERRIT_INTEGRATION_GROUP" |
-    sha1sum |
-    awk '{print $1}'
-}
-
-group_ref_for_uuid() {
-  local group_uuid shard
-  group_uuid="${1:?group uuid required}"
-  shard="${group_uuid:0:2}"
-  printf 'refs/groups/%s/%s\n' "$shard" "$group_uuid"
-}
-
-seed_all_users_account() {
-  local repo_dir work_dir account_config authorized_keys account_ref
-  repo_dir="$GERRIT_SITE_PATH/git/All-Users.git"
-  work_dir="$GERRIT_SITE_PATH/tmp/all-users-work"
-  account_ref="$(account_ref_for_id "$GERRIT_INTEGRATION_ACCOUNT_ID")"
-  ensure_site_repo_worktree "$repo_dir" "$work_dir"
-  run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && if git ls-remote --exit-code origin $(shell_quote "$account_ref") >/dev/null 2>&1; then git fetch origin $(shell_quote "$account_ref"):refs/remotes/origin/integration-account >/dev/null 2>&1 && git checkout -B $(shell_quote "setup-${GERRIT_INTEGRATION_ACCOUNT_ID}") refs/remotes/origin/integration-account >/dev/null; else git checkout --orphan $(shell_quote "setup-${GERRIT_INTEGRATION_ACCOUNT_ID}") >/dev/null && { git rm -rf . >/dev/null 2>&1 || true; } && find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +; fi && mkdir -p .ssh && git config -f account.config --replace-all account.fullName $(shell_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT") && git config -f account.config --replace-all account.preferredEmail $(shell_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT@example.invalid") && cp $(shell_quote "$GERRIT_SITE_PATH/keys/jenkins-gerrit.pub") .ssh/authorized_keys && git add account.config .ssh/authorized_keys && actual_paths=\$(git ls-files | sort) && expected_paths=\$(printf '%s\n' .ssh/authorized_keys account.config | sort) && test \"\$actual_paths\" = \"\$expected_paths\" && if ! git diff --cached --quiet; then git commit -m $(shell_quote "Seed Jenkins Gerrit integration account") >/dev/null; fi && git push origin HEAD:$(shell_quote "$account_ref") >/dev/null"
-}
-
-seed_all_users_group() {
-  local repo_dir work_dir group_uuid group_ref name_sha name_file
-  repo_dir="$GERRIT_SITE_PATH/git/All-Users.git"
-  work_dir="$GERRIT_SITE_PATH/tmp/all-users-group-work"
-  group_uuid="$(integration_group_uuid)"
-  group_ref="$(group_ref_for_uuid "$group_uuid")"
-  name_sha="$(printf '%s' "$JENKINS_GERRIT_INTEGRATION_GROUP" | sha1sum | awk '{print $1}')"
-  name_file="$work_dir/$name_sha"
-  ensure_site_repo_worktree "$repo_dir" "$work_dir"
-  run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && if git ls-remote --exit-code origin $(shell_quote "$group_ref") >/dev/null 2>&1; then git fetch origin $(shell_quote "$group_ref"):refs/remotes/origin/integration-group >/dev/null 2>&1 && git checkout -B $(shell_quote "setup-group-$group_uuid") refs/remotes/origin/integration-group >/dev/null; else git checkout --orphan $(shell_quote "setup-group-$group_uuid") >/dev/null && { git rm -rf . >/dev/null 2>&1 || true; } && find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +; fi && git config -f group.config --replace-all group.name $(shell_quote "$JENKINS_GERRIT_INTEGRATION_GROUP") && git config -f group.config --replace-all group.id $(shell_quote "$GERRIT_INTEGRATION_GROUP_ID") && git config -f group.config --replace-all group.visibleToAll false && git config -f group.config --replace-all group.description $(shell_quote "Jenkins Gerrit integration automation") && git config -f group.config --replace-all group.ownerGroupUuid $(shell_quote "$group_uuid") && printf '%s\n' $(shell_quote "$GERRIT_INTEGRATION_ACCOUNT_ID") >members && : >subgroups && git add group.config members subgroups && actual_paths=\$(git ls-files | sort) && expected_paths=\$(printf '%s\n' group.config members subgroups | sort) && test \"\$actual_paths\" = \"\$expected_paths\" && if ! git diff --cached --quiet; then git commit -m $(shell_quote "Seed Jenkins Gerrit integration group") >/dev/null; fi && git push origin HEAD:$(shell_quote "$group_ref") >/dev/null"
-  run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && if git ls-remote --exit-code --heads origin refs/meta/group-names >/dev/null 2>&1 || git ls-remote --exit-code origin refs/meta/group-names >/dev/null 2>&1; then git fetch origin refs/meta/group-names:refs/remotes/origin/meta-group-names >/dev/null 2>&1 && git checkout -B $(shell_quote "setup-group-name-$group_uuid") refs/remotes/origin/meta-group-names >/dev/null; else git checkout --orphan $(shell_quote "setup-group-name-$group_uuid") >/dev/null && { git rm -rf . >/dev/null 2>&1 || true; } && find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +; fi"
-  run_as_gerrit_runtime "cat >$(shell_quote "$name_file") <<'EOF'
-[group]
-	name = $JENKINS_GERRIT_INTEGRATION_GROUP
-	uuid = $group_uuid
-EOF
-cd $(shell_quote "$work_dir") && git add $(shell_quote "$name_sha") && git ls-files --error-unmatch $(shell_quote "$name_sha") >/dev/null && if ! git diff --cached --quiet; then git commit -m $(shell_quote "Map Jenkins Gerrit integration group name") >/dev/null; fi && git push origin HEAD:refs/meta/group-names >/dev/null"
-}
-
-configure_integration_site_git() {
-  require_command git
-  check_runtime_account_readiness
-  prepare_gerrit_runtime_ownership
-  mkdir -p "$GERRIT_SITE_PATH/git" "$GERRIT_SITE_PATH/tmp"
-  seed_all_users_account
-  seed_all_users_group
-}
-
-configure_integration_admin_ssh() {
-  [ -n "$GERRIT_ADMIN_PRIVATE_KEY_FILE" ] || die "Missing GERRIT_ADMIN_PRIVATE_KEY_FILE for admin SSH integration configuration"
-  [ -r "$GERRIT_ADMIN_PRIVATE_KEY_FILE" ] || die "Gerrit admin private key is not readable: $GERRIT_ADMIN_PRIVATE_KEY_FILE"
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -i "$GERRIT_ADMIN_PRIVATE_KEY_FILE" \
-    -p "$GERRIT_SSH_PORT" \
-    "$GERRIT_ADMIN_SSH_ACCOUNT@$GERRIT_HOST" \
-    gerrit version >/dev/null 2>&1 ||
-    die "BLOCKED: Gerrit admin SSH prerequisite failed for configure-integration"
-  die "BLOCKED: Admin SSH integration mutation is not implemented without Gerrit REST/account APIs in this step; use site-git bootstrap in the Docker harness or provide a reviewed implementation path"
-}
-
-cmd_configure_integration() {
-  load_env normal
-  require_env_values
-  confirm_mutation configure-integration || return 0
-  die "BLOCKED: Step 7 defers Jenkins integration prerequisites to the later integration step"
-  require_command ssh-keygen
-  mkdir -p "$GERRIT_SITE_PATH/etc" "$GERRIT_SITE_PATH/state" "$GERRIT_SITE_PATH/keys"
-  validate_public_key_file "$JENKINS_GERRIT_PUBLIC_KEY_FILE"
-  cp "$JENKINS_GERRIT_PUBLIC_KEY_FILE" "$GERRIT_SITE_PATH/keys/jenkins-gerrit.pub"
-  validate_public_key_file "$GERRIT_SITE_PATH/keys/jenkins-gerrit.pub"
-  render_template "$GERRIT_STAGED_ARTIFACT_DIR/verified-label.config.template" "$GERRIT_SITE_PATH/etc/verified-label.config"
-  render_template "$GERRIT_STAGED_ARTIFACT_DIR/jenkins-integration-access.config.template" "$GERRIT_SITE_PATH/etc/jenkins-integration-access.config"
-  assert_no_unresolved_placeholders "$GERRIT_SITE_PATH/etc/verified-label.config"
-  assert_no_unresolved_placeholders "$GERRIT_SITE_PATH/etc/jenkins-integration-access.config"
-  case "$GERRIT_INTEGRATION_CONFIG_MODE" in
-    site-git)
-      ensure_gerrit_site_initialized_for_site_git
-      configure_integration_site_git
-      ;;
-    admin-ssh)
-      configure_integration_admin_ssh
-      ;;
-    *)
-      die "Unsupported GERRIT_INTEGRATION_CONFIG_MODE: $GERRIT_INTEGRATION_CONFIG_MODE"
-      ;;
-  esac
-  write_text_file "$GERRIT_SITE_PATH/state/integration-applied.status" \
-    "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT group=$JENKINS_GERRIT_INTEGRATION_GROUP mode=$GERRIT_INTEGRATION_CONFIG_MODE"
-  printf 'status=pass command=configure-integration account=%s group=%s mode=%s public_key_fingerprint=%s\n' \
-    "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_GROUP" "$GERRIT_INTEGRATION_CONFIG_MODE" "$(public_key_fingerprint "$GERRIT_SITE_PATH/keys/jenkins-gerrit.pub")"
 }
 
 ldap_host_port() {
@@ -1203,31 +1039,6 @@ remove_step7_deferred_integration_grants() {
     "jenkins_integration_prerequisites=deferred streamEvents_grants=absent"
 }
 
-ensure_gerrit_site_initialized_for_site_git() {
-  local log java_opts
-  verify_war_artifact "$GERRIT_SITE_PATH/bin/gerrit.war"
-  require_command java
-  check_runtime_account_readiness
-  mkdir -p "$GERRIT_SITE_PATH/logs" "$GERRIT_SITE_PATH/run"
-  if is_gerrit_site_initialized; then
-    return 0
-  fi
-  prepare_gerrit_runtime_ownership
-  log="$(gerrit_runtime_log)"
-  java_opts="-Xms128m -Xmx512m"
-  if [ ! -s "$log" ]; then
-    printf 'timestamp=%s\n' "$(iso_timestamp_utc)" >"$log"
-  fi
-  printf 'command=java -jar gerrit.war init --batch runtime_account=%s lifecycle=configure-integration-site-git-bootstrap\n' "$GERRIT_RUNTIME_ACCOUNT" >>"$log"
-  chown "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$log"
-  if ! run_as_gerrit_runtime "java $java_opts -jar $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.war") init --batch --no-auto-start -d $(shell_quote "$GERRIT_SITE_PATH")" >>"$log" 2>&1; then
-    printf 'BLOCKED: Gerrit site bootstrap init failed before site-git integration mutation; log=%s\n' "$log" >&2
-    return 1
-  fi
-  is_gerrit_site_initialized ||
-    die "BLOCKED: Gerrit site bootstrap init did not produce the required initialized site layout for site-git integration"
-}
-
 assert_gerrit_daemon_owner() {
   local pid owner
   pid="$(gerrit_daemon_pid)" ||
@@ -1310,13 +1121,6 @@ start_real_gerrit() {
     printf 'BLOCKED: Gerrit daemon did not remain running; log=%s\n' "$log" >&2
     return 1
   fi
-}
-
-check_integration_readiness() {
-  grep -q '\[label "Verified"\]' "$GERRIT_SITE_PATH/etc/verified-label.config" || die "Verified label config is missing"
-  grep -q "label-Verified = -1..+1 group $JENKINS_GERRIT_INTEGRATION_GROUP" "$GERRIT_SITE_PATH/etc/jenkins-integration-access.config" || die "Verified vote permission template is missing"
-  grep -q "streamEvents = group $JENKINS_GERRIT_INTEGRATION_GROUP" "$GERRIT_SITE_PATH/etc/jenkins-integration-access.config" || die "stream-events permission template is missing"
-  assert_no_unresolved_placeholders "$GERRIT_SITE_PATH/etc/jenkins-integration-access.config"
 }
 
 check_installed_artifact_freshness() {
@@ -1482,7 +1286,7 @@ parse_args() {
         usage
         exit 0
         ;;
-      print-env-template|preflight|prepare-artifacts|install|configure|configure-integration|validate|collect-evidence)
+      print-env-template|preflight|prepare-artifacts|install|configure|validate|collect-evidence)
         command_name="$1"
         shift
         [ "$#" -eq 0 ] || die_usage "Unexpected arguments after command: $*"
@@ -1510,7 +1314,6 @@ main() {
     prepare-artifacts) cmd_prepare_artifacts ;;
     install) cmd_install ;;
     configure) cmd_configure ;;
-    configure-integration) cmd_configure_integration ;;
     validate) cmd_validate ;;
     collect-evidence) cmd_collect_evidence ;;
     *) die_usage "Unknown command: $command_name" ;;

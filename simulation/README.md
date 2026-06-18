@@ -77,11 +77,16 @@ implemented in Step 3. Checkpoint ownership is split by layer:
 | Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh prepare-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh prepare-artifacts`. |
 | Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh stage-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh stage-artifacts`. |
 | Service configuration | `simulation/docker/docker-harness.sh up` for role-gate containers; `simulation/docker/docker-verify.sh up` for full Docker simulation. | `simulation/vm/vm-verify.sh configure`. |
-| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` for full Docker readiness. | `simulation/vm/vm-verify.sh check`. |
-| End-to-end execution | `simulation/docker/docker-verify.sh full-verify`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full`. |
-| Evidence audit | Role-local `collect-evidence`, Docker harness evidence, `docker-verify.sh` summaries, and later global aggregation. | `simulation/vm/vm-verify.sh audit` and later global aggregation. |
+| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` plus `scripts/integration-setup.sh validate-integration` for full Docker readiness. | `simulation/vm/vm-verify.sh check` plus the shared integration helper when VM support exists. |
+| End-to-end execution | `simulation/docker/docker-verify.sh full-verify` orchestrating `scripts/integration-setup.sh verify-trigger`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full` orchestrating the shared integration helper. |
+| Evidence audit | Role-local `collect-evidence`, integration-local `scripts/integration-setup.sh collect-evidence`, Docker harness evidence, `docker-verify.sh` summaries, and later global aggregation. | `simulation/vm/vm-verify.sh audit`, integration-local evidence, and later global aggregation. |
 
 The Docker layer is the first end-to-end integration gate for Gerrit Trigger
 behavior, Jenkins agent scheduling, and `Verified` voting. The VM layer repeats
 the Docker-proven flow in a systemd-oriented, production-like environment
 after Docker behavior is stable.
+
+Role helpers stay role-local in both layers. Cross-role SSH, trigger setup,
+integration validation, trigger verification, and integration evidence use
+`scripts/integration-setup.sh`. Current scaffold-level integration commands
+must fail closed until the later real Docker or VM implementation exists.
