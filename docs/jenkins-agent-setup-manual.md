@@ -41,10 +41,10 @@ Default baseline:
 Consumed inputs:
 
 - `examples/jenkins-agent.env.example` copied to a reviewed local env file.
-- Agent host, SSH port, dedicated runtime account, remote filesystem path,
-  Jenkins node name, Jenkins scheduling labels, staged artifact path, artifact
-  output path, verification mode, evidence directory, and bounded log
-  directory.
+- Agent host, SSH port, dedicated runtime account, runtime group, remote
+  filesystem path, Jenkins node name, Jenkins scheduling labels, staged
+  artifact path, artifact output path, verification mode, evidence directory,
+  and bounded log directory.
 - `JENKINS_AGENT_OS_DEPENDENCIES`, which defaults to the static agent target
   OS package baseline from the approved agent reference adapted to v1:
   `ca-certificates`, `curl`, `git`, `openssh-client`, `openssh-server`,
@@ -205,7 +205,7 @@ Consumed inputs:
 
 - Reviewed Jenkins agent env file.
 - Staged artifact manifest and checksums.
-- Dedicated runtime account name and remote filesystem path.
+- Dedicated runtime account name, runtime group, and remote filesystem path.
 
 Produced outputs:
 
@@ -217,11 +217,15 @@ Produced outputs:
 Mutation side effects:
 
 - Creates or verifies the dedicated local runtime account.
+- Creates or verifies the role-local runtime group from `JENKINS_AGENT_GROUP`,
+  defaulting to `jenkins-agent`.
 - Creates or updates the remote filesystem.
 - Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
   SSH reachability without claiming Jenkins controller scheduling.
 - Leaves `authorized_keys` creation and Jenkins public-key installation to the
   later shared integration workflow.
+- Leaves the shared Jenkins integration group and shared storage path to
+  `scripts/integration-setup.sh` with `examples/integration.env.example`.
 
 Helper:
 
@@ -250,7 +254,7 @@ Consumed inputs:
 
 - Reviewed Jenkins agent env file.
 - Staged manifest and checksums.
-- Runtime account, remote filesystem, and SSH readiness state.
+- Runtime account, runtime group, remote filesystem, and SSH readiness state.
 
 Produced outputs:
 
@@ -263,7 +267,8 @@ Validation checks:
 - The OpenSSH banner is reachable at
   `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the Docker harness.
 - The dedicated runtime account exists.
-- `JENKINS_AGENT_REMOTE_FS` exists and is owned by the runtime account.
+- `JENKINS_AGENT_REMOTE_FS` exists and is owned by the runtime account and
+  role-local runtime group.
 - Staged artifact checksums still verify before readiness is reported.
 
 Helper:

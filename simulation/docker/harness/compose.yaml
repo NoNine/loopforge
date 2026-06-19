@@ -96,6 +96,7 @@ services:
     volumes:
       - "../../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-controller:/harness/state"
+      - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_STAGING_DIR}/jenkins-controller:/harness/staged"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
       - "${HARNESS_LOG_DIR}:/harness/logs"
@@ -123,6 +124,7 @@ services:
     volumes:
       - "../../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-agent:/harness/state"
+      - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_STAGING_DIR}/jenkins-agent:/harness/staged"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
       - "${HARNESS_LOG_DIR}:/harness/logs"

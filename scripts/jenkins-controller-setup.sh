@@ -202,6 +202,7 @@ JENKINS_HOST
 JENKINS_URL
 JENKINS_HTTP_PORT
 JENKINS_RUNTIME_ACCOUNT
+JENKINS_RUNTIME_GROUP
 JENKINS_HOME
 JENKINS_STAGED_ARTIFACT_DIR
 JENKINS_ARTIFACT_OUTPUT_DIR
@@ -239,6 +240,56 @@ require_account_separation() {
     die "Jenkins runtime account must not match Jenkins admin account"
 }
 
+reject_control_chars() {
+  local name value
+  name="${1:?name required}"
+  value="${2-}"
+  case "$value" in
+    *[$'\001'-$'\037'$'\177']*)
+      die "$name must not contain newline or control characters"
+      ;;
+  esac
+}
+
+validate_runtime_account_name() {
+  local value
+  value="${JENKINS_RUNTIME_ACCOUNT:-}"
+  reject_control_chars JENKINS_RUNTIME_ACCOUNT "$value"
+  case "$value" in
+    ""|*[!a-z_0-9-]*)
+      die "JENKINS_RUNTIME_ACCOUNT must be a local account name using lowercase letters, digits, underscore, or dash"
+      ;;
+  esac
+  case "$value" in
+    -*|[0-9]*|root|daemon|bin|sys|sync|games|man|lp|mail|news|uucp|proxy|www-data|backup|list|irc|_apt|nobody|systemd-*)
+      die "JENKINS_RUNTIME_ACCOUNT is not allowed for the Jenkins runtime account: $value"
+      ;;
+  esac
+  [ "${#value}" -le 32 ] || die "JENKINS_RUNTIME_ACCOUNT must be 32 characters or fewer"
+}
+
+validate_runtime_group_name() {
+  local value
+  value="${JENKINS_RUNTIME_GROUP:-}"
+  reject_control_chars JENKINS_RUNTIME_GROUP "$value"
+  case "$value" in
+    ""|*[!a-z_0-9-]*)
+      die "JENKINS_RUNTIME_GROUP must be a local group name using lowercase letters, digits, underscore, or dash"
+      ;;
+  esac
+  case "$value" in
+    -*|[0-9]*|root|daemon|bin|sys|sync|games|man|lp|mail|news|uucp|proxy|www-data|backup|list|irc|_apt|nobody|systemd-*)
+      die "JENKINS_RUNTIME_GROUP is not allowed for the Jenkins runtime group: $value"
+      ;;
+  esac
+  [ "${#value}" -le 32 ] || die "JENKINS_RUNTIME_GROUP must be 32 characters or fewer"
+}
+
+validate_runtime_owner_inputs() {
+  validate_runtime_account_name
+  validate_runtime_group_name
+}
+
 apply_env_defaults() {
   JENKINS_VERSION="$supported_jenkins_version"
   JENKINS_JAVA_VERSION="$supported_jenkins_java_version"
@@ -249,6 +300,7 @@ apply_env_defaults() {
   JENKINS_URL="${JENKINS_URL:-http://jenkins-controller-target:8080/}"
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
   JENKINS_RUNTIME_ACCOUNT="${JENKINS_RUNTIME_ACCOUNT:-jenkins}"
+  JENKINS_RUNTIME_GROUP="${JENKINS_RUNTIME_GROUP:-jenkins}"
   JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"
   JENKINS_STAGED_ARTIFACT_DIR="${JENKINS_STAGED_ARTIFACT_DIR:-/harness/staged}"
   JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-controller}"
@@ -289,8 +341,11 @@ ensure_dirs() {
 }
 
 runtime_account_exists() {
+  validate_runtime_owner_inputs
   getent passwd "$JENKINS_RUNTIME_ACCOUNT" >/dev/null 2>&1 ||
     die "Missing Jenkins runtime account: $JENKINS_RUNTIME_ACCOUNT"
+  getent group "$JENKINS_RUNTIME_GROUP" >/dev/null 2>&1 ||
+    die "Missing Jenkins runtime group: $JENKINS_RUNTIME_GROUP"
 }
 
 run_as_runtime() {
@@ -944,12 +999,13 @@ cmd_preflight() {
   validate_accepted_direct_plugins
   validate_os_dependencies
   require_account_separation
+  validate_runtime_owner_inputs
   if [ "$dry_run" -eq 0 ]; then
     check_os_dependency_expectations
   fi
   enforce_version_baseline
-  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s mode=%s plugins=accepted-direct-pins\n' \
-    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$JENKINS_VERIFICATION_MODE"
+  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s runtime_account=%s runtime_group=%s mode=%s plugins=accepted-direct-pins\n' \
+    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_VERIFICATION_MODE"
 }
 
 cmd_propose_plugin_versions() {
@@ -1056,6 +1112,7 @@ cmd_install() {
   local pids
   load_env normal
   require_env_values
+  validate_runtime_owner_inputs
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -1084,7 +1141,7 @@ cmd_install() {
   cp "$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_HOME/artifact-manifest.txt"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_HOME/artifact-checksums.sha256"
   runtime_account_exists
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME"
   write_text_file "$JENKINS_HOME/state/install.status" "installed"
   printf 'status=pass command=install home=%s staged=%s\n' "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR"
 }
@@ -1102,9 +1159,9 @@ start_real_jenkins() {
   export JENKINS_HOME
   export CASC_JENKINS_CONFIG="$JENKINS_HOME/jcasc/jenkins.yaml"
   export JAVA_OPTS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config=$JENKINS_HOME/jcasc/jenkins.yaml"
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME"
   mkdir -p "$JENKINS_HOME/war-cache"
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/war-cache"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/war-cache"
   run_as_runtime "JENKINS_HOME=$(printf '%q' "$JENKINS_HOME") CASC_JENKINS_CONFIG=$(printf '%q' "$CASC_JENKINS_CONFIG") nohup java $JAVA_OPTS -jar $(printf '%q' "$JENKINS_HOME/war/jenkins.war") --httpPort=$(printf '%q' "$JENKINS_HTTP_PORT") --webroot=$(printf '%q' "$JENKINS_HOME/war-cache") >$(printf '%q' "$log_file") 2>&1 & echo \$!" >"$pidfile"
   pid="$(cat "$pidfile")"
   deadline=$((SECONDS + 240))
@@ -1127,6 +1184,7 @@ start_real_jenkins() {
 cmd_configure_service() {
   load_env normal
   require_env_values
+  validate_runtime_owner_inputs
   confirm_mutation configure-service || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -1142,13 +1200,14 @@ cmd_configure_service() {
 cmd_install_plugins() {
   load_env normal
   require_env_values
+  validate_runtime_owner_inputs
   confirm_mutation install-plugins || return 0
   verify_staged_artifacts
   mkdir -p "$JENKINS_HOME/plugins" "$JENKINS_HOME/state"
   cp -R "$JENKINS_STAGED_ARTIFACT_DIR/plugins/." "$JENKINS_HOME/plugins/"
   plugin_set_digest >/dev/null
   runtime_account_exists
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/plugins"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/plugins"
   write_text_file "$JENKINS_HOME/state/plugins.status" "installed plugins=$JENKINS_PLUGIN_LIST digest=$(plugin_set_digest)"
   printf 'status=pass command=install-plugins plugin_digest=%s\n' "$(plugin_set_digest)"
 }
@@ -1156,6 +1215,7 @@ cmd_install_plugins() {
 cmd_configure_jcasc() {
   load_env normal
   require_env_values
+  validate_runtime_owner_inputs
   confirm_mutation configure-jcasc || return 0
   verify_staged_artifacts
   mkdir -p "$JENKINS_HOME/jcasc" "$JENKINS_HOME/state"
@@ -1166,7 +1226,7 @@ cmd_configure_jcasc() {
   grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP security realm is missing"
   grep -Fq -- 'managerPasswordSecret:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP manager password secret is missing"
   runtime_account_exists
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_HOME/jcasc"
+  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/jcasc"
   chmod 0700 "$JENKINS_HOME/jcasc"
   chmod 0600 "$JENKINS_HOME/jcasc/jenkins.yaml"
   write_text_file "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"

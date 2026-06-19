@@ -101,6 +101,8 @@ HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker
 HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/harness/$HARNESS_RUN_ID}"
 HARNESS_LEGACY_EVIDENCE_DIR="${HARNESS_LEGACY_EVIDENCE_DIR:-$repo_root/simulation/docker/state/evidence}"
 HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/harness/$HARNESS_RUN_ID}"
+HARNESS_INTEGRATION_ENV_FILE="${HARNESS_INTEGRATION_ENV_FILE:-$repo_root/examples/integration.env.example}"
+HARNESS_JENKINS_SHARED_STORAGE_PATH="${HARNESS_JENKINS_SHARED_STORAGE_PATH:-}"
 HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
 HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
 
@@ -111,9 +113,57 @@ export HARNESS_LDAP_ADMIN_PASSWORD HARNESS_LDAP_CONFIG_PASSWORD
 export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
 export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
 export HARNESS_STATE_DIR HARNESS_STAGING_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+export HARNESS_JENKINS_SHARED_STORAGE_PATH
 
 compose_kind=""
 compose_cmd=()
+
+load_harness_integration_env() {
+  [ -f "$HARNESS_INTEGRATION_ENV_FILE" ] ||
+    die "Missing integration env file for Docker harness shared storage: $HARNESS_INTEGRATION_ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  . "$HARNESS_INTEGRATION_ENV_FILE"
+  set +a
+  HARNESS_JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
+  validate_shared_storage_path "HARNESS_JENKINS_SHARED_STORAGE_PATH" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
+  export HARNESS_JENKINS_SHARED_STORAGE_PATH
+}
+
+validate_absolute_mount_path() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  case "$value" in
+    /*) ;;
+    *) die "$name must be an absolute container mount path" ;;
+  esac
+  case "$value" in
+    *[!A-Za-z0-9_./-]*|*"/../"*|*"/.."|"../"*|".."|*"//"*|*"/./"*|*"/.")
+      die "$name contains unsafe mount path characters"
+      ;;
+  esac
+}
+
+validate_shared_storage_path() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  validate_absolute_mount_path "$name" "$value"
+  case "$value" in
+    /|/bin|/bin/*|/boot|/boot/*|/dev|/dev/*|/etc|/etc/*|/home|/home/*|/harness|/harness/*|/lib|/lib/*|/lib64|/lib64/*|/opt|/opt/*|/proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/sbin/*|/srv|/srv/*|/sys|/sys/*|/tmp|/tmp/*|/usr|/usr/*|/var|/var/*|/workspace|/workspace/*)
+      die "$name must not target root, system, harness, workspace, or other reserved paths"
+      ;;
+  esac
+  case "$value" in
+    /mnt/*)
+      [ "$value" != "/mnt/" ] || die "$name must include a directory below /mnt"
+      ;;
+    *)
+      die "$name must use the approved /mnt/... prefix for v1 shared integration storage"
+      ;;
+  esac
+}
 
 detect_compose() {
   validate_harness_inputs
@@ -148,6 +198,7 @@ compose_v1_recreate_bug_detected() {
 
 ensure_dirs() {
   validate_harness_inputs
+  load_harness_integration_env
   mkdir -p \
     "$HARNESS_STATE_DIR" \
     "$HARNESS_STAGING_DIR" \
@@ -157,6 +208,7 @@ ensure_dirs() {
     "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
+    "$HARNESS_STATE_DIR/shared-jenkins-storage" \
     "$HARNESS_STATE_DIR/rendered" \
     "$HARNESS_STAGING_DIR/gerrit" \
     "$HARNESS_STAGING_DIR/jenkins-controller" \
@@ -558,6 +610,8 @@ HARNESS_STATE_DIR=$HARNESS_STATE_DIR
 HARNESS_STAGING_DIR=$HARNESS_STAGING_DIR
 HARNESS_EVIDENCE_DIR=$HARNESS_EVIDENCE_DIR
 HARNESS_LOG_DIR=$HARNESS_LOG_DIR
+HARNESS_INTEGRATION_ENV_FILE=$HARNESS_INTEGRATION_ENV_FILE
+HARNESS_JENKINS_SHARED_STORAGE_PATH=$HARNESS_JENKINS_SHARED_STORAGE_PATH
 EOF
   write_manifest_contract
 }

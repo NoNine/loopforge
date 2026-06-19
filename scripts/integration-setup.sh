@@ -8,6 +8,7 @@ repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 gerrit_env_file=""
 jenkins_controller_env_file=""
 jenkins_agent_env_file=""
+integration_env_file=""
 dry_run=0
 assume_yes=0
 command_name=""
@@ -19,6 +20,7 @@ Usage:
     --gerrit-env FILE \
     --jenkins-controller-env FILE \
     --jenkins-agent-env FILE \
+    --integration-env FILE \
     [--dry-run] [--yes] <command>
 
 Commands:
@@ -33,6 +35,7 @@ Options:
   --gerrit-env FILE                Source reviewed Gerrit env values.
   --jenkins-controller-env FILE    Source reviewed Jenkins controller env values.
   --jenkins-agent-env FILE         Source reviewed Jenkins agent env values.
+  --integration-env FILE           Source cross-role shared integration values.
   --dry-run                        Parse inputs and report planned mutation.
   --yes                            Confirm reviewed cross-role mutation.
   -h, --help                       Show this help.
@@ -117,9 +120,11 @@ load_inputs() {
     die_usage "Missing --jenkins-controller-env FILE"
   [ -n "$jenkins_agent_env_file" ] ||
     die_usage "Missing --jenkins-agent-env FILE"
+  [ -n "$integration_env_file" ] || die_usage "Missing --integration-env FILE"
   load_env_file "Gerrit" "$gerrit_env_file"
   load_env_file "Jenkins controller" "$jenkins_controller_env_file"
   load_env_file "Jenkins agent" "$jenkins_agent_env_file"
+  load_env_file "cross-role integration" "$integration_env_file"
   apply_defaults
 }
 
@@ -132,10 +137,13 @@ apply_defaults() {
   JENKINS_HOST="${JENKINS_HOST:-jenkins-controller-target}"
   JENKINS_URL="${JENKINS_URL:-http://jenkins-controller-target:8080/}"
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
+  JENKINS_RUNTIME_ACCOUNT="${JENKINS_RUNTIME_ACCOUNT:-jenkins}"
+  JENKINS_RUNTIME_GROUP="${JENKINS_RUNTIME_GROUP:-jenkins}"
   JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"
   JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
   JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
+  JENKINS_AGENT_GROUP="${JENKINS_AGENT_GROUP:-jenkins-agent}"
   JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/var/lib/jenkins-agent}"
   JENKINS_AGENT_NODE_NAME="${JENKINS_AGENT_NODE_NAME:-build-linux-x86-01}"
   JENKINS_AGENT_LABELS="${JENKINS_AGENT_LABELS:-linux x86_64 general-build gerrit-ci}"
@@ -152,6 +160,9 @@ apply_defaults() {
   JENKINS_GERRIT_INTEGRATION_GROUP="${JENKINS_GERRIT_INTEGRATION_GROUP:-gerrit-integration}"
   JENKINS_GERRIT_CREDENTIAL_ID="${JENKINS_GERRIT_CREDENTIAL_ID:-jenkins-gerrit-ssh}"
   JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
+  JENKINS_SHARED_GROUP="${JENKINS_SHARED_GROUP:-}"
+  JENKINS_SHARED_GROUP_GID="${JENKINS_SHARED_GROUP_GID:-}"
+  JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
   GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-docker-gerrit}"
   JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-docker-gerrit-verification}"
   select_agent_scheduling_label
@@ -193,6 +204,18 @@ validate_account_name() {
   esac
 }
 
+validate_group_name() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  reject_control_chars "$name" "$value"
+  case "$value" in
+    ""|*[!a-z_0-9-]*|[0-9]*|-*|root)
+      die "$name must be a non-root local group token"
+      ;;
+  esac
+}
+
 validate_host_token() {
   local name value
   name="${1:?name required}"
@@ -230,6 +253,26 @@ validate_absolute_path() {
   case "$value" in
     *[!A-Za-z0-9_./-]*|*"/../"*|*"/.."|"../"*|".."|*"//"*|*"/./"*|*"/.")
       die "$name contains unsafe path characters"
+      ;;
+  esac
+}
+
+validate_shared_storage_path() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  validate_absolute_path "$name" "$value"
+  case "$value" in
+    /|/bin|/bin/*|/boot|/boot/*|/dev|/dev/*|/etc|/etc/*|/home|/home/*|/harness|/harness/*|/lib|/lib/*|/lib64|/lib64/*|/opt|/opt/*|/proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/sbin/*|/srv|/srv/*|/sys|/sys/*|/tmp|/tmp/*|/usr|/usr/*|/var|/var/*|/workspace|/workspace/*)
+      die "$name must not target root, system, harness, workspace, or other reserved paths"
+      ;;
+  esac
+  case "$value" in
+    /mnt/*)
+      [ "$value" != "/mnt/" ] || die "$name must include a directory below /mnt"
+      ;;
+    *)
+      die "$name must use the approved /mnt/... prefix for v1 shared integration storage"
       ;;
   esac
 }
@@ -280,15 +323,27 @@ validate_inputs() {
   validate_simple_token GERRIT_VERIFICATION_PROJECT "$GERRIT_VERIFICATION_PROJECT"
   validate_host_token JENKINS_HOST "$JENKINS_HOST"
   validate_port JENKINS_HTTP_PORT "$JENKINS_HTTP_PORT"
+  validate_account_name JENKINS_RUNTIME_ACCOUNT "$JENKINS_RUNTIME_ACCOUNT"
+  validate_group_name JENKINS_RUNTIME_GROUP "$JENKINS_RUNTIME_GROUP"
   validate_absolute_path JENKINS_HOME "$JENKINS_HOME"
   validate_host_token JENKINS_AGENT_HOST "$JENKINS_AGENT_HOST"
   validate_port JENKINS_AGENT_SSH_PORT "$JENKINS_AGENT_SSH_PORT"
   validate_account_name JENKINS_AGENT_ACCOUNT "$JENKINS_AGENT_ACCOUNT"
+  validate_group_name JENKINS_AGENT_GROUP "$JENKINS_AGENT_GROUP"
   validate_absolute_path JENKINS_AGENT_REMOTE_FS "$JENKINS_AGENT_REMOTE_FS"
   validate_simple_token JENKINS_AGENT_NODE_NAME "$JENKINS_AGENT_NODE_NAME"
   validate_label_set
   validate_simple_token JENKINS_AGENT_SCHEDULING_LABEL "$JENKINS_AGENT_SCHEDULING_LABEL"
   validate_simple_token JENKINS_AGENT_CREDENTIAL_ID "$JENKINS_AGENT_CREDENTIAL_ID"
+  validate_group_name JENKINS_SHARED_GROUP "$JENKINS_SHARED_GROUP"
+  case "$JENKINS_SHARED_GROUP_GID" in
+    ""|*[!0-9]*)
+      die "JENKINS_SHARED_GROUP_GID must be numeric"
+      ;;
+  esac
+  [ "$JENKINS_SHARED_GROUP_GID" -ge 1 ] && [ "$JENKINS_SHARED_GROUP_GID" -le 60000 ] ||
+    die "JENKINS_SHARED_GROUP_GID must be between 1 and 60000"
+  validate_shared_storage_path JENKINS_SHARED_STORAGE_PATH "$JENKINS_SHARED_STORAGE_PATH"
   validate_simple_token JENKINS_GERRIT_CREDENTIAL_ID "$JENKINS_GERRIT_CREDENTIAL_ID"
   validate_simple_token GERRIT_TRIGGER_SERVER_NAME "$GERRIT_TRIGGER_SERVER_NAME"
   validate_simple_token JENKINS_VERIFICATION_JOB "$JENKINS_VERIFICATION_JOB"
@@ -370,9 +425,93 @@ ensure_dirs() {
 }
 
 ensure_container_integration_dirs() {
-  docker_exec_sh "$(jenkins_container)" "install -d -m 700 -o jenkins -g jenkins /harness/state/integration /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
+  docker_exec_sh "$(jenkins_container)" "install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' /harness/state/integration /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
   docker_exec_sh "$(gerrit_container)" "install -d -m 700 /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
   docker_exec_sh "$(agent_container)" "install -d -m 700 /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
+}
+
+ensure_group_with_gid() {
+  local container group gid
+  container="${1:?container required}"
+  group="${2:?group required}"
+  gid="${3:?gid required}"
+  docker_exec_sh "$container" "
+    set -e
+    existing_group=\$(getent group '$group' | awk -F: '{print \$3}' || true)
+    if [ -n \"\$existing_group\" ]; then
+      [ \"\$existing_group\" = '$gid' ]
+    elif getent group '$gid' >/dev/null 2>&1; then
+      exit 1
+    elif command -v groupadd >/dev/null 2>&1; then
+      groupadd -g '$gid' '$group'
+    else
+      exit 1
+    fi
+  "
+}
+
+ensure_user_in_group() {
+  local container user group
+  container="${1:?container required}"
+  user="${2:?user required}"
+  group="${3:?group required}"
+  docker_exec_sh "$container" "
+    set -e
+    id '$user' >/dev/null
+    if id -nG '$user' | tr ' ' '\n' | grep -Fx '$group' >/dev/null 2>&1; then
+      exit 0
+    fi
+    usermod -a -G '$group' '$user'
+  "
+}
+
+ensure_shared_storage_on_container() {
+  local container owner_user owner_group
+  container="${1:?container required}"
+  owner_user="${2:?owner user required}"
+  owner_group="${3:?owner group required}"
+  docker_exec_sh "$container" "
+    set -e
+    install -d -m 2775 -o '$owner_user' -g '$JENKINS_SHARED_GROUP' '$JENKINS_SHARED_STORAGE_PATH'
+    chown '$owner_user:$JENKINS_SHARED_GROUP' '$JENKINS_SHARED_STORAGE_PATH'
+    chmod 2775 '$JENKINS_SHARED_STORAGE_PATH'
+    test -d '$JENKINS_SHARED_STORAGE_PATH'
+    test \"\$(stat -c '%G' '$JENKINS_SHARED_STORAGE_PATH')\" = '$JENKINS_SHARED_GROUP'
+    case \"\$(stat -c '%a' '$JENKINS_SHARED_STORAGE_PATH')\" in
+      2775|2770|2?7?) ;;
+      *) exit 1 ;;
+    esac
+    getent group '$owner_group' >/dev/null
+  "
+}
+
+ensure_shared_integration_storage() {
+  local log
+  log="${1:?log required}"
+  ensure_group_with_gid "$(jenkins_container)" "$JENKINS_SHARED_GROUP" "$JENKINS_SHARED_GROUP_GID" >>"$log" 2>&1
+  ensure_group_with_gid "$(agent_container)" "$JENKINS_SHARED_GROUP" "$JENKINS_SHARED_GROUP_GID" >>"$log" 2>&1
+  ensure_user_in_group "$(jenkins_container)" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_SHARED_GROUP" >>"$log" 2>&1
+  ensure_user_in_group "$(agent_container)" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_SHARED_GROUP" >>"$log" 2>&1
+  ensure_shared_storage_on_container "$(jenkins_container)" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" >>"$log" 2>&1
+  ensure_shared_storage_on_container "$(agent_container)" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" >>"$log" 2>&1
+  printf 'shared_group=ready name=%s gid=%s controller_account=%s agent_account=%s storage_path=%s\n' \
+    "$JENKINS_SHARED_GROUP" "$JENKINS_SHARED_GROUP_GID" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_SHARED_STORAGE_PATH" >>"$log"
+}
+
+prove_shared_storage_rw() {
+  local log proof_name proof_text
+  log="${1:?log required}"
+  proof_name="integration-storage-proof-$(timestamp_utc).txt"
+  proof_text="shared-storage-proof:$proof_name"
+  docker_exec_sh "$(jenkins_container)" "
+    set -e
+    su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"printf '%s\n' '$proof_text' >'$JENKINS_SHARED_STORAGE_PATH/$proof_name'\"
+  " >>"$log" 2>&1
+  docker_exec_sh "$(agent_container)" "
+    set -e
+    su -s /bin/sh '$JENKINS_AGENT_ACCOUNT' -c \"grep -Fx '$proof_text' '$JENKINS_SHARED_STORAGE_PATH/$proof_name'\"
+  " >>"$log" 2>&1
+  printf 'shared_storage_rw=pass writer=controller reader=agent file=%s storage_path=%s\n' "$proof_name" "$JENKINS_SHARED_STORAGE_PATH" >>"$log"
 }
 
 bounded_log_path() {
@@ -706,7 +845,7 @@ jenkins_script() {
   chmod 0600 "$script_file"
   container_script="$(integration_container_state_dir)/scripts/$(basename "$script_file")"
   docker cp "$script_file" "$(jenkins_container):$container_script" >>"$log" 2>&1
-  docker_exec_sh "$(jenkins_container)" "chown jenkins:jenkins '$container_script' && chmod 600 '$container_script'" >>"$log" 2>&1
+  docker_exec_sh "$(jenkins_container)" "chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_script' && chmod 600 '$container_script'" >>"$log" 2>&1
   docker_exec_sh "$(jenkins_container)" "
     set -e
     crumb_json=/tmp/jenkins-step11-crumb.json
@@ -746,16 +885,16 @@ ensure_controller_keypair() {
   container_private="$(integration_container_state_dir)/keys/$name"
   docker_exec_sh "$(jenkins_container)" "
     set -e
-    install -d -m 700 -o jenkins -g jenkins '$(integration_container_state_dir)/keys'
+    install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$(integration_container_state_dir)/keys'
     if [ ! -s '$container_private' ]; then
-      su -s /bin/sh jenkins -c \"ssh-keygen -q -t ed25519 -N '' -C '$name-docker-step11' -f '$container_private'\"
+      su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh-keygen -q -t ed25519 -N '' -C '$name-docker-step11' -f '$container_private'\"
     fi
   " >>"$log" 2>&1
   docker_exec_sh "$(jenkins_container)" "
     set -e
-    chown jenkins:jenkins '$container_private'
+    chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private'
     chmod 600 '$container_private'
-    su -s /bin/sh jenkins -c \"ssh-keygen -y -f '$container_private' >'$container_private.pub'\"
+    su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh-keygen -y -f '$container_private' >'$container_private.pub'\"
     chmod 644 '$container_private.pub'
   " >>"$log" 2>&1
   docker cp "$(jenkins_container):$container_private.pub" "$public" >>"$log" 2>&1
@@ -769,7 +908,7 @@ ensure_controller_private_key_permissions() {
   name="${2:?key name required}"
   ensure_container_integration_dirs
   container_private="$(integration_container_state_dir)/keys/$name"
-  docker_exec_sh "$(jenkins_container)" "test -s '$container_private' && chown jenkins:jenkins '$container_private' && chmod 600 '$container_private'" >/dev/null
+  docker_exec_sh "$(jenkins_container)" "test -s '$container_private' && chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private' && chmod 600 '$container_private'" >/dev/null
 }
 
 register_gerrit_public_key() {
@@ -835,13 +974,13 @@ cmd_configure_agent_ssh() {
     set -e
     home=\$(getent passwd '$JENKINS_AGENT_ACCOUNT' | awk -F: '{print \$6}')
     test -n \"\$home\"
-    install -d -m 700 -o '$JENKINS_AGENT_ACCOUNT' -g '$JENKINS_AGENT_ACCOUNT' \"\$home/.ssh\"
+    install -d -m 700 -o '$JENKINS_AGENT_ACCOUNT' -g '$JENKINS_AGENT_GROUP' \"\$home/.ssh\"
     touch \"\$home/.ssh/authorized_keys\"
     grep -F -x -f /tmp/jenkins-agent.pub \"\$home/.ssh/authorized_keys\" >/dev/null 2>&1 || cat /tmp/jenkins-agent.pub >>\"\$home/.ssh/authorized_keys\"
-    chown '$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_ACCOUNT' \"\$home/.ssh/authorized_keys\"
+    chown '$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP' \"\$home/.ssh/authorized_keys\"
     chmod 600 \"\$home/.ssh/authorized_keys\"
     rm -rf '$JENKINS_AGENT_REMOTE_FS/remoting.jar' '$JENKINS_AGENT_REMOTE_FS/remoting'
-    install -d -m 755 -o '$JENKINS_AGENT_ACCOUNT' -g '$JENKINS_AGENT_ACCOUNT' '$JENKINS_AGENT_REMOTE_FS'
+    install -d -m 755 -o '$JENKINS_AGENT_ACCOUNT' -g '$JENKINS_AGENT_GROUP' '$JENKINS_AGENT_REMOTE_FS'
   " >>"$log" 2>&1
   known_hosts="$(integration_host_state_dir)/keys/agent-known-hosts"
   docker_exec_sh "$(jenkins_container)" "ssh-keyscan -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_HOST' 2>/dev/null" >"$known_hosts"
@@ -849,8 +988,8 @@ cmd_configure_agent_ssh() {
   docker cp "$known_hosts" "$(jenkins_container):/tmp/step11-agent-known-hosts" >>"$log" 2>&1
   docker_exec_sh "$(jenkins_container)" "
     set -e
-    install -d -m 700 -o jenkins -g jenkins '$JENKINS_HOME/.ssh'
-    install -m 600 -o jenkins -g jenkins /tmp/step11-agent-known-hosts '$JENKINS_HOME/.ssh/known_hosts'
+    install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$JENKINS_HOME/.ssh'
+    install -m 600 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' /tmp/step11-agent-known-hosts '$JENKINS_HOME/.ssh/known_hosts'
   " >>"$log" 2>&1
   groovy="$(integration_host_state_dir)/scripts/configure-agent.groovy"
   q_credential="$(groovy_quote "$JENKINS_AGENT_CREDENTIAL_ID")"
@@ -1124,16 +1263,19 @@ validate_integration_impl() {
   docker_exec_sh "$(jenkins_container)" "test -s '$(integration_container_state_dir)/keys/jenkins-gerrit' && test -s '$(integration_container_state_dir)/keys/jenkins-agent'" >/dev/null ||
     die "Missing Jenkins-controller private keys; rerun configure-gerrit-ssh and configure-agent-ssh with --yes"
   [ -s "$(status_file trigger)" ] || die "Missing trigger configuration; run configure-trigger with --yes first"
+  ensure_shared_integration_storage "$log"
+  prove_shared_storage_rw "$log"
   ssh_from_controller_to_gerrit "gerrit version" >>"$log" 2>&1
   prove_stream_events "$log"
-  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh jenkins -c \"ssh -i $(integration_container_state_dir)/keys/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
+  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh -i $(integration_container_state_dir)/keys/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
   validate_agent_online "$log"
   schedule_smoke_build "$log"
+  write_evidence shared-storage pass "Controller runtime account wrote through the shared Jenkins storage path and agent runtime account read the proof through the same mounted path" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH writer=$JENKINS_RUNTIME_ACCOUNT reader=$JENKINS_AGENT_ACCOUNT" >/dev/null
   write_evidence jenkins-to-gerrit-ssh pass "Real SSH command to Gerrit succeeded as Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
   write_evidence stream-events pass "Gerrit stream-events SSH command accepted for Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
   write_evidence agent-connection pass "Jenkins runtime OS user connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
   evidence="$(write_evidence scheduling pass "Jenkins scheduled a real smoke build on the selected agent scheduling label" "$log" "job=$JENKINS_VERIFICATION_JOB node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL")"
-  printf 'status=pass command=validate-integration proof=real jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass scheduling=pass evidence=%s log=%s\n' "$evidence" "$log"
+  printf 'status=pass command=validate-integration proof=real shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass scheduling=pass evidence=%s log=%s\n' "$evidence" "$log"
 }
 
 cmd_validate_integration() {
@@ -1314,6 +1456,15 @@ parse_args() {
         ;;
       --jenkins-agent-env=*)
         jenkins_agent_env_file="${1#--jenkins-agent-env=}"
+        shift
+        ;;
+      --integration-env)
+        [ "$#" -ge 2 ] || die_usage "--integration-env requires a value"
+        integration_env_file="$2"
+        shift 2
+        ;;
+      --integration-env=*)
+        integration_env_file="${1#--integration-env=}"
         shift
         ;;
       --dry-run)

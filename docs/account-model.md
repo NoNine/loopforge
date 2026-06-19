@@ -15,6 +15,7 @@ roles in this package are accounts.
 | Gerrit runtime account | Local OS | Runs Gerrit only. |
 | Jenkins runtime account | Local OS | Runs the Jenkins controller only. |
 | Jenkins agent runtime account | Local OS | Runs SSH build-agent sessions only. |
+| Jenkins shared integration group | Local OS group | Grants Jenkins controller and agent runtime accounts access to shared integration storage only. |
 | Gerrit admin account | LDAP-backed human account or group | Administers Gerrit. |
 | Jenkins admin account | LDAP-backed human account or group | Administers Jenkins. |
 | Jenkins Gerrit integration account | Gerrit service account | Lets Jenkins authenticate to Gerrit, stream events, and vote `Verified`. |
@@ -38,6 +39,20 @@ service files, and role-local runtime paths only. The Gerrit runtime account
 runs Gerrit, the Jenkins runtime account runs the Jenkins controller, and the
 Jenkins agent runtime account owns SSH build-agent sessions and workspace
 paths. Runtime OS accounts are not application admin accounts.
+
+Runtime accounts may have role-local primary groups. The Jenkins controller
+role uses `JENKINS_RUNTIME_GROUP`, defaulting to `jenkins`. The Jenkins agent
+role uses `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`. These groups
+own role-local files only; they are not the cross-role sharing mechanism.
+
+Cross-role Jenkins controller and agent sharing uses a separate integration
+group from `examples/integration.env.example`. That file is the source of
+truth for the shared group name, shared group GID, and shared storage path.
+`scripts/integration-setup.sh` owns creating or validating that group, adding
+the Jenkins controller runtime account and the Jenkins agent runtime account
+to it, setting group-writable shared storage permissions, and recording
+read/write proof. Role-local helpers must not own this shared group or shared
+storage setup.
 
 Human admin accounts are LDAP-backed human accounts or LDAP-backed groups.
 The Gerrit admin account administers Gerrit and can configure integration

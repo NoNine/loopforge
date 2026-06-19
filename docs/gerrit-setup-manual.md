@@ -360,6 +360,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  --integration-env <reviewed-integration.env> \
   configure-gerrit-ssh
 ```
 

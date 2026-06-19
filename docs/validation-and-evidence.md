@@ -38,6 +38,7 @@ Every evidence record must include:
 - Plugin checks where applicable.
 - JCasC checks where applicable.
 - Runtime-account checks where applicable.
+- Shared integration group and shared Jenkins storage checks where applicable.
 - Jenkins agent scheduling and execution results where applicable.
 - Gerrit Trigger event, build, and `Verified` vote results where applicable.
 - Gerrit ACL reviewed-workflow planning or blocked results where applicable.
@@ -53,9 +54,10 @@ redacted.
 Integration-scoped records from `scripts/integration-setup.sh` are distinct
 from role-local readiness records and from the final global aggregation. They
 may record public key fingerprints, Jenkins credential IDs, account names,
-service endpoints, bounded log paths, trigger/build/change identifiers, and
-redaction status. They must not record private keys, tokens, passwords, LDAP
-bind secrets, or full secret-bearing env values.
+service endpoints, the shared integration group name and GID, shared storage
+path, bounded read/write proof, bounded log paths, trigger/build/change
+identifiers, and redaction status. They must not record private keys, tokens,
+passwords, LDAP bind secrets, or full secret-bearing env values.
 
 The global collector accepts legacy Step 7-9 records that do not yet carry
 explicit `package_version` or `helper_command_version` fields. It enriches
@@ -115,10 +117,19 @@ These records are the primary inputs to global aggregation.
 
 The shared integration helper owns cross-role evidence for Jenkins-to-Gerrit
 SSH, Jenkins-to-agent SSH, Gerrit Trigger configuration, agent scheduling,
-trigger delivery, `Verified` voting, and Gerrit ACL reviewed-workflow
-planning. These records are not substitutes for role-local readiness records
-and are not the final evidence package. They are additional inputs consumed by
-Docker/VM verifiers and by global aggregation.
+trigger delivery, `Verified` voting, shared Jenkins controller/agent storage,
+and Gerrit ACL reviewed-workflow planning. These records are not substitutes
+for role-local readiness records and are not the final evidence package. They
+are additional inputs consumed by Docker/VM verifiers and by global
+aggregation.
+
+`examples/integration.env.example` is the single reviewed source for the
+cross-role Jenkins shared group name, shared group GID, and shared storage
+path.
+
+Docker simulation evidence must prove the shared path is mounted into both
+Jenkins containers by writing a file as the controller runtime account and
+reading it as the agent runtime account.
 
 ACL planning records must include:
 
@@ -171,6 +182,7 @@ Use the summaries to confirm:
 - Which checkpoint passed, failed, blocked, or was not applicable.
 - Which hostnames and endpoints were exercised.
 - Which manifests and checksums were verified.
+- Which shared integration group, GID, and storage path were verified.
 - Which logs support the result.
 - Whether the run was simulation-only or production-like.
 - Whether any sensitive data was redacted.

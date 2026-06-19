@@ -24,10 +24,19 @@ Before Gerrit Trigger verification starts:
   Jenkins admin accounts.
 - Jenkins controller owns the Jenkins-to-Gerrit private key.
 - Gerrit consumes only the Jenkins-to-Gerrit public key.
+- `examples/integration.env.example` has been reviewed for the shared Jenkins
+  integration group name, group GID, and shared storage path.
 
 Jenkins must authenticate to Gerrit as the Jenkins Gerrit integration account.
 It must not use a human Jenkins admin or human Gerrit admin account for trigger
 connectivity, `stream-events`, or `Verified` voting.
+
+The shared integration helper also owns Jenkins controller and agent shared
+storage setup. In Docker simulation it creates or validates the shared group
+from `examples/integration.env.example` on both Jenkins containers, adds the
+controller runtime account and agent runtime account to that group, makes the
+configured shared storage path group-writable on both sides, and records a
+controller-write/agent-read proof.
 
 ## Integration Sequence
 
@@ -47,18 +56,21 @@ connectivity, `stream-events`, or `Verified` voting.
 6. Jenkins stores the controller-held private key as a credential. The
    credential ID may be recorded in evidence only when it does not encode a
    username, hostname, secret value, or other sensitive material.
-7. Jenkins configures a Gerrit Trigger server that connects as the Jenkins
+7. The integration helper validates shared Jenkins controller/agent storage
+   using `examples/integration.env.example`.
+8. Jenkins configures a Gerrit Trigger server that connects as the Jenkins
    Gerrit integration account.
-8. Jenkins registers a disposable verification job that responds to
+9. Jenkins registers a disposable verification job that responds to
    `patchset-created`.
-9. Verification creates a disposable Gerrit project and change labeled as
+10. Verification creates a disposable Gerrit project and change labeled as
    verification artifacts.
-10. The disposable change emits a `patchset-created` event.
-11. Jenkins receives the event and schedules the verification job on the
+11. The disposable change emits a `patchset-created` event.
+12. Jenkins receives the event and schedules the verification job on the
     selected Jenkins agent scheduling label.
-12. The job runs on the Jenkins agent and Jenkins posts `Verified +1` to the
+13. The job runs on the Jenkins agent and Jenkins posts `Verified +1` to the
     Gerrit change.
-13. Evidence records the change, build, vote, and verification mode.
+14. Evidence records the shared storage proof, change, build, vote, and
+    verification mode.
 
 ## Templates
 
@@ -154,6 +166,11 @@ exists, Jenkins integration actor or group, validation results, bounded log
 references, and redaction status. Planned or blocked records must use
 `not-created` for review identifiers rather than implying a review was opened.
 
+Shared storage evidence records the shared group name, GID, storage path, the
+controller runtime account as writer, the agent runtime account as reader, and
+bounded log references. It must not include private keys, passwords, tokens,
+or LDAP bind secrets.
+
 ## Disposable Verification Artifacts
 
 Verification may create disposable projects, Jenkins jobs, and Gerrit changes.
@@ -194,6 +211,8 @@ problem.
 The Docker simulation acceptance contract for this integration is:
 
 - A disposable Gerrit change emits a `patchset-created` event.
+- The shared Jenkins storage path is mounted into both Jenkins controller and
+  Jenkins agent containers, and a controller-write/agent-read proof succeeds.
 - Jenkins receives the event and schedules the disposable verification job.
 - The job runs on the Jenkins agent.
 - Jenkins posts `Verified +1` to the Gerrit change.

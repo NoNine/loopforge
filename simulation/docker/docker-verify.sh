@@ -82,6 +82,7 @@ export HARNESS_STAGING_DIR="$DOCKER_VERIFY_STAGING_DIR"
 export HARNESS_EVIDENCE_DIR="$DOCKER_VERIFY_EVIDENCE_DIR/harness"
 export HARNESS_LOG_DIR="$DOCKER_VERIFY_LOG_DIR/harness"
 export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL="${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL:-simulation-only}"
+export HARNESS_INTEGRATION_ENV_FILE="$repo_root/examples/integration.env.example"
 
 roles=(gerrit jenkins-controller jenkins-agent)
 
@@ -135,6 +136,7 @@ public_internet_fallback=simulation-only
 gerrit_env=$repo_root/examples/gerrit.env.example
 jenkins_controller_env=$repo_root/examples/jenkins-controller.env.example
 jenkins_agent_env=$repo_root/examples/jenkins-agent.env.example
+integration_env=$repo_root/examples/integration.env.example
 EOF
 }
 
@@ -252,6 +254,7 @@ integration_args=(
   --gerrit-env "$repo_root/examples/gerrit.env.example"
   --jenkins-controller-env "$repo_root/examples/jenkins-controller.env.example"
   --jenkins-agent-env "$repo_root/examples/jenkins-agent.env.example"
+  --integration-env "$repo_root/examples/integration.env.example"
 )
 
 write_blocked_integration_evidence() {

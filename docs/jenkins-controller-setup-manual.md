@@ -39,7 +39,8 @@ Consumed inputs:
 
 - `examples/jenkins-controller.env.example` copied to a reviewed local env
   file.
-- Jenkins URL, host, HTTP port, runtime account, and Jenkins home path.
+- Jenkins URL, host, HTTP port, runtime account, runtime group, and Jenkins
+  home path.
 - LDAP URL, read-only bind DN, user base, group base, Jenkins admin account,
   and Jenkins admin group.
 - Gerrit HTTP URL, SSH host and port, Gerrit Trigger server name, Jenkins
@@ -62,6 +63,8 @@ Deferred integration inputs:
 
 - Jenkins-to-Gerrit credential file locations and public key delivery paths.
 - Jenkins-to-agent credential file locations and public key delivery paths.
+- Shared Jenkins controller/agent group and storage values from
+  `examples/integration.env.example`.
 - These values are not required for controller-only bringup and are consumed
   only by the shared integration helper.
 
@@ -258,7 +261,12 @@ Produced outputs:
 Mutation side effects:
 
 - Creates or updates Jenkins role-local home files.
+- Uses `JENKINS_RUNTIME_GROUP`, defaulting to `jenkins`, for role-local
+  Jenkins home ownership.
 - Does not download Jenkins application artifacts on the target.
+- Does not create the shared Jenkins integration group or shared storage path;
+  those are owned by `scripts/integration-setup.sh` with
+  `examples/integration.env.example`.
 
 Helper:
 
@@ -272,7 +280,8 @@ Consumed inputs:
 
 - Reviewed Jenkins controller env file.
 - Staged service template.
-- Jenkins runtime account, home path, HTTP port, and JCasC location.
+- Jenkins runtime account, runtime group, home path, HTTP port, and JCasC
+  location.
 
 Produced outputs:
 
@@ -365,6 +374,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  --integration-env <reviewed-integration.env> \
   configure-trigger
 ```
 
@@ -402,6 +412,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  --integration-env <reviewed-integration.env> \
   configure-gerrit-ssh
 ```
 
@@ -440,6 +451,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  --integration-env <reviewed-integration.env> \
   configure-agent-ssh
 ```
 
@@ -482,6 +494,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  --integration-env <reviewed-integration.env> \
   --yes validate-integration
 ```
 
@@ -521,6 +534,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
+  --integration-env <reviewed-integration.env> \
   --yes verify-trigger
 ```
 
