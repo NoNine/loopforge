@@ -134,10 +134,12 @@ apply_defaults() {
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
   JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"
   JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
-  JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-2222}"
+  JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
-  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/home/jenkins-agent/workspace}"
-  JENKINS_AGENT_LABEL="${JENKINS_AGENT_LABEL:-review-agent}"
+  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/var/lib/jenkins-agent}"
+  JENKINS_AGENT_NODE_NAME="${JENKINS_AGENT_NODE_NAME:-build-linux-x86-01}"
+  JENKINS_AGENT_LABELS="${JENKINS_AGENT_LABELS:-linux x86_64 general-build gerrit-ci}"
+  JENKINS_AGENT_EXECUTORS="${JENKINS_AGENT_EXECUTORS:-5}"
 
   INTEGRATION_GERRIT_ADMIN_ACCOUNT="${INTEGRATION_GERRIT_ADMIN_ACCOUNT:-gerrit-admin}"
   INTEGRATION_GERRIT_ADMIN_PASSWORD="${INTEGRATION_GERRIT_ADMIN_PASSWORD:-admin-password}"
@@ -152,6 +154,160 @@ apply_defaults() {
   JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
   GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-docker-gerrit}"
   JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-docker-gerrit-verification}"
+  select_agent_scheduling_label
+  validate_inputs
+}
+
+reject_control_chars() {
+  local name value
+  name="${1:?name required}"
+  value="${2-}"
+  case "$value" in
+    *[$'\001'-$'\037'$'\177']*)
+      die "$name must not contain newline or control characters"
+      ;;
+  esac
+}
+
+validate_simple_token() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  reject_control_chars "$name" "$value"
+  case "$value" in
+    ""|*[!A-Za-z0-9_.-]*)
+      die "$name must use letters, digits, underscore, dot, or dash"
+      ;;
+  esac
+}
+
+validate_account_name() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  reject_control_chars "$name" "$value"
+  case "$value" in
+    ""|*[!a-z_0-9-]*|[0-9]*|-*|root)
+      die "$name must be a non-root local/service account token"
+      ;;
+  esac
+}
+
+validate_host_token() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  reject_control_chars "$name" "$value"
+  case "$value" in
+    ""|*[!A-Za-z0-9_.-]*|.*|*-|*.)
+      die "$name must be a DNS-safe host token"
+      ;;
+  esac
+}
+
+validate_port() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  case "$value" in
+    ""|*[!0-9]*)
+      die "$name must be numeric"
+      ;;
+  esac
+  [ "$value" -ge 1 ] && [ "$value" -le 65535 ] ||
+    die "$name must be between 1 and 65535"
+}
+
+validate_absolute_path() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  reject_control_chars "$name" "$value"
+  case "$value" in
+    /*) ;;
+    *) die "$name must be an absolute path" ;;
+  esac
+  case "$value" in
+    *[!A-Za-z0-9_./-]*|*"/../"*|*"/.."|"../"*|".."|*"//"*|*"/./"*|*"/.")
+      die "$name contains unsafe path characters"
+      ;;
+  esac
+}
+
+validate_shell_embedded_secret() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  reject_control_chars "$name" "$value"
+  case "$value" in
+    *"'"*)
+      die "$name must not contain single quotes because it is passed through bounded shell snippets"
+      ;;
+  esac
+}
+
+validate_label_set() {
+  local label
+  reject_control_chars JENKINS_AGENT_LABELS "$JENKINS_AGENT_LABELS"
+  case " $JENKINS_AGENT_LABELS " in
+    *"  "*)
+      die "JENKINS_AGENT_LABELS must be a space-separated list without empty labels"
+      ;;
+  esac
+  [ -n "$JENKINS_AGENT_LABELS" ] || die "JENKINS_AGENT_LABELS must not be empty"
+  for label in $JENKINS_AGENT_LABELS; do
+    validate_simple_token JENKINS_AGENT_LABELS "$label"
+  done
+}
+
+select_agent_scheduling_label() {
+  local label first
+  first=""
+  for label in $JENKINS_AGENT_LABELS; do
+    [ -n "$first" ] || first="$label"
+    if [ "$label" = "gerrit-ci" ]; then
+      JENKINS_AGENT_SCHEDULING_LABEL="gerrit-ci"
+      return 0
+    fi
+  done
+  JENKINS_AGENT_SCHEDULING_LABEL="$first"
+}
+
+validate_inputs() {
+  validate_host_token GERRIT_HOST "$GERRIT_HOST"
+  validate_port GERRIT_HTTP_PORT "$GERRIT_HTTP_PORT"
+  validate_port GERRIT_SSH_PORT "$GERRIT_SSH_PORT"
+  validate_simple_token GERRIT_VERIFICATION_PROJECT "$GERRIT_VERIFICATION_PROJECT"
+  validate_host_token JENKINS_HOST "$JENKINS_HOST"
+  validate_port JENKINS_HTTP_PORT "$JENKINS_HTTP_PORT"
+  validate_absolute_path JENKINS_HOME "$JENKINS_HOME"
+  validate_host_token JENKINS_AGENT_HOST "$JENKINS_AGENT_HOST"
+  validate_port JENKINS_AGENT_SSH_PORT "$JENKINS_AGENT_SSH_PORT"
+  validate_account_name JENKINS_AGENT_ACCOUNT "$JENKINS_AGENT_ACCOUNT"
+  validate_absolute_path JENKINS_AGENT_REMOTE_FS "$JENKINS_AGENT_REMOTE_FS"
+  validate_simple_token JENKINS_AGENT_NODE_NAME "$JENKINS_AGENT_NODE_NAME"
+  validate_label_set
+  validate_simple_token JENKINS_AGENT_SCHEDULING_LABEL "$JENKINS_AGENT_SCHEDULING_LABEL"
+  validate_simple_token JENKINS_AGENT_CREDENTIAL_ID "$JENKINS_AGENT_CREDENTIAL_ID"
+  validate_simple_token JENKINS_GERRIT_CREDENTIAL_ID "$JENKINS_GERRIT_CREDENTIAL_ID"
+  validate_simple_token GERRIT_TRIGGER_SERVER_NAME "$GERRIT_TRIGGER_SERVER_NAME"
+  validate_simple_token JENKINS_VERIFICATION_JOB "$JENKINS_VERIFICATION_JOB"
+  validate_account_name INTEGRATION_GERRIT_ADMIN_ACCOUNT "$INTEGRATION_GERRIT_ADMIN_ACCOUNT"
+  validate_account_name INTEGRATION_JENKINS_ADMIN_ACCOUNT "$INTEGRATION_JENKINS_ADMIN_ACCOUNT"
+  validate_account_name INTEGRATION_TEST_ACCOUNT "$INTEGRATION_TEST_ACCOUNT"
+  validate_account_name JENKINS_GERRIT_INTEGRATION_ACCOUNT "$JENKINS_GERRIT_INTEGRATION_ACCOUNT"
+  validate_simple_token JENKINS_GERRIT_INTEGRATION_GROUP "$JENKINS_GERRIT_INTEGRATION_GROUP"
+  validate_shell_embedded_secret INTEGRATION_GERRIT_ADMIN_PASSWORD "$INTEGRATION_GERRIT_ADMIN_PASSWORD"
+  validate_shell_embedded_secret INTEGRATION_JENKINS_ADMIN_PASSWORD "$INTEGRATION_JENKINS_ADMIN_PASSWORD"
+  validate_shell_embedded_secret INTEGRATION_TEST_PASSWORD "$INTEGRATION_TEST_PASSWORD"
+  validate_shell_embedded_secret JENKINS_GERRIT_INTEGRATION_PASSWORD "$JENKINS_GERRIT_INTEGRATION_PASSWORD"
+  case "$JENKINS_AGENT_EXECUTORS" in
+    ""|*[!0-9]*)
+      die "JENKINS_AGENT_EXECUTORS must be numeric"
+      ;;
+  esac
+  [ "$JENKINS_AGENT_EXECUTORS" -ge 1 ] && [ "$JENKINS_AGENT_EXECUTORS" -le 100 ] ||
+    die "JENKINS_AGENT_EXECUTORS must be between 1 and 100"
 }
 
 require_docker_mode() {
@@ -661,7 +817,7 @@ cmd_configure_gerrit_ssh() {
 }
 
 cmd_configure_agent_ssh() {
-  local log private public fp groovy known_hosts
+  local log private public fp groovy known_hosts q_credential q_account q_key_file q_node q_remote_fs q_host q_labels
   load_inputs
   require_docker_mode
   confirm_mutation configure-agent-ssh || return 0
@@ -697,6 +853,13 @@ cmd_configure_agent_ssh() {
     install -m 600 -o jenkins -g jenkins /tmp/step11-agent-known-hosts '$JENKINS_HOME/.ssh/known_hosts'
   " >>"$log" 2>&1
   groovy="$(integration_host_state_dir)/scripts/configure-agent.groovy"
+  q_credential="$(groovy_quote "$JENKINS_AGENT_CREDENTIAL_ID")"
+  q_account="$(groovy_quote "$JENKINS_AGENT_ACCOUNT")"
+  q_key_file="$(groovy_quote "$(integration_container_state_dir)/keys/jenkins-agent")"
+  q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
+  q_remote_fs="$(groovy_quote "$JENKINS_AGENT_REMOTE_FS")"
+  q_host="$(groovy_quote "$JENKINS_AGENT_HOST")"
+  q_labels="$(groovy_quote "$JENKINS_AGENT_LABELS")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
 import com.cloudbees.plugins.credentials.CredentialsScope
@@ -709,35 +872,35 @@ import hudson.plugins.sshslaves.verifiers.KnownHostsFileKeyVerificationStrategy
 
 def j = Jenkins.instance
 def store = SystemCredentialsProvider.instance.store
-def existing = SystemCredentialsProvider.instance.credentials.find { it.id == '$JENKINS_AGENT_CREDENTIAL_ID' }
+def existing = SystemCredentialsProvider.instance.credentials.find { it.id == $q_credential }
 if (existing != null) {
   store.removeCredentials(com.cloudbees.plugins.credentials.domains.Domain.global(), existing)
 }
-def key = new File('$(integration_container_state_dir)/keys/jenkins-agent').text
+def key = new File($q_key_file).text
 def credential = new BasicSSHUserPrivateKey(
   CredentialsScope.GLOBAL,
-  '$JENKINS_AGENT_CREDENTIAL_ID',
-  '$JENKINS_AGENT_ACCOUNT',
+  $q_credential,
+  $q_account,
   new BasicSSHUserPrivateKey.DirectEntryPrivateKeySource(key),
   '',
   'Docker Step 11 Jenkins agent SSH key')
 store.addCredentials(com.cloudbees.plugins.credentials.domains.Domain.global(), credential)
-def old = j.getNode('$JENKINS_AGENT_LABEL')
+def old = j.getNode($q_node)
 if (old != null) {
   j.removeNode(old)
 }
-def launcher = new SSHLauncher('$JENKINS_AGENT_HOST', $JENKINS_AGENT_SSH_PORT, '$JENKINS_AGENT_CREDENTIAL_ID', null, null, null, null, null, null, null, new KnownHostsFileKeyVerificationStrategy())
-def node = new DumbSlave('$JENKINS_AGENT_LABEL', '$JENKINS_AGENT_REMOTE_FS', launcher)
-node.numExecutors = 1
-node.labelString = '$JENKINS_AGENT_LABEL'
+def launcher = new SSHLauncher($q_host, $JENKINS_AGENT_SSH_PORT, $q_credential, null, null, null, null, null, null, null, new KnownHostsFileKeyVerificationStrategy())
+def node = new DumbSlave($q_node, $q_remote_fs, launcher)
+node.numExecutors = $JENKINS_AGENT_EXECUTORS
+node.labelString = $q_labels
 node.retentionStrategy = RetentionStrategy.INSTANCE
 j.addNode(node)
 j.save()
-println('configured_agent_node=$JENKINS_AGENT_LABEL credential=$JENKINS_AGENT_CREDENTIAL_ID')
+println('configured_agent_node=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS credential=$JENKINS_AGENT_CREDENTIAL_ID executors=$JENKINS_AGENT_EXECUTORS')
 EOF
   jenkins_script "$groovy" "$log"
   write_evidence agent-connection configured "Agent public key authorized, Jenkins SSH credential and node configured through Jenkins runtime script API" "$log" "agent_public_key_fingerprint=$fp" >/dev/null
-  printf 'status=pass command=configure-agent-ssh public_key_fingerprint=%s node=%s log=%s\n' "$fp" "$JENKINS_AGENT_LABEL" "$log"
+  printf 'status=pass command=configure-agent-ssh public_key_fingerprint=%s node=%s labels=%s log=%s\n' "$fp" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$log"
 }
 
 cmd_configure_trigger() {
@@ -757,7 +920,7 @@ cmd_configure_trigger() {
   q_gerrit_http_user="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
   q_gerrit_http_password="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_PASSWORD")"
   q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
-  q_label="$(groovy_quote "$JENKINS_AGENT_LABEL")"
+  q_label="$(groovy_quote "$JENKINS_AGENT_SCHEDULING_LABEL")"
   q_project="$(groovy_quote "$GERRIT_VERIFICATION_PROJECT")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
@@ -834,12 +997,12 @@ trigger.setGerritBuildUnstableVerifiedValue(-1)
 job.addTrigger(trigger)
 job.save()
 trigger.start(job, true)
-println('configured_verification_job=' + $q_job + ' label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=simulation-only-direct-rest')
+println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=simulation-only-direct-rest')
 EOF
   jenkins_script "$groovy" "$log"
-  printf 'job=%s label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=simulation-only-direct-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger)"
-  write_evidence trigger configured "Jenkins Gerrit Trigger server and disposable verification job configured through the Jenkins runtime plugin API; Docker simulation posts review results through Gerrit REST" "$log" "job=$JENKINS_VERIFICATION_JOB label=$JENKINS_AGENT_LABEL review_apply=simulation-only-direct-rest" >/dev/null
-  printf 'status=pass command=configure-trigger job=%s label=%s log=%s\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_LABEL" "$log"
+  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=simulation-only-direct-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger)"
+  write_evidence trigger configured "Jenkins Gerrit Trigger server and disposable verification job configured through the Jenkins runtime plugin API; Docker simulation posts review results through Gerrit REST" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=simulation-only-direct-rest" >/dev/null
+  printf 'status=pass command=configure-trigger job=%s scheduling_label=%s log=%s\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$log"
 }
 
 ssh_from_controller_to_gerrit() {
@@ -849,32 +1012,36 @@ ssh_from_controller_to_gerrit() {
 }
 
 validate_agent_online() {
-  local log groovy
+  local log groovy q_node
   log="${1:?log required}"
   groovy="$(integration_host_state_dir)/scripts/validate-agent-online.groovy"
+  q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
-def node = Jenkins.instance.getNode('$JENKINS_AGENT_LABEL')
+def node = Jenkins.instance.getNode($q_node)
 assert node != null
 def comp = node.toComputer()
 if (comp == null) { throw new RuntimeException('agent computer missing') }
 comp.connect(false).get()
 if (!comp.isOnline()) { throw new RuntimeException('agent is not online') }
-println('agent_online=true node=$JENKINS_AGENT_LABEL')
+println('agent_online=true node=$JENKINS_AGENT_NODE_NAME')
 EOF
   jenkins_script "$groovy" "$log"
 }
 
 schedule_smoke_build() {
-  local log groovy
+  local log groovy q_job q_node q_label
   log="${1:?log required}"
   groovy="$(integration_host_state_dir)/scripts/schedule-smoke.groovy"
+  q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
+  q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
+  q_label="$(groovy_quote "$JENKINS_AGENT_SCHEDULING_LABEL")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
 import hudson.model.Cause
 import hudson.model.ParametersAction
 import hudson.model.StringParameterValue
-def job = Jenkins.instance.getItem('$JENKINS_VERIFICATION_JOB')
+def job = Jenkins.instance.getItem($q_job)
 assert job != null
 def params = new ParametersAction(
   new StringParameterValue('GERRIT_CHANGE_NUMBER', '0'),
@@ -883,8 +1050,8 @@ def q = job.scheduleBuild2(0, new Cause.UserIdCause(), params)
 def build = q.get()
 while (build.isBuilding()) { Thread.sleep(1000) }
 if (build.result.toString() != 'SUCCESS') { throw new RuntimeException('smoke build result=' + build.result) }
-if (build.builtOnStr != '$JENKINS_AGENT_LABEL') { throw new RuntimeException('smoke build did not run on expected agent: ' + build.builtOnStr) }
-println('scheduling=pass build=' + build.number + ' node=' + build.builtOnStr)
+if (build.builtOnStr != $q_node) { throw new RuntimeException('smoke build did not run on expected node: ' + build.builtOnStr) }
+println('scheduling=pass build=' + build.number + ' node=' + build.builtOnStr + ' label=' + $q_label)
 EOF
   jenkins_script "$groovy" "$log"
 }
@@ -947,10 +1114,8 @@ EOF
   die "Timed out waiting for real Gerrit stream-events patchset-created event"
 }
 
-cmd_validate_integration() {
+validate_integration_impl() {
   local log evidence
-  load_inputs
-  require_docker_mode
   ensure_dirs
   ensure_container_integration_dirs
   log="$(bounded_log_path validate-integration)"
@@ -961,14 +1126,21 @@ cmd_validate_integration() {
   [ -s "$(status_file trigger)" ] || die "Missing trigger configuration; run configure-trigger with --yes first"
   ssh_from_controller_to_gerrit "gerrit version" >>"$log" 2>&1
   prove_stream_events "$log"
-  docker_exec_sh "$(jenkins_container)" "ssh -i $(integration_container_state_dir)/keys/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'" >>"$log" 2>&1
+  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh jenkins -c \"ssh -i $(integration_container_state_dir)/keys/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
   validate_agent_online "$log"
   schedule_smoke_build "$log"
   write_evidence jenkins-to-gerrit-ssh pass "Real SSH command to Gerrit succeeded as Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
   write_evidence stream-events pass "Gerrit stream-events SSH command accepted for Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
-  write_evidence agent-connection pass "Jenkins controller SSH credential connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_LABEL" >/dev/null
-  evidence="$(write_evidence scheduling pass "Jenkins scheduled a real smoke build on the configured agent label" "$log" "job=$JENKINS_VERIFICATION_JOB label=$JENKINS_AGENT_LABEL")"
+  write_evidence agent-connection pass "Jenkins runtime OS user connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
+  evidence="$(write_evidence scheduling pass "Jenkins scheduled a real smoke build on the selected agent scheduling label" "$log" "job=$JENKINS_VERIFICATION_JOB node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL")"
   printf 'status=pass command=validate-integration proof=real jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass scheduling=pass evidence=%s log=%s\n' "$evidence" "$log"
+}
+
+cmd_validate_integration() {
+  load_inputs
+  confirm_mutation validate-integration || return 0
+  require_docker_mode
+  validate_integration_impl
 }
 
 create_gerrit_change() {
@@ -1011,14 +1183,16 @@ PY
 }
 
 run_verification_build() {
-  local log change patchset groovy
+  local log change patchset groovy q_job q_node
   log="${1:?log required}"
   change="${2:?change required}"
   patchset="${3:?patchset required}"
   groovy="$(integration_host_state_dir)/scripts/wait-triggered-verification.groovy"
+  q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
+  q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
-def job = Jenkins.instance.getItem('$JENKINS_VERIFICATION_JOB')
+def job = Jenkins.instance.getItem($q_job)
 assert job != null
 def build = null
 long deadline = System.currentTimeMillis() + 120000
@@ -1036,7 +1210,7 @@ while (System.currentTimeMillis() < deadline) {
 if (build == null) { throw new RuntimeException('no Gerrit-triggered build observed for change $change,$patchset') }
 if (build.isBuilding()) { throw new RuntimeException('Gerrit-triggered build did not finish before timeout') }
 if (build.result.toString() != 'SUCCESS') { throw new RuntimeException('verification build result=' + build.result) }
-if (build.builtOnStr != '$JENKINS_AGENT_LABEL') { throw new RuntimeException('verification build node=' + build.builtOnStr) }
+if (build.builtOnStr != $q_node) { throw new RuntimeException('verification build node=' + build.builtOnStr) }
 def causes = build.getCauses().collect { it.class.name }.join(',')
 if (!causes.contains('gerrit')) { throw new RuntimeException('build was not caused by Gerrit Trigger: ' + causes) }
 println('job_execution=pass build=' + build.number + ' node=' + build.builtOnStr + ' causes=' + causes)
@@ -1053,7 +1227,7 @@ post_simulation_verified_vote() {
   container_json="/tmp/step11-simulation-verified-vote.json"
   cat >"$review_post_json" <<EOF
 {
-  "message": "Docker Step 11 simulation-only direct REST verification passed on Jenkins agent $JENKINS_AGENT_LABEL",
+  "message": "Docker Step 11 simulation-only direct REST verification passed on Jenkins agent $JENKINS_AGENT_NODE_NAME via label $JENKINS_AGENT_SCHEDULING_LABEL",
   "labels": {
     "Verified": 1
   },
@@ -1070,10 +1244,11 @@ EOF
 cmd_verify_trigger() {
   local log change patchset change_id review_json vote_result evidence
   load_inputs
+  confirm_mutation verify-trigger || return 0
   require_docker_mode
   ensure_dirs
   log="$(bounded_log_path verify-trigger)"
-  cmd_validate_integration >>"$log" 2>&1
+  validate_integration_impl >>"$log" 2>&1
   read -r change patchset change_id <<EOF
 $(create_gerrit_change "$log")
 EOF

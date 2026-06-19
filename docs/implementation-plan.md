@@ -443,7 +443,7 @@ Workflow contract:
 | Jenkins controller readiness | Jenkins controller | `install`, `configure-service`, `install-plugins`, `configure-jcasc`, `validate` | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, and JCasC evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files, installs plugins, and starts or restarts Jenkins. | Controller-only checkpoint: Jenkins starts, uses LDAP/JCasC, has required plugins, records bounded logs, and stops before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
 | Jenkins agent readiness | Jenkins agent | `install`, `configure-runtime`, `validate` | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Installs packages from approved sources and creates or updates agent-host runtime files and SSH service state. | Step 9 role gate only: the agent host proves OS/tooling, SSH daemon, runtime account, filesystem, staged artifact, bounded log, and evidence readiness, and stops before credential transfer, controller node registration, or scheduling proof. |
 | Later Gerrit integration | Jenkins controller and Gerrit host | `scripts/integration-setup.sh configure-gerrit-ssh` | Jenkins controller produces and owns the Jenkins-to-Gerrit private key; Gerrit consumes only the matching public key; Jenkins consumes Gerrit endpoint and account values. | Creates or updates Jenkins-held key material, Gerrit integration permissions, the `Verified` label, and related integration evidence. | Later workflow phase only: Jenkins-to-Gerrit SSH authentication, stream-events permission, `Verified` voting permission, and integration evidence are ready. |
-| Later agent integration | Jenkins controller and Jenkins agent | `scripts/integration-setup.sh configure-agent-ssh`, `scripts/integration-setup.sh validate-integration` | Jenkins controller produces and owns the agent private key; the integration workflow applies only the public key to authorize agent access; Jenkins consumes agent host, label, and remote filesystem values. | Creates or updates Jenkins-to-agent key material on Jenkins, agent SSH access, Jenkins node registration, validation job state, and integration evidence. | Later workflow phase only: Jenkins can connect to the agent, schedule a job on the configured label, and retain agent evidence. |
+| Later agent integration | Jenkins controller and Jenkins agent | `scripts/integration-setup.sh configure-agent-ssh`, `scripts/integration-setup.sh validate-integration` | Jenkins controller produces and owns the agent private key; the integration workflow applies only the public key to authorize agent access; Jenkins consumes agent host, node name, labels, executor count, and remote filesystem values. | Creates or updates Jenkins-to-agent key material on Jenkins, agent SSH access, Jenkins node registration, validation job state, and integration evidence. | Later workflow phase only: Jenkins can connect to the named agent node, schedule a job on the selected label, and retain agent evidence. |
 | Later end-to-end acceptance | Jenkins controller and Gerrit host | `scripts/integration-setup.sh configure-trigger`, `scripts/integration-setup.sh verify-trigger` | Consumes disposable Gerrit project/change and Jenkins job inputs; produces build, change, and vote evidence. | Creates disposable verification project, job, change, and review vote artifacts. | Later workflow phase only: a disposable Gerrit change triggers Jenkins, runs on the agent, and receives `Verified +1`. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
@@ -474,9 +474,11 @@ Operator sequencing rules:
   Jenkins controller and provide only the public key to the agent host.
 - Run `scripts/integration-setup.sh configure-trigger` only after Gerrit SSH
   and agent SSH integration exist.
-- Run `scripts/integration-setup.sh validate-integration` and
-  `scripts/integration-setup.sh verify-trigger` for cross-role scheduling,
-  trigger, and vote proof. Role-local `validate` remains role-only readiness.
+- Run `scripts/integration-setup.sh --yes validate-integration` and
+  `scripts/integration-setup.sh --yes verify-trigger` for cross-role
+  scheduling, trigger, and vote proof. `--dry-run` for these commands must not
+  create Gerrit or Jenkins state. Role-local `validate` remains role-only
+  readiness.
 - The Jenkins agent helper must not register controller nodes.
 - Treat role-local `validate` as role-only readiness validation. Treat
   shared `verify-trigger` as later end-to-end acceptance for Gerrit event
@@ -1026,22 +1028,25 @@ Implementation notes:
   `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
 - Target-side manifests and checksums must be verified in the Jenkins agent
   target before install or runtime configuration mutates the agent host.
-- The agent helper configures only the agent host runtime and SSH access side.
+- The agent helper configures only the agent host runtime and SSH service
+  side; it must not write `authorized_keys`, register a Jenkins node, prove
+  scheduling, configure Gerrit Trigger, or prove `Verified` voting.
 - Jenkins controller node registration belongs to the shared integration
   helper after Jenkins controller and Jenkins agent role-only bringup are
   accepted.
 - Step 9 is agent host-only bringup. Jenkins-to-agent key generation, public
   key transfer, runtime-account key installation, controller node
-  registration, controller credential selection, label/executor policy,
-  scheduling, validation jobs, and Gerrit Trigger execution are later
+  registration, controller credential selection, node-name/label/executor
+  policy, scheduling, validation jobs, and Gerrit Trigger execution are later
   integration-step outputs, not Step 9 acceptance outputs.
 - The controller's built-in node should remain at zero executors in
   production-like docs.
 - Agent validation must prove OS/tooling readiness, SSH daemon reachability,
   runtime account ownership, remote filesystem readiness, staged artifact
-  checks, bounded logs, and role-local evidence. Jenkins controller key
-  handoff, node registration, and controller-side scheduling proof are deferred
-  to the later integration step.
+  checks, bounded logs, and role-local evidence. Jenkins node name and labels
+  are handoff metadata only in the agent role. Jenkins controller key handoff,
+  node registration, and controller-side scheduling proof are deferred to the
+  later integration step.
 - `install`, `configure-runtime`, and `validate` must be functional against the
   Jenkins agent target in the shared Docker harness.
 - Agent validation must pass real SSH daemon and filesystem readiness checks,

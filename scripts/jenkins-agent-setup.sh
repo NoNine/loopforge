@@ -128,7 +128,10 @@ JENKINS_AGENT_HOST
 JENKINS_AGENT_SSH_PORT
 JENKINS_AGENT_ACCOUNT
 JENKINS_AGENT_REMOTE_FS
-JENKINS_AGENT_LABEL
+JENKINS_AGENT_NODE_NAME
+JENKINS_AGENT_LABELS
+JENKINS_AGENT_EXECUTORS
+JENKINS_AGENT_CREDENTIAL_ID
 JENKINS_AGENT_STATE_DIR
 JENKINS_AGENT_STAGED_ARTIFACT_DIR
 JENKINS_AGENT_ARTIFACT_OUTPUT_DIR
@@ -154,10 +157,13 @@ apply_env_defaults() {
   JENKINS_AGENT_UBUNTU_CODENAME="${JENKINS_AGENT_UBUNTU_CODENAME:-noble}"
   JENKINS_AGENT_JAVA_VERSION="${JENKINS_AGENT_JAVA_VERSION:-21}"
   JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
-  JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-2222}"
+  JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
-  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/home/jenkins-agent/workspace}"
-  JENKINS_AGENT_LABEL="${JENKINS_AGENT_LABEL:-review-agent}"
+  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/var/lib/jenkins-agent}"
+  JENKINS_AGENT_NODE_NAME="${JENKINS_AGENT_NODE_NAME:-build-linux-x86-01}"
+  JENKINS_AGENT_LABELS="${JENKINS_AGENT_LABELS:-linux x86_64 general-build gerrit-ci}"
+  JENKINS_AGENT_EXECUTORS="${JENKINS_AGENT_EXECUTORS:-5}"
+  JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
   JENKINS_AGENT_STATE_DIR="${JENKINS_AGENT_STATE_DIR:-/harness/state/agent}"
   JENKINS_AGENT_STAGED_ARTIFACT_DIR="${JENKINS_AGENT_STAGED_ARTIFACT_DIR:-/harness/staged}"
   JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="${JENKINS_AGENT_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-agent}"
@@ -260,8 +266,8 @@ validate_agent_ssh_port() {
       die "JENKINS_AGENT_SSH_PORT must be numeric"
       ;;
   esac
-  [ "$value" -ge 1024 ] && [ "$value" -le 65535 ] ||
-    die "JENKINS_AGENT_SSH_PORT must be between 1024 and 65535 for the harness"
+  [ "$value" -ge 1 ] && [ "$value" -le 65535 ] ||
+    die "JENKINS_AGENT_SSH_PORT must be between 1 and 65535"
 }
 
 validate_safe_absolute_path_string() {
@@ -305,16 +311,16 @@ validate_agent_remote_fs() {
   validate_safe_absolute_path_string JENKINS_AGENT_REMOTE_FS "$value"
   allowed_home="/home/$JENKINS_AGENT_ACCOUNT/workspace"
   case "$value" in
-    "$allowed_home"|"$allowed_home"/*|/harness/state/agent/workspace|/harness/state/agent/workspace/*)
+    "$allowed_home"|"$allowed_home"/*|/var/lib/jenkins-agent|/var/lib/jenkins-agent/*|/harness/state/agent/workspace|/harness/state/agent/workspace/*)
       ;;
     *)
-      die "JENKINS_AGENT_REMOTE_FS must be under $allowed_home or /harness/state/agent/workspace"
+      die "JENKINS_AGENT_REMOTE_FS must be under $allowed_home, /var/lib/jenkins-agent, or /harness/state/agent/workspace"
       ;;
   esac
   case "$value" in
     /|/etc|/etc/*|/usr|/usr/*|/var|/var/*|/tmp|/tmp/*|/root|/root/*|/home|/home/*)
       case "$value" in
-        "$allowed_home"|"$allowed_home"/*)
+        "$allowed_home"|"$allowed_home"/*|/var/lib/jenkins-agent|/var/lib/jenkins-agent/*)
           ;;
         *)
           die "JENKINS_AGENT_REMOTE_FS is too broad or unsafe: $value"
@@ -325,8 +331,11 @@ validate_agent_remote_fs() {
 }
 
 validate_agent_render_inputs() {
+  local label
   reject_control_chars JENKINS_AGENT_HOST "${JENKINS_AGENT_HOST:-}"
-  reject_control_chars JENKINS_AGENT_LABEL "${JENKINS_AGENT_LABEL:-}"
+  reject_control_chars JENKINS_AGENT_NODE_NAME "${JENKINS_AGENT_NODE_NAME:-}"
+  reject_control_chars JENKINS_AGENT_LABELS "${JENKINS_AGENT_LABELS:-}"
+  reject_control_chars JENKINS_AGENT_CREDENTIAL_ID "${JENKINS_AGENT_CREDENTIAL_ID:-}"
   reject_control_chars JENKINS_AGENT_CONTROLLER_PLUGIN "${JENKINS_AGENT_CONTROLLER_PLUGIN:-}"
   reject_control_chars JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE "${JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE:-}"
   reject_control_chars JENKINS_AGENT_EXECUTOR_CONTEXT "${JENKINS_AGENT_EXECUTOR_CONTEXT:-}"
@@ -334,6 +343,36 @@ validate_agent_render_inputs() {
   validate_agent_ssh_port
   validate_agent_state_dir
   validate_agent_remote_fs
+  case "$JENKINS_AGENT_NODE_NAME" in
+    ""|*[!A-Za-z0-9_.-]*|.*|*-|*.)
+      die "JENKINS_AGENT_NODE_NAME must use letters, digits, underscore, dot, or dash"
+      ;;
+  esac
+  case " $JENKINS_AGENT_LABELS " in
+    *"  "*)
+      die "JENKINS_AGENT_LABELS must be a space-separated list without empty labels"
+      ;;
+  esac
+  [ -n "$JENKINS_AGENT_LABELS" ] || die "JENKINS_AGENT_LABELS must not be empty"
+  for label in $JENKINS_AGENT_LABELS; do
+    case "$label" in
+      ""|*[!A-Za-z0-9_.-]*)
+        die "JENKINS_AGENT_LABELS must contain space-separated Jenkins labels using letters, digits, underscore, dot, or dash"
+        ;;
+    esac
+  done
+  case "$JENKINS_AGENT_EXECUTORS" in
+    ""|*[!0-9]*)
+      die "JENKINS_AGENT_EXECUTORS must be numeric"
+      ;;
+  esac
+  [ "$JENKINS_AGENT_EXECUTORS" -ge 1 ] && [ "$JENKINS_AGENT_EXECUTORS" -le 100 ] ||
+    die "JENKINS_AGENT_EXECUTORS must be between 1 and 100"
+  case "$JENKINS_AGENT_CREDENTIAL_ID" in
+    ""|*[!A-Za-z0-9_.-]*)
+      die "JENKINS_AGENT_CREDENTIAL_ID must use letters, digits, underscore, dot, or dash"
+      ;;
+  esac
 }
 
 confirm_mutation() {
@@ -364,7 +403,10 @@ render_template() {
   text="$(cat "$source")"
   text="${text//\{\{JENKINS_AGENT_ACCOUNT\}\}/$JENKINS_AGENT_ACCOUNT}"
   text="${text//\{\{JENKINS_AGENT_REMOTE_FS\}\}/$JENKINS_AGENT_REMOTE_FS}"
-  text="${text//\{\{JENKINS_AGENT_LABEL\}\}/$JENKINS_AGENT_LABEL}"
+  text="${text//\{\{JENKINS_AGENT_NODE_NAME\}\}/$JENKINS_AGENT_NODE_NAME}"
+  text="${text//\{\{JENKINS_AGENT_LABELS\}\}/$JENKINS_AGENT_LABELS}"
+  text="${text//\{\{JENKINS_AGENT_EXECUTORS\}\}/$JENKINS_AGENT_EXECUTORS}"
+  text="${text//\{\{JENKINS_AGENT_CREDENTIAL_ID\}\}/$JENKINS_AGENT_CREDENTIAL_ID}"
   text="${text//\{\{JENKINS_AGENT_SSH_PORT\}\}/$JENKINS_AGENT_SSH_PORT}"
   text="${text//\{\{JENKINS_AGENT_JAVA_VERSION\}\}/$JENKINS_AGENT_JAVA_VERSION}"
   text="${text//\{\{JENKINS_AGENT_CONTROLLER_PLUGIN\}\}/$JENKINS_AGENT_CONTROLLER_PLUGIN}"
@@ -530,8 +572,8 @@ cmd_preflight() {
     die "Jenkins agent must consume SSH Build Agents plugin from the controller plugin bundle"
   [ "$JENKINS_AGENT_EXECUTOR_CONTEXT" = "controller-owned" ] ||
     die "Jenkins agent executor and scheduling context must remain controller-owned"
-  printf 'status=pass command=preflight dry_run=%s env=%s host=%s ssh_port=%s account=%s label=%s mode=%s\n' \
-    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_SSH_PORT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_LABEL" "$JENKINS_AGENT_VERIFICATION_MODE"
+  printf 'status=pass command=preflight dry_run=%s env=%s host=%s ssh_port=%s account=%s node_name=%s labels=%s mode=%s\n' \
+    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_SSH_PORT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$JENKINS_AGENT_VERIFICATION_MODE"
 }
 
 write_manifest() {
@@ -720,7 +762,8 @@ EOF
     printf 'service=sshd\n'
     printf 'mode=%s\n' "$JENKINS_AGENT_VERIFICATION_MODE"
     printf 'account=%s\n' "$JENKINS_AGENT_ACCOUNT"
-    printf 'label=%s\n' "$JENKINS_AGENT_LABEL"
+    printf 'node_name=%s\n' "$JENKINS_AGENT_NODE_NAME"
+    printf 'labels=%s\n' "$JENKINS_AGENT_LABELS"
     printf 'remote_fs=%s\n' "$JENKINS_AGENT_REMOTE_FS"
     printf 'sshd_config=%s\n' "$sshd_config"
   } >>"$log_file"
@@ -756,7 +799,7 @@ cmd_configure_runtime() {
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
   write_text_file "$JENKINS_AGENT_STATE_DIR/state/runtime.status" \
-    "account=$JENKINS_AGENT_ACCOUNT home=$account_home remote_fs=$JENKINS_AGENT_REMOTE_FS label=$JENKINS_AGENT_LABEL ssh_port=$JENKINS_AGENT_SSH_PORT executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT"
+    "account=$JENKINS_AGENT_ACCOUNT home=$account_home remote_fs=$JENKINS_AGENT_REMOTE_FS node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS ssh_port=$JENKINS_AGENT_SSH_PORT executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT"
   start_sshd_service
   printf 'status=pass command=configure-runtime account=%s remote_fs=%s SSH_port=%s ssh_daemon=started\n' \
     "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_SSH_PORT"
@@ -804,8 +847,8 @@ cmd_validate() {
   validate_agent_render_inputs
   check_runtime_readiness
   cmd_collect_evidence >/dev/null
-  printf 'status=pass command=validate proof=real-agent-host-side SSH=pass ssh_daemon_banner=pass remote_fs=pass runtime_account=pass label=%s executor_context=%s evidence_dir=%s\n' \
-    "$JENKINS_AGENT_LABEL" "$JENKINS_AGENT_EXECUTOR_CONTEXT" "$JENKINS_AGENT_EVIDENCE_DIR"
+  printf 'status=pass command=validate proof=real-agent-host-side SSH=pass ssh_daemon_banner=pass remote_fs=pass runtime_account=pass node_name=%s labels=%s executor_context=%s evidence_dir=%s\n' \
+    "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$JENKINS_AGENT_EXECUTOR_CONTEXT" "$JENKINS_AGENT_EVIDENCE_DIR"
 }
 
 cmd_collect_evidence() {
@@ -820,7 +863,7 @@ cmd_collect_evidence() {
   evidence="$JENKINS_AGENT_EVIDENCE_DIR/jenkins-agent-readiness-$(timestamp_utc).json"
   bounded_log="$JENKINS_AGENT_LOG_DIR/jenkins-agent-collect-evidence-$(timestamp_utc).log"
   service_log="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
-  input_fingerprint="$(printf '%s\n%s\n%s\n%s\n%s\n' "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_SSH_PORT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_LABEL" | sha256sum | awk '{print $1}')"
+  input_fingerprint="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_SSH_PORT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" | sha256sum | awk '{print $1}')"
   manifest="$JENKINS_AGENT_STAGED_ARTIFACT_DIR/manifest.txt"
   checksum="$JENKINS_AGENT_STAGED_ARTIFACT_DIR/checksums.sha256"
   {
@@ -831,7 +874,8 @@ cmd_collect_evidence() {
     printf 'checksum_reference=%s\n' "$checksum"
     printf 'observed=static-os-dependency-baseline,dependency-commands,ssh-reachability,real-sshd-banner,remote-filesystem,runtime-account-ownership\n'
     printf 'account=%s\n' "$JENKINS_AGENT_ACCOUNT"
-    printf 'label=%s\n' "$JENKINS_AGENT_LABEL"
+    printf 'node_name=%s\n' "$JENKINS_AGENT_NODE_NAME"
+    printf 'labels=%s\n' "$JENKINS_AGENT_LABELS"
     printf 'executor_context=%s\n' "$JENKINS_AGENT_EXECUTOR_CONTEXT"
     printf 'remote_fs=%s\n' "$JENKINS_AGENT_REMOTE_FS"
     printf 'redaction=secrets-not-recorded\n'
@@ -847,7 +891,7 @@ cmd_collect_evidence() {
   q_input="$(json_quote "$input_fingerprint")"
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
-  q_checks="$(json_quote "real agent-host-side readiness: static OS dependency baseline, dependency commands including java, ssh, and sshd, SSH reachability, real sshd banner, remote filesystem ownership, runtime account ownership; label=$JENKINS_AGENT_LABEL executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT")"
+  q_checks="$(json_quote "real agent-host-side readiness: static OS dependency baseline, dependency commands including java, ssh, and sshd, SSH reachability, real sshd banner, remote filesystem ownership, runtime account ownership; node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT")"
   q_log="$(json_quote "$bounded_log;$service_log")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"
   cat >"$evidence" <<EOF

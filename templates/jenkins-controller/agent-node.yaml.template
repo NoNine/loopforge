@@ -1,9 +1,10 @@
 jenkins:
   nodes:
     - permanent:
-        name: "{{JENKINS_AGENT_LABEL}}"
+        name: "{{JENKINS_AGENT_NODE_NAME}}"
         remoteFS: "{{JENKINS_AGENT_REMOTE_FS}}"
-        labelString: "{{JENKINS_AGENT_LABEL}}"
+        numExecutors: {{JENKINS_AGENT_EXECUTORS}}
+        labelString: "{{JENKINS_AGENT_LABELS}}"
         launcher:
           ssh:
             host: "{{JENKINS_AGENT_HOST}}"

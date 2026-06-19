@@ -16,7 +16,8 @@ Before Gerrit Trigger verification starts:
 
 - Gerrit is running with LDAP-backed authentication.
 - Jenkins is running with LDAP-backed human admin access.
-- The Jenkins agent is registered and can run jobs on the reviewed agent label.
+- The Jenkins agent is registered under the reviewed node name and can run
+  jobs on the selected scheduling label.
 - The Jenkins Gerrit integration account exists as a Gerrit service account or
   is represented by a Gerrit group intended for automation.
 - The Jenkins Gerrit integration account is separate from human Gerrit and
@@ -54,7 +55,7 @@ connectivity, `stream-events`, or `Verified` voting.
    verification artifacts.
 10. The disposable change emits a `patchset-created` event.
 11. Jenkins receives the event and schedules the verification job on the
-    Jenkins agent label.
+    selected Jenkins agent scheduling label.
 12. The job runs on the Jenkins agent and Jenkins posts `Verified +1` to the
     Gerrit change.
 13. Evidence records the change, build, vote, and verification mode.
@@ -181,7 +182,7 @@ End-to-end verification must report these failures separately:
 | Jenkins cannot authenticate to Gerrit over SSH | SSH credential or Gerrit integration account setup failure. |
 | SSH works but event streaming fails | `stream-events` permission or Gerrit Trigger server connectivity failure. |
 | A `patchset-created` event is received but no build runs | Jenkins verification job, trigger mapping, or agent scheduling failure. |
-| The build runs but not on the Jenkins agent label | Jenkins agent scheduling failure. |
+| The build runs but not on the selected Jenkins agent scheduling label | Jenkins agent scheduling failure. |
 | The build succeeds but Gerrit rejects the review command | `Verified` label or voting permission failure. |
 
 Failed `Verified` voting must not be collapsed into event-stream or

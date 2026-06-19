@@ -62,8 +62,10 @@ Record these values before installation:
 | --- | --- |
 | Agent host | `JENKINS_AGENT_HOST` |
 | Agent SSH port | `22` or chosen port |
-| Agent runtime user | `JENKINS_AGENT_USER`, normally `jenkins-agent` |
+| Agent runtime user | `JENKINS_AGENT_ACCOUNT`, normally `jenkins-agent` |
 | Agent remote FS | `JENKINS_AGENT_REMOTE_FS`, normally `/var/lib/jenkins-agent` |
+| Jenkins node name | `JENKINS_AGENT_NODE_NAME`, normally `build-linux-x86-01` |
+| Jenkins scheduling labels | `JENKINS_AGENT_LABELS`, normally `linux x86_64 general-build gerrit-ci` |
 | Network mode | Approved internal OS repositories for target-host OS dependencies |
 
 Run on the agent host:
@@ -235,13 +237,14 @@ Acceptance checks:
 - SSH service is active on the build server.
 - The SSH daemon returns a real OpenSSH banner on the agent port.
 - Jenkins controller node registration, controller-side SSH launch,
-  scheduling, later integration validation jobs, Gerrit Trigger execution, and
-  `Verified` vote proof are deferred to the later shared integration workflow.
+  scheduling-label proof, later integration validation jobs, Gerrit Trigger
+  execution, and `Verified` vote proof are deferred to the later shared
+  integration workflow.
 
 ## 5. Backup and Operations
 
-Record the agent host, SSH endpoint, runtime user, and remote FS path with the
-later integration handoff.
+Record the agent host, SSH endpoint, runtime user, remote FS path, Jenkins
+node name, and scheduling labels with the later integration handoff.
 
 Jenkins-to-agent key rotation is a later shared integration workflow. It must
 preserve Jenkins-controller private-key custody and provide only the matching

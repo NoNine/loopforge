@@ -598,11 +598,11 @@ later shared integration workflow, not controller-only validation
 requirements. Perform the cross-role operations only after the Jenkins
 controller and agent host are both ready.
 
-Agent endpoint inventory, credential creation, public-key handoff, executor
-counts, labels, scheduling, and node registration belong to the later shared
-integration workflow, not this controller role-local native reference. The
-Jenkins controller owns the private key; the agent host consumes only the
-matching public key during that later workflow.
+Agent endpoint inventory, credential creation, public-key handoff, node name,
+executor counts, scheduling labels, scheduling, and node registration belong to
+the later shared integration workflow, not this controller role-local native
+reference. The Jenkins controller owns the private key; the agent host
+consumes only the matching public key during that later workflow.
 
 ### 4.3 UI-Driven Fallback
 

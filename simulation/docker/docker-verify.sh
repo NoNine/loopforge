@@ -376,7 +376,7 @@ cmd_check() {
     "$integration_helper" "${integration_args[@]}" --yes configure-gerrit-ssh
     "$integration_helper" "${integration_args[@]}" --yes configure-agent-ssh
     "$integration_helper" "${integration_args[@]}" --yes configure-trigger
-    "$integration_helper" "${integration_args[@]}" validate-integration
+    "$integration_helper" "${integration_args[@]}" --yes validate-integration
   } >"$integration_log" 2>&1 || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
@@ -415,7 +415,7 @@ cmd_full_verify() {
   unset rc
 
   log="$(bounded_log_path verify-trigger)"
-  "$integration_helper" "${integration_args[@]}" verify-trigger >"$log" 2>&1 || rc=$?
+  "$integration_helper" "${integration_args[@]}" --yes verify-trigger >"$log" 2>&1 || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then

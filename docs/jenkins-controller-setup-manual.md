@@ -451,8 +451,8 @@ are both accepted.
 
 Consumed inputs:
 
-- Jenkins agent host, SSH port, runtime account, label, remote filesystem, and
-  credential ID.
+- Jenkins agent host, SSH port, runtime account, node name, scheduling labels,
+  remote filesystem, executor count, and credential ID.
 - Controller-held Jenkins-to-agent private key.
 - Public key delivery path for the agent host.
 - Staged agent-node template.
@@ -462,16 +462,17 @@ Later integration-step outputs, not Step 8 accepted outputs:
 - Rendered Jenkins agent node config.
 - Agent registration marker.
 - Jenkins controller-side node registration state.
-- Shared `validate-integration` must either run a real controller-to-agent
-  scheduling check against the configured SSH agent or exit nonzero with a
-  clear blocked or unsupported status.
+- Shared `validate-integration` must require `--yes` for mutation and must
+  either run a real Jenkins runtime node/smoke proof against the configured
+  SSH agent or exit nonzero with a clear blocked or unsupported status.
 
 Deferred mutation side effects:
 
 - Creates or updates Jenkins node configuration through the shared integration
   helper in the later integration step.
-- `validate-integration` must not pass with a modeled scheduling record when the
-  later integration step runs. The agent helper owns only host-side SSH
+- `validate-integration --dry-run` must not create Gerrit or Jenkins state.
+  Non-dry-run validation must not pass with a modeled scheduling record when
+  the later integration step runs. The agent helper owns only host-side SSH
   readiness.
 
 Later shared helper:
@@ -481,7 +482,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  validate-integration
+  --yes validate-integration
 ```
 
 ## Phase 12: Deferred End-To-End Gerrit Trigger Verification
@@ -520,7 +521,7 @@ scripts/integration-setup.sh \
   --gerrit-env <reviewed-gerrit.env> \
   --jenkins-controller-env <reviewed-jenkins-controller.env> \
   --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  verify-trigger
+  --yes verify-trigger
 ```
 
 Failure classification follows `docs/gerrit-trigger-integration.md`: SSH

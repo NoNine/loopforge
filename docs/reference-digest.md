@@ -52,9 +52,9 @@ become a supported product surface.
 | Artifact preparation | Bundle factory | Prepare curated application artifacts, plugin inputs, manifests, and checksums. | Reviewed role env files, version selections, plugin source locations or allowed download sources. | Role artifact directories, release manifests, checksum files, and archives when packaging is needed. | Downloads or copies artifacts; any public internet use in simulation is labeled `simulation-only`. | Manifests exist and checksums verify before staging. |
 | Artifact staging | Bundle factory and target hosts | Move prepared role artifacts to the hosts that will install them. | Prepared role artifact outputs and target staging paths. | Staged artifacts on Gerrit, Jenkins controller, and Jenkins agent hosts. | Copies files to target hosts but does not install services. | Target-side checksum verification passes before mutation. |
 | Gerrit readiness | Gerrit host | Install, configure, start, and validate Gerrit with LDAP and integration prerequisites. | Gerrit env, staged Gerrit artifacts, LDAP bind values, runtime account values. | Gerrit service config, secure LDAP config, plugin placement, readiness evidence. | Creates or updates runtime paths, service config, plugins, and service state. | HTTP, SSH, LDAP, plugin readiness, and integration account readiness checks pass. |
-| Jenkins controller readiness | Jenkins controller | Install, configure, start, and validate Jenkins with LDAP, JCasC, plugins, and Gerrit integration prerequisites. | Jenkins env, staged controller artifacts, LDAP bind values, admin group values. | Jenkins service config, JCasC material, plugin state, readiness evidence. | Creates or updates Jenkins home, service settings, plugin state, and service state. | HTTP, LDAP, plugins, JCasC, Gerrit SSH, and Gerrit Trigger readiness checks pass. |
+| Jenkins controller readiness | Jenkins controller | Install, configure, start, and validate Jenkins with LDAP, JCasC, plugins, and controller-only readiness. | Jenkins env, staged controller artifacts, LDAP bind values, admin group values. | Jenkins service config, JCasC material, plugin state, readiness evidence. | Creates or updates Jenkins home, service settings, plugin state, and service state. | HTTP, LDAP, plugins, JCasC, and controller runtime checks pass before cross-role SSH, Gerrit Trigger, scheduling, or vote proof. |
 | Gerrit integration | Jenkins controller and Gerrit host | Give Jenkins a Gerrit integration identity that can stream events and vote. | Jenkins-generated public key, Gerrit admin credentials, Gerrit account/group values. | Gerrit integration account key registration, `Verified` label, access grants, Jenkins Gerrit Trigger server config. | Creates or updates Gerrit permissions, label config, Jenkins credentials, and trigger server config. | SSH auth, stream-events permission, trigger connection, and vote permission are validated separately. |
-| Agent integration | Jenkins controller and Jenkins agent | Let Jenkins connect to an SSH build agent and schedule work on a label. | Jenkins-generated agent public key, agent host/user/label/remote FS values. | Agent authorized key, runtime filesystem, Jenkins node, smoke job evidence. | Creates or updates agent SSH access, runtime directories, Jenkins credentials, node config, and validation job state. | Jenkins connects to the node and runs a smoke job on the configured label. |
+| Agent integration | Jenkins controller and Jenkins agent | Let Jenkins connect to an SSH build agent and schedule work on a label. | Jenkins-generated agent public key, agent host/user/node-name/labels/remote FS values. | Agent authorized key, runtime filesystem, Jenkins node, smoke job evidence. | Creates or updates agent SSH access, runtime directories, Jenkins credentials, node config, and validation job state. | Jenkins connects to the named node and runs a smoke job on the selected scheduling label. |
 | End-to-end acceptance | Jenkins controller and Gerrit | Prove that a Gerrit change triggers Jenkins and receives `Verified +1`. | Disposable project, branch, uploader identity, Jenkins job, trigger server config. | Gerrit change, Jenkins build, Gerrit review vote, evidence summary. | Creates disposable verification project/job/change and vote artifacts. | Event streaming, job scheduling, agent execution, and vote posting all pass. |
 | Evidence | All role environments | Preserve reviewable proof without leaking secrets or streaming verbose logs. | Validation outputs, manifests, checksums, sanitized config inputs, bounded logs. | Mode-labeled summaries with checksums, fingerprints, endpoints, and bounded log references. | Writes evidence summaries only. | Evidence identifies simulation vs production-like mode and redacts secrets. |
 
@@ -152,8 +152,11 @@ Jenkins controller behavior notes:
 - The built-in node should be kept at zero executors for production-like
   validation.
 - Gerrit Trigger should connect as the Jenkins Gerrit integration account.
-- Trigger verification should run on the configured agent label except for
-  explicitly labeled simulation-only checks.
+- The Jenkins agent node name is identity and lookup metadata. Scheduling uses
+  the configured label set, selecting `gerrit-ci` when present and otherwise
+  the first label.
+- Trigger verification should run on the selected agent scheduling label except
+  for explicitly labeled simulation-only checks.
 
 ### Jenkins Agent Helper
 
@@ -161,7 +164,7 @@ Jenkins controller behavior notes:
 
 | Command | Behavior intent |
 | --- | --- |
-| `print-env-template` | Emit a reviewed env template for agent host, SSH port, runtime user, remote filesystem, labels, and artifact paths. |
+| `print-env-template` | Emit a reviewed env template for agent host, SSH port, runtime user, remote filesystem, node name, labels, and artifact paths. |
 | `preflight` | Check required commands, disk space, host resolution, SSH readiness assumptions, runtime account values, and env completeness. |
 | `prepare-artifacts` | Prepare agent bootstrap artifacts, package intent manifests, and checksums without exposing an offline dependency bundle workflow. |
 | `install` | Verify staged artifacts and install the agent host baseline after confirmation or `--yes`. |
@@ -186,8 +189,8 @@ Agent behavior notes:
 | `configure-gerrit-ssh` | Create or rotate the Jenkins-to-Gerrit SSH keypair on the Jenkins controller, expose only the public key to Gerrit, register Gerrit integration access, and record fingerprints. |
 | `configure-agent-ssh` | Create or rotate the Jenkins-to-agent SSH keypair on the Jenkins controller, expose only the public key to the agent, authorize agent access, and configure the Jenkins node credential. |
 | `configure-trigger` | Configure Jenkins Gerrit Trigger server and disposable verification job inputs after Gerrit permissions and credentials exist. |
-| `validate-integration` | Validate Jenkins-to-Gerrit SSH, stream-events permission, Jenkins-to-agent SSH, node readiness, and agent scheduling without accepting modeled proof. |
-| `verify-trigger` | Create disposable verification inputs, push a change, observe a triggered build, and verify `Verified +1`. |
+| `validate-integration` | After `--yes`, validate Jenkins-to-Gerrit SSH, stream-events permission, Jenkins-to-agent SSH, node readiness, and agent scheduling without accepting modeled proof. `--dry-run` must not create Gerrit or Jenkins state. |
+| `verify-trigger` | After `--yes`, create disposable verification inputs, push a change, observe a triggered build, and verify `Verified +1`. `--dry-run` must not create Gerrit or Jenkins state. |
 | `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, bounded logs, and redaction status. |
 
 The helper may fail closed until the later Docker or VM integration
@@ -274,7 +277,7 @@ The known working integration sequence is:
 7. Jenkins configures a Gerrit Trigger server using the integration account.
 8. Jenkins registers a verification job that responds to `patchset-created`.
 9. A disposable Gerrit change triggers Jenkins.
-10. Jenkins runs the job on the SSH agent label.
+10. Jenkins runs the job on the selected SSH agent scheduling label.
 11. Jenkins posts `Verified +1` back to the Gerrit change.
 
 Failure classification:

@@ -24,10 +24,11 @@ trigger_contract:
   branch: "{{GERRIT_VERIFICATION_BRANCH}}"
 
 execution_contract:
-  agent_label: "{{JENKINS_AGENT_LABEL}}"
+  agent_node_name: "{{JENKINS_AGENT_NODE_NAME}}"
+  agent_label: "{{JENKINS_AGENT_SCHEDULING_LABEL}}"
   required_behavior:
     - "Schedule this disposable job when Gerrit Trigger receives patchset-created."
-    - "Run the job on the reviewed Jenkins agent label."
+    - "Run the job on the selected Jenkins agent scheduling label."
     - "Keep controller built-in executors out of production-like verification unless explicitly approved."
     - "Allow Gerrit Trigger to post Verified +1 only after the agent job succeeds."
 
@@ -35,7 +36,7 @@ evidence_contract:
   separate_results:
     - "Gerrit Trigger received patchset-created."
     - "Jenkins scheduled the disposable job."
-    - "The disposable job ran on {{JENKINS_AGENT_LABEL}}."
+    - "The disposable job ran on {{JENKINS_AGENT_NODE_NAME}} through {{JENKINS_AGENT_SCHEDULING_LABEL}}."
     - "Jenkins posted Verified +1 to the Gerrit change."
   recordable_fields:
     - "verification mode"
@@ -50,4 +51,3 @@ evidence_contract:
     - "tokens"
     - "LDAP bind secrets"
     - "verbose logs"
-

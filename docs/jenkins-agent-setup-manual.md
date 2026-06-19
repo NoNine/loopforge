@@ -21,9 +21,11 @@ is simulation-only and must be labeled that way in docs, logs, and evidence.
 Jenkins connects out to the agent over SSH. The agent helper owns only the
 agent host side: OS/tooling readiness, runtime account readiness, remote
 filesystem readiness, SSH daemon reachability, staged artifact checks, bounded
-logs, and evidence. Jenkins controller node registration, credential storage,
-executor count, label assignment, and scheduling validation remain in the
-later integration step.
+logs, and evidence. It must not update `authorized_keys`, register a Jenkins
+node, prove Jenkins scheduling, configure Gerrit Trigger, or prove `Verified`
+voting. Jenkins controller node registration, credential storage, executor
+count, label assignment, and scheduling validation remain in the later
+integration step.
 
 Default baseline:
 
@@ -40,8 +42,9 @@ Consumed inputs:
 
 - `examples/jenkins-agent.env.example` copied to a reviewed local env file.
 - Agent host, SSH port, dedicated runtime account, remote filesystem path,
-  Jenkins label, staged artifact path, artifact output path, verification
-  mode, evidence directory, and bounded log directory.
+  Jenkins node name, Jenkins scheduling labels, staged artifact path, artifact
+  output path, verification mode, evidence directory, and bounded log
+  directory.
 - `JENKINS_AGENT_OS_DEPENDENCIES`, which defaults to the static agent target
   OS package baseline from the approved agent reference adapted to v1:
   `ca-certificates`, `curl`, `git`, `openssh-client`, `openssh-server`,
@@ -66,8 +69,9 @@ Secret-redaction expectations:
 
 - Evidence must not record private keys, passwords, tokens, LDAP bind secrets,
   or full secret-bearing env values.
-- Evidence may record account names, labels, endpoints, remote filesystem
-  paths, manifest paths, checksum paths, and bounded log references.
+- Evidence may record account names, node names, labels, endpoints, remote
+  filesystem paths, manifest paths, checksum paths, and bounded log
+  references.
 
 ## Phase 2: Prerequisite Readiness
 
@@ -84,7 +88,7 @@ Produced outputs:
 
 - Readiness result showing required commands, reviewed values, baseline
   values, SSH endpoint values, runtime account values, remote filesystem
-  path, label, and artifact paths.
+  path, node name, labels, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
 
 Side effects:
