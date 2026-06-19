@@ -313,7 +313,7 @@ apply_env_defaults() {
   JENKINS_PLUGIN_SOURCE_DIR="${JENKINS_PLUGIN_SOURCE_DIR:-}"
   JENKINS_OS_DEPENDENCIES="${JENKINS_OS_DEPENDENCIES:-ca-certificates,curl,fontconfig,git,net-tools,netcat-openbsd,openjdk-21-jre,openssh-client,rsync,tar,unzip,wget}"
   JENKINS_DIRECT_PLUGIN_NAMES="${JENKINS_DIRECT_PLUGIN_NAMES:-configuration-as-code,credentials,git,gerrit-trigger,ldap,matrix-auth,ssh-credentials,ssh-slaves,workflow-aggregator,job-dsl,timestamper,ws-cleanup}"
-  JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2006.v001a_2ca_6b_574,credentials:1415.v831096eb_5534,git:5.7.0,gerrit-trigger:2.42.0,ldap:780.vcb_33c9a_e4332,matrix-auth:3.2.6,ssh-credentials:361.vb_f6760818e8c,ssh-slaves:3.1031.v72c6b_883b_869,workflow-aggregator:608.v67378e9d3db_1,job-dsl:1.93,timestamper:1.30,ws-cleanup:0.48}"
+  JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2088.ve3b_42c663c80,credentials:1502.v5c95e620ddfe,git:5.10.1,gerrit-trigger:3.1971.v217d381e3a_5a_,ldap:807.809.vd3a_4e5e4ec98,matrix-auth:3.2.10,ssh-credentials:372.va_250881b_08cd,ssh-slaves:3.1097.v868116049892,workflow-aggregator:608.v67378e9d3db_1,job-dsl:3654.vdf58f53e2d15,timestamper:1.30,ws-cleanup:0.49}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
   LDAP_BIND_PASSWORD_FILE="${LDAP_BIND_PASSWORD_FILE:-}"
@@ -673,16 +673,15 @@ write_plugin_list_to_env() {
   mv "$tmp_file" "$target_file"
 }
 
-run_plugin_manager_list() {
+run_plugin_manager_latest_compatible_list() {
   local plugin_file report_file
   plugin_file="${1:?plugin file required}"
   report_file="${2:?report file required}"
   require_command java
-  printf 'simulation-only public internet use: Jenkins Plugin Installation Manager may consult update-center metadata for plugin resolution\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  printf 'simulation-only public internet use: Jenkins Plugin Installation Manager may consult update-center metadata for latest-compatible plugin proposals\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
   java -jar "$(jenkins_plugin_manager_artifact)" \
     --war "$(jenkins_war_artifact)" \
     --plugin-file "$plugin_file" \
-    --latest false \
     --no-download \
     --list \
     >"$report_file" 2>&1
@@ -704,40 +703,58 @@ run_plugin_manager_review() {
     >"$report_file" 2>&1
 }
 
-extract_full_plugin_lock_from_report() {
-  local report_file lock_file
-  report_file="${1:?report file required}"
-  lock_file="${2:?lock file required}"
-  awk '
-    $0 == "All requested plugins:" { in_list = 1; next }
-    in_list && $0 == "" { in_list = 0 }
-    in_list {
-      name = $1
-      version = $2
-      if (name ~ /^[A-Za-z0-9_.-]+$/ && version ~ /^[A-Za-z0-9_.+-]+$/) {
-        print name ":" version
-      }
-    }
-  ' "$report_file" | sort -u >"$lock_file"
-  [ -s "$lock_file" ] || die "Could not extract full plugin closure from Plugin Installation Manager output: $report_file"
+plugin_review_metadata_file() {
+  printf '%s/plugin-warning-review.metadata\n' "$JENKINS_ARTIFACT_OUTPUT_DIR"
 }
 
-copy_plugin_source_closure() {
-  local lock_file spec name source_file
-  lock_file="${1:?lock file required}"
-  while IFS= read -r spec; do
-    validate_plugin_spec "$spec"
-    name="$(plugin_name "$spec")"
-    source_file=""
-    for candidate in "$JENKINS_PLUGIN_SOURCE_DIR/${name}.jpi" "$JENKINS_PLUGIN_SOURCE_DIR/${name}.hpi"; do
-      if [ -f "$candidate" ]; then
-        source_file="$candidate"
-        break
-      fi
-    done
-    [ -n "$source_file" ] || die "Missing reviewed Jenkins plugin artifact for resolved closure plugin $name in $JENKINS_PLUGIN_SOURCE_DIR"
-    cp "$source_file" "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${source_file##*/}"
-  done <"$lock_file"
+write_plugin_review_metadata() {
+  local warning_count report_name accepted_by_yes
+  warning_count="${1:?warning count required}"
+  report_name="${2:?report name required}"
+  accepted_by_yes="${3:?accepted flag required}"
+  cat >"$(plugin_review_metadata_file)" <<EOF
+plugin_warning_count=$warning_count
+plugin_warning_report=$report_name
+plugin_warning_accepted_by_yes=$accepted_by_yes
+EOF
+}
+
+inspect_plugin_review_report() {
+  local report_file markers_file warning_count report_name accepted_by_yes
+  report_file="${1:?plugin review report required}"
+  [ -f "$report_file" ] || die "Missing Jenkins plugin review report: $report_file"
+  markers_file="$report_file.warning-markers"
+  awk '
+    {
+      line = tolower($0)
+    }
+    line ~ /^[[:space:]]*no available updates[[:space:]]*\.?[[:space:]]*$/ { next }
+    line ~ /^[[:space:]]*no security warnings[[:space:]]*\.?[[:space:]]*$/ { next }
+    line ~ /^[[:space:]]*no security advisories[[:space:]]*\.?[[:space:]]*$/ { next }
+    line ~ /security-[0-9]+/ { printf "%d:%s\n", NR, $0; next }
+    line ~ /security[[:space:]-]+warning/ { printf "%d:%s\n", NR, $0; next }
+    line ~ /security[[:space:]-]+advis/ { printf "%d:%s\n", NR, $0; next }
+    line ~ /some plugins have updates/ { printf "%d:%s\n", NR, $0; next }
+    line ~ /update[[:space:]]+required:/ { printf "%d:%s\n", NR, $0; next }
+    line ~ /has[[:space:]]+update/ { printf "%d:%s\n", NR, $0; next }
+    line ~ /available[[:space:]-]+update/ { printf "%d:%s\n", NR, $0; next }
+  ' "$report_file" >"$markers_file"
+  warning_count="$(wc -l <"$markers_file" | tr -d ' ')"
+  report_name="${report_file##*/}"
+  accepted_by_yes=false
+  if [ "$warning_count" -gt 0 ]; then
+    printf 'WARNING: Jenkins plugin review found %s warning/security/update marker(s) in %s\n' "$warning_count" "$report_name" >&2
+    sed -n '1,20p' "$markers_file" >&2
+    if [ "$assume_yes" -ne 1 ]; then
+      write_plugin_review_metadata "$warning_count" "$report_name" false
+      printf 'BLOCKED: review Jenkins plugin warning summary and rerun with --yes after operator review\n' >&2
+      return 2
+    fi
+    accepted_by_yes=true
+    printf 'operator acceptance recorded for Jenkins plugin warning review; accepted_by_yes=true report=%s warning_count=%s\n' "$report_name" "$warning_count"
+  fi
+  write_plugin_review_metadata "$warning_count" "$report_name" "$accepted_by_yes"
+  rm -f "$markers_file"
 }
 
 generate_plugins_lock() {
@@ -764,24 +781,36 @@ generate_plugins_lock() {
   [ -s "$lock" ] || die "No Jenkins plugin artifacts were available to generate plugins.lock.txt"
 }
 
+assert_direct_plugin_pins_in_lock() {
+  local lock spec name expected actual
+  lock="${1:?plugin lock required}"
+  [ -s "$lock" ] || die "Missing Jenkins plugin lock for direct pin check: $lock"
+  validate_plugins
+  for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
+    name="$(plugin_name "$spec")"
+    expected="$(plugin_version "$spec")"
+    actual="$(awk -F: -v name="$name" '$1 == name { print $2; found = 1 } END { exit !found }' "$lock" 2>/dev/null || true)"
+    [ -n "$actual" ] || die "Accepted direct Jenkins plugin pin is missing from plugins.lock.txt: $name"
+    [ "$actual" = "$expected" ] ||
+      die "Direct Jenkins plugin pin drift for $name: accepted=$expected lock=$actual"
+  done
+}
+
 prepare_plugins() {
-  local seed_file spec name expected_lock resolver_report
+  local seed_file spec name resolver_report
   seed_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.seed.txt"
-  expected_lock="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.expected-lock.txt"
   resolver_report="$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-resolution-report.txt"
   write_accepted_plugin_seed "$seed_file"
-  run_plugin_manager_list "$seed_file" "$resolver_report"
-  extract_full_plugin_lock_from_report "$resolver_report" "$expected_lock"
+  run_plugin_manager_latest_compatible_list "$seed_file" "$resolver_report"
 
   if [ -n "${JENKINS_PLUGIN_SOURCE_DIR:-}" ]; then
-    copy_plugin_source_closure "$expected_lock"
+    find "$JENKINS_PLUGIN_SOURCE_DIR" -maxdepth 1 -type f \( -name '*.jpi' -o -name '*.hpi' \) -exec cp {} "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/" \;
   elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command java
     printf 'simulation-only public internet use: resolving and downloading Jenkins plugin artifacts with dependencies\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
     java -jar "$(jenkins_plugin_manager_artifact)" \
       --war "$(jenkins_war_artifact)" \
       --plugin-file "$seed_file" \
-      --latest false \
       --plugin-download-directory "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" \
       >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-download-report.txt" 2>&1
   else
@@ -796,9 +825,9 @@ prepare_plugins() {
       die "Curated Jenkins plugin artifact is missing after preparation: $name"
   done
   generate_plugins_lock "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt"
-  diff -u "$expected_lock" "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt" >/dev/null ||
-    die "Downloaded or reviewed Jenkins plugin artifacts do not match Plugin Installation Manager resolved closure"
+  assert_direct_plugin_pins_in_lock "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt"
   run_plugin_manager_review "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt" "$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-review-report.txt"
+  inspect_plugin_review_report "$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-review-report.txt"
   find "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" -type f \( -name '*.jpi' -o -name '*.hpi' \) -print |
     sort >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-artifacts.manifest"
 }
@@ -952,7 +981,7 @@ validate_artifact_output_dir() {
 }
 
 verify_staged_artifacts() {
-  local manifest checksums staged_tmp
+  local manifest checksums
   manifest="$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt"
   checksums="$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256"
   [ -f "$manifest" ] || die "Missing staged Jenkins controller manifest: $manifest"
@@ -961,16 +990,23 @@ verify_staged_artifacts() {
   [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt" ] || die "Missing staged Jenkins plugin lock: $JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt"
   [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugin-resolution-report.txt" ] || die "Missing staged Jenkins plugin resolution report"
   [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugin-review-report.txt" ] || die "Missing staged Jenkins plugin review report"
+  [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugin-warning-review.metadata" ] || die "Missing staged Jenkins plugin warning review metadata"
   (cd "$JENKINS_STAGED_ARTIFACT_DIR" && sha256sum -c checksums.sha256) >/dev/null
   grep -Fq './plugins.seed.txt' "$checksums" || die "Staged checksums do not cover plugins.seed.txt"
   grep -Fq './plugins.lock.txt' "$checksums" || die "Staged checksums do not cover plugins.lock.txt"
   grep -Fq './plugin-resolution-report.txt' "$checksums" || die "Staged checksums do not cover plugin-resolution-report.txt"
   grep -Fq './plugin-review-report.txt' "$checksums" || die "Staged checksums do not cover plugin-review-report.txt"
-  staged_tmp="$(mktemp)"
-  generate_plugins_lock "$JENKINS_STAGED_ARTIFACT_DIR/plugins" "$staged_tmp"
-  diff -u "$JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt" "$staged_tmp" >/dev/null ||
-    die "Staged plugins.lock.txt does not match staged plugin artifacts"
-  rm -f "$staged_tmp"
+  grep -Fq './plugin-warning-review.metadata' "$checksums" || die "Staged checksums do not cover plugin-warning-review.metadata"
+  (
+    local staged_tmp_dir staged_tmp
+    staged_tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "$staged_tmp_dir"' EXIT
+    staged_tmp="$staged_tmp_dir/plugins.lock.txt"
+    generate_plugins_lock "$JENKINS_STAGED_ARTIFACT_DIR/plugins" "$staged_tmp"
+    diff -u "$JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt" "$staged_tmp" >/dev/null ||
+      die "Staged plugins.lock.txt does not match staged plugin artifacts"
+    assert_direct_plugin_pins_in_lock "$JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt"
+  )
   awk -F= '
     $1 == "harness_manifest_version" && $2 == "1" { h=1 }
     $1 == "role" && $2 == "jenkins-controller" { r=1 }
@@ -1034,7 +1070,7 @@ cmd_propose_plugin_versions() {
   report_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-version-resolution-report.txt"
   proposals_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-version-proposals.txt"
   write_direct_plugin_intent "$intent_file"
-  run_plugin_manager_list "$intent_file" "$report_file"
+  run_plugin_manager_latest_compatible_list "$intent_file" "$report_file"
   extract_direct_plugin_proposals "$intent_file" "$report_file" "$proposals_file"
   accepted_list="$(accepted_plugin_list_from_file "$proposals_file")"
   if [ "$write_env" -eq 1 ]; then
@@ -1051,8 +1087,13 @@ cmd_propose_plugin_versions() {
 }
 
 write_manifest() {
-  local manifest
+  local manifest warning_metadata warning_count warning_report warning_accepted
   manifest="$JENKINS_ARTIFACT_OUTPUT_DIR/manifest.txt"
+  warning_metadata="$(plugin_review_metadata_file)"
+  [ -f "$warning_metadata" ] || write_plugin_review_metadata 0 "plugin-review-report.txt" false
+  warning_count="$(awk -F= '$1 == "plugin_warning_count" { print $2; exit }' "$warning_metadata")"
+  warning_report="$(awk -F= '$1 == "plugin_warning_report" { print $2; exit }' "$warning_metadata")"
+  warning_accepted="$(awk -F= '$1 == "plugin_warning_accepted_by_yes" { print $2; exit }' "$warning_metadata")"
   cat >"$manifest" <<EOF
 harness_manifest_version=1
 role=jenkins-controller
@@ -1070,6 +1111,10 @@ direct_plugins=$JENKINS_PLUGIN_LIST
 plugin_lock=plugins.lock.txt
 plugin_resolution_report=plugin-resolution-report.txt
 plugin_review_report=plugin-review-report.txt
+plugin_warning_review_metadata=plugin-warning-review.metadata
+plugin_warning_count=$warning_count
+plugin_warning_report=$warning_report
+plugin_warning_accepted_by_yes=$warning_accepted
 war=jenkins-2.555.3.war
 plugin_manager=jenkins-plugin-manager-2.15.0.jar
 EOF
@@ -1308,6 +1353,19 @@ check_plugin_readiness() {
   [ -s "$JENKINS_HOME/state/plugins.status" ] || die "Plugin readiness marker is missing"
 }
 
+check_runtime_plugin_load_log() {
+  local log_file markers_file
+  log_file="$JENKINS_HOME/logs/jenkins-controller.log"
+  [ -s "$log_file" ] || die "Jenkins controller startup log is missing: $log_file"
+  markers_file="$log_file.plugin-load-failures"
+  grep -En 'Failed Loading plugin|Update required:|Failed to load:' "$log_file" >"$markers_file" || true
+  if [ -s "$markers_file" ]; then
+    sed -n '1,20p' "$markers_file" >&2
+    die "Jenkins runtime log contains plugin load failure marker: $log_file"
+  fi
+  rm -f "$markers_file"
+}
+
 check_jcasc_readiness() {
   [ -s "$JENKINS_HOME/jcasc/jenkins.yaml" ] || die "JCasC file is missing"
   grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP realm is missing"
@@ -1324,6 +1382,7 @@ verify_base_readiness_facts() {
   check_plugin_readiness
   check_jcasc_readiness
   [ -s "$JENKINS_HOME/state/runtime.status" ] || die "Jenkins runtime status marker is missing"
+  check_runtime_plugin_load_log
   check_ldap_access
 }
 

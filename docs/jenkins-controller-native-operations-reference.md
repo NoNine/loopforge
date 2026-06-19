@@ -228,8 +228,10 @@ else
 fi
 ```
 
-Ask the Jenkins Plugin Installation Manager Tool to propose versions for the
-direct plugin intent against Jenkins `2.555.3`:
+Ask the Jenkins Plugin Installation Manager Tool to propose current
+latest-compatible versions for the direct plugin intent against Jenkins
+`2.555.3`. This proposal phase intentionally uses the tool default/latest
+behavior:
 
 ```bash
 rm -f \
@@ -242,7 +244,6 @@ rm -f \
 java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
   --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.intent.txt \
-  --latest false \
   --no-download \
   --list \
   > ~/jenkins-artifacts-bundle/jenkins/plugin-version-resolution-report.txt
@@ -311,7 +312,10 @@ cp accepted-direct-plugins.txt plugins.seed.txt
 accepted direct pins. It is not an operator-owned review artifact. Do not add
 transitive dependencies to `accepted-direct-plugins.txt` or `plugins.seed.txt`.
 
-Resolve and download the accepted direct pins and their dependencies:
+Resolve and download the accepted direct pins and their dependencies. This
+artifact preparation phase uses Plugin Installation Manager's
+latest-compatible resolver for the full closure, then the helper verifies that
+every accepted direct pin remains at the exact reviewed version:
 
 ```bash
 rm -rf ~/jenkins-artifacts-bundle/jenkins/plugins
@@ -319,7 +323,6 @@ mkdir -p ~/jenkins-artifacts-bundle/jenkins/plugins
 java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
   --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.seed.txt \
-  --latest false \
   --plugin-download-directory ~/jenkins-artifacts-bundle/jenkins/plugins \
   > ~/jenkins-artifacts-bundle/jenkins/plugin-download-report.txt
 ```
@@ -338,21 +341,21 @@ done | sort -u > plugins.lock.txt
 ```
 
 Every `plugins.lock.txt` entry must include `plugin-name:version`. Treat any
-blank name, blank version, missing accepted direct plugin, or unexpected full
-closure entry as a release-blocking issue.
+blank name, blank version, missing accepted direct plugin, or direct plugin
+version drift as a release-blocking issue.
 
-Preserve resolver evidence for the accepted direct pins and check
-update/security metadata for the full lock:
+Preserve latest-compatible resolver evidence for the accepted direct pins, then
+check update/security metadata for the generated full lock:
 
 ```bash
 java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
   --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.seed.txt \
-  --latest false \
   --no-download \
   --list \
   > ~/jenkins-artifacts-bundle/jenkins/plugin-resolution-report.txt
 
+# Advisory/update review only; this does not select the closure.
 java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
   --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.lock.txt \
@@ -364,8 +367,28 @@ java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
 ```
 
 Review `plugin-resolution-report.txt`, `plugin-review-report.txt`, and
-`plugins.lock.txt`, then record approval before moving the bundle into the
-offline environment.
+`plugins.lock.txt`. Plugin Installation Manager is used in two places:
+`propose-plugin-versions` proposes latest-compatible direct plugin pins for
+operator review, and `prepare-artifacts` resolves/downloads a
+latest-compatible full closure from the accepted direct pins. `plugins.lock.txt`
+is the generated audited full closure, not operator input. The helper verifies
+that every accepted direct pin is preserved exactly; Jenkins startup-log
+plugin-load checks prevent runtime dependency failures from passing validation.
+
+Jenkins Web UI plugin installation does not run the standalone
+`jenkins-plugin-manager-*.jar`; it uses Jenkins core PluginManager and
+UpdateCenter behavior to install missing dependencies or upgrade installed
+dependencies older than required versions. That behavior is closer to Plugin
+Installation Manager default/latest-compatible dependency resolution than to
+`--latest false` minimum dependency mode. Use `--latest false` here only for
+advisory/update review against the generated full lock, not for selecting the
+prepared closure.
+
+If `plugin-review-report.txt` contains warning, security, or update markers,
+stop and record operator review before continuing; automated runs may continue
+only when that review is represented by an explicit `--yes` or equivalent
+release approval. Preserve the visible warning summary in the bundle evidence;
+v1 does not use per-advisory waiver files.
 
 Create manifests, checksums, and archive:
 
@@ -373,7 +396,9 @@ Create manifests, checksums, and archive:
 cd ~/jenkins-artifacts-bundle
 find jenkins/plugins -type f -printf '%f\n' \
   | sort > jenkins/plugin-artifacts.manifest
-printf 'bundle_kind=jenkins-controller-artifacts\njenkins_version=2.555.3\njenkins_core_deb=jenkins_2.555.3_all.deb\njenkins_war=jenkins-2.555.3.war\nplugin_lock=plugins.lock.txt\nplugin_resolution_report=plugin-resolution-report.txt\nplugin_review_report=plugin-review-report.txt\nplugin_artifacts=plugin-artifacts.manifest\n' \
+printf 'plugin_warning_count=<reviewed-count>\nplugin_warning_report=plugin-review-report.txt\nplugin_warning_accepted_by_yes=<true-or-false>\n' \
+  > jenkins/plugin-warning-review.metadata
+printf 'bundle_kind=jenkins-controller-artifacts\njenkins_version=2.555.3\njenkins_core_deb=jenkins_2.555.3_all.deb\njenkins_war=jenkins-2.555.3.war\nplugin_lock=plugins.lock.txt\nplugin_resolution_report=plugin-resolution-report.txt\nplugin_review_report=plugin-review-report.txt\nplugin_warning_review_metadata=plugin-warning-review.metadata\nplugin_artifacts=plugin-artifacts.manifest\n' \
   > jenkins/release-unit.manifest
 find . -type f ! -path './checksums/SHA256SUMS' -print0 \
   | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS

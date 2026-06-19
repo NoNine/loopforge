@@ -133,7 +133,9 @@ scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.exampl
 
 Plugin version proposal runs in the bundle factory environment, not on the
 Jenkins controller target. The Jenkins Plugin Installation Manager Tool is the
-authoritative resolver for this workflow.
+authoritative resolver for this workflow. Proposals use the tool's
+latest-compatible behavior for Jenkins 2.555.3 so operators review current
+direct plugin pins before accepting them.
 
 Consumed inputs:
 
@@ -149,7 +151,7 @@ Produced outputs:
 
 - `plugins.intent.txt`, generated from `JENKINS_DIRECT_PLUGIN_NAMES`.
 - `plugin-version-proposals.txt`, containing only direct
-  `plugin-name:version` proposals.
+  latest-compatible `plugin-name:version` proposals.
 - `plugin-version-resolution-report.txt`, preserving the full Plugin
   Installation Manager resolver output as evidence.
 
@@ -158,8 +160,8 @@ Acceptance:
 - Review the proposal and full resolver report.
 - Accept explicitly with `--write-env --yes`; this updates only
   `JENKINS_PLUGIN_LIST` in the reviewed env file.
-- `JENKINS_PLUGIN_LIST` remains limited to direct plugin pins. Transitive
-  dependencies are captured later in `plugins.lock.txt`.
+- `JENKINS_PLUGIN_LIST` remains limited to direct plugin pins and is not a
+  transitive dependency lock.
 
 Helper:
 
@@ -174,12 +176,24 @@ Artifact preparation runs in the bundle factory environment, not on the
 Jenkins controller target. The shared Docker harness runs this phase in the
 bundle factory container for Step 8 validation.
 
+Jenkins Web UI plugin installation does not run the standalone
+`jenkins-plugin-manager-*.jar`. The Web UI uses Jenkins core PluginManager and
+UpdateCenter behavior, installing missing dependencies and upgrading installed
+dependencies older than required versions. The Plugin Installation Manager CLI
+remains the official pre-start automation tool for preparing artifacts from
+Update Center metadata, but artifact preparation must use its
+latest-compatible dependency behavior rather than `--latest false` minimum
+dependency mode.
+
 Consumed inputs:
 
 - Reviewed Jenkins controller env values.
 - Version baseline: Jenkins 2.555.3 LTS, OpenJDK 21, Jenkins Plugin
   Installation Manager Tool 2.15.0, Ubuntu release `24.04`, codename `noble`.
 - Accepted direct Jenkins plugin pins from `JENKINS_PLUGIN_LIST`.
+- Plugin Installation Manager is used here to resolve and download the
+  latest-compatible full plugin closure from accepted direct pins. The helper
+  verifies every direct pin remains at the exact accepted version.
 - Reviewed controller artifact source paths, or `JENKINS_DOWNLOAD_ARTIFACTS=1`
   in the bundle-factory Docker simulation path. Any public internet use here
   is labeled `simulation-only` and remains outside target-host application
@@ -196,10 +210,13 @@ Produced outputs:
   staged from reviewed sources or resolved in the bundle factory.
 - `plugins.seed.txt`, generated from accepted direct pins as internal Plugin
   Installation Manager input.
-- `plugins.lock.txt`, generated from downloaded plugin manifests as the full
-  direct-plus-transitive closure.
+- `plugins.lock.txt`, generated from downloaded plugin manifests as the
+  audited full direct-plus-transitive closure. It is evidence output, not
+  operator input.
 - Plugin artifact manifest, plugin resolution report, and plugin review
   report.
+- `plugin-warning-review.metadata`, recording the plugin warning marker count,
+  review report name, and whether `--yes` accepted the warning review.
 - Controller-only JCasC and service templates.
 - No Jenkins credentials, Gerrit Trigger server, agent-node, disposable
   verification job, or trigger-verification env templates are staged by the
@@ -208,6 +225,11 @@ Produced outputs:
 - `manifest.txt` records `artifact_source=curated-bundle-factory`,
   `os_dependency_source=approved-internal-os-repos`,
   `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
+- If `plugin-review-report.txt` contains warning, security, or update markers,
+  `prepare-artifacts` prints a bounded summary and stops unless the operator
+  reruns with `--yes` after review. Automation may pass `--yes` only after
+  that review is part of the change procedure; no per-advisory waiver file is
+  used in v1.
 
 Staged artifact paths:
 
@@ -567,8 +589,10 @@ Validation evidence covers:
 - LDAP access: the Jenkins controller target can open a TCP connection to the
   reviewed LDAP endpoint.
 - Plugin readiness: every accepted direct plugin pin from
-  `JENKINS_PLUGIN_LIST` is installed from staged artifacts, and the full
-  direct-plus-transitive closure is retained in `plugins.lock.txt`.
+  `JENKINS_PLUGIN_LIST` is installed from staged artifacts at the exact
+  accepted version, the full direct-plus-transitive closure is retained in
+  `plugins.lock.txt`, and Jenkins startup log checks prevent plugin-load
+  failures from passing validation.
 - JCasC readiness: LDAP realm exists and the built-in node has zero executors.
 - Gerrit SSH connectivity: deferred to the later integration step.
 - Gerrit Trigger readiness: deferred to the later integration step.
