@@ -193,10 +193,23 @@ wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
   https://gerrit-ci.gerritforge.com/job/plugin-healthcheck-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/healthcheck/healthcheck.jar
 ```
 
+Record and review the approved plugin source pins:
+
+```bash
+cat > plugin-source-catalog.tsv <<'EOF'
+plugin	jar	sha256	gerrit_api_line	source_url
+events-log	events-log.jar	7c36b24e0885546c0a09502c022386b88b5894b649fba6b4c1cd595d23c7c695	3.13	https://gerrit-ci.gerritforge.com/job/plugin-events-log-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/events-log/events-log.jar
+metrics-reporter-prometheus	metrics-reporter-prometheus.jar	d1edafbd620b1dbab76530788cf8af7b279eb935e6ade788589fb69e3e20f8d3	3.13	https://gerrit-ci.gerritforge.com/job/plugin-metrics-reporter-prometheus-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/metrics-reporter-prometheus/metrics-reporter-prometheus.jar
+healthcheck	healthcheck.jar	289a931fdf0aa251c306c1cf2914635267a818f7e4abbd2862d4406a80885798	3.13	https://gerrit-ci.gerritforge.com/job/plugin-healthcheck-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/healthcheck/healthcheck.jar
+EOF
+```
+
 Plugin compatibility rules:
 
 - Every staged plugin jar must be built for the selected Gerrit major/minor
   line, for example Gerrit `3.13.x`.
+- Mutable upstream plugin URLs are acceptable only when the reviewed source
+  pin includes the expected SHA256 and the jar metadata checks pass.
 - Do not use plugin jars built for another Gerrit line unless the plugin
   maintainer explicitly documents compatibility.
 - Treat missing expected plugins or unexpected extra plugin jars as
@@ -204,17 +217,51 @@ Plugin compatibility rules:
 - Add `replication` or `webhooks` later only after selecting approved compatible
   plugin artifact URLs for the selected Gerrit line.
 
+Verify source pins, plugin metadata, missing jars, and extra jars:
+
+```bash
+cd ~/gerrit-artifacts-bundle/gerrit
+awk 'NR > 1 { print $3 "  plugins/" $2 }' plugin-source-catalog.tsv \
+  > plugin-checksums.expected
+sha256sum -c plugin-checksums.expected
+
+find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
+  | sort > plugin-artifacts.manifest
+sed 's/$/.jar/' plugins.seed.txt | sort > plugin-seed-jars.expected
+comm -23 plugin-seed-jars.expected plugin-artifacts.manifest \
+  > plugin-artifacts.missing
+comm -13 plugin-seed-jars.expected plugin-artifacts.manifest \
+  > plugin-artifacts.unexpected
+test ! -s plugin-artifacts.missing
+test ! -s plugin-artifacts.unexpected
+
+{
+  printf 'plugin\tjar\tsha256\tgerrit_plugin_name\tgerrit_api_version\texpected_api_line\tsource_url\n'
+  awk 'NR > 1 { print }' plugin-source-catalog.tsv |
+    while IFS="$(printf '\t')" read -r plugin jar sha api_line url; do
+      plugin_name="$(unzip -p "plugins/$jar" META-INF/MANIFEST.MF |
+        tr -d '\r' | awk -F': ' '$1 == "Gerrit-PluginName" { print $2; exit }')"
+      api_version="$(unzip -p "plugins/$jar" META-INF/MANIFEST.MF |
+        tr -d '\r' | awk -F': ' '$1 == "Gerrit-ApiVersion" { print $2; exit }')"
+      test "$plugin_name" = "$plugin"
+      case "$api_version" in
+        "$api_line".*|"$api_line".*-SNAPSHOT) ;;
+        *) exit 1 ;;
+      esac
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$plugin" "$jar" "$sha" "$plugin_name" "$api_version" "$api_line" "$url"
+    done
+} > plugin-metadata.report
+
+find plugins -type f -name '*.jar' -print0 |
+  sort -z | xargs -0 sha256sum > plugin-checksums.sha256
+```
+
 Create manifests, checksums, and archive:
 
 ```bash
 cd ~/gerrit-artifacts-bundle
-find gerrit/plugins -type f -name '*.jar' -printf '%f\n' \
-  | sort > gerrit/plugin-artifacts.manifest
-sed 's/$/.jar/' gerrit/plugins.seed.txt | sort > gerrit/plugin-seed-jars.expected
-comm -23 gerrit/plugin-seed-jars.expected gerrit/plugin-artifacts.manifest \
-  > gerrit/plugin-artifacts.missing
-test ! -s gerrit/plugin-artifacts.missing
-printf 'bundle_kind=gerrit-artifacts\ngerrit_version=3.13.6\ngerrit_war=gerrit-3.13.6.war\nplugin_seed=plugins.seed.txt\nplugin_artifacts=plugin-artifacts.manifest\n' \
+printf 'bundle_kind=gerrit-artifacts\ngerrit_version=3.13.6\ngerrit_war=gerrit-3.13.6.war\nplugin_seed=plugins.seed.txt\nplugin_source_catalog=plugin-source-catalog.tsv\nplugin_artifacts=plugin-artifacts.manifest\nplugin_metadata=plugin-metadata.report\nplugin_checksums=plugin-checksums.sha256\n' \
   > gerrit/release-unit.manifest
 find . -type f ! -path './checksums/SHA256SUMS' -print0 \
   | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
@@ -224,7 +271,9 @@ sha256sum ~/gerrit-artifacts-bundle.tar.gz > ~/gerrit-artifacts-bundle.tar.gz.sh
 
 The approved Gerrit release unit is the combination of the artifact archive,
 its `.sha256` file, the internal `SHA256SUMS` file, `plugins.seed.txt`,
-`plugin-artifacts.manifest`, and `release-unit.manifest`.
+`plugin-source-catalog.tsv`, `plugin-artifacts.manifest`,
+`plugin-metadata.report`, `plugin-checksums.sha256`, and
+`release-unit.manifest`.
 
 #### 2.2.2 Install the Gerrit Artifact Bundle Manually
 
@@ -238,6 +287,11 @@ sudo rm -rf /opt/gerrit-artifacts-bundle
 sudo tar -xzf gerrit-artifacts-bundle.tar.gz -C /opt
 cd /opt/gerrit-artifacts-bundle
 sha256sum -c checksums/SHA256SUMS
+cd /opt/gerrit-artifacts-bundle/gerrit
+sha256sum -c plugin-checksums.sha256
+find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
+  | sort > /tmp/gerrit-plugin-artifacts.installed
+cmp /tmp/gerrit-plugin-artifacts.installed plugin-artifacts.manifest
 java -version
 ```
 
@@ -254,6 +308,10 @@ sudo chown gerrit:gerrit /opt/gerrit/gerrit.war
 sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/plugins
 sudo cp /opt/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/ 2>/dev/null || true
 sudo chown gerrit:gerrit /srv/gerrit/plugins/*.jar 2>/dev/null || true
+sudo install -d -o gerrit -g gerrit -m 0750 /srv/gerrit/etc
+sudo install -m 0644 /opt/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest /srv/gerrit/etc/plugin-artifacts.manifest
+sudo install -m 0644 /opt/gerrit-artifacts-bundle/gerrit/plugin-metadata.report /srv/gerrit/etc/plugin-metadata.report
+sudo install -m 0644 /opt/gerrit-artifacts-bundle/gerrit/plugin-checksums.sha256 /srv/gerrit/etc/plugin-checksums.sha256
 ```
 
 For artifact recovery, rerun only the artifact archive checksum, extraction,
@@ -371,6 +429,9 @@ Repository replication and outbound webhooks can be added later after approved
 compatible plugin artifact URLs are selected.
 
 Plugin rule: Gerrit plugin jars must match the selected Gerrit major/minor line.
+The installed plugin jar set must exactly match the staged
+`plugin-artifacts.manifest`; missing expected jars and unexpected extra jars
+are release-blocking.
 
 Install the plugins staged in the Gerrit artifact bundle:
 
@@ -378,6 +439,11 @@ Install the plugins staged in the Gerrit artifact bundle:
 install -d -o gerrit -g gerrit /srv/gerrit/plugins
 cp /opt/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/
 chown gerrit:gerrit /srv/gerrit/plugins/*.jar
+find /srv/gerrit/plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
+  | sort > /tmp/gerrit-plugin-artifacts.installed
+cmp /tmp/gerrit-plugin-artifacts.installed \
+  /opt/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest
+(cd /opt/gerrit-artifacts-bundle/gerrit && sha256sum -c plugin-checksums.sha256)
 ```
 
 ### 3.5 Create Gerrit systemd Service

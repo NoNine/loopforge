@@ -12,6 +12,13 @@ default_env_file="$repo_root/examples/gerrit.env.example"
 env_file=""
 dry_run=0
 assume_yes=0
+cleanup_paths=()
+
+readonly GERRIT_INTERNAL_VERSION="3.13.6"
+readonly GERRIT_INTERNAL_JAVA_VERSION="21"
+readonly GERRIT_INTERNAL_UBUNTU_RELEASE="24.04"
+readonly GERRIT_INTERNAL_UBUNTU_CODENAME="noble"
+readonly GERRIT_INTERNAL_API_LINE="3.13"
 
 usage() {
   cat <<'USAGE'
@@ -51,6 +58,20 @@ timestamp_utc() {
 iso_timestamp_utc() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
+
+cleanup_registered_paths() {
+  local path
+  for path in "${cleanup_paths[@]}"; do
+    [ -n "$path" ] || continue
+    rm -rf -- "$path"
+  done
+}
+
+register_cleanup_path() {
+  cleanup_paths+=("${1:?path required}")
+}
+
+trap cleanup_registered_paths EXIT
 
 json_quote() {
   local value i ch out
@@ -184,10 +205,6 @@ require_reviewed_value() {
 require_env_values() {
   local required name
   required="
-GERRIT_VERSION
-GERRIT_JAVA_VERSION
-GERRIT_UBUNTU_RELEASE
-GERRIT_UBUNTU_CODENAME
 GERRIT_HOST
 GERRIT_HTTP_PORT
 GERRIT_SSH_PORT
@@ -218,10 +235,14 @@ GERRIT_EVIDENCE_DIR
 }
 
 apply_env_defaults() {
-  GERRIT_VERSION="${GERRIT_VERSION:-3.13.6}"
-  GERRIT_JAVA_VERSION="${GERRIT_JAVA_VERSION:-21}"
-  GERRIT_UBUNTU_RELEASE="${GERRIT_UBUNTU_RELEASE:-24.04}"
-  GERRIT_UBUNTU_CODENAME="${GERRIT_UBUNTU_CODENAME:-noble}"
+  assert_internal_baseline_value GERRIT_VERSION "$GERRIT_INTERNAL_VERSION"
+  assert_internal_baseline_value GERRIT_JAVA_VERSION "$GERRIT_INTERNAL_JAVA_VERSION"
+  assert_internal_baseline_value GERRIT_UBUNTU_RELEASE "$GERRIT_INTERNAL_UBUNTU_RELEASE"
+  assert_internal_baseline_value GERRIT_UBUNTU_CODENAME "$GERRIT_INTERNAL_UBUNTU_CODENAME"
+  GERRIT_VERSION="$GERRIT_INTERNAL_VERSION"
+  GERRIT_JAVA_VERSION="$GERRIT_INTERNAL_JAVA_VERSION"
+  GERRIT_UBUNTU_RELEASE="$GERRIT_INTERNAL_UBUNTU_RELEASE"
+  GERRIT_UBUNTU_CODENAME="$GERRIT_INTERNAL_UBUNTU_CODENAME"
   GERRIT_HOST="${GERRIT_HOST:-gerrit-target}"
   GERRIT_HTTP_PORT="${GERRIT_HTTP_PORT:-8080}"
   GERRIT_SSH_PORT="${GERRIT_SSH_PORT:-29418}"
@@ -267,6 +288,16 @@ apply_env_defaults() {
       GERRIT_LOG_DIR="/harness/logs"
       ;;
   esac
+}
+
+assert_internal_baseline_value() {
+  local name expected actual
+  name="${1:?name required}"
+  expected="${2:?expected value required}"
+  actual="$(value_or_default "$name" "")"
+  if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
+    die "$name is an internal Gerrit helper baseline constant and must remain $expected for v1"
+  fi
 }
 
 load_env() {
@@ -442,6 +473,180 @@ validate_plugin_identifier() {
 
 validate_plugins() {
   for_each_plugin validate_plugin_identifier
+  for_each_plugin require_plugin_catalog_entry
+}
+
+plugin_catalog_entry() {
+  local plugin
+  plugin="${1:?plugin required}"
+  case "$plugin" in
+    events-log)
+      printf '%s\t%s\t%s\t%s\n' \
+        "events-log.jar" \
+        "https://gerrit-ci.gerritforge.com/job/plugin-events-log-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/events-log/events-log.jar" \
+        "7c36b24e0885546c0a09502c022386b88b5894b649fba6b4c1cd595d23c7c695" \
+        "$GERRIT_INTERNAL_API_LINE"
+      ;;
+    metrics-reporter-prometheus)
+      printf '%s\t%s\t%s\t%s\n' \
+        "metrics-reporter-prometheus.jar" \
+        "https://gerrit-ci.gerritforge.com/job/plugin-metrics-reporter-prometheus-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/metrics-reporter-prometheus/metrics-reporter-prometheus.jar" \
+        "d1edafbd620b1dbab76530788cf8af7b279eb935e6ade788589fb69e3e20f8d3" \
+        "$GERRIT_INTERNAL_API_LINE"
+      ;;
+    healthcheck)
+      printf '%s\t%s\t%s\t%s\n' \
+        "healthcheck.jar" \
+        "https://gerrit-ci.gerritforge.com/job/plugin-healthcheck-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/healthcheck/healthcheck.jar" \
+        "289a931fdf0aa251c306c1cf2914635267a818f7e4abbd2862d4406a80885798" \
+        "$GERRIT_INTERNAL_API_LINE"
+      ;;
+    *)
+      die "No approved Gerrit plugin source catalog entry for selected plugin: $plugin"
+      ;;
+  esac
+}
+
+plugin_catalog_field() {
+  local plugin field jar url sha api
+  plugin="${1:?plugin required}"
+  field="${2:?field required}"
+  IFS=$'\t' read -r jar url sha api <<EOF
+$(plugin_catalog_entry "$plugin")
+EOF
+  case "$field" in
+    jar) printf '%s\n' "$jar" ;;
+    url) printf '%s\n' "$url" ;;
+    sha256) printf '%s\n' "$sha" ;;
+    api_line) printf '%s\n' "$api" ;;
+    *) die "Unknown Gerrit plugin source catalog field: $field" ;;
+  esac
+}
+
+require_plugin_catalog_entry() {
+  plugin_catalog_entry "${1:?plugin required}" >/dev/null
+}
+
+plugin_list_values() {
+  validate_plugins
+  printf '%s\n' "$GERRIT_PLUGIN_LIST" | tr ',' '\n'
+}
+
+expected_plugin_jars() {
+  local plugin
+  plugin_list_values | while IFS= read -r plugin; do
+    plugin_catalog_field "$plugin" jar
+  done | sort
+}
+
+actual_plugin_jars() {
+  local plugin_dir
+  plugin_dir="${1:?plugin dir required}"
+  [ -d "$plugin_dir" ] || die "Missing Gerrit plugin directory: $plugin_dir"
+  find "$plugin_dir" -maxdepth 1 -type f -name '*.jar' -printf '%f\n' | sort
+}
+
+assert_no_unexpected_plugin_tree_entries() {
+  local plugin_dir unexpected
+  plugin_dir="${1:?plugin dir required}"
+  unexpected="$(
+    find "$plugin_dir" -mindepth 1 ! -type f -print -quit
+  )"
+  [ -z "$unexpected" ] || die "Gerrit plugin entries must be regular top-level jar files: $unexpected"
+  unexpected="$(
+    find "$plugin_dir" -mindepth 2 -type f -print -quit
+  )"
+  [ -z "$unexpected" ] || die "Nested Gerrit plugin files are not allowed: $unexpected"
+  unexpected="$(
+    find "$plugin_dir" -maxdepth 1 -type f ! -name '*.jar' -print -quit
+  )"
+  [ -z "$unexpected" ] || die "Unexpected non-jar Gerrit plugin file: $unexpected"
+}
+
+assert_plugin_jar_set_exact() {
+  local plugin_dir tmpdir expected actual missing unexpected missing_list unexpected_list
+  plugin_dir="${1:?plugin dir required}"
+  tmpdir="$(mktemp -d)"
+  register_cleanup_path "$tmpdir"
+  expected="$tmpdir/expected"
+  actual="$tmpdir/actual"
+  missing="$tmpdir/missing"
+  unexpected="$tmpdir/unexpected"
+  assert_no_unexpected_plugin_tree_entries "$plugin_dir"
+  expected_plugin_jars >"$expected" || die "Could not generate expected Gerrit plugin jar list"
+  actual_plugin_jars "$plugin_dir" >"$actual" || die "Could not generate actual Gerrit plugin jar list"
+  comm -23 "$expected" "$actual" >"$missing" || die "Could not compare missing Gerrit plugin jars"
+  comm -13 "$expected" "$actual" >"$unexpected" || die "Could not compare unexpected Gerrit plugin jars"
+  if [ -s "$missing" ]; then
+    missing_list="$(paste -sd, "$missing")"
+    die "Missing expected Gerrit plugin jars in $plugin_dir: $missing_list"
+  fi
+  if [ -s "$unexpected" ]; then
+    unexpected_list="$(paste -sd, "$unexpected")"
+    die "Unexpected Gerrit plugin jars in $plugin_dir: $unexpected_list"
+  fi
+  rm -rf "$tmpdir"
+}
+
+assert_plugin_artifact_manifest_matches() {
+  local plugin_dir manifest tmpdir actual
+  plugin_dir="${1:?plugin dir required}"
+  manifest="${2:?plugin artifact manifest required}"
+  [ -f "$manifest" ] || die "Missing Gerrit plugin artifact manifest: $manifest"
+  tmpdir="$(mktemp -d)"
+  register_cleanup_path "$tmpdir"
+  actual="$tmpdir/actual"
+  actual_plugin_jars "$plugin_dir" >"$actual" || die "Could not generate actual Gerrit plugin artifact manifest"
+  if ! cmp -s "$actual" "$manifest"; then
+    die "Gerrit plugin artifact manifest does not match staged plugin jar set: $manifest"
+  fi
+  rm -rf "$tmpdir"
+}
+
+verify_plugin_artifacts_in_dir() {
+  local plugin_dir plugin jar
+  plugin_dir="${1:?plugin dir required}"
+  assert_plugin_jar_set_exact "$plugin_dir"
+  plugin_list_values | while IFS= read -r plugin; do
+    jar="$plugin_dir/$(plugin_catalog_field "$plugin" jar)"
+    verify_plugin_artifact_file "$plugin" "$jar"
+  done
+}
+
+write_plugin_metadata_report_for_dir() {
+  local plugin_dir report plugin file jar sha plugin_name api_version expected_api_line url
+  plugin_dir="${1:?plugin dir required}"
+  report="${2:?metadata report required}"
+  {
+    printf 'plugin\tjar\tsha256\tgerrit_plugin_name\tgerrit_api_version\texpected_api_line\tsource_url\n'
+    plugin_list_values | while IFS= read -r plugin; do
+      file="$(plugin_catalog_field "$plugin" jar)"
+      jar="$plugin_dir/$file"
+      verify_plugin_artifact_file "$plugin" "$jar"
+      sha="$(sha256_file "$jar")"
+      plugin_name="$(manifest_attribute "$jar" Gerrit-PluginName)"
+      api_version="$(manifest_attribute "$jar" Gerrit-ApiVersion)"
+      expected_api_line="$(plugin_catalog_field "$plugin" api_line)"
+      url="$(plugin_catalog_field "$plugin" url)"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$plugin" "$file" "$sha" "$plugin_name" "$api_version" "$expected_api_line" "$url"
+    done
+  } >"$report"
+}
+
+assert_plugin_metadata_report_matches() {
+  local plugin_dir report tmpdir actual
+  plugin_dir="${1:?plugin dir required}"
+  report="${2:?metadata report required}"
+  [ -f "$report" ] || die "Missing Gerrit plugin metadata report: $report"
+  tmpdir="$(mktemp -d)"
+  register_cleanup_path "$tmpdir"
+  actual="$tmpdir/actual"
+  write_plugin_metadata_report_for_dir "$plugin_dir" "$actual"
+  if ! cmp -s "$actual" "$report"; then
+    die "Gerrit plugin metadata report does not match plugin jars and source catalog: $report"
+  fi
+  rm -rf "$tmpdir"
 }
 
 validate_os_dependency_identifier() {
@@ -520,31 +725,69 @@ check_runtime_account_readiness() {
     die "Missing Gerrit runtime group: $GERRIT_RUNTIME_GROUP"
 }
 
-write_plugin_artifact() {
-  local plugin source jar url
+manifest_attribute() {
+  local jar key
+  jar="${1:?jar required}"
+  key="${2:?manifest key required}"
+  unzip -p "$jar" META-INF/MANIFEST.MF 2>/dev/null |
+    awk -v key="$key" '
+      BEGIN { value = ""; collecting = 0 }
+      $0 ~ "\r$" { sub(/\r$/, "") }
+      index($0, key ": ") == 1 {
+        value = substr($0, length(key) + 3)
+        collecting = 1
+        next
+      }
+      collecting && substr($0, 1, 1) == " " {
+        value = value substr($0, 2)
+        next
+      }
+      collecting { collecting = 0 }
+      END { print value }
+    '
+}
+
+verify_plugin_artifact_file() {
+  local plugin jar expected_jar expected_sha expected_api_line actual_sha plugin_name api_version
   plugin="${1:?plugin required}"
-  jar="$GERRIT_ARTIFACT_OUTPUT_DIR/plugins/${plugin}.jar"
+  jar="${2:?plugin jar required}"
+  expected_jar="$(plugin_catalog_field "$plugin" jar)"
+  expected_sha="$(plugin_catalog_field "$plugin" sha256)"
+  expected_api_line="$(plugin_catalog_field "$plugin" api_line)"
+  [ "$(basename "$jar")" = "$expected_jar" ] ||
+    die "Gerrit plugin jar filename for $plugin must be $expected_jar: $jar"
+  [ -s "$jar" ] || die "Gerrit plugin jar is missing or empty: $jar"
+  unzip -t "$jar" >/dev/null 2>&1 ||
+    die "BLOCKED: Gerrit plugin artifact is not a valid jar archive: $jar"
+  plugin_name="$(manifest_attribute "$jar" Gerrit-PluginName)"
+  [ "$plugin_name" = "$plugin" ] ||
+    die "Gerrit plugin artifact metadata mismatch for $plugin: Gerrit-PluginName=$plugin_name file=$jar"
+  api_version="$(manifest_attribute "$jar" Gerrit-ApiVersion)"
+  case "$api_version" in
+    "$expected_api_line".*|"$expected_api_line".*-SNAPSHOT)
+      ;;
+    *)
+      die "Gerrit plugin artifact API mismatch for $plugin: Gerrit-ApiVersion=$api_version expected=${expected_api_line}.x or ${expected_api_line}.x-SNAPSHOT"
+      ;;
+  esac
+  actual_sha="$(sha256_file "$jar")"
+  [ "$actual_sha" = "$expected_sha" ] ||
+    die "Gerrit plugin artifact SHA256 mismatch for $plugin: expected=$expected_sha actual=$actual_sha file=$jar"
+}
+
+write_plugin_artifact() {
+  local plugin source jar url expected_jar
+  plugin="${1:?plugin required}"
+  expected_jar="$(plugin_catalog_field "$plugin" jar)"
+  jar="$GERRIT_ARTIFACT_OUTPUT_DIR/plugins/$expected_jar"
   mkdir -p "$(dirname "$jar")"
   if [ -n "$GERRIT_PLUGIN_SOURCE_DIR" ]; then
-    source="$GERRIT_PLUGIN_SOURCE_DIR/${plugin}.jar"
+    source="$GERRIT_PLUGIN_SOURCE_DIR/$expected_jar"
     [ -f "$source" ] || die "GERRIT_PLUGIN_SOURCE_DIR is missing selected plugin artifact: $source"
     cp "$source" "$jar"
   elif [ "$GERRIT_DOWNLOAD_ARTIFACTS" = "1" ]; then
     require_command wget
-    case "$plugin" in
-      events-log)
-        url="https://gerrit-ci.gerritforge.com/job/plugin-events-log-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/events-log/events-log.jar"
-        ;;
-      metrics-reporter-prometheus)
-        url="https://gerrit-ci.gerritforge.com/job/plugin-metrics-reporter-prometheus-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/metrics-reporter-prometheus/metrics-reporter-prometheus.jar"
-        ;;
-      healthcheck)
-        url="https://gerrit-ci.gerritforge.com/job/plugin-healthcheck-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/healthcheck/healthcheck.jar"
-        ;;
-      *)
-        die "No approved plugin download URL configured for selected Gerrit plugin: $plugin"
-        ;;
-    esac
+    url="$(plugin_catalog_field "$plugin" url)"
     printf 'simulation-only public internet use: downloading Gerrit plugin artifact %s\n' "$plugin" >>"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log"
     rm -f "$jar"
     wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
@@ -553,16 +796,53 @@ write_plugin_artifact() {
     printf 'BLOCKED: prepare-artifacts requires GERRIT_PLUGIN_SOURCE_DIR or GERRIT_DOWNLOAD_ARTIFACTS=1 for selected Gerrit plugin jars\n' >&2
     return 1
   fi
-  verify_plugin_artifact_file "$jar"
+  verify_plugin_artifact_file "$plugin" "$jar"
+}
+
+assert_plugin_source_dir_safe() {
+  local source_dir artifact_dir output_plugins source_abs artifact_abs output_abs
+  source_dir="${GERRIT_PLUGIN_SOURCE_DIR:-}"
+  [ -n "$source_dir" ] || return 0
+  artifact_dir="$GERRIT_ARTIFACT_OUTPUT_DIR"
+  output_plugins="$GERRIT_ARTIFACT_OUTPUT_DIR/plugins"
+  source_abs="$(cd "$source_dir" 2>/dev/null && pwd -P)" ||
+    die "GERRIT_PLUGIN_SOURCE_DIR is not readable: $source_dir"
+  mkdir -p "$artifact_dir" "$output_plugins"
+  artifact_abs="$(cd "$artifact_dir" && pwd -P)" ||
+    die "Could not resolve Gerrit artifact output directory: $artifact_dir"
+  output_abs="$(cd "$output_plugins" && pwd -P)" ||
+    die "Could not resolve Gerrit plugin output directory: $output_plugins"
+  case "$source_abs" in
+    "$artifact_abs"|"$artifact_abs"/*|"$output_abs"|"$output_abs"/*)
+      die "GERRIT_PLUGIN_SOURCE_DIR must not overlap GERRIT_ARTIFACT_OUTPUT_DIR"
+      ;;
+  esac
+  case "$artifact_abs" in
+    "$source_abs"/*)
+      die "GERRIT_PLUGIN_SOURCE_DIR must not overlap GERRIT_ARTIFACT_OUTPUT_DIR"
+      ;;
+  esac
+  case "$output_abs" in
+    "$source_abs"/*)
+      die "GERRIT_PLUGIN_SOURCE_DIR must not overlap GERRIT_ARTIFACT_OUTPUT_DIR"
+      ;;
+  esac
 }
 
 verify_staged_artifacts() {
-  local manifest checksums
+  local manifest checksums plugin_manifest plugin_metadata plugin_checksums
   manifest="$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt"
   checksums="$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256"
+  plugin_manifest="$GERRIT_STAGED_ARTIFACT_DIR/plugin-artifacts.manifest"
+  plugin_metadata="$GERRIT_STAGED_ARTIFACT_DIR/plugin-metadata.report"
+  plugin_checksums="$GERRIT_STAGED_ARTIFACT_DIR/plugin-checksums.sha256"
   [ -f "$manifest" ] || die "Missing staged Gerrit manifest: $manifest"
   [ -f "$checksums" ] || die "Missing staged Gerrit checksums: $checksums"
+  [ -f "$plugin_manifest" ] || die "Missing staged Gerrit plugin artifact manifest: $plugin_manifest"
+  [ -f "$plugin_metadata" ] || die "Missing staged Gerrit plugin metadata report: $plugin_metadata"
+  [ -f "$plugin_checksums" ] || die "Missing staged Gerrit plugin checksums: $plugin_checksums"
   (cd "$GERRIT_STAGED_ARTIFACT_DIR" && sha256sum -c checksums.sha256) >/dev/null
+  (cd "$GERRIT_STAGED_ARTIFACT_DIR" && sha256sum -c plugin-checksums.sha256) >/dev/null
   awk -F= '
     $1 == "harness_manifest_version" && $2 == "1" { h=1 }
     $1 == "role" && $2 == "gerrit" { r=1 }
@@ -576,6 +856,9 @@ verify_staged_artifacts() {
     $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
     END { exit !(h && r && g && j && u && n && a && o && p && k) }
   ' "$manifest" || die "Staged manifest does not match the Gerrit Version Baseline"
+  verify_plugin_artifacts_in_dir "$GERRIT_STAGED_ARTIFACT_DIR/plugins"
+  assert_plugin_artifact_manifest_matches "$GERRIT_STAGED_ARTIFACT_DIR/plugins" "$plugin_manifest"
+  assert_plugin_metadata_report_matches "$GERRIT_STAGED_ARTIFACT_DIR/plugins" "$plugin_metadata"
   assert_no_artifact_key_material "$GERRIT_STAGED_ARTIFACT_DIR"
 }
 
@@ -598,10 +881,6 @@ cmd_preflight() {
     check_runtime_account_readiness
     check_ldap_access
   fi
-  [ "$GERRIT_VERSION" = "3.13.6" ] || die "Gerrit default baseline must be 3.13.6 unless the reviewed baseline is updated"
-  [ "$GERRIT_JAVA_VERSION" = "21" ] || die "Gerrit Java baseline must be OpenJDK 21"
-  [ "$GERRIT_UBUNTU_RELEASE" = "24.04" ] || die "Ubuntu release baseline must be 24.04"
-  [ "$GERRIT_UBUNTU_CODENAME" = "noble" ] || die "Ubuntu codename baseline must be noble"
   printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s ssh_port=%s mode=%s checks=%s\n' \
     "$dry_run" "${env_file:-$default_env_file}" "$GERRIT_HOST" "$GERRIT_HTTP_PORT" "$GERRIT_SSH_PORT" "$GERRIT_VERIFICATION_MODE" \
     "disk,host-resolution,runtime-account-group,ldap-bind-search"
@@ -626,20 +905,23 @@ bundle_contains_keys=no
 plugins=$GERRIT_PLUGIN_LIST
 war=gerrit-3.13.6.war
 plugin_artifacts=plugin-artifacts.manifest
+plugin_metadata=plugin-metadata.report
+plugin_checksums=plugin-checksums.sha256
 EOF
 }
 
 write_plugin_manifests() {
+  assert_plugin_jar_set_exact "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins"
   (
     cd "$GERRIT_ARTIFACT_OUTPUT_DIR"
     find plugins -type f -name '*.jar' -printf '%f\n' | sort >plugin-artifacts.manifest
-    printf '%s\n' "$GERRIT_PLUGIN_LIST" |
-      tr ',' '\n' |
-      sed 's/$/.jar/' |
-      sort >plugin-seed-jars.expected
-    comm -23 plugin-seed-jars.expected plugin-artifacts.manifest >plugin-artifacts.missing
-    test ! -s plugin-artifacts.missing
-  ) || die "Prepared Gerrit plugin set does not match GERRIT_PLUGIN_LIST"
+    find plugins -type f -name '*.jar' -print0 |
+      sort -z |
+      xargs -0 sha256sum >plugin-checksums.sha256
+  )
+  write_plugin_metadata_report_for_dir "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins" "$GERRIT_ARTIFACT_OUTPUT_DIR/plugin-metadata.report"
+  assert_plugin_artifact_manifest_matches "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins" "$GERRIT_ARTIFACT_OUTPUT_DIR/plugin-artifacts.manifest"
+  assert_plugin_metadata_report_matches "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins" "$GERRIT_ARTIFACT_OUTPUT_DIR/plugin-metadata.report"
 }
 
 prepare_real_gerrit_war() {
@@ -683,14 +965,6 @@ verify_war_artifact() {
   fi
 }
 
-verify_plugin_artifact_file() {
-  local jar
-  jar="${1:?plugin jar required}"
-  [ -s "$jar" ] || die "Gerrit plugin jar is missing or empty: $jar"
-  unzip -t "$jar" >/dev/null 2>&1 ||
-    die "BLOCKED: Gerrit plugin artifact is not a valid jar archive: $jar"
-}
-
 cmd_prepare_artifacts() {
   load_env normal
   apply_env_defaults
@@ -699,6 +973,7 @@ cmd_prepare_artifacts() {
   require_command unzip
   validate_plugins
   mkdir -p "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins"
+  assert_plugin_source_dir_safe
   rm -f "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins/"*.jar
   prepare_real_gerrit_war
   for_each_plugin write_plugin_artifact
@@ -728,10 +1003,14 @@ cmd_install() {
   mkdir -p "$GERRIT_SITE_PATH/bin" "$GERRIT_SITE_PATH/plugins" "$GERRIT_SITE_PATH/etc" "$GERRIT_SITE_PATH/logs"
   verify_war_artifact "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war"
   cp "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war"
-  rm -f "$GERRIT_SITE_PATH/plugins/"*.jar
+  find "$GERRIT_SITE_PATH/plugins" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
   cp -R "$GERRIT_STAGED_ARTIFACT_DIR/plugins/." "$GERRIT_SITE_PATH/plugins/"
+  verify_plugin_artifacts_in_dir "$GERRIT_SITE_PATH/plugins"
   cp "$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt" "$GERRIT_SITE_PATH/etc/artifact-manifest.txt"
   cp "$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256" "$GERRIT_SITE_PATH/etc/artifact-checksums.sha256"
+  cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-artifacts.manifest" "$GERRIT_SITE_PATH/etc/plugin-artifacts.manifest"
+  cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-metadata.report" "$GERRIT_SITE_PATH/etc/plugin-metadata.report"
+  cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-checksums.sha256" "$GERRIT_SITE_PATH/etc/plugin-checksums.sha256"
   write_text_file "$GERRIT_SITE_PATH/state/install.status" "installed"
   printf 'status=pass command=install site=%s staged=%s\n' "$GERRIT_SITE_PATH" "$GERRIT_STAGED_ARTIFACT_DIR"
 }
@@ -879,9 +1158,10 @@ check_plugin_readiness() {
 }
 
 check_plugin_file() {
-  local plugin
+  local plugin jar
   plugin="${1:?plugin required}"
-  [ -f "$GERRIT_SITE_PATH/plugins/${plugin}.jar" ]
+  jar="$(plugin_catalog_field "$plugin" jar)"
+  [ -f "$GERRIT_SITE_PATH/plugins/$jar" ]
 }
 
 gerrit_ssh_log() {
@@ -1136,8 +1416,15 @@ check_installed_artifact_freshness() {
     die "Installed artifact manifest copy does not match the staged manifest input"
   cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256" "$GERRIT_SITE_PATH/etc/artifact-checksums.sha256" ||
     die "Installed artifact checksum copy does not match the staged checksum input"
+  cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/plugin-artifacts.manifest" "$GERRIT_SITE_PATH/etc/plugin-artifacts.manifest" ||
+    die "Installed plugin artifact manifest copy does not match the staged plugin manifest input"
+  cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/plugin-metadata.report" "$GERRIT_SITE_PATH/etc/plugin-metadata.report" ||
+    die "Installed plugin metadata report copy does not match the staged plugin metadata input"
+  cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/plugin-checksums.sha256" "$GERRIT_SITE_PATH/etc/plugin-checksums.sha256" ||
+    die "Installed plugin checksum copy does not match the staged plugin checksum input"
 
   rendered_dir="$(mktemp -d)"
+  register_cleanup_path "$rendered_dir"
   render_template "$GERRIT_STAGED_ARTIFACT_DIR/gerrit.config.template" "$rendered_dir/gerrit.config"
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" gerrit.canonicalWebUrl
   assert_config_key_matches "$rendered_dir/gerrit.config" "$GERRIT_SITE_PATH/etc/gerrit.config" gerrit.basePath
@@ -1159,6 +1446,8 @@ check_installed_artifact_freshness() {
   installed_plugin_digest="$(plugin_set_digest "$GERRIT_SITE_PATH/plugins")"
   [ "$staged_plugin_digest" = "$installed_plugin_digest" ] ||
     die "Installed Gerrit plugin set does not match the staged plugin input"
+  verify_plugin_artifacts_in_dir "$GERRIT_SITE_PATH/plugins"
+  assert_plugin_artifact_manifest_matches "$GERRIT_SITE_PATH/plugins" "$GERRIT_SITE_PATH/etc/plugin-artifacts.manifest"
 }
 
 verify_readiness_facts() {
