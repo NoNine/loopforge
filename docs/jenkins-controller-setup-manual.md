@@ -48,7 +48,11 @@ Consumed inputs:
   filesystem, and Jenkins credential ID.
 - Artifact output path, staged artifact path, verification mode, evidence
   directory, and bounded log directory.
-- `JENKINS_PLUGIN_LIST`, with curated `name:version` plugin entries.
+- `JENKINS_DIRECT_PLUGIN_NAMES`, with operator-owned direct plugin intent as
+  plugin names only.
+- `JENKINS_PLUGIN_LIST`, with accepted direct plugin pins as `name:version`
+  entries. Do not add transitive dependencies to this env value only because
+  they appear in Plugin Installation Manager resolver output.
 - `JENKINS_OS_DEPENDENCIES`, which defaults to controller target OS package
   expectations from the approved Jenkins reference: `ca-certificates`, `curl`,
   `fontconfig`, `git`, `net-tools`, `netcat-openbsd`, `openjdk-21-jre`,
@@ -122,7 +126,46 @@ For dry-run review:
 scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.example --dry-run preflight
 ```
 
-## Phase 3: Curated Jenkins Controller Artifact And Plugin Preparation
+## Phase 3: Jenkins Direct Plugin Version Proposal
+
+Plugin version proposal runs in the bundle factory environment, not on the
+Jenkins controller target. The Jenkins Plugin Installation Manager Tool is the
+authoritative resolver for this workflow.
+
+Consumed inputs:
+
+- Reviewed Jenkins controller env values.
+- `JENKINS_DIRECT_PLUGIN_NAMES`, names only.
+- The package v1 Jenkins baseline: Jenkins 2.555.3 LTS and Jenkins Plugin
+  Installation Manager Tool 2.15.0.
+- Reviewed Jenkins WAR and Plugin Installation Manager artifact source paths,
+  or `JENKINS_DOWNLOAD_ARTIFACTS=1` in the bundle-factory Docker simulation
+  path.
+
+Produced outputs:
+
+- `plugins.intent.txt`, generated from `JENKINS_DIRECT_PLUGIN_NAMES`.
+- `plugin-version-proposals.txt`, containing only direct
+  `plugin-name:version` proposals.
+- `plugin-version-resolution-report.txt`, preserving the full Plugin
+  Installation Manager resolver output as evidence.
+
+Acceptance:
+
+- Review the proposal and full resolver report.
+- Accept explicitly with `--write-env --yes`; this updates only
+  `JENKINS_PLUGIN_LIST` in the reviewed env file.
+- `JENKINS_PLUGIN_LIST` remains limited to direct plugin pins. Transitive
+  dependencies are captured later in `plugins.lock.txt`.
+
+Helper:
+
+```bash
+scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> propose-plugin-versions
+scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --write-env --yes propose-plugin-versions
+```
+
+## Phase 4: Curated Jenkins Controller Artifact And Plugin Preparation
 
 Artifact preparation runs in the bundle factory environment, not on the
 Jenkins controller target. The shared Docker harness runs this phase in the
@@ -133,7 +176,7 @@ Consumed inputs:
 - Reviewed Jenkins controller env values.
 - Version baseline: Jenkins 2.555.3 LTS, OpenJDK 21, Jenkins Plugin
   Installation Manager Tool 2.15.0, Ubuntu release `24.04`, codename `noble`.
-- Curated Jenkins plugin list with versions.
+- Accepted direct Jenkins plugin pins from `JENKINS_PLUGIN_LIST`.
 - Reviewed controller artifact source paths, or `JENKINS_DOWNLOAD_ARTIFACTS=1`
   in the bundle-factory Docker simulation path. Any public internet use here
   is labeled `simulation-only` and remains outside target-host application
@@ -148,7 +191,12 @@ Produced outputs:
 - Curated Jenkins Plugin Installation Manager Tool artifact.
 - Curated Jenkins plugin artifacts, including resolved dependency plugins,
   staged from reviewed sources or resolved in the bundle factory.
-- Plugin seed, artifact manifest, and plugin resolution report.
+- `plugins.seed.txt`, generated from accepted direct pins as internal Plugin
+  Installation Manager input.
+- `plugins.lock.txt`, generated from downloaded plugin manifests as the full
+  direct-plus-transitive closure.
+- Plugin artifact manifest, plugin resolution report, and plugin review
+  report.
 - Controller-only JCasC and service templates.
 - No Jenkins credentials, Gerrit Trigger server, agent-node, disposable
   verification job, or trigger-verification env templates are staged by the
@@ -186,7 +234,7 @@ Harness:
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
 ```
 
-## Phase 4: Jenkins Installation
+## Phase 5: Jenkins Installation
 
 Installation consumes only staged bundle factory output. The target verifies
 `manifest.txt` and `checksums.sha256` before mutation.
@@ -218,7 +266,7 @@ Helper:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes install
 ```
 
-## Phase 5: Jenkins Runtime Configuration
+## Phase 6: Jenkins Runtime Configuration
 
 Consumed inputs:
 
@@ -244,7 +292,7 @@ Helper:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes configure-service
 ```
 
-## Phase 6: LDAP/JCasC Configuration
+## Phase 7: LDAP/JCasC Configuration
 
 Jenkins uses LDAP-backed human admin access. The Jenkins runtime account and
 Jenkins Gerrit integration account remain separate from the Jenkins admin
@@ -281,7 +329,7 @@ Plugins are installed from staged curated artifacts before JCasC validation:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes install-plugins
 ```
 
-## Phase 7: Shared Gerrit Trigger Integration Handoff
+## Phase 8: Shared Gerrit Trigger Integration Handoff
 
 Gerrit Trigger configuration is deferred to the later integration step. Step 8
 is Jenkins controller-only bringup and must not require Gerrit-side mutation,
@@ -320,7 +368,7 @@ scripts/integration-setup.sh \
   configure-trigger
 ```
 
-## Phase 8: Deferred Jenkins-To-Gerrit SSH Key Handoff
+## Phase 9: Deferred Jenkins-To-Gerrit SSH Key Handoff
 
 Jenkins-to-Gerrit key generation is deferred to the later integration step.
 Controller-only validation must not require this credential material.
@@ -357,7 +405,7 @@ scripts/integration-setup.sh \
   configure-gerrit-ssh
 ```
 
-## Phase 9: Deferred Build-Agent SSH Key Handoff
+## Phase 10: Deferred Build-Agent SSH Key Handoff
 
 Jenkins-to-agent key generation is deferred to the later integration step.
 Step 8 controller-only validation must not require a configured build agent.
@@ -395,7 +443,7 @@ scripts/integration-setup.sh \
   configure-agent-ssh
 ```
 
-## Phase 10: Deferred Build-Agent Registration And Scheduling Validation
+## Phase 11: Deferred Build-Agent Registration And Scheduling Validation
 
 Build-agent registration and scheduling validation are deferred to the later
 integration step, after Jenkins controller and Jenkins agent host-only bringup
@@ -436,7 +484,7 @@ scripts/integration-setup.sh \
   validate-integration
 ```
 
-## Phase 11: Deferred End-To-End Gerrit Trigger Verification
+## Phase 12: Deferred End-To-End Gerrit Trigger Verification
 
 End-to-end Gerrit Trigger verification is deferred to the later integration
 step. Step 8 controller-only validation must not claim patchset-created event
@@ -479,12 +527,13 @@ Failure classification follows `docs/gerrit-trigger-integration.md`: SSH
 credential failures, `stream-events` failures, job/agent scheduling failures,
 and `Verified` voting failures must remain distinct.
 
-## Phase 12: Validation
+## Phase 13: Validation
 
 Validation in Step 8 proves Jenkins controller-only readiness with real runtime
 checks for controller lifecycle phases. It verifies staged artifacts, rendered
-configuration, curated plugins, LDAP/JCasC configuration, LDAP reachability,
-Jenkins controller startup, endpoint reachability, bounded logs, and evidence.
+configuration, accepted direct plugin pins and resolved plugin closure,
+LDAP/JCasC configuration, LDAP reachability, Jenkins controller startup,
+endpoint reachability, bounded logs, and evidence.
 Gerrit SSH reachability, Gerrit Trigger readiness, agent scheduling, and
 trigger voting are deferred to the later shared integration step.
 
@@ -502,8 +551,9 @@ Validation evidence covers:
   manifest/checksum before mutation.
 - LDAP access: the Jenkins controller target can open a TCP connection to the
   reviewed LDAP endpoint.
-- Plugin readiness: every curated plugin from `JENKINS_PLUGIN_LIST` is
-  installed from staged artifacts.
+- Plugin readiness: every accepted direct plugin pin from
+  `JENKINS_PLUGIN_LIST` is installed from staged artifacts, and the full
+  direct-plus-transitive closure is retained in `plugins.lock.txt`.
 - JCasC readiness: LDAP realm exists and the built-in node has zero executors.
 - Gerrit SSH connectivity: deferred to the later integration step.
 - Gerrit Trigger readiness: deferred to the later integration step.
@@ -522,7 +572,7 @@ Harness gate:
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
 ```
 
-## Phase 13: Evidence Collection
+## Phase 14: Evidence Collection
 
 Consumed inputs:
 

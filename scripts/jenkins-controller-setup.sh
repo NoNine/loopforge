@@ -12,15 +12,23 @@ default_env_file="$repo_root/examples/jenkins-controller.env.example"
 env_file=""
 dry_run=0
 assume_yes=0
+write_env=0
+
+supported_jenkins_version="2.555.3"
+supported_jenkins_java_version="21"
+supported_jenkins_plugin_manager_version="2.15.0"
+supported_jenkins_ubuntu_release="24.04"
+supported_jenkins_ubuntu_codename="noble"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/jenkins-controller-setup.sh [--env FILE] [--dry-run] [--yes] <command>
+  scripts/jenkins-controller-setup.sh [--env FILE] [--dry-run] [--yes] [--write-env] <command>
 
 Commands:
   print-env-template
   preflight
+  propose-plugin-versions
   prepare-artifacts
   install
   configure-service
@@ -33,6 +41,8 @@ Options:
   --env FILE     Source reviewed Jenkins controller env values from FILE.
   --dry-run      Check inputs and describe non-mutating results only.
   --yes          Confirm mutating commands after env review.
+  --write-env    With propose-plugin-versions and --yes, accept direct plugin
+                 version proposals by updating only JENKINS_PLUGIN_LIST.
   -h, --help     Show this help.
 
 The manual remains the authority. This helper accelerates reviewed Jenkins
@@ -188,11 +198,6 @@ require_reviewed_value() {
 require_env_values() {
   local required name
   required="
-JENKINS_VERSION
-JENKINS_JAVA_VERSION
-JENKINS_PLUGIN_MANAGER_VERSION
-JENKINS_UBUNTU_RELEASE
-JENKINS_UBUNTU_CODENAME
 JENKINS_HOST
 JENKINS_URL
 JENKINS_HTTP_PORT
@@ -200,6 +205,7 @@ JENKINS_RUNTIME_ACCOUNT
 JENKINS_HOME
 JENKINS_STAGED_ARTIFACT_DIR
 JENKINS_ARTIFACT_OUTPUT_DIR
+JENKINS_DIRECT_PLUGIN_NAMES
 JENKINS_PLUGIN_LIST
 JENKINS_DOWNLOAD_ARTIFACTS
 LDAP_URL
@@ -234,11 +240,11 @@ require_account_separation() {
 }
 
 apply_env_defaults() {
-  JENKINS_VERSION="${JENKINS_VERSION:-2.555.3}"
-  JENKINS_JAVA_VERSION="${JENKINS_JAVA_VERSION:-21}"
-  JENKINS_PLUGIN_MANAGER_VERSION="${JENKINS_PLUGIN_MANAGER_VERSION:-2.15.0}"
-  JENKINS_UBUNTU_RELEASE="${JENKINS_UBUNTU_RELEASE:-24.04}"
-  JENKINS_UBUNTU_CODENAME="${JENKINS_UBUNTU_CODENAME:-noble}"
+  JENKINS_VERSION="$supported_jenkins_version"
+  JENKINS_JAVA_VERSION="$supported_jenkins_java_version"
+  JENKINS_PLUGIN_MANAGER_VERSION="$supported_jenkins_plugin_manager_version"
+  JENKINS_UBUNTU_RELEASE="$supported_jenkins_ubuntu_release"
+  JENKINS_UBUNTU_CODENAME="$supported_jenkins_ubuntu_codename"
   JENKINS_HOST="${JENKINS_HOST:-jenkins-controller-target}"
   JENKINS_URL="${JENKINS_URL:-http://jenkins-controller-target:8080/}"
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
@@ -254,6 +260,7 @@ apply_env_defaults() {
   JENKINS_PLUGIN_MANAGER_SOURCE="${JENKINS_PLUGIN_MANAGER_SOURCE:-}"
   JENKINS_PLUGIN_SOURCE_DIR="${JENKINS_PLUGIN_SOURCE_DIR:-}"
   JENKINS_OS_DEPENDENCIES="${JENKINS_OS_DEPENDENCIES:-ca-certificates,curl,fontconfig,git,net-tools,netcat-openbsd,openjdk-21-jre,openssh-client,rsync,tar,unzip,wget}"
+  JENKINS_DIRECT_PLUGIN_NAMES="${JENKINS_DIRECT_PLUGIN_NAMES:-configuration-as-code,credentials,git,gerrit-trigger,ldap,matrix-auth,ssh-credentials,ssh-slaves,workflow-aggregator,job-dsl,timestamper,ws-cleanup}"
   JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2006.v001a_2ca_6b_574,credentials:1415.v831096eb_5534,git:5.7.0,gerrit-trigger:2.42.0,ldap:780.vcb_33c9a_e4332,matrix-auth:3.2.6,ssh-credentials:361.vb_f6760818e8c,ssh-slaves:3.1031.v72c6b_883b_869,workflow-aggregator:608.v67378e9d3db_1,job-dsl:1.93,timestamper:1.30,ws-cleanup:0.48}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
@@ -399,6 +406,20 @@ assert_no_unresolved_placeholders() {
   fi
 }
 
+validate_plugin_identifier() {
+  local name
+  name="${1:?plugin name required}"
+  case "$name" in
+    ""|*[!A-Za-z0-9_.-]*|*/*|*'..'*|.*|*-|*.)
+      die "Invalid Jenkins plugin identifier: $name"
+      ;;
+  esac
+}
+
+validate_direct_plugin_name() {
+  validate_plugin_identifier "$1"
+}
+
 validate_plugin_spec() {
   local spec name version
   spec="${1:?plugin spec required}"
@@ -406,11 +427,7 @@ validate_plugin_spec() {
     *:*) name="${spec%%:*}"; version="${spec#*:}" ;;
     *) die "JENKINS_PLUGIN_LIST entries must be name:version, got: $spec" ;;
   esac
-  case "$name" in
-    ""|*[!A-Za-z0-9_.-]*|*/*|*'..'*|.*|*-|*.)
-      die "Invalid Jenkins plugin identifier: $name"
-      ;;
-  esac
+  validate_plugin_identifier "$name"
   case "$version" in
     ""|*[!A-Za-z0-9_.+-]*|*/*|*'..'*|.*|*-|*.)
       die "Invalid Jenkins plugin version for $name: $version"
@@ -418,8 +435,45 @@ validate_plugin_spec() {
   esac
 }
 
+validate_direct_plugins() {
+  for_each_csv_value "$JENKINS_DIRECT_PLUGIN_NAMES" validate_direct_plugin_name "JENKINS_DIRECT_PLUGIN_NAMES"
+}
+
 validate_plugins() {
   for_each_csv_value "$JENKINS_PLUGIN_LIST" validate_plugin_spec "JENKINS_PLUGIN_LIST"
+}
+
+enforce_version_baseline() {
+  [ "$JENKINS_VERSION" = "$supported_jenkins_version" ] || die "Jenkins controller baseline must be $supported_jenkins_version unless the reviewed baseline is updated"
+  [ "$JENKINS_JAVA_VERSION" = "$supported_jenkins_java_version" ] || die "Jenkins Java baseline must be OpenJDK $supported_jenkins_java_version"
+  [ "$JENKINS_PLUGIN_MANAGER_VERSION" = "$supported_jenkins_plugin_manager_version" ] || die "Jenkins Plugin Installation Manager baseline must be $supported_jenkins_plugin_manager_version"
+  [ "$JENKINS_UBUNTU_RELEASE" = "$supported_jenkins_ubuntu_release" ] || die "Ubuntu release baseline must be $supported_jenkins_ubuntu_release"
+  [ "$JENKINS_UBUNTU_CODENAME" = "$supported_jenkins_ubuntu_codename" ] || die "Ubuntu codename baseline must be $supported_jenkins_ubuntu_codename"
+}
+
+validate_accepted_direct_plugins() {
+  local name spec expected_count actual_count
+  validate_direct_plugins
+  validate_plugins
+  expected_count=0
+  for name in ${JENKINS_DIRECT_PLUGIN_NAMES//,/ }; do
+    expected_count=$((expected_count + 1))
+    case ",$JENKINS_PLUGIN_LIST," in
+      *",$name:"*) ;;
+      *) die "JENKINS_PLUGIN_LIST is missing accepted direct plugin pin for $name" ;;
+    esac
+  done
+  actual_count=0
+  for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
+    actual_count=$((actual_count + 1))
+    name="$(plugin_name "$spec")"
+    case ",$JENKINS_DIRECT_PLUGIN_NAMES," in
+      *",$name,"*) ;;
+      *) die "JENKINS_PLUGIN_LIST must contain only accepted direct plugin pins, not transitive dependency: $name" ;;
+    esac
+  done
+  [ "$actual_count" -eq "$expected_count" ] ||
+    die "JENKINS_PLUGIN_LIST must contain one accepted pin for each JENKINS_DIRECT_PLUGIN_NAMES entry"
 }
 
 plugin_name() {
@@ -459,25 +513,222 @@ write_plugin_artifact() {
     die "Jenkins plugin artifact is not a valid archive: $dest_file"
 }
 
-prepare_plugins() {
-  local seed_file spec name
-  seed_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.seed.txt"
-  : >"$seed_file"
-  for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
-    printf '%s\n' "$spec" >>"$seed_file"
+jenkins_war_artifact() {
+  printf '%s/jenkins-%s.war\n' "$JENKINS_ARTIFACT_OUTPUT_DIR" "$JENKINS_VERSION"
+}
+
+jenkins_plugin_manager_artifact() {
+  printf '%s/jenkins-plugin-manager-%s.jar\n' "$JENKINS_ARTIFACT_OUTPUT_DIR" "$JENKINS_PLUGIN_MANAGER_VERSION"
+}
+
+write_direct_plugin_intent() {
+  local target name
+  target="${1:?target required}"
+  : >"$target"
+  for name in ${JENKINS_DIRECT_PLUGIN_NAMES//,/ }; do
+    validate_plugin_identifier "$name"
+    printf '%s\n' "$name" >>"$target"
   done
+}
+
+write_accepted_plugin_seed() {
+  local target spec
+  target="${1:?target required}"
+  : >"$target"
+  for spec in ${JENKINS_PLUGIN_LIST//,/ }; do
+    validate_plugin_spec "$spec"
+    printf '%s\n' "$spec" >>"$target"
+  done
+}
+
+extract_direct_plugin_proposals() {
+  local intent_file report_file proposals_file
+  intent_file="${1:?intent file required}"
+  report_file="${2:?report file required}"
+  proposals_file="${3:?proposals file required}"
+  awk '
+    NR == FNR {
+      wanted[$1] = 1
+      order[++count] = $1
+      next
+    }
+    {
+      line = $0
+      gsub(/\r/, "", line)
+      sub(/^[[:space:]*-]+/, "", line)
+      name = ""
+      version = ""
+      split(line, fields, /[[:space:]]+/)
+      if (fields[1] ~ /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+$/) {
+        split(fields[1], pair, ":")
+        name = pair[1]
+        version = pair[2]
+      } else if (wanted[fields[1]]) {
+        name = fields[1]
+        version = fields[2]
+        gsub(/^[({[]/, "", version)
+        gsub(/[)}\],;]$/, "", version)
+      }
+      if (wanted[name] && version ~ /^[A-Za-z0-9_.+-]+$/) {
+        resolved[name] = version
+      }
+    }
+    END {
+      missing = 0
+      for (i = 1; i <= count; i++) {
+        name = order[i]
+        if (!(name in resolved)) {
+          printf "missing proposal for %s\n", name > "/dev/stderr"
+          missing = 1
+        } else {
+          printf "%s:%s\n", name, resolved[name]
+        }
+      }
+      exit missing
+    }
+  ' "$intent_file" "$report_file" >"$proposals_file" ||
+    die "Could not extract direct plugin version proposals from Plugin Installation Manager output; report=$report_file"
+}
+
+accepted_plugin_list_from_file() {
+  local proposals_file
+  proposals_file="${1:?proposals file required}"
+  paste -sd, "$proposals_file"
+}
+
+write_plugin_list_to_env() {
+  local target_file accepted_list tmp_file backup_file existing_count
+  target_file="${1:?env file required}"
+  accepted_list="${2:?accepted plugin list required}"
+  [ -n "$env_file" ] || die "--write-env requires --env FILE; refusing to update the example env by default"
+  [ -f "$target_file" ] || die "Missing env file for --write-env: $target_file"
+  existing_count="$(grep -Ec '^JENKINS_PLUGIN_LIST=' "$target_file" || true)"
+  [ "$existing_count" -le 1 ] || die "Env file contains multiple JENKINS_PLUGIN_LIST assignments; refusing ambiguous --write-env update"
+  tmp_file="$target_file.tmp.$$"
+  backup_file="$target_file.bak.$(timestamp_utc)"
+  cp "$target_file" "$backup_file"
+  NEW_PLUGIN_LIST="$accepted_list" perl -0pe '
+    my $value = $ENV{NEW_PLUGIN_LIST};
+    my $line = "JENKINS_PLUGIN_LIST=\"$value\"";
+    if (!s/^JENKINS_PLUGIN_LIST=.*$/$line/m) {
+      s/\n?\z/\n$line\n/;
+    }
+  ' "$target_file" >"$tmp_file"
+  JENKINS_PLUGIN_LIST="$accepted_list" validate_accepted_direct_plugins
+  mv "$tmp_file" "$target_file"
+}
+
+run_plugin_manager_list() {
+  local plugin_file report_file
+  plugin_file="${1:?plugin file required}"
+  report_file="${2:?report file required}"
+  require_command java
+  printf 'simulation-only public internet use: Jenkins Plugin Installation Manager may consult update-center metadata for plugin resolution\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  java -jar "$(jenkins_plugin_manager_artifact)" \
+    --war "$(jenkins_war_artifact)" \
+    --plugin-file "$plugin_file" \
+    --latest false \
+    --no-download \
+    --list \
+    >"$report_file" 2>&1
+}
+
+run_plugin_manager_review() {
+  local plugin_file report_file
+  plugin_file="${1:?plugin file required}"
+  report_file="${2:?report file required}"
+  require_command java
+  printf 'simulation-only public internet use: Jenkins Plugin Installation Manager may consult update-center metadata for update/security review\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  java -jar "$(jenkins_plugin_manager_artifact)" \
+    --war "$(jenkins_war_artifact)" \
+    --plugin-file "$plugin_file" \
+    --latest false \
+    --available-updates \
+    --view-all-security-warnings \
+    --no-download \
+    >"$report_file" 2>&1
+}
+
+extract_full_plugin_lock_from_report() {
+  local report_file lock_file
+  report_file="${1:?report file required}"
+  lock_file="${2:?lock file required}"
+  awk '
+    $0 == "All requested plugins:" { in_list = 1; next }
+    in_list && $0 == "" { in_list = 0 }
+    in_list {
+      name = $1
+      version = $2
+      if (name ~ /^[A-Za-z0-9_.-]+$/ && version ~ /^[A-Za-z0-9_.+-]+$/) {
+        print name ":" version
+      }
+    }
+  ' "$report_file" | sort -u >"$lock_file"
+  [ -s "$lock_file" ] || die "Could not extract full plugin closure from Plugin Installation Manager output: $report_file"
+}
+
+copy_plugin_source_closure() {
+  local lock_file spec name source_file
+  lock_file="${1:?lock file required}"
+  while IFS= read -r spec; do
+    validate_plugin_spec "$spec"
+    name="$(plugin_name "$spec")"
+    source_file=""
+    for candidate in "$JENKINS_PLUGIN_SOURCE_DIR/${name}.jpi" "$JENKINS_PLUGIN_SOURCE_DIR/${name}.hpi"; do
+      if [ -f "$candidate" ]; then
+        source_file="$candidate"
+        break
+      fi
+    done
+    [ -n "$source_file" ] || die "Missing reviewed Jenkins plugin artifact for resolved closure plugin $name in $JENKINS_PLUGIN_SOURCE_DIR"
+    cp "$source_file" "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${source_file##*/}"
+  done <"$lock_file"
+}
+
+generate_plugins_lock() {
+  local plugin_dir lock plugin tmp manifest short_name plugin_version
+  if [ "$#" -eq 1 ]; then
+    plugin_dir="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins"
+    lock="${1:?lock file required}"
+  else
+    plugin_dir="${1:?plugin directory required}"
+    lock="${2:?lock file required}"
+  fi
+  tmp="$lock.tmp"
+  : >"$tmp"
+  while IFS= read -r -d '' plugin; do
+    manifest="$(unzip -p "$plugin" META-INF/MANIFEST.MF | tr -d '\r')" ||
+      die "Could not read Jenkins plugin manifest: $plugin"
+    short_name="$(printf '%s\n' "$manifest" | awk -F': ' '/^Short-Name:/ {print $2; exit}')"
+    plugin_version="$(printf '%s\n' "$manifest" | awk -F': ' '/^Plugin-Version:/ {print $2; exit}')"
+    validate_plugin_spec "$short_name:$plugin_version"
+    printf '%s:%s\n' "$short_name" "$plugin_version" >>"$tmp"
+  done < <(find "$plugin_dir" -type f \( -name '*.jpi' -o -name '*.hpi' \) -print0 | sort -z)
+  sort -u "$tmp" >"$lock"
+  rm -f "$tmp"
+  [ -s "$lock" ] || die "No Jenkins plugin artifacts were available to generate plugins.lock.txt"
+}
+
+prepare_plugins() {
+  local seed_file spec name expected_lock resolver_report
+  seed_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.seed.txt"
+  expected_lock="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.expected-lock.txt"
+  resolver_report="$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-resolution-report.txt"
+  write_accepted_plugin_seed "$seed_file"
+  run_plugin_manager_list "$seed_file" "$resolver_report"
+  extract_full_plugin_lock_from_report "$resolver_report" "$expected_lock"
 
   if [ -n "${JENKINS_PLUGIN_SOURCE_DIR:-}" ]; then
-    find "$JENKINS_PLUGIN_SOURCE_DIR" -maxdepth 1 -type f \( -name '*.jpi' -o -name '*.hpi' \) -exec cp {} "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/" \;
+    copy_plugin_source_closure "$expected_lock"
   elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command java
     printf 'simulation-only public internet use: resolving and downloading Jenkins plugin artifacts with dependencies\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
-    java -jar "$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-plugin-manager-2.15.0.jar" \
-      --war "$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-2.555.3.war" \
+    java -jar "$(jenkins_plugin_manager_artifact)" \
+      --war "$(jenkins_war_artifact)" \
       --plugin-file "$seed_file" \
       --latest false \
       --plugin-download-directory "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" \
-      >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-resolution-report.txt" 2>&1
+      >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-download-report.txt" 2>&1
   else
     printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_SOURCE_DIR or JENKINS_DOWNLOAD_ARTIFACTS=1 for selected Jenkins plugin artifacts\n' >&2
     exit 2
@@ -489,18 +740,22 @@ prepare_plugins() {
       [ -s "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins/${name}.hpi" ] ||
       die "Curated Jenkins plugin artifact is missing after preparation: $name"
   done
+  generate_plugins_lock "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt"
+  diff -u "$expected_lock" "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt" >/dev/null ||
+    die "Downloaded or reviewed Jenkins plugin artifacts do not match Plugin Installation Manager resolved closure"
+  run_plugin_manager_review "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt" "$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-review-report.txt"
   find "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" -type f \( -name '*.jpi' -o -name '*.hpi' \) -print |
     sort >"$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-artifacts.manifest"
 }
 
 prepare_jenkins_war() {
   local dest url
-  dest="$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-2.555.3.war"
+  dest="$(jenkins_war_artifact)"
   if [ -n "${JENKINS_WAR_SOURCE:-}" ]; then
     cp "$JENKINS_WAR_SOURCE" "$dest"
   elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command wget
-    url="https://get.jenkins.io/war-stable/2.555.3/jenkins.war"
+    url="https://get.jenkins.io/war-stable/$JENKINS_VERSION/jenkins.war"
     printf 'simulation-only public internet use: downloading Jenkins controller WAR\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
     wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
   else
@@ -513,12 +768,12 @@ prepare_jenkins_war() {
 
 prepare_plugin_manager() {
   local dest url
-  dest="$JENKINS_ARTIFACT_OUTPUT_DIR/jenkins-plugin-manager-2.15.0.jar"
+  dest="$(jenkins_plugin_manager_artifact)"
   if [ -n "${JENKINS_PLUGIN_MANAGER_SOURCE:-}" ]; then
     cp "$JENKINS_PLUGIN_MANAGER_SOURCE" "$dest"
   elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command wget
-    url="https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar"
+    url="https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/$JENKINS_PLUGIN_MANAGER_VERSION/jenkins-plugin-manager-$JENKINS_PLUGIN_MANAGER_VERSION.jar"
     printf 'simulation-only public internet use: downloading Jenkins Plugin Installation Manager artifact\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
     wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
   else
@@ -574,6 +829,26 @@ check_os_dependency_expectations() {
   for_each_csv_value "$JENKINS_OS_DEPENDENCIES" check_os_dependency_command "JENKINS_OS_DEPENDENCIES"
 }
 
+require_plugin_proposal_env_values() {
+  local required name
+  required="
+JENKINS_DIRECT_PLUGIN_NAMES
+JENKINS_ARTIFACT_OUTPUT_DIR
+JENKINS_DOWNLOAD_ARTIFACTS
+"
+  for name in $required; do
+    if [ "$dry_run" -eq 1 ]; then
+      [ -n "$(value_or_default "$name" "")" ] || die "Missing env value $name"
+    else
+      require_reviewed_value "$name"
+    fi
+  done
+  if [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" != "1" ]; then
+    require_reviewed_value JENKINS_WAR_SOURCE
+    require_reviewed_value JENKINS_PLUGIN_MANAGER_SOURCE
+  fi
+}
+
 validate_artifact_output_dir() {
   local dir repo_generated allowed_harness allowed_repo base suffix
   dir="${JENKINS_ARTIFACT_OUTPUT_DIR:-}"
@@ -622,12 +897,25 @@ validate_artifact_output_dir() {
 }
 
 verify_staged_artifacts() {
-  local manifest checksums
+  local manifest checksums staged_tmp
   manifest="$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt"
   checksums="$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256"
   [ -f "$manifest" ] || die "Missing staged Jenkins controller manifest: $manifest"
   [ -f "$checksums" ] || die "Missing staged Jenkins controller checksums: $checksums"
+  [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugins.seed.txt" ] || die "Missing staged Jenkins plugin seed: $JENKINS_STAGED_ARTIFACT_DIR/plugins.seed.txt"
+  [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt" ] || die "Missing staged Jenkins plugin lock: $JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt"
+  [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugin-resolution-report.txt" ] || die "Missing staged Jenkins plugin resolution report"
+  [ -s "$JENKINS_STAGED_ARTIFACT_DIR/plugin-review-report.txt" ] || die "Missing staged Jenkins plugin review report"
   (cd "$JENKINS_STAGED_ARTIFACT_DIR" && sha256sum -c checksums.sha256) >/dev/null
+  grep -Fq './plugins.seed.txt' "$checksums" || die "Staged checksums do not cover plugins.seed.txt"
+  grep -Fq './plugins.lock.txt' "$checksums" || die "Staged checksums do not cover plugins.lock.txt"
+  grep -Fq './plugin-resolution-report.txt' "$checksums" || die "Staged checksums do not cover plugin-resolution-report.txt"
+  grep -Fq './plugin-review-report.txt' "$checksums" || die "Staged checksums do not cover plugin-review-report.txt"
+  staged_tmp="$(mktemp)"
+  generate_plugins_lock "$JENKINS_STAGED_ARTIFACT_DIR/plugins" "$staged_tmp"
+  diff -u "$JENKINS_STAGED_ARTIFACT_DIR/plugins.lock.txt" "$staged_tmp" >/dev/null ||
+    die "Staged plugins.lock.txt does not match staged plugin artifacts"
+  rm -f "$staged_tmp"
   awk -F= '
     $1 == "harness_manifest_version" && $2 == "1" { h=1 }
     $1 == "role" && $2 == "jenkins-controller" { r=1 }
@@ -653,19 +941,57 @@ cmd_preflight() {
   require_command awk
   require_command sed
   require_command perl
-  validate_plugins
+  validate_accepted_direct_plugins
   validate_os_dependencies
   require_account_separation
   if [ "$dry_run" -eq 0 ]; then
     check_os_dependency_expectations
   fi
-  [ "$JENKINS_VERSION" = "2.555.3" ] || die "Jenkins controller baseline must be 2.555.3 unless the reviewed baseline is updated"
-  [ "$JENKINS_JAVA_VERSION" = "21" ] || die "Jenkins Java baseline must be OpenJDK 21"
-  [ "$JENKINS_PLUGIN_MANAGER_VERSION" = "2.15.0" ] || die "Jenkins Plugin Installation Manager baseline must be 2.15.0"
-  [ "$JENKINS_UBUNTU_RELEASE" = "24.04" ] || die "Ubuntu release baseline must be 24.04"
-  [ "$JENKINS_UBUNTU_CODENAME" = "noble" ] || die "Ubuntu codename baseline must be noble"
-  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s mode=%s plugins=curated\n' \
+  enforce_version_baseline
+  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s mode=%s plugins=accepted-direct-pins\n' \
     "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$JENKINS_VERIFICATION_MODE"
+}
+
+cmd_propose_plugin_versions() {
+  local intent_file report_file proposals_file accepted_list target_env
+  load_env normal
+  apply_env_defaults
+  require_plugin_proposal_env_values
+  require_command sha256sum
+  require_command unzip
+  require_command awk
+  require_command perl
+  validate_direct_plugins
+  enforce_version_baseline
+  validate_artifact_output_dir
+  if [ "$dry_run" -eq 1 ]; then
+    printf 'status=pass command=propose-plugin-versions dry_run=1 env=%s artifact_dir=%s plugins=direct-intent write_env=%s\n' \
+      "${env_file:-$default_env_file}" "$JENKINS_ARTIFACT_OUTPUT_DIR" "$write_env"
+    return 0
+  fi
+  rm -rf "$JENKINS_ARTIFACT_OUTPUT_DIR"
+  mkdir -p "$JENKINS_ARTIFACT_OUTPUT_DIR"
+  : >"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  prepare_jenkins_war
+  prepare_plugin_manager
+  intent_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.intent.txt"
+  report_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-version-resolution-report.txt"
+  proposals_file="$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-version-proposals.txt"
+  write_direct_plugin_intent "$intent_file"
+  run_plugin_manager_list "$intent_file" "$report_file"
+  extract_direct_plugin_proposals "$intent_file" "$report_file" "$proposals_file"
+  accepted_list="$(accepted_plugin_list_from_file "$proposals_file")"
+  if [ "$write_env" -eq 1 ]; then
+    [ "$assume_yes" -eq 1 ] ||
+      die "propose-plugin-versions requires --yes with --write-env before updating the reviewed env"
+    target_env="${env_file:-}"
+    write_plugin_list_to_env "$target_env" "$accepted_list"
+    printf 'status=pass command=propose-plugin-versions proposals=%s report=%s intent=%s write_env=accepted env=%s\n' \
+      "$proposals_file" "$report_file" "$intent_file" "$target_env"
+  else
+    printf 'status=pass command=propose-plugin-versions proposals=%s report=%s intent=%s write_env=skipped\n' \
+      "$proposals_file" "$report_file" "$intent_file"
+  fi
 }
 
 write_manifest() {
@@ -684,7 +1010,10 @@ artifact_source=curated-bundle-factory
 os_dependency_source=approved-internal-os-repos
 public_internet_fallback=simulation-only
 bundle_contains_keys=no
-plugins=$JENKINS_PLUGIN_LIST
+direct_plugins=$JENKINS_PLUGIN_LIST
+plugin_lock=plugins.lock.txt
+plugin_resolution_report=plugin-resolution-report.txt
+plugin_review_report=plugin-review-report.txt
 war=jenkins-2.555.3.war
 plugin_manager=jenkins-plugin-manager-2.15.0.jar
 EOF
@@ -695,7 +1024,8 @@ cmd_prepare_artifacts() {
   apply_env_defaults
   require_command sha256sum
   require_command unzip
-  validate_plugins
+  validate_accepted_direct_plugins
+  enforce_version_baseline
   validate_artifact_output_dir
   rm -rf "$JENKINS_ARTIFACT_OUTPUT_DIR"
   mkdir -p "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates"
@@ -714,8 +1044,12 @@ cmd_prepare_artifacts() {
       sort -z |
       xargs -0 sha256sum >checksums.sha256
   )
-  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s plugins=curated\n' \
-    "$JENKINS_ARTIFACT_OUTPUT_DIR" "$JENKINS_ARTIFACT_OUTPUT_DIR/manifest.txt" "$JENKINS_ARTIFACT_OUTPUT_DIR/checksums.sha256"
+  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s plugins=accepted-direct-pins lock=%s review=%s\n' \
+    "$JENKINS_ARTIFACT_OUTPUT_DIR" \
+    "$JENKINS_ARTIFACT_OUTPUT_DIR/manifest.txt" \
+    "$JENKINS_ARTIFACT_OUTPUT_DIR/checksums.sha256" \
+    "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt" \
+    "$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-review-report.txt"
 }
 
 cmd_install() {
@@ -1034,11 +1368,15 @@ parse_args() {
         assume_yes=1
         shift
         ;;
+      --write-env)
+        write_env=1
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
         ;;
-      print-env-template|preflight|prepare-artifacts|install|configure-service|install-plugins|configure-jcasc|validate|collect-evidence)
+      print-env-template|preflight|propose-plugin-versions|prepare-artifacts|install|configure-service|install-plugins|configure-jcasc|validate|collect-evidence)
         command_name="$1"
         shift
         [ "$#" -eq 0 ] || die_usage "Unexpected arguments after command: $*"
@@ -1060,9 +1398,13 @@ parse_args() {
 main() {
   local command_name=""
   parse_args "$@"
+  if [ "$write_env" -eq 1 ] && [ "$command_name" != "propose-plugin-versions" ]; then
+    die_usage "--write-env is valid only with propose-plugin-versions"
+  fi
   case "$command_name" in
     print-env-template) print_env_template ;;
     preflight) cmd_preflight ;;
+    propose-plugin-versions) cmd_propose_plugin_versions ;;
     prepare-artifacts) cmd_prepare_artifacts ;;
     install) cmd_install ;;
     configure-service) cmd_configure_service ;;

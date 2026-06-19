@@ -181,8 +181,6 @@ Official source references:
 https://pkg.jenkins.io/debian-stable/binary/jenkins_2.555.3_all.deb
 https://get.jenkins.io/war-stable/2.555.3/jenkins.war
 https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar
-https://updates.jenkins.io/update-center.json
-https://updates.jenkins.io/current/plugin-versions.json
 https://updates.jenkins.io/download/plugins
 ```
 
@@ -196,35 +194,25 @@ cd ~/jenkins-artifacts-bundle/jenkins
 wget https://pkg.jenkins.io/debian-stable/binary/jenkins_2.555.3_all.deb
 wget -O jenkins-2.555.3.war \
   https://get.jenkins.io/war-stable/2.555.3/jenkins.war
-cat > plugins.seed.txt <<'EOF'
-gerrit-trigger
-git
-workflow-aggregator
-pipeline-groovy-lib
-pipeline-stage-view
+cat > plugins.intent.txt <<'EOF'
+configuration-as-code
 credentials
+git
+gerrit-trigger
+ldap
+matrix-auth
 ssh-credentials
 ssh-slaves
-credentials-binding
-matrix-auth
-configuration-as-code
+workflow-aggregator
 job-dsl
 timestamper
 ws-cleanup
-build-timeout
-lockable-resources
-mailer
-email-ext
-prometheus
-metrics
-ldap
 EOF
 ```
 
-`pipeline-groovy-lib` is listed explicitly so a development-stage bundle
-rebuild selects a current fixed version instead of keeping an older transitive
-Pipeline Groovy Libraries dependency. `ldap` is required for the JCasC security
-realm.
+`plugins.intent.txt` is the operator-owned direct plugin intent, names only.
+Do not add transitive dependencies to this file only because they appear in
+Plugin Installation Manager resolver output.
 
 Download and verify the Jenkins Plugin Installation Manager Tool:
 
@@ -240,24 +228,104 @@ else
 fi
 ```
 
-Resolve and download the seed plugin set for Jenkins `2.555.3`:
+Ask the Jenkins Plugin Installation Manager Tool to propose versions for the
+direct plugin intent against Jenkins `2.555.3`:
 
 ```bash
-rm -rf ~/jenkins-artifacts-bundle/jenkins/plugins
-mkdir -p ~/jenkins-artifacts-bundle/jenkins/plugins
 rm -f \
+  ~/jenkins-artifacts-bundle/jenkins/plugin-version-proposals.txt \
+  ~/jenkins-artifacts-bundle/jenkins/plugin-version-resolution-report.txt \
   ~/jenkins-artifacts-bundle/jenkins/plugins.lock.txt \
   ~/jenkins-artifacts-bundle/jenkins/plugin-artifacts.manifest \
   ~/jenkins-artifacts-bundle/jenkins/plugin-resolution-report.txt \
   ~/jenkins-artifacts-bundle/jenkins/plugin-review-report.txt
 java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
-  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.seed.txt \
+  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.intent.txt \
   --latest false \
-  --plugin-download-directory ~/jenkins-artifacts-bundle/jenkins/plugins
+  --no-download \
+  --list \
+  > ~/jenkins-artifacts-bundle/jenkins/plugin-version-resolution-report.txt
 ```
 
-Generate and review the locked plugin set:
+Extract direct `plugin-name:version` proposals from the resolver output. Keep
+the full resolver output as evidence and verify that every direct plugin was
+resolved before accepting:
+
+```bash
+cd ~/jenkins-artifacts-bundle/jenkins
+awk '
+  NR == FNR {
+    wanted[$1] = 1
+    order[++count] = $1
+    next
+  }
+  {
+    line = $0
+    gsub(/\r/, "", line)
+    sub(/^[[:space:]*-]+/, "", line)
+    name = ""
+    version = ""
+    split(line, fields, /[[:space:]]+/)
+    if (fields[1] ~ /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+$/) {
+      split(fields[1], pair, ":")
+      name = pair[1]
+      version = pair[2]
+    } else if (wanted[fields[1]]) {
+      name = fields[1]
+      version = fields[2]
+      gsub(/^[({[]/, "", version)
+      gsub(/[)}\],;]$/, "", version)
+    }
+    if (wanted[name] && version ~ /^[A-Za-z0-9_.+-]+$/) {
+      resolved[name] = version
+    }
+  }
+  END {
+    missing = 0
+    for (i = 1; i <= count; i++) {
+      name = order[i]
+      if (!(name in resolved)) {
+        printf "missing proposal for %s\n", name > "/dev/stderr"
+        missing = 1
+      } else {
+        printf "%s:%s\n", name, resolved[name]
+      }
+    }
+    exit missing
+  }
+' plugins.intent.txt plugin-version-resolution-report.txt \
+  > plugin-version-proposals.txt
+```
+
+Review `plugin-version-proposals.txt` and
+`plugin-version-resolution-report.txt`. Accept direct pins by recording the
+reviewed proposal as the controller's direct plugin list:
+
+```bash
+cp plugin-version-proposals.txt accepted-direct-plugins.txt
+cp accepted-direct-plugins.txt plugins.seed.txt
+```
+
+`plugins.seed.txt` is generated Plugin Installation Manager input from the
+accepted direct pins. It is not an operator-owned review artifact. Do not add
+transitive dependencies to `accepted-direct-plugins.txt` or `plugins.seed.txt`.
+
+Resolve and download the accepted direct pins and their dependencies:
+
+```bash
+rm -rf ~/jenkins-artifacts-bundle/jenkins/plugins
+mkdir -p ~/jenkins-artifacts-bundle/jenkins/plugins
+java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
+  --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
+  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.seed.txt \
+  --latest false \
+  --plugin-download-directory ~/jenkins-artifacts-bundle/jenkins/plugins \
+  > ~/jenkins-artifacts-bundle/jenkins/plugin-download-report.txt
+```
+
+Generate and review the full direct-plus-transitive locked plugin closure from
+downloaded plugin manifests:
 
 ```bash
 cd ~/jenkins-artifacts-bundle/jenkins
@@ -270,16 +338,16 @@ done | sort -u > plugins.lock.txt
 ```
 
 Every `plugins.lock.txt` entry must include `plugin-name:version`. Treat any
-blank name, blank version, missing expected plugin, or unexpected plugin as a
-release-blocking issue.
+blank name, blank version, missing accepted direct plugin, or unexpected full
+closure entry as a release-blocking issue.
 
-Verify the locked set can be resolved against Jenkins `2.555.3` and check
-update/security metadata:
+Preserve resolver evidence for the accepted direct pins and check
+update/security metadata for the full lock:
 
 ```bash
 java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   --war ~/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war \
-  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.lock.txt \
+  --plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.seed.txt \
   --latest false \
   --no-download \
   --list \
@@ -295,8 +363,9 @@ java -jar ~/jenkins-artifacts-bundle/tools/jenkins-plugin-manager-2.15.0.jar \
   > ~/jenkins-artifacts-bundle/jenkins/plugin-review-report.txt
 ```
 
-Review `plugin-resolution-report.txt` and `plugin-review-report.txt`, then
-record approval before moving the bundle into the offline environment.
+Review `plugin-resolution-report.txt`, `plugin-review-report.txt`, and
+`plugins.lock.txt`, then record approval before moving the bundle into the
+offline environment.
 
 Create manifests, checksums, and archive:
 
@@ -314,8 +383,10 @@ sha256sum ~/jenkins-artifacts-bundle.tar.gz > ~/jenkins-artifacts-bundle.tar.gz.
 
 The approved controller release unit is the combination of the artifact
 archive, its `.sha256` file, the internal `SHA256SUMS` file,
-`plugins.seed.txt`, `plugins.lock.txt`, plugin review reports,
-`plugin-artifacts.manifest`, and `release-unit.manifest`.
+`plugins.intent.txt`, `plugin-version-proposals.txt`,
+`plugin-version-resolution-report.txt`, generated `plugins.seed.txt`,
+`plugins.lock.txt`, plugin review reports, `plugin-artifacts.manifest`, and
+`release-unit.manifest`.
 
 #### 2.2.2 Install the Controller Artifact Bundle Manually
 
