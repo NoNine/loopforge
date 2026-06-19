@@ -76,6 +76,19 @@ verification summaries. Target hosts must not download Gerrit/Jenkins
 application artifacts from the public internet as fallback. In v1, offline Ubuntu
 dependency bundle workflows are not supported.
 
+## Local Browser Access
+
+The Docker harness publishes service HTTP ports on loopback for local manual
+simulation checks:
+
+- Gerrit: `http://127.0.0.1:8081/`
+- Jenkins: `http://127.0.0.1:8082/login`
+
+These browser-visible URLs are for manual simulation inspection on the local
+operator workstation only. They are not production exposure guidance and must
+not be treated as a recommended network binding for production-like Gerrit or
+Jenkins hosts.
+
 ## Output Locations
 
 Docker-generated runtime output is not committed. The shared output convention
@@ -105,6 +118,13 @@ Trigger workflow:
 - event streaming readiness
 - agent readiness
 - disposable change, Jenkins trigger, agent job, and `Verified +1`
+
+Disposable Gerrit changes are part of the simulation evidence contract. The
+`stream-events` validation changes prove real event streaming. The verification
+change proves the Gerrit Trigger event path, Jenkins job mapping, Jenkins agent
+execution, and `Verified +1` review posting. These changes may remain open and
+show missing submit requirements because cleanup and submission are outside the
+current Docker simulation contract.
 
 Docker Step 11 should call role helpers for role-local lifecycle only, then
 call `scripts/integration-setup.sh` for Jenkins-to-Gerrit SSH,

@@ -190,6 +190,13 @@ recorded only when they do not encode usernames, hostnames, secret values, or
 other sensitive material. Evidence must not include private keys, passwords,
 tokens, LDAP bind secrets, or verbose logs.
 
+Docker and VM simulation may leave disposable Gerrit changes open. The
+`stream-events` validation changes prove real event streaming from Gerrit to
+Jenkins. The verification change proves the trigger, Jenkins job mapping,
+Jenkins agent execution, and `Verified +1` review posting. These changes may
+show missing submit requirements because cleanup and submission are not part of
+the current simulation evidence contract.
+
 ## Failure Classification
 
 End-to-end verification must report these failures separately:
