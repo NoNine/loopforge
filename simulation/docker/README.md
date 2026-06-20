@@ -79,10 +79,24 @@ dependency bundle workflows are not supported.
 ## Local Browser Access
 
 The Docker harness publishes service HTTP ports on loopback for local manual
-simulation checks:
+simulation checks. Ports are selected per run from currently available
+`127.0.0.1` ports unless the operator explicitly sets
+`HARNESS_GERRIT_HTTP_HOST_PORT` or `HARNESS_JENKINS_HTTP_HOST_PORT` to an
+available numeric TCP port before `render-config`, `preflight`, or `up`.
 
-- Gerrit: `http://127.0.0.1:8081/`
-- Jenkins: `http://127.0.0.1:8082/login`
+The selected values are persisted in the harness rendered env for the same
+`HARNESS_RUN_ID`:
+
+```bash
+simulation/docker/docker-harness.sh render-config
+rg 'HARNESS_.*HTTP_HOST_PORT|HARNESS_.*BROWSER_URL' \
+  simulation/state/docker/harness/<run-id>/rendered/harness.env
+```
+
+The command output also prints the browser URLs:
+
+- Gerrit: `http://127.0.0.1:<chosen-port>/`
+- Jenkins: `http://127.0.0.1:<chosen-port>/login`
 
 These browser-visible URLs are for manual simulation inspection on the local
 operator workstation only. They are not production exposure guidance and must

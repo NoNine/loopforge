@@ -222,6 +222,139 @@ bounded_log_path() {
   printf '%s/%s-%s.log' "$HARNESS_LOG_DIR" "$name" "$(timestamp_utc)"
 }
 
+validate_tcp_port_value() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  case "$value" in
+    ''|*[!0-9]*)
+      die "$name must be a numeric TCP port"
+      ;;
+  esac
+  [ "$value" -ge 1 ] && [ "$value" -le 65535 ] ||
+    die "$name must be between 1 and 65535"
+}
+
+loopback_port_owned_by_harness() {
+  local service port container published
+  service="${1:?service required}"
+  port="${2:?port required}"
+  command -v docker >/dev/null 2>&1 || return 1
+  container="${HARNESS_PROJECT_NAME}-${service}"
+  docker inspect "$container" >/dev/null 2>&1 || return 1
+  published="$(docker inspect -f '{{range $p, $bindings := .NetworkSettings.Ports}}{{range $bindings}}{{if eq .HostIp "127.0.0.1"}}{{.HostPort}}{{"\n"}}{{end}}{{end}}{{end}}' "$container" 2>/dev/null || true)"
+  printf '%s\n' "$published" | grep -Fxq "$port"
+}
+
+service_for_browser_port_name() {
+  case "$1" in
+    HARNESS_GERRIT_HTTP_HOST_PORT) printf '%s\n' gerrit-target ;;
+    HARNESS_JENKINS_HTTP_HOST_PORT) printf '%s\n' jenkins-controller-target ;;
+    *) die "Unknown browser port name: $1" ;;
+  esac
+}
+
+can_bind_loopback_port() {
+  local port
+  port="${1:?port required}"
+  python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", port))
+PY
+}
+
+require_loopback_port_available() {
+  local name port
+  name="${1:?name required}"
+  port="${2:?port required}"
+  validate_tcp_port_value "$name" "$port"
+  can_bind_loopback_port "$port" ||
+    die "$name is not available on 127.0.0.1: $port"
+}
+
+require_loopback_port_available_or_owned() {
+  local name port service
+  name="${1:?name required}"
+  port="${2:?port required}"
+  service="$(service_for_browser_port_name "$name")"
+  validate_tcp_port_value "$name" "$port"
+  if can_bind_loopback_port "$port" 2>/dev/null; then
+    return 0
+  fi
+  loopback_port_owned_by_harness "$service" "$port" ||
+    die "$name is not available on 127.0.0.1: $port"
+}
+
+choose_loopback_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+rendered_env_value() {
+  local name file
+  name="${1:?name required}"
+  file="${2:?file required}"
+  [ -f "$file" ] || return 1
+  sed -n "s/^$name=//p" "$file" | tail -1
+}
+
+resolve_browser_port() {
+  local name requested persisted chosen other_port
+  name="${1:?name required}"
+  requested="${2:-}"
+  other_port="${3:-}"
+
+  if [ -n "$requested" ]; then
+    require_loopback_port_available_or_owned "$name" "$requested"
+    printf '%s\n' "$requested"
+    return 0
+  fi
+
+  persisted="$(rendered_env_value "$name" "$HARNESS_RENDERED_ENV" || true)"
+  if [ -n "$persisted" ]; then
+    require_loopback_port_available_or_owned "$name" "$persisted"
+    printf '%s\n' "$persisted"
+    return 0
+  fi
+
+  while :; do
+    chosen="$(choose_loopback_port)"
+    require_loopback_port_available "$name" "$chosen"
+    [ "$chosen" != "$other_port" ] || continue
+    printf '%s\n' "$chosen"
+    return 0
+  done
+}
+
+resolve_browser_ports() {
+  local gerrit_requested jenkins_requested
+  gerrit_requested="${HARNESS_GERRIT_HTTP_HOST_PORT:-}"
+  jenkins_requested="${HARNESS_JENKINS_HTTP_HOST_PORT:-}"
+
+  HARNESS_GERRIT_HTTP_HOST_PORT="$(resolve_browser_port HARNESS_GERRIT_HTTP_HOST_PORT "$gerrit_requested" "")"
+  HARNESS_JENKINS_HTTP_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_HTTP_HOST_PORT "$jenkins_requested" "$HARNESS_GERRIT_HTTP_HOST_PORT")"
+
+  [ "$HARNESS_GERRIT_HTTP_HOST_PORT" != "$HARNESS_JENKINS_HTTP_HOST_PORT" ] ||
+    die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_JENKINS_HTTP_HOST_PORT must be different"
+
+  export HARNESS_GERRIT_HTTP_HOST_PORT HARNESS_JENKINS_HTTP_HOST_PORT
+}
+
+print_browser_urls() {
+  printf 'gerrit_url=http://127.0.0.1:%s/\n' "$HARNESS_GERRIT_HTTP_HOST_PORT"
+  printf 'jenkins_url=http://127.0.0.1:%s/login\n' "$HARNESS_JENKINS_HTTP_HOST_PORT"
+}
+
 service_for_role() {
   case "${1:-}" in
     gerrit) printf '%s\n' gerrit-target ;;
@@ -586,6 +719,8 @@ EOF
 write_rendered_env() {
   validate_harness_inputs
   ensure_dirs
+  require_command python3
+  resolve_browser_ports
   cat >"$HARNESS_RENDERED_ENV" <<EOF
 HARNESS_MODE=$HARNESS_MODE
 HARNESS_RUN_ID=$HARNESS_RUN_ID
@@ -612,6 +747,10 @@ HARNESS_EVIDENCE_DIR=$HARNESS_EVIDENCE_DIR
 HARNESS_LOG_DIR=$HARNESS_LOG_DIR
 HARNESS_INTEGRATION_ENV_FILE=$HARNESS_INTEGRATION_ENV_FILE
 HARNESS_JENKINS_SHARED_STORAGE_PATH=$HARNESS_JENKINS_SHARED_STORAGE_PATH
+HARNESS_GERRIT_HTTP_HOST_PORT=$HARNESS_GERRIT_HTTP_HOST_PORT
+HARNESS_JENKINS_HTTP_HOST_PORT=$HARNESS_JENKINS_HTTP_HOST_PORT
+HARNESS_GERRIT_BROWSER_URL=http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/
+HARNESS_JENKINS_BROWSER_URL=http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login
 EOF
   write_manifest_contract
 }
@@ -756,6 +895,7 @@ cmd_preflight() {
   write_evidence preflight harness pass "docker-harness.sh preflight" "not-applicable" "Compose provider: $compose_kind; generated output paths are ignored local state" >/dev/null
   printf 'status=pass mode=%s compose=%s rendered_env=%s evidence_dir=%s log_dir=%s\n' \
     "$HARNESS_MODE" "$compose_kind" "$HARNESS_RENDERED_ENV" "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR"
+  print_browser_urls
 }
 
 cmd_render_config() {
@@ -765,6 +905,7 @@ cmd_render_config() {
   write_rendered_env
   write_evidence render-config harness pass "docker-harness.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
   printf 'rendered_env=%s evidence_dir=%s\n' "$HARNESS_RENDERED_ENV" "$HARNESS_EVIDENCE_DIR"
+  print_browser_urls
 }
 
 cmd_up() {
@@ -800,6 +941,7 @@ cmd_up() {
   require_running_service ldap
   evidence="$(write_evidence up harness pass "docker-harness.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   printf 'exit=0 log=%s evidence=%s\n' "$log" "$evidence"
+  print_browser_urls
 }
 
 role_helper_present_in_container() {

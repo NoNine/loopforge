@@ -140,6 +140,29 @@ integration_env=$repo_root/examples/integration.env.example
 EOF
 }
 
+append_harness_browser_ports() {
+  local harness_env gerrit_port jenkins_port
+  harness_env="$HARNESS_STATE_DIR/rendered/harness.env"
+  [ -f "$harness_env" ] || return 0
+  gerrit_port="$(sed -n 's/^HARNESS_GERRIT_HTTP_HOST_PORT=//p' "$harness_env" | tail -1)"
+  jenkins_port="$(sed -n 's/^HARNESS_JENKINS_HTTP_HOST_PORT=//p' "$harness_env" | tail -1)"
+  [ -n "$gerrit_port" ] && [ -n "$jenkins_port" ] || return 0
+  cat >>"$DOCKER_VERIFY_RENDERED_ENV" <<EOF
+HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_port
+HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_port
+HARNESS_GERRIT_BROWSER_URL=http://127.0.0.1:$gerrit_port/
+HARNESS_JENKINS_BROWSER_URL=http://127.0.0.1:$jenkins_port/login
+EOF
+}
+
+print_browser_urls() {
+  local gerrit_url jenkins_url
+  gerrit_url="$(sed -n 's/^HARNESS_GERRIT_BROWSER_URL=//p' "$DOCKER_VERIFY_RENDERED_ENV" | tail -1)"
+  jenkins_url="$(sed -n 's/^HARNESS_JENKINS_BROWSER_URL=//p' "$DOCKER_VERIFY_RENDERED_ENV" | tail -1)"
+  [ -n "$gerrit_url" ] && printf 'gerrit_url=%s\n' "$gerrit_url"
+  [ -n "$jenkins_url" ] && printf 'jenkins_url=%s\n' "$jenkins_url"
+}
+
 manifest_ref_for_role() {
   printf '%s/bundle-factory/artifacts/%s/manifest.txt\n' "$HARNESS_STATE_DIR" "$1"
 }
@@ -283,19 +306,23 @@ cmd_preflight() {
     return "$rc"
   fi
   write_rendered_env
+  append_harness_browser_ports
   evidence="$(write_evidence preflight docker pass "docker-verify.sh preflight" "$log" "Docker verifier inputs, harness, integration helper, generated paths, and Version Baseline are ready")"
   printf 'status=pass mode=%s rendered_env=%s evidence=%s log_dir=%s\n' \
     "$DOCKER_VERIFY_MODE" "$DOCKER_VERIFY_RENDERED_ENV" "$evidence" "$DOCKER_VERIFY_LOG_DIR"
+  print_browser_urls
 }
 
 cmd_render_config() {
-  local evidence
+  local output evidence
   ensure_dirs
   require_baseline
   write_rendered_env
-  run_harness_logged render-config-harness render-config
+  output="$(run_harness_logged render-config-harness render-config)"
+  append_harness_browser_ports
   evidence="$(write_evidence render-config docker pass "docker-verify.sh render-config" "not-applicable" "Rendered Docker simulation configuration and delegated harness configuration")"
   printf 'rendered_env=%s evidence=%s\n' "$DOCKER_VERIFY_RENDERED_ENV" "$evidence"
+  print_browser_urls
 }
 
 cmd_prepare_artifacts() {
@@ -348,8 +375,11 @@ cmd_up() {
     write_evidence up docker fail "docker-verify.sh up" "$log" "Shared Docker harness failed to start the five simulation environments" >/dev/null
     return "$rc"
   fi
+  write_rendered_env
+  append_harness_browser_ports
   evidence="$(write_evidence up docker pass "docker-verify.sh up" "$log" "Started bundle factory, LDAP, Gerrit, Jenkins controller, and Jenkins agent containers through the shared harness")"
   printf 'evidence=%s\n' "$evidence"
+  print_browser_urls
 }
 
 cmd_check() {

@@ -31,6 +31,25 @@ The harness writes generated local output to ignored paths:
 Generated state, staged artifacts, evidence, and bounded logs are runtime
 output. Do not commit them.
 
+## Local Browser Ports
+
+The harness publishes Gerrit and Jenkins HTTP on available loopback ports for
+manual local simulation inspection. If `HARNESS_GERRIT_HTTP_HOST_PORT` or
+`HARNESS_JENKINS_HTTP_HOST_PORT` is set, the harness validates that the value
+is numeric and available before Compose starts. If either value is omitted, the
+harness selects an available `127.0.0.1` port and persists it in the rendered
+env for the same `HARNESS_RUN_ID`.
+
+Run `simulation/docker/docker-harness.sh render-config` or `up` to see:
+
+```text
+gerrit_url=http://127.0.0.1:<chosen-port>/
+jenkins_url=http://127.0.0.1:<chosen-port>/login
+```
+
+The persisted values are in
+`simulation/state/docker/harness/<run-id>/rendered/harness.env`.
+
 ## Source Boundaries
 
 The bundle factory is an environment, not a public API. The harness does not
