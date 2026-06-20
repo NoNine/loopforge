@@ -171,7 +171,7 @@ Staged artifact paths:
 | --- | --- |
 | Bundle factory output | `GERRIT_ARTIFACT_OUTPUT_DIR` |
 | Docker harness bundle output | `/harness/state/artifacts/gerrit` inside the bundle factory |
-| Docker harness host state | `simulation/state/docker/harness/<run-id>/bundle-factory/artifacts/gerrit/` |
+| Docker harness host state | `simulation/state/docker/<run-id>/bundle-factory/artifacts/gerrit/` |
 
 Side effects:
 
@@ -402,9 +402,7 @@ Produced outputs:
 - A helper bounded log file under `GERRIT_LOG_DIR`.
 - Gerrit daemon startup and runtime logs under `GERRIT_SITE_PATH/logs/`.
 - In the shared Docker harness, canonical evidence under
-  `simulation/evidence/docker/harness/<run-id>/`.
-- For Step 7 compatibility, the harness also mirrors evidence to ignored
-  `simulation/docker/state/evidence/`.
+  `simulation/evidence/docker/<run-id>/`.
 
 Evidence Contract fields:
 

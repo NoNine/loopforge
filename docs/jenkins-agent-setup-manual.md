@@ -139,7 +139,7 @@ Staged artifact paths:
 | --- | --- |
 | Bundle factory output | `JENKINS_AGENT_ARTIFACT_OUTPUT_DIR` |
 | Docker harness bundle output | `/harness/state/artifacts/jenkins-agent` inside the bundle factory |
-| Docker harness host state | `simulation/state/docker/harness/<run-id>/bundle-factory/artifacts/jenkins-agent/` |
+| Docker harness host state | `simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-agent/` |
 
 Side effects:
 

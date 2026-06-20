@@ -20,8 +20,7 @@ Options:
 
 Defaults:
   Inputs are discovered from the current packageable evidence locations when present:
-    simulation/evidence/docker/harness/default
-    simulation/docker/state/evidence
+    simulation/evidence/docker
   Output defaults to:
     simulation/evidence/package
 EOF
@@ -43,8 +42,7 @@ sanitize_path_list() {
 discover_default_inputs() {
   local candidate
   for candidate in \
-    "$repo_root/simulation/evidence/docker/harness/default" \
-    "$repo_root/simulation/docker/state/evidence"
+    "$repo_root/simulation/evidence/docker"
   do
     [ -e "$candidate" ] && input_paths+=("$candidate")
   done

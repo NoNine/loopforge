@@ -148,9 +148,9 @@ transcripts here.
   `logs/execution-step-11-refined-scans-20260618202923.log`;
   `logs/step11-secret-perms-fast2-20260618203803.log`;
   `logs/step11-secret-perms-scan2-20260618203803.log`
-- Notes: Added `simulation/docker/docker-verify.sh` and proved real Gerrit,
-  Jenkins controller, Jenkins agent, shared integration, scheduling, triggered
-  build, and Gerrit `Verified +1` behavior through the Docker harness.
+- Notes: Added Docker harness verification and proved real Gerrit, Jenkins
+  controller, Jenkins agent, shared integration, scheduling, triggered build,
+  and Gerrit `Verified +1` behavior through the Docker harness.
 - Waiver: Docker Step 11 has a user-approved Gerrit admin LDAP group
   resolution waiver. For Docker Step 11 only, admin rights may be bootstrapped
   through Gerrit's documented first-registered-user internal `Administrators`

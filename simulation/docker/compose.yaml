@@ -16,7 +16,7 @@ services:
       HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
-      - "../../../:/workspace:ro"
+      - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/bundle-factory:/harness/state"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
       - "${HARNESS_LOG_DIR}:/harness/logs"
@@ -66,7 +66,7 @@ services:
       LDAP_BIND_PASSWORD_FILE: /harness/validation-secrets/ldap-bind-password
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
-      - "../../../:/workspace:ro"
+      - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/gerrit:/harness/state"
       - "${HARNESS_STAGING_DIR}/gerrit:/harness/staged"
       - "${HARNESS_STATE_DIR}/gerrit-validation-secrets:/harness/validation-secrets"
@@ -96,7 +96,7 @@ services:
       HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
-      - "../../../:/workspace:ro"
+      - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-controller:/harness/state"
       - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_STAGING_DIR}/jenkins-controller:/harness/staged"
@@ -126,7 +126,7 @@ services:
       HARNESS_LOG_DIR: "${HARNESS_LOG_DIR}"
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
-      - "../../../:/workspace:ro"
+      - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-agent:/harness/state"
       - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_STAGING_DIR}/jenkins-agent:/harness/staged"

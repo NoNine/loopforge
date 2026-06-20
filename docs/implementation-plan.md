@@ -348,14 +348,14 @@ Checkpoint ownership map:
 
 | Checkpoint | Docker owner | VM owner |
 | --- | --- | --- |
-| Preflight | `simulation/docker/docker-harness.sh preflight` for role-gate harness readiness; `simulation/docker/docker-verify.sh preflight` for full Docker simulation readiness. | `simulation/vm/vm-verify.sh check --preflight-only` or `simulation/vm/vm-verify.sh full --preflight-only`. |
-| Input rendering | `simulation/docker/docker-harness.sh render-config` for role gates; `simulation/docker/docker-verify.sh render-config` for full Docker simulation. | `simulation/vm/vm-verify.sh bootstrap`. |
-| Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh prepare-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh prepare-artifacts`. |
-| Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh stage-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh stage-artifacts`. |
-| Service configuration | `simulation/docker/docker-harness.sh up` for role-gate containers; `simulation/docker/docker-verify.sh up` for full Docker simulation. | `simulation/vm/vm-verify.sh configure`. |
-| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` for full Docker readiness. | `simulation/vm/vm-verify.sh check`. |
-| End-to-end execution | `simulation/docker/docker-verify.sh full-verify`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full`. |
-| Evidence audit | Role-local `collect-evidence`, Docker harness evidence, `docker-verify.sh` summaries, and later global aggregation. | `simulation/vm/vm-verify.sh audit` and later global aggregation. |
+| Preflight | `simulation/docker/docker-harness.sh preflight`. | `simulation/vm/vm-verify.sh check --preflight-only` or `simulation/vm/vm-verify.sh full --preflight-only`. |
+| Input rendering | `simulation/docker/docker-harness.sh render-config`. | `simulation/vm/vm-verify.sh bootstrap`. |
+| Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts [--role ...]`. | `simulation/vm/vm-verify.sh prepare-artifacts`. |
+| Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts [--role ...]`. | `simulation/vm/vm-verify.sh stage-artifacts`. |
+| Service configuration | `simulation/docker/docker-harness.sh up`. | `simulation/vm/vm-verify.sh configure`. |
+| Readiness checks | `simulation/docker/docker-harness.sh check` for full Docker readiness; `simulation/docker/docker-harness.sh run-role-gate --role ...` for a single role. | `simulation/vm/vm-verify.sh check`. |
+| End-to-end execution | `simulation/docker/docker-harness.sh full-verify`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full`. |
+| Evidence audit | Role-local `collect-evidence`, Docker harness evidence, and later global aggregation. | `simulation/vm/vm-verify.sh audit` and later global aggregation. |
 
 Ownership rules:
 
@@ -371,16 +371,15 @@ Ownership rules:
   documented for later work and skipped in the current default plan.
 - Simulation wrappers orchestrate role helpers but must not replace role
   behavior with modeled success.
-- The Docker harness owns role-step readiness gates; the full Docker verifier
-  owns Docker end-to-end integration.
+- The Docker harness owns role-step readiness gates and Docker end-to-end
+  integration.
 
 Command convention model:
 
 - Every command surface uses one owning script plus a subcommand.
 - Role helpers use `scripts/<role>-setup.sh <command>`.
 - Cross-role integration uses `scripts/integration-setup.sh <command>`.
-- Docker role gates use `simulation/docker/docker-harness.sh <command>`.
-- Full Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
+- Docker simulation uses `simulation/docker/docker-harness.sh <command>`.
 - VM simulation uses `simulation/vm/vm-verify.sh <command>`.
 - Do not add standalone role phase scripts such as `scripts/preflight.sh`,
   Docker phase scripts such as `simulation/docker/check.sh`, or VM phase
@@ -396,7 +395,7 @@ test -f simulation/docker/README.md
 test -f simulation/vm/README.md
 rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|operator" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 rg -n "Docker|VM|simulation-only|Verified|Gerrit Trigger" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "Checkpoint ownership|docker-harness.sh|docker-verify.sh|vm-verify.sh" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "Checkpoint ownership|docker-harness.sh|vm-verify.sh" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 rg -n "Ubuntu/OS dependencies|Application artifacts|approved internal Ubuntu/OS package repositories" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 rg -n "local OS|LDAP-backed|prepare-artifacts|bundle-factory-helper" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 rg -n "supported offline|offline Ubuntu|offline-bundle" simulation/README.md simulation/docker/README.md simulation/vm/README.md
@@ -412,10 +411,9 @@ Acceptance criteria:
 - Simulation docs define generated-output locations for state, staged
   artifacts, evidence, and bounded logs.
 - No bundle factory helper or bundle factory public API is introduced.
-- Docker is documented as the shared role-gate harness and the first full
-  integration verification gate.
-- Docker harness, full Docker verifier, and VM verifier responsibilities are
-  distinguishable by checkpoint.
+- Docker is documented as the first full integration verification gate.
+- Docker harness and VM verifier responsibilities are distinguishable by
+  checkpoint.
 - Real VM verification is documented as a future follow-up gate, not a
   prerequisite for early Docker milestones or current default acceptance.
 - Ubuntu/OS dependency handling and application artifact handling are documented
@@ -587,8 +585,8 @@ role-step validation, but it is not the full end-to-end Docker simulation.
 Create:
 
 - `simulation/docker/docker-harness.sh`
-- Docker Compose assets under `simulation/docker/harness/`
-- Harness env examples under `simulation/docker/harness/examples/`
+- Docker Compose assets under `simulation/docker/`
+- Docker env examples under `simulation/docker/examples/`
 - Harness state, staging, evidence, and bounded-log directories documented as
   generated local output
 
@@ -620,9 +618,10 @@ Harness implementation decisions:
 - If Docker Compose v2 is unavailable but `docker-compose` v1 is available, the
   Step 6 harness may use `docker-compose`. The command implementation should
   detect and report the Compose command it will use.
-- Existing generated `simulation/docker/state/` and `simulation/docker/logs/`
-  content is not source material. Treat those paths as generated output and do
-  not commit retained state or verbose logs.
+- Existing generated `simulation/state/docker/<run-id>/`,
+  `simulation/staging/docker/<run-id>/`, `simulation/evidence/docker/<run-id>/`,
+  and `logs/docker/<run-id>/` content is not source material. Treat those paths
+  as generated output and do not commit retained state or verbose logs.
 - Harness evidence must record the Version Baseline values used by the run and
   must not report comparable readiness when container OS or artifact versions
   drift from that baseline.
@@ -652,9 +651,9 @@ Implementation notes:
   bundle factory container.
 - Add ignore rules for generated harness state and log directories before
   creating runtime output.
-- Create only source assets under `simulation/docker/` and
-  `simulation/docker/harness/`; generated state, staged artifacts, evidence,
-  and bounded logs must be written under generated paths.
+- Create only source assets under `simulation/docker/`; generated state,
+  staged artifacts, evidence, and bounded logs must be written under generated
+  paths.
 - `prepare-artifacts --role ...` must run only in the bundle factory
   environment and must fail if invoked against a target container.
 - `stage-artifacts --role ...` copies bundle factory output to the selected
@@ -795,10 +794,10 @@ scripts/gerrit-setup.sh --env examples/gerrit.env.example --dry-run preflight
 simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
 simulation/docker/docker-harness.sh stage-artifacts --role gerrit
 simulation/docker/docker-harness.sh run-role-gate --role gerrit
-find simulation/docker/state/evidence -type f -name '*gerrit*' -print -quit | rg .
-! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*gerrit*')
-rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/docker/state/artifacts/gerrit/manifest.txt simulation/docker/state/staged/gerrit/manifest.txt
-! find simulation/docker/state/artifacts/gerrit simulation/docker/state/staged/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
+find simulation/evidence/docker -type f -name '*gerrit*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/evidence/docker -type f -name '*gerrit*')
+rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/state/docker/<run-id>/bundle-factory/artifacts/gerrit/manifest.txt simulation/staging/docker/<run-id>/gerrit/manifest.txt
+! find simulation/state/docker/<run-id>/bundle-factory/artifacts/gerrit simulation/staging/docker/<run-id>/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "prepare-artifacts|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ! scripts/gerrit-setup.sh --help | rg -n "configure-integration|verify-trigger|configure-agent"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
@@ -940,10 +939,10 @@ scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.exampl
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh stage-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
-find simulation/docker/state/evidence -type f -name '*jenkins-controller*' -print -quit | rg .
-! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-controller*')
-rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/docker/state/artifacts/jenkins-controller/manifest.txt simulation/docker/state/staged/jenkins-controller/manifest.txt
-! find simulation/docker/state/artifacts/jenkins-controller simulation/docker/state/staged/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
+find simulation/evidence/docker -type f -name '*jenkins-controller*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/evidence/docker -type f -name '*jenkins-controller*')
+rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-controller/manifest.txt simulation/staging/docker/<run-id>/jenkins-controller/manifest.txt
+! find simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-controller simulation/staging/docker/<run-id>/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|verify-trigger"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
@@ -1068,8 +1067,8 @@ scripts/jenkins-agent-setup.sh --env examples/jenkins-agent.env.example --dry-ru
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
 simulation/docker/docker-harness.sh stage-artifacts --role jenkins-agent
 simulation/docker/docker-harness.sh run-role-gate --role jenkins-agent
-find simulation/docker/state/evidence -type f -name '*jenkins-agent*' -print -quit | rg .
-! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/docker/state/evidence -type f -name '*jenkins-agent*')
+find simulation/evidence/docker -type f -name '*jenkins-agent*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/evidence/docker -type f -name '*jenkins-agent*')
 rg -n "agent|SSH|label|executor|collect-evidence" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes|configure-" docs/jenkins-agent-native-operations-reference.md
@@ -1174,14 +1173,14 @@ Create Docker simulation assets under `simulation/docker/` for:
 Expected command surface:
 
 ```text
-simulation/docker/docker-verify.sh preflight
-simulation/docker/docker-verify.sh render-config
-simulation/docker/docker-verify.sh prepare-artifacts
-simulation/docker/docker-verify.sh stage-artifacts
-simulation/docker/docker-verify.sh up
-simulation/docker/docker-verify.sh check
-simulation/docker/docker-verify.sh full-verify
-simulation/docker/docker-verify.sh down
+simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh prepare-artifacts
+simulation/docker/docker-harness.sh stage-artifacts
+simulation/docker/docker-harness.sh up
+simulation/docker/docker-harness.sh check
+simulation/docker/docker-harness.sh full-verify
+simulation/docker/docker-harness.sh down
 ```
 
 Implementation notes:
@@ -1198,16 +1197,16 @@ Implementation notes:
   artifacts, staged artifacts, role helpers, and final evidence.
 - Docker simulation is the first full end-to-end integration gate for Gerrit
   Trigger behavior, Jenkins agent scheduling, and `Verified` voting.
-- `docker-verify.sh prepare-artifacts` runs role helper
+- `docker-harness.sh prepare-artifacts` runs role helper
   `prepare-artifacts` commands inside the bundle factory container. Do not add
   a `bundle-factory-helper.sh`.
-- `docker-verify.sh stage-artifacts` stages prepared role artifacts from bundle
+- `docker-harness.sh stage-artifacts` stages prepared role artifacts from bundle
   factory output to the Gerrit, Jenkins controller, and Jenkins agent
   containers, then verifies manifests and checksums on the target side before
   service mutation.
-- `docker-verify.sh check` is an independently repeatable readiness gate before
-  `docker-verify.sh full-verify`.
-- `docker-verify.sh check` must invoke `scripts/integration-setup.sh
+- `docker-harness.sh check` is an independently repeatable readiness gate
+  before `docker-harness.sh full-verify`.
+- `docker-harness.sh check` must invoke `scripts/integration-setup.sh
   validate-integration` for cross-role readiness once the real implementation
   exists, and must report blocked rather than success while the shared
   integration helper is scaffold-only.
@@ -1229,15 +1228,15 @@ Implementation notes:
 Verification:
 
 ```bash
-bash -n simulation/docker/docker-verify.sh
-simulation/docker/docker-verify.sh --help
-simulation/docker/docker-verify.sh preflight
-simulation/docker/docker-verify.sh render-config
-simulation/docker/docker-verify.sh prepare-artifacts
-simulation/docker/docker-verify.sh stage-artifacts
-simulation/docker/docker-verify.sh up
-simulation/docker/docker-verify.sh check
-simulation/docker/docker-verify.sh full-verify
+bash -n simulation/docker/docker-harness.sh
+simulation/docker/docker-harness.sh --help
+simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh prepare-artifacts
+simulation/docker/docker-harness.sh stage-artifacts
+simulation/docker/docker-harness.sh up
+simulation/docker/docker-harness.sh check
+simulation/docker/docker-harness.sh full-verify
 ```
 
 Acceptance criteria:
@@ -1250,7 +1249,7 @@ Acceptance criteria:
   validation, and role-local evidence commands, then uses
   `scripts/integration-setup.sh` for cross-role integration, agent scheduling,
   trigger verification, and integration evidence instead of reimplementing or
-  modeling that behavior inside `docker-verify.sh`.
+  modeling that behavior inside `docker-harness.sh`.
 - LDAP, local OS runtime account, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugin,
   Jenkins-to-Gerrit SSH, stream-events, and Jenkins agent readiness checks pass
   with separate evidence.
@@ -1381,8 +1380,8 @@ Run final acceptance in this order:
 
 1. Static docs and shell checks.
 2. Helper `--help`, `print-env-template`, and `--dry-run preflight` checks.
-3. Docker simulation preflight and setup phases through `docker-verify.sh`.
-4. Docker full verification through `docker-verify.sh`.
+3. Docker simulation preflight and setup phases through `docker-harness.sh`.
+4. Docker full verification through `docker-harness.sh`.
 5. Global evidence aggregation.
 6. VM scaffold preflight-only checks.
 7. Real VM implementation and verification from Step 15 is skipped for the
@@ -1397,23 +1396,23 @@ Docker verification.
 Minimum command set:
 
 ```bash
-bash -n scripts/*.sh simulation/docker/docker-harness.sh simulation/docker/docker-verify.sh simulation/vm/*.sh
+bash -n scripts/*.sh simulation/docker/docker-harness.sh simulation/vm/*.sh
 scripts/gerrit-setup.sh --help
 scripts/jenkins-controller-setup.sh --help
 scripts/jenkins-agent-setup.sh --help
 scripts/integration-setup.sh --help
 scripts/collect-evidence.sh --help
-simulation/docker/docker-verify.sh preflight
-simulation/docker/docker-verify.sh render-config
-simulation/docker/docker-verify.sh prepare-artifacts
-simulation/docker/docker-verify.sh stage-artifacts
-simulation/docker/docker-verify.sh up
-simulation/docker/docker-verify.sh check
-simulation/docker/docker-verify.sh full-verify
+simulation/docker/docker-harness.sh preflight
+simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh prepare-artifacts
+simulation/docker/docker-harness.sh stage-artifacts
+simulation/docker/docker-harness.sh up
+simulation/docker/docker-harness.sh check
+simulation/docker/docker-harness.sh full-verify
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes validate-integration
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes verify-trigger
 scripts/collect-evidence.sh
-simulation/docker/docker-verify.sh down
+simulation/docker/docker-harness.sh down
 simulation/vm/vm-verify.sh --help
 simulation/vm/vm-verify.sh check --preflight-only --env simulation/vm/example.env
 simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env

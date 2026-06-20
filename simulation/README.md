@@ -1,11 +1,14 @@
 # Simulation Model
 
-This directory defines the simulation model for the v1 Gerrit/Jenkins setup
-package.
+This directory defines the shared simulation model for the v1 Gerrit/Jenkins
+setup package. Layer-specific command ownership lives in the Docker and VM
+README files; this file owns the common topology, baseline, source boundaries,
+output conventions, and checkpoint meanings.
 
 The model has two layers:
 
-1. Docker-based simulation first.
+1. Docker-based simulation first, owned by
+   `simulation/docker/docker-harness.sh`.
 2. VM-based simulation second.
 
 Both layers use the same five-machine topology:
@@ -23,6 +26,8 @@ does not introduce a separate account taxonomy. The `operator` account is a
 local OS account on simulation machines only; it is not a Gerrit or Jenkins
 product account.
 
+## Version Baseline
+
 Version baseline inputs for both simulation layers:
 
 - Ubuntu 24.04.4 LTS, release `24.04`, codename `noble`
@@ -33,6 +38,12 @@ Version baseline inputs for both simulation layers:
 - Jenkins agent OpenJDK 21 plus SSH server/client tooling and the Jenkins SSH
   Build Agents plugin from the controller plugin bundle
 
+Future verifiers must fail or report blocked rather than claim comparable
+readiness when the Ubuntu, Java, Gerrit, Jenkins controller, plugin-manager,
+or Jenkins agent/plugin-bundle versions differ from this baseline.
+
+## Source Boundaries
+
 Ubuntu/OS dependencies and application artifacts are separate supply lanes.
 Target hosts may use approved internal Ubuntu/OS package repositories for OS
 dependencies. Application artifacts are prepared only in the bundle factory,
@@ -42,12 +53,14 @@ environments and verified by manifest and checksum before mutation.
 Public internet fallback for target-host Ubuntu/OS dependency installation is
 simulation-only and must be labeled `simulation-only` in docs, logs, and
 verification summaries. Target hosts must not download Gerrit/Jenkins
-application artifacts from the public internet as fallback. In v1, offline Ubuntu
-dependency bundle workflows are not supported.
+application artifacts from the public internet as fallback. In v1, offline
+Ubuntu dependency bundle workflows are not supported.
 
-Generated runtime output is not committed. Future Docker and VM steps should
-write generated state, staged artifacts, evidence, and bounded logs under
-layer- and run-scoped paths so separate runs do not collide.
+## Output Locations
+
+Generated runtime output is not committed. Docker and VM steps write generated
+state, staged artifacts, evidence, and bounded logs under layer- and
+run-scoped paths so separate runs do not collide.
 
 Use these canonical roots and subpath patterns:
 
@@ -64,29 +77,26 @@ a UTC timestamp plus a short label. `<environment>` is one of
 `jenkins-agent`.
 
 These paths are generated runtime output unless a file in the tree states
-otherwise. Keep them ignored or documented as generated when created by future
+otherwise. Keep them ignored or documented as generated when created by
 simulation steps.
 
-The scripts named below are planned future command surfaces, not commands
-implemented in Step 3. Checkpoint ownership is split by layer:
+## Checkpoint Contract
 
-| Checkpoint | Planned Docker owner | Planned VM owner |
-| --- | --- | --- |
-| Preflight | `simulation/docker/docker-harness.sh preflight` for role-gate harness readiness; `simulation/docker/docker-verify.sh preflight` for full Docker simulation readiness. | `simulation/vm/vm-verify.sh check --preflight-only` or `simulation/vm/vm-verify.sh full --preflight-only`. |
-| Input rendering | `simulation/docker/docker-harness.sh render-config` for role gates; `simulation/docker/docker-verify.sh render-config` for full Docker simulation. | `simulation/vm/vm-verify.sh bootstrap`. |
-| Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh prepare-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh prepare-artifacts`. |
-| Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts --role ...` for role gates; `simulation/docker/docker-verify.sh stage-artifacts` for full Docker simulation aggregation. | `simulation/vm/vm-verify.sh stage-artifacts`. |
-| Service configuration | `simulation/docker/docker-harness.sh up` for role-gate containers; `simulation/docker/docker-verify.sh up` for full Docker simulation. | `simulation/vm/vm-verify.sh configure`. |
-| Readiness checks | `simulation/docker/docker-harness.sh run-role-gate --role ...` for role readiness; `simulation/docker/docker-verify.sh check` plus `scripts/integration-setup.sh validate-integration` for full Docker readiness. | `simulation/vm/vm-verify.sh check` plus the shared integration helper when VM support exists. |
-| End-to-end execution | `simulation/docker/docker-verify.sh full-verify` orchestrating `scripts/integration-setup.sh verify-trigger`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full` orchestrating the shared integration helper. |
-| Evidence audit | Role-local `collect-evidence`, integration-local `scripts/integration-setup.sh collect-evidence`, Docker harness evidence, `docker-verify.sh` summaries, and later global aggregation. | `simulation/vm/vm-verify.sh audit`, integration-local evidence, and later global aggregation. |
+Each simulation layer maps these checkpoints to its own commands. The
+checkpoint meaning stays the same across layers.
 
-The Docker layer is the first end-to-end integration gate for Gerrit Trigger
-behavior, Jenkins agent scheduling, and `Verified` voting. The VM layer repeats
-the Docker-proven flow in a systemd-oriented, production-like environment
-after Docker behavior is stable.
+| Checkpoint | Purpose | What it does | Output/evidence | Pass or block condition |
+| --- | --- | --- | --- | --- |
+| Preflight | Answer whether this environment can run the tools. | Checks required local tools, command surfaces, run naming, and version/source-boundary constraints before service mutation. It may create minimal evidence and log directories, but it does not render operator-selected env files. | Preflight evidence and bounded logs. | Pass only when prerequisites and baseline constraints are ready; fail or block on missing tools, invalid names, missing helpers, or baseline drift. |
+| Input rendering | Answer what exact operator-selected config this run will use. | Loads the selected env file, applies defaults, resolves run-scoped paths and ports, records redacted env values, and writes layer-specific rendered env files. | Rendered env files and render evidence. | Pass when selected input files exist, rendered inputs are complete, and secrets are redacted; fail on invalid or unavailable configured values. |
+| Artifact preparation | Produce application artifacts in the bundle factory. | Runs role helper `prepare-artifacts` commands in the bundle factory and creates role artifacts, manifests, checksums, and source-boundary labels. | Bundle factory artifact directories, `manifest.txt`, `checksums.sha256`, and preparation evidence. | Pass only when required artifacts, manifests, checksums, and simulation-only source labels exist; block comparable readiness on missing or drifted manifest metadata. |
+| Artifact staging | Move prepared artifacts to targets before mutation. | Copies prepared artifacts to target/service environments and verifies manifest and checksum data on the target side. | Staged artifact directories, checksum verification logs, and staging evidence. | Pass only after target-side manifest/checksum verification succeeds; fail or block on missing artifacts, checksum mismatch, or manifest drift. |
+| Service configuration | Start or configure role-local runtime environments. | Starts the simulation environments and runs role-local install/configuration paths needed before readiness checks. | Service startup/configuration logs and evidence. | Pass when required environments are running/configured against the version baseline; fail on startup or configuration errors. |
+| Readiness checks | Prove service readiness without claiming full trigger success. | Runs role-local readiness gates, then validates cross-role integration readiness such as SSH paths, stream-events, agent connection, and scheduling. | Readiness evidence, integration evidence, and bounded logs. | Pass only on real runtime checks; fail on role-local errors and block when cross-role proof is not implemented or unavailable. |
+| End-to-end execution | Prove the full Gerrit Trigger workflow. | Creates or uses a disposable verification change, proves Gerrit event receipt, Jenkins job scheduling, agent execution, and Gerrit `Verified +1`. | End-to-end verification evidence and bounded logs. | Pass only when the real workflow completes; block if readiness did not pass or trigger proof is unavailable. |
+| Evidence audit | Summarize retained proof without rerunning the workflow. | Collects and reviews evidence, manifests, checksums, log references, redaction status, and source-boundary labels. | Audit summaries and evidence references. | Pass when evidence is complete, bounded, redacted, and traceable; fail or block on missing proof, unredacted secrets, or unsupported claims. |
 
 Role helpers stay role-local in both layers. Cross-role SSH, trigger setup,
 integration validation, trigger verification, and integration evidence use
-`scripts/integration-setup.sh`. Current scaffold-level integration commands
-must fail closed until the later real Docker or VM implementation exists.
+`scripts/integration-setup.sh`. Scaffold-level integration commands must fail
+closed until a real Docker or VM implementation exists.

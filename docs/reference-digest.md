@@ -96,7 +96,7 @@ Every command surface uses one owning script plus a subcommand:
 
 - Role helpers use `scripts/<role>-setup.sh <command>`.
 - Cross-role integration uses `scripts/integration-setup.sh <command>`.
-- Docker simulation uses `simulation/docker/docker-verify.sh <command>`.
+- Docker simulation uses `simulation/docker/docker-harness.sh <command>`.
 - VM simulation uses `simulation/vm/vm-verify.sh <command>`.
 
 Do not add standalone role phase scripts such as `scripts/preflight.sh`, Docker
@@ -208,14 +208,14 @@ Docker simulation should expose:
 
 | Command | Behavior intent |
 | --- | --- |
-| `simulation/docker/docker-verify.sh preflight` | Check local Docker/Compose tooling, env completeness, ports, disk space, and generated-state prerequisites. |
-| `simulation/docker/docker-verify.sh render-config` | Render simulation configs from reviewed env values and browser-visible URLs. |
-| `simulation/docker/docker-verify.sh prepare-artifacts` | Run role helper `prepare-artifacts` commands in the bundle factory container and retain manifests, checksums, and simulation-only source labels. |
-| `simulation/docker/docker-verify.sh stage-artifacts` | Stage prepared artifacts from bundle factory output to Gerrit, Jenkins controller, and Jenkins agent containers, then verify target-side manifests and checksums. |
-| `simulation/docker/docker-verify.sh up` | Start the five-environment simulation after artifacts/configs exist. |
-| `simulation/docker/docker-verify.sh check` | Check LDAP, service availability, runtime accounts, Gerrit HTTP auth, Jenkins-to-Gerrit SSH auth, event streaming, and agent readiness before end-to-end verification. |
-| `simulation/docker/docker-verify.sh full-verify` | Run the full Docker gate by calling the shared integration helper for agent provisioning, agent smoke job, disposable Gerrit change, triggered Jenkins build, and `Verified +1`. |
-| `simulation/docker/docker-verify.sh down` | Stop the simulation without deleting retained evidence unless explicitly requested. |
+| `simulation/docker/docker-harness.sh preflight` | Check local Docker/Compose tooling, static harness files, script wiring, and baseline labels without rendering operator env files. |
+| `simulation/docker/docker-harness.sh render-config` | Render simulation configs from reviewed env values and browser-visible URLs, then copy selected inputs into run-scoped runtime inputs. |
+| `simulation/docker/docker-harness.sh prepare-artifacts` | Run role helper `prepare-artifacts` commands in the bundle factory container and retain manifests, checksums, and simulation-only source labels. |
+| `simulation/docker/docker-harness.sh stage-artifacts` | Stage prepared artifacts from bundle factory output to Gerrit, Jenkins controller, and Jenkins agent containers, then verify target-side manifests and checksums. |
+| `simulation/docker/docker-harness.sh up` | Start the five-environment simulation after artifacts/configs exist. |
+| `simulation/docker/docker-harness.sh check` | Run all role gates, then call the shared integration helper for Jenkins-to-Gerrit SSH, event streaming, agent connection, scheduling, and integration validation. |
+| `simulation/docker/docker-harness.sh full-verify` | Run the full Docker gate by calling the shared integration helper for agent provisioning, agent smoke job, disposable Gerrit change, triggered Jenkins build, and `Verified +1`. |
+| `simulation/docker/docker-harness.sh down` | Stop the simulation without deleting retained evidence unless explicitly requested. |
 
 Docker simulation behavior notes:
 

@@ -4,8 +4,11 @@ set -euo pipefail
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
-harness_dir="$script_dir/harness"
-compose_file="$harness_dir/compose.yaml"
+docker_dir="$script_dir"
+compose_file="$docker_dir/compose.yaml"
+docker_env_example="$docker_dir/examples/docker.env.example"
+integration_helper="${HARNESS_TEST_INTEGRATION_HELPER:-$repo_root/scripts/integration-setup.sh}"
+roles=(gerrit jenkins-controller jenkins-agent)
 
 usage() {
   cat <<'USAGE'
@@ -16,17 +19,21 @@ Commands:
   preflight
   render-config
   up
-  prepare-artifacts --role <gerrit|jenkins-controller|jenkins-agent>
-  stage-artifacts --role <gerrit|jenkins-controller|jenkins-agent>
+  prepare-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
+  stage-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   run-role-gate --role <gerrit|jenkins-controller|jenkins-agent>
+  check
+  full-verify
   down
 
 Options:
+  --env FILE        Harness env file for render-config.
   --role ROLE       Role for role-scoped commands.
   -h, --help        Show this help.
 
-The harness starts the five role-gate environments only. It is not the full
-end-to-end Docker simulation.
+The harness is the Docker simulation CLI. It owns role gates and cross-role
+integration orchestration. Public internet fallback on target hosts is
+simulation-only.
 USAGE
 }
 
@@ -76,8 +83,39 @@ iso_timestamp_utc() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
+HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
+HARNESS_STATE_DIR_OPERATOR_SET="${HARNESS_STATE_DIR+x}"
+HARNESS_STAGING_DIR_OPERATOR_SET="${HARNESS_STAGING_DIR+x}"
+HARNESS_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_EVIDENCE_DIR+x}"
+HARNESS_LOG_DIR_OPERATOR_SET="${HARNESS_LOG_DIR+x}"
+HARNESS_RENDERED_ENV_OPERATOR_SET="${HARNESS_RENDERED_ENV+x}"
+HARNESS_BASELINE_CONTRACT_OPERATOR_SET="${HARNESS_BASELINE_CONTRACT+x}"
+HARNESS_ENV_FILE_OPERATOR_SET="${HARNESS_ENV_FILE+x}"
+HARNESS_GERRIT_ENV_FILE_OPERATOR_SET="${HARNESS_GERRIT_ENV_FILE+x}"
+HARNESS_JENKINS_CONTROLLER_ENV_FILE_OPERATOR_SET="${HARNESS_JENKINS_CONTROLLER_ENV_FILE+x}"
+HARNESS_JENKINS_AGENT_ENV_FILE_OPERATOR_SET="${HARNESS_JENKINS_AGENT_ENV_FILE+x}"
+HARNESS_INTEGRATION_ENV_FILE_OPERATOR_SET="${HARNESS_INTEGRATION_ENV_FILE+x}"
+HARNESS_RUN_ID_OPERATOR_VALUE="${HARNESS_RUN_ID-}"
+HARNESS_PROJECT_NAME_OPERATOR_VALUE="${HARNESS_PROJECT_NAME-}"
+HARNESS_STATE_DIR_OPERATOR_VALUE="${HARNESS_STATE_DIR-}"
+HARNESS_STAGING_DIR_OPERATOR_VALUE="${HARNESS_STAGING_DIR-}"
+HARNESS_EVIDENCE_DIR_OPERATOR_VALUE="${HARNESS_EVIDENCE_DIR-}"
+HARNESS_LOG_DIR_OPERATOR_VALUE="${HARNESS_LOG_DIR-}"
+HARNESS_RENDERED_ENV_OPERATOR_VALUE="${HARNESS_RENDERED_ENV-}"
+HARNESS_BASELINE_CONTRACT_OPERATOR_VALUE="${HARNESS_BASELINE_CONTRACT-}"
+HARNESS_ENV_FILE_OPERATOR_VALUE="${HARNESS_ENV_FILE-}"
+HARNESS_GERRIT_ENV_FILE_OPERATOR_VALUE="${HARNESS_GERRIT_ENV_FILE-}"
+HARNESS_JENKINS_CONTROLLER_ENV_FILE_OPERATOR_VALUE="${HARNESS_JENKINS_CONTROLLER_ENV_FILE-}"
+HARNESS_JENKINS_AGENT_ENV_FILE_OPERATOR_VALUE="${HARNESS_JENKINS_AGENT_ENV_FILE-}"
+HARNESS_INTEGRATION_ENV_FILE_OPERATOR_VALUE="${HARNESS_INTEGRATION_ENV_FILE-}"
+HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET="${HARNESS_GERRIT_HTTP_HOST_PORT+x}"
+HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET="${HARNESS_JENKINS_HTTP_HOST_PORT+x}"
+HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE="${HARNESS_GERRIT_HTTP_HOST_PORT-}"
+HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKINS_HTTP_HOST_PORT-}"
+
 HARNESS_MODE="${HARNESS_MODE:-docker-harness-simulation}"
-HARNESS_RUN_ID="${HARNESS_RUN_ID:-default}"
+HARNESS_RUN_ID="${HARNESS_RUN_ID:-manual}"
 HARNESS_PROJECT_NAME="${HARNESS_PROJECT_NAME:-gerrit-jenkins-harness-${HARNESS_RUN_ID}}"
 HARNESS_UBUNTU_IMAGE="${HARNESS_UBUNTU_IMAGE:-ubuntu:24.04}"
 HARNESS_UBUNTU_BASELINE_VERSION="${HARNESS_UBUNTU_BASELINE_VERSION:-24.04.4}"
@@ -96,15 +134,20 @@ HARNESS_LDAP_BIND_USER="${HARNESS_LDAP_BIND_USER:-readonly}"
 HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-password}"
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL="${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL:-simulation-only}"
 
-HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/harness/$HARNESS_RUN_ID}"
-HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/harness/$HARNESS_RUN_ID}"
-HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/harness/$HARNESS_RUN_ID}"
-HARNESS_LEGACY_EVIDENCE_DIR="${HARNESS_LEGACY_EVIDENCE_DIR:-$repo_root/simulation/docker/state/evidence}"
-HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/harness/$HARNESS_RUN_ID}"
+HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/$HARNESS_RUN_ID}"
+HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/$HARNESS_RUN_ID}"
+HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/$HARNESS_RUN_ID}"
+HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/$HARNESS_RUN_ID}"
 HARNESS_INTEGRATION_ENV_FILE="${HARNESS_INTEGRATION_ENV_FILE:-$repo_root/examples/integration.env.example}"
+HARNESS_GERRIT_ENV_FILE="${HARNESS_GERRIT_ENV_FILE:-$repo_root/examples/gerrit.env.example}"
+HARNESS_JENKINS_CONTROLLER_ENV_FILE="${HARNESS_JENKINS_CONTROLLER_ENV_FILE:-$repo_root/examples/jenkins-controller.env.example}"
+HARNESS_JENKINS_AGENT_ENV_FILE="${HARNESS_JENKINS_AGENT_ENV_FILE:-$repo_root/examples/jenkins-agent.env.example}"
 HARNESS_JENKINS_SHARED_STORAGE_PATH="${HARNESS_JENKINS_SHARED_STORAGE_PATH:-}"
-HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
-HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
+HARNESS_ENV_FILE="${HARNESS_ENV_FILE:-$HARNESS_ENV_FILE_OPERATOR_VALUE}"
+HARNESS_RENDERED_ENV="${HARNESS_RENDERED_ENV:-$HARNESS_STATE_DIR/rendered/harness.env}"
+HARNESS_RUNTIME_ENV="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
+HARNESS_RUNTIME_INPUT_DIR="${HARNESS_RUNTIME_INPUT_DIR:-$HARNESS_STATE_DIR/rendered/runtime-inputs}"
+HARNESS_BASELINE_CONTRACT="${HARNESS_BASELINE_CONTRACT:-$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt}"
 
 export HARNESS_MODE HARNESS_RUN_ID HARNESS_PROJECT_NAME
 export HARNESS_UBUNTU_IMAGE HARNESS_LDAP_IMAGE
@@ -113,14 +156,177 @@ export HARNESS_LDAP_ADMIN_PASSWORD HARNESS_LDAP_CONFIG_PASSWORD
 export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
 export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
 export HARNESS_STATE_DIR HARNESS_STAGING_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
-export HARNESS_JENKINS_SHARED_STORAGE_PATH
+export HARNESS_JENKINS_SHARED_STORAGE_PATH HARNESS_ENV_FILE
+export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
+export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
 
 compose_kind=""
 compose_cmd=()
 
+require_readable_file() {
+  local name file
+  name="${1:?name required}"
+  file="${2:?file required}"
+  [ -f "$file" ] || die "$name does not exist: $file"
+  [ -r "$file" ] || die "$name is not readable: $file"
+}
+
+resolve_repo_relative_path() {
+  local path
+  path="${1:?path required}"
+  case "$path" in
+    /*) printf '%s\n' "$path" ;;
+    *) printf '%s/%s\n' "$repo_root" "$path" ;;
+  esac
+}
+
+normalize_operator_env_paths() {
+  HARNESS_GERRIT_ENV_FILE="$(resolve_repo_relative_path "$HARNESS_GERRIT_ENV_FILE")"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$(resolve_repo_relative_path "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$(resolve_repo_relative_path "$HARNESS_JENKINS_AGENT_ENV_FILE")"
+  HARNESS_INTEGRATION_ENV_FILE="$(resolve_repo_relative_path "$HARNESS_INTEGRATION_ENV_FILE")"
+  export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
+  export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
+}
+
+load_env_file() {
+  local file
+  file="${1:?env file required}"
+  require_readable_file "Harness env file" "$file"
+  [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ] || unset HARNESS_PROJECT_NAME
+  [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ] || unset HARNESS_STATE_DIR
+  [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ] || unset HARNESS_STAGING_DIR
+  [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ] || unset HARNESS_EVIDENCE_DIR
+  [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ] || unset HARNESS_LOG_DIR
+  HARNESS_INTEGRATION_ENV_FILE="$repo_root/examples/integration.env.example"
+  HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$repo_root/examples/jenkins-agent.env.example"
+  set -a
+  # shellcheck disable=SC1090
+  . "$file"
+  set +a
+  normalize_operator_env_paths
+  if [ -n "$HARNESS_RUN_ID_OPERATOR_SET" ]; then
+    HARNESS_RUN_ID="$HARNESS_RUN_ID_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
+    HARNESS_PROJECT_NAME="$HARNESS_PROJECT_NAME_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
+    HARNESS_STATE_DIR="$HARNESS_STATE_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
+    HARNESS_STAGING_DIR="$HARNESS_STAGING_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ]; then
+    HARNESS_EVIDENCE_DIR="$HARNESS_EVIDENCE_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ]; then
+    HARNESS_LOG_DIR="$HARNESS_LOG_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_GERRIT_HTTP_HOST_PORT="$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_JENKINS_HTTP_HOST_PORT="$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE"
+  fi
+  HARNESS_ENV_FILE="$file"
+  if [ -z "$HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
+    HARNESS_PROJECT_NAME="${HARNESS_PROJECT_NAME:-gerrit-jenkins-harness-${HARNESS_RUN_ID}}"
+  fi
+  if [ -z "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
+    HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/$HARNESS_RUN_ID}"
+  fi
+  if [ -z "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
+    HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/$HARNESS_RUN_ID}"
+  fi
+  if [ -z "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ]; then
+    HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/$HARNESS_RUN_ID}"
+  fi
+  if [ -z "$HARNESS_LOG_DIR_OPERATOR_SET" ]; then
+    HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/$HARNESS_RUN_ID}"
+  fi
+  if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ]; then
+    HARNESS_RENDERED_ENV="$HARNESS_RENDERED_ENV_OPERATOR_VALUE"
+  else
+    HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
+  fi
+  HARNESS_RUNTIME_ENV="${HARNESS_RENDERED_ENV%.env}.runtime.env"
+  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
+  if [ -n "$HARNESS_BASELINE_CONTRACT_OPERATOR_SET" ]; then
+    HARNESS_BASELINE_CONTRACT="$HARNESS_BASELINE_CONTRACT_OPERATOR_VALUE"
+  else
+    HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
+  fi
+  export HARNESS_ENV_FILE HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
+  export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
+  export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
+}
+
+reapply_operator_overrides() {
+  if [ -n "$HARNESS_RUN_ID_OPERATOR_SET" ]; then
+    HARNESS_RUN_ID="$HARNESS_RUN_ID_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
+    HARNESS_PROJECT_NAME="$HARNESS_PROJECT_NAME_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
+    HARNESS_STATE_DIR="$HARNESS_STATE_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
+    HARNESS_STAGING_DIR="$HARNESS_STAGING_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ]; then
+    HARNESS_EVIDENCE_DIR="$HARNESS_EVIDENCE_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ]; then
+    HARNESS_LOG_DIR="$HARNESS_LOG_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_GERRIT_HTTP_HOST_PORT="$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_JENKINS_HTTP_HOST_PORT="$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE"
+  fi
+}
+
+load_rendered_config_if_present() {
+  local runtime
+  runtime="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
+  [ -f "$runtime" ] || return 1
+  set -a
+  # shellcheck disable=SC1090
+  . "$runtime"
+  set +a
+  reapply_operator_overrides
+  if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ]; then
+    HARNESS_RENDERED_ENV="$HARNESS_RENDERED_ENV_OPERATOR_VALUE"
+  else
+    HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
+  fi
+  HARNESS_RUNTIME_ENV="${HARNESS_RENDERED_ENV%.env}.runtime.env"
+  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
+  if [ -n "$HARNESS_BASELINE_CONTRACT_OPERATOR_SET" ]; then
+    HARNESS_BASELINE_CONTRACT="$HARNESS_BASELINE_CONTRACT_OPERATOR_VALUE"
+  else
+    HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
+  fi
+  export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
+}
+
+ensure_runtime_config() {
+  if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] && load_rendered_config_if_present; then
+    return 0
+  fi
+  if load_rendered_config_if_present; then
+    return 0
+  fi
+  die "Missing Docker harness runtime config: run render-config first"
+}
+
 load_harness_integration_env() {
-  [ -f "$HARNESS_INTEGRATION_ENV_FILE" ] ||
-    die "Missing integration env file for Docker harness shared storage: $HARNESS_INTEGRATION_ENV_FILE"
+  require_readable_file "Integration env file for Docker harness shared storage" "$HARNESS_INTEGRATION_ENV_FILE"
   set -a
   # shellcheck disable=SC1090
   . "$HARNESS_INTEGRATION_ENV_FILE"
@@ -128,6 +334,57 @@ load_harness_integration_env() {
   HARNESS_JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
   validate_shared_storage_path "HARNESS_JENKINS_SHARED_STORAGE_PATH" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
   export HARNESS_JENKINS_SHARED_STORAGE_PATH
+}
+
+set_env_file_value() {
+  local file name value tmp
+  file="${1:?env file required}"
+  name="${2:?env name required}"
+  value="${3-}"
+  tmp="$(mktemp "${file}.XXXXXX")"
+  grep -v "^$name=" "$file" >"$tmp" || true
+  printf '%s=%s\n' "$name" "$(shell_quote "$value")" >>"$tmp"
+  chmod 0600 "$tmp"
+  mv -- "$tmp" "$file"
+}
+
+copy_runtime_env_inputs_to() {
+  local dest_dir
+  dest_dir="${1:?destination required}"
+  mkdir -p "$dest_dir"
+  umask 077
+  cp -- "$HARNESS_ENV_FILE" "$dest_dir/harness.env"
+  cp -- "$HARNESS_GERRIT_ENV_FILE" "$dest_dir/gerrit.env"
+  cp -- "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$dest_dir/jenkins-controller.env"
+  cp -- "$HARNESS_JENKINS_AGENT_ENV_FILE" "$dest_dir/jenkins-agent.env"
+  cp -- "$HARNESS_INTEGRATION_ENV_FILE" "$dest_dir/integration.env"
+  chmod 0600 "$dest_dir/"*.env
+}
+
+copy_runtime_env_inputs() {
+  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
+  rm -rf "$HARNESS_RUNTIME_INPUT_DIR"
+  copy_runtime_env_inputs_to "$HARNESS_RUNTIME_INPUT_DIR"
+  HARNESS_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/harness.env"
+  HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
+  HARNESS_INTEGRATION_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_GERRIT_ENV_FILE "$HARNESS_GERRIT_ENV_FILE"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_JENKINS_AGENT_ENV_FILE"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_INTEGRATION_ENV_FILE"
+  export HARNESS_ENV_FILE HARNESS_RUNTIME_INPUT_DIR
+  export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
+  export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
+}
+
+validate_render_config_inputs() {
+  require_readable_file "HARNESS_ENV_FILE" "$HARNESS_ENV_FILE"
+  require_readable_file "HARNESS_GERRIT_ENV_FILE" "$HARNESS_GERRIT_ENV_FILE"
+  require_readable_file "HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
+  require_readable_file "HARNESS_JENKINS_AGENT_ENV_FILE" "$HARNESS_JENKINS_AGENT_ENV_FILE"
+  require_readable_file "HARNESS_INTEGRATION_ENV_FILE" "$HARNESS_INTEGRATION_ENV_FILE"
 }
 
 validate_absolute_mount_path() {
@@ -193,18 +450,22 @@ compose_v1_recreate_bug_detected() {
   local log
   log="${1:?log required}"
   [ "$compose_kind" = "docker-compose v1" ] || return 1
-  rg -q "KeyError: 'ContainerConfig'" "$log"
+  grep -q "KeyError: 'ContainerConfig'" "$log"
+}
+
+ensure_preflight_dirs() {
+  validate_harness_inputs
+  mkdir -p \
+    "$HARNESS_EVIDENCE_DIR" \
+    "$HARNESS_LOG_DIR"
 }
 
 ensure_dirs() {
   validate_harness_inputs
-  load_harness_integration_env
+  ensure_preflight_dirs
   mkdir -p \
     "$HARNESS_STATE_DIR" \
     "$HARNESS_STAGING_DIR" \
-    "$HARNESS_EVIDENCE_DIR" \
-    "$HARNESS_LEGACY_EVIDENCE_DIR" \
-    "$HARNESS_LOG_DIR" \
     "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
@@ -214,6 +475,15 @@ ensure_dirs() {
     "$HARNESS_STAGING_DIR/jenkins-controller" \
     "$HARNESS_STAGING_DIR/jenkins-agent"
   chmod 0700 "$HARNESS_STATE_DIR/gerrit-validation-secrets"
+}
+
+prepare_render_config() {
+  validate_harness_inputs
+  validate_render_config_inputs
+  copy_runtime_env_inputs
+  load_harness_integration_env
+  ensure_dirs
+  write_rendered_helper_envs
 }
 
 bounded_log_path() {
@@ -401,11 +671,108 @@ parse_role() {
   printf '%s\n' "$role"
 }
 
+parse_optional_role() {
+  local role=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --role)
+        [ "$#" -ge 2 ] || die "--role requires a value"
+        role="$2"
+        shift 2
+        ;;
+      --role=*)
+        role="${1#--role=}"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for role command: $1"
+        ;;
+    esac
+  done
+
+  if [ -n "$role" ]; then
+    service_for_role "$role" >/dev/null
+  fi
+  printf '%s\n' "$role"
+}
+
+test_stub_role_command() {
+  local command_name role
+  command_name="${1:?command required}"
+  role="${2:?role required}"
+  [ -n "${HARNESS_TEST_STUB_ROLE_COMMANDS:-}" ] || return 1
+  mkdir -p "$(dirname "$HARNESS_TEST_STUB_ROLE_COMMANDS")" "$HARNESS_LOG_DIR"
+  printf '%s %s\n' "$command_name" "$role" >>"$HARNESS_TEST_STUB_ROLE_COMMANDS"
+  if [ "${HARNESS_TEST_STUB_ROLE_FAIL:-}" = "$role" ] ||
+    [ "${HARNESS_TEST_STUB_ROLE_FAIL:-}" = "$command_name:$role" ]; then
+    printf 'exit=9 log=%s evidence=test-stub-fail\n' "$HARNESS_LOG_DIR/test-stub-$command_name-$role.log"
+    return 9
+  fi
+  printf 'exit=0 log=%s evidence=test-stub\n' "$HARNESS_LOG_DIR/test-stub-$command_name-$role.log"
+  return 0
+}
+
+run_role_command_logged() {
+  local command_name role output log rc evidence
+  command_name="${1:?command required}"
+  role="${2:?role required}"
+
+  if [ -n "${HARNESS_TEST_STUB_ROLE_COMMANDS:-}" ]; then
+    test_stub_role_command "$command_name" "$role"
+    return "$?"
+  fi
+
+  case "$command_name" in
+    prepare-artifacts) output="$(cmd_prepare_artifacts --role "$role")" || rc=$? ;;
+    stage-artifacts) output="$(cmd_stage_artifacts --role "$role")" || rc=$? ;;
+    run-role-gate) output="$(cmd_run_role_gate --role "$role")" || rc=$? ;;
+    *) die "Unknown role command: $command_name" ;;
+  esac
+  rc="${rc:-0}"
+  log="$(printf '%s\n' "$output" | sed -n 's/^exit=[0-9][0-9]* log=\([^ ]*\).*/\1/p' | tail -1)"
+  printf '%s\n' "$output"
+  if [ "$rc" -ne 0 ]; then
+    return "$rc"
+  fi
+  if [ -n "$log" ] && [ -f "$log" ] && ! assert_no_forbidden_success_markers "$log"; then
+    evidence="$(write_evidence "$command_name" "$role" fail "docker-harness.sh $command_name" "$log" "Forbidden success marker found in role command log")"
+    printf 'exit=1 evidence=%s log=%s\n' "$evidence" "$log"
+    return 1
+  fi
+}
+
+run_all_roles() {
+  local command_name role rc first_rc
+  command_name="${1:?command required}"
+  first_rc=0
+  for role in "${roles[@]}"; do
+    run_role_command_logged "$command_name" "$role" || rc=$?
+    rc="${rc:-0}"
+    if [ "$rc" -ne 0 ]; then
+      if [ "$first_rc" -eq 0 ]; then
+        first_rc="$rc"
+      fi
+    fi
+    unset rc
+  done
+  return "$first_rc"
+}
+
 json_quote() {
   local value
   value="${1-}"
   require_command python3
   python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$value"
+}
+
+shell_quote() {
+  local value
+  value="${1-}"
+  printf '%q' "$value"
 }
 
 target_container_for_evidence() {
@@ -526,26 +893,122 @@ jenkins_controller_bundle_factory_env_file() {
   printf '%s\n' "/harness/state/rendered/jenkins-controller-bundle-factory.env"
 }
 
-write_gerrit_bundle_factory_env() {
-  local env_file host_env_file
+container_env_file_for_role() {
+  local role
+  role="${1:?role required}"
+  printf '/harness/state/rendered/%s.env\n' "$role"
+}
+
+host_container_env_file_for_role() {
+  local role service
+  role="${1:?role required}"
+  service="${2:?service required}"
+  printf '%s/rendered/%s.env\n' "$(host_state_dir_for_service "$service")" "$role"
+}
+
+host_gerrit_bundle_factory_env_file() {
+  printf '%s/bundle-factory/rendered/gerrit-bundle-factory.env\n' "$HARNESS_STATE_DIR"
+}
+
+host_jenkins_controller_bundle_factory_env_file() {
+  printf '%s/bundle-factory/rendered/jenkins-controller-bundle-factory.env\n' "$HARNESS_STATE_DIR"
+}
+
+host_state_dir_for_service() {
+  local service
+  service="${1:?service required}"
+  case "$service" in
+    bundle-factory) printf '%s/bundle-factory\n' "$HARNESS_STATE_DIR" ;;
+    gerrit-target) printf '%s/gerrit\n' "$HARNESS_STATE_DIR" ;;
+    jenkins-controller-target) printf '%s/jenkins-controller\n' "$HARNESS_STATE_DIR" ;;
+    jenkins-agent-target) printf '%s/jenkins-agent\n' "$HARNESS_STATE_DIR" ;;
+    *) die "Unknown harness service for state dir: $service" ;;
+  esac
+}
+
+source_env_file_for_role() {
+  local role
+  role="${1:?role required}"
+  case "$role" in
+    gerrit) printf '%s\n' "$HARNESS_GERRIT_ENV_FILE" ;;
+    jenkins-controller) printf '%s\n' "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" ;;
+    jenkins-agent) printf '%s\n' "$HARNESS_JENKINS_AGENT_ENV_FILE" ;;
+    *) die "Unknown role for env file: $role" ;;
+  esac
+}
+
+render_container_role_env() {
+  local role service src host_env_file container_env_file
+  role="${1:?role required}"
+  service="${2:?service required}"
+  src="$(source_env_file_for_role "$role")"
+  require_readable_file "Harness $role env file" "$src"
+  container_env_file="$(container_env_file_for_role "$role")"
+  host_env_file="$(host_container_env_file_for_role "$role" "$service")"
+  mkdir -p "$(dirname "$host_env_file")"
+  cp -- "$src" "$host_env_file"
+  chmod 0600 "$host_env_file"
+  printf '%s\n' "$container_env_file"
+}
+
+render_gerrit_bundle_factory_env() {
+  local env_file host_env_file src
   env_file="$(gerrit_bundle_factory_env_file)"
-  host_env_file="$HARNESS_STATE_DIR/bundle-factory/rendered/gerrit-bundle-factory.env"
+  host_env_file="$(host_gerrit_bundle_factory_env_file)"
+  src="$(source_env_file_for_role gerrit)"
+  require_readable_file "Harness gerrit env file" "$src"
   mkdir -p "$(dirname "$host_env_file")"
   sed \
     -e 's|^GERRIT_DOWNLOAD_ARTIFACTS=.*|GERRIT_DOWNLOAD_ARTIFACTS="1"|' \
-    "$repo_root/examples/gerrit.env.example" >"$host_env_file"
+    "$src" >"$host_env_file"
+  chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
 }
 
-write_jenkins_controller_bundle_factory_env() {
-  local env_file host_env_file
+render_jenkins_controller_bundle_factory_env() {
+  local env_file host_env_file src
   env_file="$(jenkins_controller_bundle_factory_env_file)"
-  host_env_file="$HARNESS_STATE_DIR/bundle-factory/rendered/jenkins-controller-bundle-factory.env"
+  host_env_file="$(host_jenkins_controller_bundle_factory_env_file)"
+  src="$(source_env_file_for_role jenkins-controller)"
+  require_readable_file "Harness jenkins-controller env file" "$src"
   mkdir -p "$(dirname "$host_env_file")"
   sed \
     -e 's|^JENKINS_DOWNLOAD_ARTIFACTS=.*|JENKINS_DOWNLOAD_ARTIFACTS="1"|' \
-    "$repo_root/examples/jenkins-controller.env.example" >"$host_env_file"
+    "$src" >"$host_env_file"
+  chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
+}
+
+write_rendered_helper_envs() {
+  render_gerrit_bundle_factory_env >/dev/null
+  render_jenkins_controller_bundle_factory_env >/dev/null
+  render_container_role_env jenkins-agent bundle-factory >/dev/null
+  render_container_role_env gerrit gerrit-target >/dev/null
+  render_container_role_env jenkins-controller jenkins-controller-target >/dev/null
+  render_container_role_env jenkins-agent jenkins-agent-target >/dev/null
+}
+
+require_container_role_env() {
+  local role service host_env_file
+  role="${1:?role required}"
+  service="${2:?service required}"
+  host_env_file="$(host_container_env_file_for_role "$role" "$service")"
+  require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
+  printf '%s\n' "$(container_env_file_for_role "$role")"
+}
+
+require_gerrit_bundle_factory_env() {
+  require_readable_file \
+    "Rendered Gerrit bundle factory env file; run render-config first" \
+    "$(host_gerrit_bundle_factory_env_file)"
+  gerrit_bundle_factory_env_file
+}
+
+require_jenkins_controller_bundle_factory_env() {
+  require_readable_file \
+    "Rendered Jenkins controller bundle factory env file; run render-config first" \
+    "$(host_jenkins_controller_bundle_factory_env_file)"
+  jenkins_controller_bundle_factory_env_file
 }
 
 manifest_get() {
@@ -649,7 +1112,11 @@ write_evidence() {
   message="${6:-}"
 
   validate_harness_inputs
-  ensure_dirs
+  if [ "$checkpoint" = "preflight" ]; then
+    ensure_preflight_dirs
+  else
+    ensure_dirs
+  fi
   file="$HARNESS_EVIDENCE_DIR/${checkpoint}-${role}-$(timestamp_utc).json"
   manifest_ref="$(manifest_reference_for_evidence "$role")"
   checksum_ref="$(checksum_reference_for_evidence "$role")"
@@ -712,47 +1179,104 @@ write_evidence() {
   "source_boundary": $q_source_boundary
 }
 EOF
-  cp "$file" "$HARNESS_LEGACY_EVIDENCE_DIR/$(basename "$file")"
   printf '%s\n' "$file"
 }
 
 write_rendered_env() {
-  validate_harness_inputs
-  ensure_dirs
+  prepare_render_config
   require_command python3
   resolve_browser_ports
   cat >"$HARNESS_RENDERED_ENV" <<EOF
-HARNESS_MODE=$HARNESS_MODE
-HARNESS_RUN_ID=$HARNESS_RUN_ID
-HARNESS_PROJECT_NAME=$HARNESS_PROJECT_NAME
-HARNESS_UBUNTU_IMAGE=$HARNESS_UBUNTU_IMAGE
-HARNESS_UBUNTU_BASELINE_VERSION=$HARNESS_UBUNTU_BASELINE_VERSION
-HARNESS_UBUNTU_BASELINE_RELEASE=$HARNESS_UBUNTU_BASELINE_RELEASE
-HARNESS_UBUNTU_BASELINE_CODENAME=$HARNESS_UBUNTU_BASELINE_CODENAME
-HARNESS_JAVA_BASELINE=$HARNESS_JAVA_BASELINE
-HARNESS_GERRIT_BASELINE=$HARNESS_GERRIT_BASELINE
-HARNESS_JENKINS_BASELINE=$HARNESS_JENKINS_BASELINE
-HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE=$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE
-HARNESS_LDAP_IMAGE=$HARNESS_LDAP_IMAGE
-HARNESS_LDAP_DOMAIN=$HARNESS_LDAP_DOMAIN
-HARNESS_LDAP_BASE_DN=$HARNESS_LDAP_BASE_DN
-HARNESS_LDAP_ADMIN_PASSWORD=<redacted>
-HARNESS_LDAP_CONFIG_PASSWORD=<redacted>
-HARNESS_LDAP_BIND_USER=$HARNESS_LDAP_BIND_USER
-HARNESS_LDAP_BIND_PASSWORD=<redacted>
-HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
-HARNESS_STATE_DIR=$HARNESS_STATE_DIR
-HARNESS_STAGING_DIR=$HARNESS_STAGING_DIR
-HARNESS_EVIDENCE_DIR=$HARNESS_EVIDENCE_DIR
-HARNESS_LOG_DIR=$HARNESS_LOG_DIR
-HARNESS_INTEGRATION_ENV_FILE=$HARNESS_INTEGRATION_ENV_FILE
-HARNESS_JENKINS_SHARED_STORAGE_PATH=$HARNESS_JENKINS_SHARED_STORAGE_PATH
-HARNESS_GERRIT_HTTP_HOST_PORT=$HARNESS_GERRIT_HTTP_HOST_PORT
-HARNESS_JENKINS_HTTP_HOST_PORT=$HARNESS_JENKINS_HTTP_HOST_PORT
-HARNESS_GERRIT_BROWSER_URL=http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/
-HARNESS_JENKINS_BROWSER_URL=http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login
+HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
+HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
+HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
+HARNESS_UBUNTU_IMAGE=$(shell_quote "$HARNESS_UBUNTU_IMAGE")
+HARNESS_UBUNTU_BASELINE_VERSION=$(shell_quote "$HARNESS_UBUNTU_BASELINE_VERSION")
+HARNESS_UBUNTU_BASELINE_RELEASE=$(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
+HARNESS_UBUNTU_BASELINE_CODENAME=$(shell_quote "$HARNESS_UBUNTU_BASELINE_CODENAME")
+HARNESS_JAVA_BASELINE=$(shell_quote "$HARNESS_JAVA_BASELINE")
+HARNESS_GERRIT_BASELINE=$(shell_quote "$HARNESS_GERRIT_BASELINE")
+HARNESS_JENKINS_BASELINE=$(shell_quote "$HARNESS_JENKINS_BASELINE")
+HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE=$(shell_quote "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE")
+HARNESS_LDAP_IMAGE=$(shell_quote "$HARNESS_LDAP_IMAGE")
+HARNESS_LDAP_DOMAIN=$(shell_quote "$HARNESS_LDAP_DOMAIN")
+HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
+HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "<redacted>")
+HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "<redacted>")
+HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
+HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "<redacted>")
+HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
+HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
+HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
+HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
+HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
+HARNESS_GERRIT_ENV_FILE=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
+HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
+HARNESS_JENKINS_AGENT_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
+HARNESS_JENKINS_SHARED_STORAGE_PATH=$(shell_quote "$HARNESS_JENKINS_SHARED_STORAGE_PATH")
+HARNESS_GERRIT_HTTP_HOST_PORT=$(shell_quote "$HARNESS_GERRIT_HTTP_HOST_PORT")
+HARNESS_JENKINS_HTTP_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_HTTP_HOST_PORT")
+HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/")
+HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
+public_internet_fallback=simulation-only
+gerrit_env=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
+jenkins_controller_env=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
+jenkins_agent_env=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
+integration_env=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 EOF
+  write_runtime_env
   write_manifest_contract
+}
+
+write_runtime_env() {
+  umask 077
+  cat >"$HARNESS_RUNTIME_ENV" <<EOF
+HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
+HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
+HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
+HARNESS_UBUNTU_IMAGE=$(shell_quote "$HARNESS_UBUNTU_IMAGE")
+HARNESS_UBUNTU_BASELINE_VERSION=$(shell_quote "$HARNESS_UBUNTU_BASELINE_VERSION")
+HARNESS_UBUNTU_BASELINE_RELEASE=$(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
+HARNESS_UBUNTU_BASELINE_CODENAME=$(shell_quote "$HARNESS_UBUNTU_BASELINE_CODENAME")
+HARNESS_JAVA_BASELINE=$(shell_quote "$HARNESS_JAVA_BASELINE")
+HARNESS_GERRIT_BASELINE=$(shell_quote "$HARNESS_GERRIT_BASELINE")
+HARNESS_JENKINS_BASELINE=$(shell_quote "$HARNESS_JENKINS_BASELINE")
+HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE=$(shell_quote "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE")
+HARNESS_LDAP_IMAGE=$(shell_quote "$HARNESS_LDAP_IMAGE")
+HARNESS_LDAP_DOMAIN=$(shell_quote "$HARNESS_LDAP_DOMAIN")
+HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
+HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "$HARNESS_LDAP_ADMIN_PASSWORD")
+HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "$HARNESS_LDAP_CONFIG_PASSWORD")
+HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
+HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
+HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
+HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
+HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
+HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
+HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
+HARNESS_GERRIT_ENV_FILE=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
+HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
+HARNESS_JENKINS_AGENT_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
+HARNESS_JENKINS_SHARED_STORAGE_PATH=$(shell_quote "$HARNESS_JENKINS_SHARED_STORAGE_PATH")
+HARNESS_GERRIT_HTTP_HOST_PORT=$(shell_quote "$HARNESS_GERRIT_HTTP_HOST_PORT")
+HARNESS_JENKINS_HTTP_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_HTTP_HOST_PORT")
+HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/")
+HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
+HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
+HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
+HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_BASELINE_CONTRACT=$(shell_quote "$HARNESS_BASELINE_CONTRACT")
+public_internet_fallback=simulation-only
+gerrit_env=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
+jenkins_controller_env=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
+jenkins_agent_env=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
+integration_env=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
+EOF
+  chmod 0600 "$HARNESS_RUNTIME_ENV"
 }
 
 write_manifest_contract() {
@@ -879,7 +1403,7 @@ check_ubuntu_service_baseline() {
 
 cmd_preflight() {
   validate_harness_inputs
-  ensure_dirs
+  ensure_preflight_dirs
   require_command docker
   require_command python3
   require_command sha256sum
@@ -887,20 +1411,20 @@ cmd_preflight() {
   require_command awk
   detect_compose
   require_baseline_label
+  [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   [ -f "$compose_file" ] || die "Missing Compose file: $compose_file"
-  [ -f "$harness_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
-  [ -f "$harness_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
-  [ -f "$harness_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
-  write_rendered_env
+  [ -f "$docker_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
+  [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
+  [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
   write_evidence preflight harness pass "docker-harness.sh preflight" "not-applicable" "Compose provider: $compose_kind; generated output paths are ignored local state" >/dev/null
-  printf 'status=pass mode=%s compose=%s rendered_env=%s evidence_dir=%s log_dir=%s\n' \
-    "$HARNESS_MODE" "$compose_kind" "$HARNESS_RENDERED_ENV" "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR"
-  print_browser_urls
+  printf 'status=pass mode=%s compose=%s evidence_dir=%s log_dir=%s\n' \
+    "$HARNESS_MODE" "$compose_kind" "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR"
 }
 
 cmd_render_config() {
-  validate_harness_inputs
-  ensure_dirs
+  local env_file
+  env_file="${1:-$docker_env_example}"
+  load_env_file "$env_file"
   require_baseline_label
   write_rendered_env
   write_evidence render-config harness pass "docker-harness.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
@@ -910,7 +1434,18 @@ cmd_render_config() {
 
 cmd_up() {
   local log rc evidence
-  cmd_preflight >/dev/null
+  ensure_runtime_config
+  require_command docker
+  require_command python3
+  require_command sha256sum
+  require_command tar
+  require_command awk
+  detect_compose
+  require_baseline_label
+  [ -f "$compose_file" ] || die "Missing Compose file: $compose_file"
+  [ -f "$docker_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
+  [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
+  [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
   log="$(bounded_log_path up)"
   if compose up -d --build >"$log" 2>&1; then
     rc=0
@@ -953,7 +1488,16 @@ role_helper_present_in_container() {
 
 cmd_prepare_artifacts() {
   local role helper service log rc evidence artifact_dir gerrit_env_file jenkins_env_file
-  role="$(parse_role "$@")"
+  ensure_runtime_config
+  role="$(parse_optional_role "$@")"
+  if [ -z "$role" ]; then
+    run_all_roles prepare-artifacts
+    return
+  fi
+  if [ -n "${HARNESS_TEST_STUB_ROLE_COMMANDS:-}" ]; then
+    test_stub_role_command prepare-artifacts "$role"
+    return "$?"
+  fi
   helper="$(helper_for_role "$role")"
   service="bundle-factory"
   ensure_harness_up_for_role "$service"
@@ -977,9 +1521,11 @@ cmd_prepare_artifacts() {
   : >"$log"
   if [ "$role" = "gerrit" ]; then
     ensure_gerrit_ldap_bind_secret "$log"
-    gerrit_env_file="$(write_gerrit_bundle_factory_env)"
+    gerrit_env_file="$(require_gerrit_bundle_factory_env)"
   elif [ "$role" = "jenkins-controller" ]; then
-    jenkins_env_file="$(write_jenkins_controller_bundle_factory_env)"
+    jenkins_env_file="$(require_jenkins_controller_bundle_factory_env)"
+  elif [ "$role" = "jenkins-agent" ]; then
+    jenkins_env_file="$(require_container_role_env jenkins-agent "$service")"
   fi
 
   if [ "$role" = "gerrit" ]; then
@@ -990,6 +1536,12 @@ cmd_prepare_artifacts() {
     fi
   elif [ "$role" = "jenkins-controller" ]; then
     if compose exec -T "$service" "/workspace/$helper" --env "$jenkins_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif [ "$role" = "jenkins-agent" ]; then
+    if compose exec -T "$service" "/workspace/$helper" --env "$jenkins_env_file" prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
@@ -1029,7 +1581,16 @@ cmd_prepare_artifacts() {
 
 cmd_stage_artifacts() {
   local role service artifact_dir stage_dir log rc evidence
-  role="$(parse_role "$@")"
+  ensure_runtime_config
+  role="$(parse_optional_role "$@")"
+  if [ -z "$role" ]; then
+    run_all_roles stage-artifacts
+    return
+  fi
+  if [ -n "${HARNESS_TEST_STUB_ROLE_COMMANDS:-}" ]; then
+    test_stub_role_command stage-artifacts "$role"
+    return "$?"
+  fi
   service="$(service_for_role "$role")"
   artifact_dir="$HARNESS_STATE_DIR/bundle-factory/artifacts/$role"
   stage_dir="$HARNESS_STAGING_DIR/$role"
@@ -1099,6 +1660,21 @@ assert_no_placeholder_success() {
     return 1
   fi
   if grep -Eiq "proof=modeled|proof_scope=step8-modeled|real_execution=false|modeled_(scheduling|patchset|agent_build|verified)" "$log"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_no_forbidden_success_markers() {
+  local log
+  log="${1:?log required}"
+  if grep -Eiq 'dummy success|operation-plan-only|planned-checks-only|synthetic transcript|marker WAR|marker JAR|local responder|would verify|would validate|fake stream-events|fake scheduling|fake Verified' "$log"; then
+    return 1
+  fi
+  if grep -Eiq 'proof[[:space:]]*=[[:space:]]*modeled|proof_scope[[:space:]]*=[[:space:]]*step[0-9]+-modeled|real_execution[[:space:]]*=[[:space:]]*false' "$log"; then
+    return 1
+  fi
+  if grep -Eiq 'modeled[_ -]?(stream-events|trigger|scheduling|agent|agent-build|agent_execution|verified|vote|verified-vote)|simulated[_ -]?(stream-events|trigger|scheduling|agent-build|verified-vote)' "$log"; then
     return 1
   fi
   return 0
@@ -1231,33 +1807,35 @@ PY
 }
 
 ensure_gerrit_ready_for_jenkins_controller() {
-  local log gerrit_helper gerrit_service
+  local log gerrit_helper gerrit_service gerrit_env_file
   log="${1:?log required}"
   gerrit_helper="$(helper_for_role gerrit)"
   gerrit_service="$(service_for_role gerrit)"
 
   ensure_harness_up_for_role "$gerrit_service"
   require_running_service "$gerrit_service"
+  gerrit_env_file="$(require_container_role_env gerrit "$gerrit_service")"
 
-  if compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes validate >>"$log" 2>&1; then
+  if compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes validate >>"$log" 2>&1; then
     printf 'dependency_ready role=gerrit reason=real-gerrit-validation-already-passing\n' >>"$log"
     normalize_gerrit_role_evidence_logs "$log"
     return 0
   fi
 
   printf 'dependency_prepare role=gerrit reason=jenkins-controller-real-gerrit-ssh-validation\n' >>"$log"
-  cmd_prepare_artifacts --role gerrit >>"$log" 2>&1 &&
+    cmd_prepare_artifacts --role gerrit >>"$log" 2>&1 &&
     cmd_stage_artifacts --role gerrit >>"$log" 2>&1 &&
     ensure_gerrit_ldap_bind_secret "$log" &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes install >>"$log" 2>&1 &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes configure >>"$log" 2>&1 &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes validate >>"$log" 2>&1 &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --yes collect-evidence >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes install >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes configure >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes validate >>"$log" 2>&1 &&
+    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes collect-evidence >>"$log" 2>&1 &&
     normalize_gerrit_role_evidence_logs "$log"
 }
 
 cmd_run_role_gate() {
-  local role helper service log rc evidence
+  local role helper service log rc evidence role_env_file
+  ensure_runtime_config
   role="$(parse_role "$@")"
   helper="$(helper_for_role "$role")"
   service="$(service_for_role "$role")"
@@ -1273,6 +1851,7 @@ cmd_run_role_gate() {
     printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
     return 1
   fi
+  role_env_file="$(require_container_role_env "$role" "$service")"
 
   case "$role" in
     gerrit)
@@ -1280,10 +1859,10 @@ cmd_run_role_gate() {
       if cmd_prepare_artifacts --role gerrit >>"$log" 2>&1 &&
         cmd_stage_artifacts --role gerrit >>"$log" 2>&1 &&
         reset_gerrit_site_state "$service" "$log" &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes configure >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes validate >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --yes collect-evidence >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
         normalize_gerrit_role_evidence_logs "$log"; then
         rc=0
       else
@@ -1291,12 +1870,14 @@ cmd_run_role_gate() {
       fi
       ;;
     jenkins-controller)
-      if compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes configure-service >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes install-plugins >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --yes configure-jcasc >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
+      if cmd_prepare_artifacts --role jenkins-controller >>"$log" 2>&1 &&
+        cmd_stage_artifacts --role jenkins-controller >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
         rc=0
       else
@@ -1304,10 +1885,12 @@ cmd_run_role_gate() {
       fi
       ;;
     jenkins-agent)
-      if compose exec -T "$service" "/workspace/$helper" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --yes configure-runtime >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" collect-evidence >>"$log" 2>&1 &&
+      if cmd_prepare_artifacts --role jenkins-agent >>"$log" 2>&1 &&
+        cmd_stage_artifacts --role jenkins-agent >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_agent_role_evidence_logs "$log"; then
         rc=0
       else
@@ -1315,7 +1898,7 @@ cmd_run_role_gate() {
       fi
       ;;
     *)
-      if compose exec -T "$service" "/workspace/$helper" validate >>"$log" 2>&1; then
+      if compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -1357,10 +1940,110 @@ cmd_run_role_gate() {
   return "$rc"
 }
 
+integration_args=()
+
+refresh_integration_args() {
+  integration_args=(
+    --gerrit-env "$HARNESS_GERRIT_ENV_FILE"
+    --jenkins-controller-env "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
+    --jenkins-agent-env "$HARNESS_JENKINS_AGENT_ENV_FILE"
+    --integration-env "$HARNESS_INTEGRATION_ENV_FILE"
+  )
+}
+
+write_blocked_integration_evidence() {
+  local checkpoint log reason
+  checkpoint="${1:?checkpoint required}"
+  log="${2:?log required}"
+  reason="${3:?reason required}"
+  write_evidence "$checkpoint" integration blocked "scripts/integration-setup.sh" "$log" "$reason" >/dev/null
+}
+
+cmd_check() {
+  local integration_log rc evidence
+  ensure_runtime_config
+  refresh_integration_args
+  run_all_roles run-role-gate || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(write_evidence check roles fail "docker-harness.sh check" "not-applicable" "One or more role gates failed; cross-role integration was not attempted")"
+    printf 'exit=%s evidence=%s status=role-gates-failed\n' "$rc" "$evidence"
+    return "$rc"
+  fi
+  unset rc
+
+  [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
+  integration_log="$(bounded_log_path configure-and-validate-integration)"
+  {
+    set -e
+    "$integration_helper" "${integration_args[@]}" --yes configure-gerrit-ssh
+    "$integration_helper" "${integration_args[@]}" --yes configure-agent-ssh
+    "$integration_helper" "${integration_args[@]}" --yes configure-trigger
+    "$integration_helper" "${integration_args[@]}" --yes validate-integration
+  } >"$integration_log" 2>&1 || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -eq 0 ]; then
+    if ! assert_no_forbidden_success_markers "$integration_log"; then
+      evidence="$(write_evidence check integration fail "docker-harness.sh check" "$integration_log" "Forbidden success marker found in integration validation log")"
+      printf 'exit=1 evidence=%s log=%s\n' "$evidence" "$integration_log"
+      return 1
+    fi
+    evidence="$(write_evidence check integration pass "docker-harness.sh check" "$integration_log" "Shared integration helper proved Jenkins-to-Gerrit SSH, stream-events, Jenkins-to-agent SSH, node readiness, and agent scheduling")"
+    printf 'exit=0 log=%s evidence=%s\n' "$integration_log" "$evidence"
+    return 0
+  fi
+
+  write_blocked_integration_evidence jenkins-to-gerrit-ssh "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins-to-Gerrit SSH setup and validation"
+  write_blocked_integration_evidence stream-events "$integration_log" "Blocked: shared integration helper has not implemented real Gerrit stream-events validation"
+  write_blocked_integration_evidence agent-connection "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins-to-agent SSH connection validation"
+  write_blocked_integration_evidence scheduling "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins agent scheduling validation"
+  evidence="$(write_evidence check integration blocked "docker-harness.sh check" "$integration_log" "Shared integration helper reported blocked cross-role validation; Docker simulation cannot claim readiness")"
+  printf 'exit=%s log=%s evidence=%s status=blocked\n' "$rc" "$integration_log" "$evidence"
+  return "$rc"
+}
+
+cmd_full_verify() {
+  local log rc evidence
+  ensure_runtime_config
+  refresh_integration_args
+  cmd_check || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -ne 0 ]; then
+    log="$(bounded_log_path full-verify-blocked)"
+    printf 'full_verify_blocked=check_failed_or_blocked\n' >"$log"
+    write_blocked_integration_evidence job-execution "$log" "Blocked: readiness check did not prove real cross-role integration, so job execution was not attempted"
+    write_blocked_integration_evidence verified-vote "$log" "Blocked: readiness check did not prove real cross-role integration, so Verified +1 was not attempted"
+    evidence="$(write_evidence full-verify integration blocked "docker-harness.sh full-verify" "$log" "Full verification blocked before end-to-end trigger execution")"
+    printf 'exit=%s log=%s evidence=%s status=blocked\n' "$rc" "$log" "$evidence"
+    return "$rc"
+  fi
+  unset rc
+
+  [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
+  log="$(bounded_log_path verify-trigger)"
+  "$integration_helper" "${integration_args[@]}" --yes verify-trigger >"$log" 2>&1 || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -eq 0 ]; then
+    if ! assert_no_forbidden_success_markers "$log"; then
+      evidence="$(write_evidence full-verify integration fail "docker-harness.sh full-verify" "$log" "Forbidden success marker found in trigger verification log")"
+      printf 'exit=1 evidence=%s log=%s\n' "$evidence" "$log"
+      return 1
+    fi
+    evidence="$(write_evidence full-verify integration pass "docker-harness.sh full-verify" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
+    printf 'exit=0 log=%s evidence=%s\n' "$log" "$evidence"
+    return 0
+  fi
+
+  write_blocked_integration_evidence job-execution "$log" "Blocked: shared integration helper has not implemented real disposable Jenkins job execution proof"
+  write_blocked_integration_evidence verified-vote "$log" "Blocked: shared integration helper has not implemented real Gerrit Verified +1 vote proof"
+  evidence="$(write_evidence full-verify integration blocked "docker-harness.sh full-verify" "$log" "Shared integration helper reported blocked trigger verification; Docker simulation cannot claim end-to-end success")"
+  printf 'exit=%s log=%s evidence=%s status=blocked\n' "$rc" "$log" "$evidence"
+  return "$rc"
+}
+
 cmd_down() {
   local log rc evidence
-  validate_harness_inputs
-  ensure_dirs
+  ensure_runtime_config
   detect_compose
   log="$(bounded_log_path down)"
   if compose down >"$log" 2>&1; then
@@ -1377,6 +2060,29 @@ cmd_down() {
   printf 'exit=0 log=%s evidence=%s\n' "$log" "$evidence"
 }
 
+parse_render_config_args() {
+  local env_file
+  env_file="$docker_env_example"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --env)
+        [ "$#" -ge 2 ] || die "--env requires a file"
+        env_file="$2"
+        shift 2
+        ;;
+      --env=*)
+        env_file="${1#--env=}"
+        [ -n "$env_file" ] || die "--env requires a file"
+        shift
+        ;;
+      *)
+        die "render-config accepts only --env FILE"
+        ;;
+    esac
+  done
+  printf '%s\n' "$env_file"
+}
+
 main() {
   local command_name
   command_name="${1:-}"
@@ -1391,8 +2097,7 @@ main() {
       ;;
     render-config)
       shift
-      [ "$#" -eq 0 ] || die "render-config does not accept options"
-      cmd_render_config
+      cmd_render_config "$(parse_render_config_args "$@")"
       ;;
     up)
       shift
@@ -1410,6 +2115,16 @@ main() {
     run-role-gate)
       shift
       cmd_run_role_gate "$@"
+      ;;
+    check)
+      shift
+      [ "$#" -eq 0 ] || die "check does not accept options"
+      cmd_check
+      ;;
+    full-verify)
+      shift
+      [ "$#" -eq 0 ] || die "full-verify does not accept options"
+      cmd_full_verify
       ;;
     down)
       shift

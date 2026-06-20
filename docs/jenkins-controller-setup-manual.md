@@ -237,7 +237,7 @@ Staged artifact paths:
 | --- | --- |
 | Bundle factory output | `JENKINS_ARTIFACT_OUTPUT_DIR` |
 | Docker harness bundle output | `/harness/state/artifacts/jenkins-controller` inside the bundle factory |
-| Docker harness host state | `simulation/state/docker/harness/<run-id>/bundle-factory/artifacts/jenkins-controller/` |
+| Docker harness host state | `simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-controller/` |
 
 Side effects:
 
@@ -450,9 +450,7 @@ Produced outputs:
 - Role-local Jenkins controller evidence JSON under `JENKINS_EVIDENCE_DIR`.
 - A helper bounded log file under `JENKINS_LOG_DIR`.
 - In the shared Docker harness, canonical evidence under
-  `simulation/evidence/docker/harness/<run-id>/`.
-- For Step 8 compatibility, the harness also mirrors evidence to ignored
-  `simulation/docker/state/evidence/`.
+  `simulation/evidence/docker/<run-id>/`.
 
 Evidence Contract fields:
 
