@@ -10,10 +10,12 @@
 # - {{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}: optional service account name.
 #
 # Grant permissions to either the reviewed integration group or account.
-# read and label-Verified are project/ref scoped and belong under the reviewed
-# project access config for {{GERRIT_VERIFICATION_REF_PATTERN}}.
-# streamEvents is a global capability and belongs in the reviewed global or
-# All-Projects capability scope.
+# The global Verified label definition belongs in reviewed All-Projects
+# project configuration. This template documents access grants only.
+# read and label-Verified remain project/ref scoped and belong under the
+# reviewed project access config for {{GERRIT_VERIFICATION_REF_PATTERN}}.
+# streamEvents is a global capability grant and belongs in reviewed global
+# capability scope.
 # Do not grant these permissions to a human Jenkins admin as the integration
 # actor.
 # This is a declarative template, not an executable script.
@@ -22,9 +24,8 @@
 	read = group {{JENKINS_GERRIT_INTEGRATION_GROUP}}
 	label-Verified = -1..+1 group {{JENKINS_GERRIT_INTEGRATION_GROUP}}
 
-# Apply this capability stanza only in the reviewed global or All-Projects
-# capability scope, not in a disposable project-local config unless that is the
-# approved inherited capability location.
+# Apply this capability stanza only in the reviewed global capability scope,
+# not in a disposable project-local config.
 [capability]
 	streamEvents = group {{JENKINS_GERRIT_INTEGRATION_GROUP}}
 

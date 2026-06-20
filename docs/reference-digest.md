@@ -53,7 +53,7 @@ become a supported product surface.
 | Artifact staging | Bundle factory and target hosts | Move prepared role artifacts to the hosts that will install them. | Prepared role artifact outputs and target staging paths. | Staged artifacts on Gerrit, Jenkins controller, and Jenkins agent hosts. | Copies files to target hosts but does not install services. | Target-side checksum verification passes before mutation. |
 | Gerrit readiness | Gerrit host | Install, configure, start, and validate Gerrit with LDAP and integration prerequisites. | Gerrit env, staged Gerrit artifacts, LDAP bind values, runtime account values. | Gerrit service config, secure LDAP config, plugin placement, readiness evidence. | Creates or updates runtime paths, service config, plugins, and service state. | HTTP, SSH, LDAP, plugin readiness, and integration account readiness checks pass. |
 | Jenkins controller readiness | Jenkins controller | Install, configure, start, and validate Jenkins with LDAP, JCasC, plugins, and controller-only readiness. | Jenkins env, staged controller artifacts, LDAP bind values, admin group values. | Jenkins service config, JCasC material, plugin state, readiness evidence. | Creates or updates Jenkins home, service settings, plugin state, and service state. | HTTP, LDAP, plugins, JCasC, and controller runtime checks pass before cross-role SSH, Gerrit Trigger, scheduling, or vote proof. |
-| Gerrit integration | Jenkins controller and Gerrit host | Give Jenkins a Gerrit integration identity that can stream events and vote. | Jenkins-generated public key, Gerrit admin credentials, Gerrit account/group values. | Gerrit integration account key registration, `Verified` label, access grants, Jenkins Gerrit Trigger server config. | Creates or updates Gerrit permissions, label config, Jenkins credentials, and trigger server config. | SSH auth, stream-events permission, trigger connection, and vote permission are validated separately. |
+| Gerrit integration | Jenkins controller and Gerrit host | Give Jenkins a Gerrit integration account that can stream events and vote. | Jenkins-generated public key, Gerrit admin credentials, Gerrit account/group values. | Gerrit integration account key registration, global `Verified` label in reviewed `All-Projects` config, project/ref access grants, Jenkins Gerrit Trigger server config, and REST vote posting config. | Creates or updates Gerrit permissions, label config, Jenkins credentials, and trigger server config. | SSH auth, stream-events permission, global label existence, scoped vote permission, trigger connection, REST vote posting, and Gerrit review state are validated separately. |
 | Agent integration | Jenkins controller and Jenkins agent | Let Jenkins connect to an SSH build agent and schedule work on a label. | Jenkins-generated agent public key, agent host/user/node-name/labels/remote FS values. | Agent authorized key, runtime filesystem, Jenkins node, smoke job evidence. | Creates or updates agent SSH access, runtime directories, Jenkins credentials, node config, and validation job state. | Jenkins connects to the named node and runs a smoke job on the selected scheduling label. |
 | End-to-end acceptance | Jenkins controller and Gerrit | Prove that a Gerrit change triggers Jenkins and receives `Verified +1`. | Disposable project, branch, uploader identity, Jenkins job, trigger server config. | Gerrit change, Jenkins build, Gerrit review vote, evidence summary. | Creates disposable verification project/job/change and vote artifacts. | Event streaming, job scheduling, agent execution, and vote posting all pass. |
 | Evidence | All role environments | Preserve reviewable proof without leaking secrets or streaming verbose logs. | Validation outputs, manifests, checksums, sanitized config inputs, bounded logs. | Mode-labeled summaries with checksums, fingerprints, endpoints, and bounded log references. | Writes evidence summaries only. | Evidence identifies simulation vs production-like mode and redacts secrets. |
@@ -182,22 +182,25 @@ Agent behavior notes:
 
 ### Shared Integration Helper
 
+`docs/integration-setup-manual.md` is the operator command manual for the
+shared helper. It runs after the three role manuals are complete.
+
 `scripts/integration-setup.sh` should support:
 
 | Command | Behavior intent |
 | --- | --- |
-| `configure-gerrit-ssh` | Create or rotate the Jenkins-to-Gerrit SSH keypair on the Jenkins controller, expose only the public key to Gerrit, register Gerrit integration access, and record fingerprints. |
+| `configure-gerrit-ssh` | Create or rotate the Jenkins-to-Gerrit SSH keypair on the Jenkins controller, expose only the public key to Gerrit, register Gerrit integration access, create reviewed global `Verified` label configuration in `All-Projects`, create scoped read and `label-Verified -1..+1` grants, and record fingerprints. |
 | `configure-agent-ssh` | Create or rotate the Jenkins-to-agent SSH keypair on the Jenkins controller, expose only the public key to the agent, authorize agent access, and configure the Jenkins node credential. |
-| `configure-trigger` | Configure Jenkins Gerrit Trigger server and disposable verification job inputs after Gerrit permissions and credentials exist. |
-| `validate-integration` | After `--yes`, validate Jenkins-to-Gerrit SSH, stream-events permission, Jenkins-to-agent SSH, node readiness, and agent scheduling without accepting modeled proof. `--dry-run` must not create Gerrit or Jenkins state. |
-| `verify-trigger` | After `--yes`, create disposable verification inputs, push a change, observe a triggered build, and verify `Verified +1`. `--dry-run` must not create Gerrit or Jenkins state. |
-| `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, bounded logs, and redaction status. |
+| `configure-trigger` | Configure Jenkins Gerrit Trigger server for SSH authentication and `stream-events`, configure REST vote posting, and prepare disposable verification job inputs after Gerrit permissions and credentials exist. |
+| `validate-integration` | After `--yes`, validate Jenkins-to-Gerrit SSH, stream-events permission, global `Verified` label existence, scoped vote permission, Jenkins-to-agent SSH, node readiness, and agent scheduling without accepting modeled proof. `--dry-run` must not create Gerrit or Jenkins state. |
+| `verify-trigger` | After `--yes`, create disposable verification inputs, push a change, observe a triggered build, post `Verified +1` through the Gerrit REST review API, and verify Gerrit review state. `--dry-run` must not create Gerrit or Jenkins state. |
+| `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, REST vote results, Gerrit review state, bounded logs, and redaction status. |
 
-The helper may fail closed until the later Docker or VM integration
-implementation exists. Role helpers must not expose these cross-role commands.
-The reviewed Gerrit ACL REST workflow is planned for the deferred Step 11 or
-later approved shared integration implementation; it is not part of the
-current helper command surface.
+The helper may fail closed until Docker or VM integration exists. The reviewed
+Gerrit ACL REST workflow is part of the shared integration manual. Role
+helpers must not expose cross-role commands. Legacy SSH review commands or
+flags are exception-only and require operator justification plus compatibility
+evidence.
 
 ### Docker Simulation Helpers
 
@@ -271,14 +274,16 @@ The known working integration sequence is:
 2. Gerrit has a Jenkins integration account or group intended for automation.
 3. Jenkins controller generates the Jenkins-to-Gerrit SSH keypair.
 4. Gerrit receives only the public key.
-5. Gerrit grants read, event streaming, and `Verified` voting rights to the
-   integration account or group.
+5. Gerrit defines global `Verified` in reviewed `All-Projects` config,
+   grants project/ref read and `label-Verified -1..+1`, and grants
+   `stream-events` as a global capability to the integration account or group.
 6. Jenkins stores the controller-held private key as a credential.
 7. Jenkins configures a Gerrit Trigger server using the integration account.
 8. Jenkins registers a verification job that responds to `patchset-created`.
 9. A disposable Gerrit change triggers Jenkins.
 10. Jenkins runs the job on the selected SSH agent scheduling label.
-11. Jenkins posts `Verified +1` back to the Gerrit change.
+11. Jenkins posts `Verified +1` back to the Gerrit change through the Gerrit
+    REST review API and verifies Gerrit review state.
 
 Failure classification:
 
@@ -288,8 +293,8 @@ Failure classification:
   trigger-server connectivity failure.
 - If the event is received but no build runs, report a Jenkins job or agent
   scheduling failure.
-- If the build succeeds but Gerrit rejects the review command, report a
-  `Verified` label or voting permission failure.
+- If the build succeeds but Gerrit rejects the REST review vote, report a
+  REST vote, `Verified` label, or voting permission failure.
 
 ## Validation And Evidence Expectations
 
@@ -310,7 +315,7 @@ Evidence should include:
 - Gerrit SSH and stream-events check result.
 - Jenkins plugin/JCasC readiness result.
 - Jenkins agent online and scheduling result.
-- Gerrit Trigger event, build, and `Verified` vote result.
+- Gerrit Trigger event, build, REST vote, and Gerrit review state result.
 - Bounded log paths and short failure snippets.
 
 Evidence must not include:
@@ -337,6 +342,18 @@ Do not carry these draft concepts into v1 as supported behavior:
 - Reuse of runtime accounts as human admin accounts.
 - Jenkins builds on the controller for production-like validation.
 - Evidence that exposes secrets or depends on unbounded runtime logs.
+
+## Document Map
+
+- `docs/gerrit-setup-manual.md` covers Gerrit role-local setup.
+- `docs/jenkins-controller-setup-manual.md` covers Jenkins controller
+  role-local setup.
+- `docs/jenkins-agent-setup-manual.md` covers Jenkins agent host role-local
+  setup.
+- `docs/integration-setup-manual.md` covers the shared cross-role helper
+  command workflow after the three role manuals complete.
+- `docs/gerrit-trigger-integration.md` covers the Gerrit Trigger policy and
+  validation contract.
 
 ## Maintained Native Operation References
 

@@ -362,207 +362,29 @@ scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes install-p
 
 ## Phase 8: Shared Gerrit Trigger Integration Handoff
 
-Gerrit Trigger configuration is deferred to the later integration step. Step 8
+Gerrit Trigger configuration is deferred to the shared integration step. Step 8
 is Jenkins controller-only bringup and must not require Gerrit-side mutation,
 Jenkins-to-Gerrit SSH proof, Gerrit event streaming, agent scheduling, or
 `Verified` voting. Cross-role trigger configuration belongs to
 `scripts/integration-setup.sh`.
 
-Consumed inputs:
+After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
+use `docs/integration-setup-manual.md` for the shared helper workflow. That
+manual is the command authority for `configure-gerrit-ssh`,
+`configure-agent-ssh`, `configure-trigger`, `validate-integration`,
+`verify-trigger`, and `collect-evidence`.
 
-- Jenkins Gerrit integration account.
-- Jenkins Gerrit credential ID.
-- Gerrit HTTP URL, SSH host, SSH port, and Gerrit Trigger server name.
-- Staged credentials and Gerrit Trigger templates.
-- Jenkins-to-Gerrit private key and public key for the later integration
-  workflow.
-
-Later integration-step outputs, not Step 8 accepted outputs:
-
-- Rendered Jenkins credentials material referencing the credential IDs.
-- Rendered Gerrit Trigger server configuration.
-- Gerrit Trigger readiness marker.
-
-Deferred mutation side effects:
-
-- Creates or updates Jenkins credential and Gerrit Trigger config through the
-  shared integration helper in the later integration step.
-- Does not write private key material into evidence.
-
-Later shared helper:
-
-```bash
-scripts/integration-setup.sh \
-  --gerrit-env <reviewed-gerrit.env> \
-  --jenkins-controller-env <reviewed-jenkins-controller.env> \
-  --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  --integration-env <reviewed-integration.env> \
-  configure-trigger
-```
-
-## Phase 9: Deferred Jenkins-To-Gerrit SSH Key Handoff
-
-Jenkins-to-Gerrit key generation is deferred to the later integration step.
-Controller-only validation must not require this credential material.
-
-Consumed inputs:
-
-- Reviewed controller-owned credential path.
-- Public key delivery path for Gerrit.
-- Jenkins Gerrit integration account name.
-
-Later integration-step outputs, not Step 8 accepted outputs:
-
-- Jenkins-to-Gerrit private key owned by the Jenkins controller workflow.
-- Jenkins-to-Gerrit public key delivery file for Gerrit.
-- Public key fingerprint in status and evidence.
-
-Key handoff:
-
-- Jenkins controller retains the private key.
-- Gerrit consumes only the public key through the shared integration workflow.
-
-Deferred mutation side effects:
-
-- Creates or rotates the controller-held Jenkins-to-Gerrit keypair in the later
-  integration step.
-
-Later shared helper:
-
-```bash
-scripts/integration-setup.sh \
-  --gerrit-env <reviewed-gerrit.env> \
-  --jenkins-controller-env <reviewed-jenkins-controller.env> \
-  --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  --integration-env <reviewed-integration.env> \
-  configure-gerrit-ssh
-```
-
-## Phase 10: Deferred Build-Agent SSH Key Handoff
-
-Jenkins-to-agent key generation is deferred to the later integration step.
-Step 8 controller-only validation must not require a configured build agent.
-
-Consumed inputs:
-
-- Reviewed controller-owned agent credential path.
-- Public key transfer path for the Jenkins agent host.
-- Jenkins agent account name.
-
-Later integration-step outputs, not Step 8 accepted outputs:
-
-- Jenkins-to-agent private key owned by the Jenkins controller workflow.
-- Public key transfer file for the later agent integration workflow.
-- Public key fingerprint in status and evidence.
-
-Key handoff:
-
-- Jenkins controller retains the private key.
-- Jenkins agent consumes only the public key through the shared integration
-  workflow.
-
-Deferred mutation side effects:
-
-- Creates or rotates the controller-held Jenkins-to-agent keypair in the later
-  integration step.
-
-Later shared helper:
-
-```bash
-scripts/integration-setup.sh \
-  --gerrit-env <reviewed-gerrit.env> \
-  --jenkins-controller-env <reviewed-jenkins-controller.env> \
-  --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  --integration-env <reviewed-integration.env> \
-  configure-agent-ssh
-```
-
-## Phase 11: Deferred Build-Agent Registration And Scheduling Validation
-
-Build-agent registration and scheduling validation are deferred to the later
-integration step, after Jenkins controller and Jenkins agent host-only bringup
-are both accepted.
-
-Consumed inputs:
-
-- Jenkins agent host, SSH port, runtime account, node name, scheduling labels,
-  remote filesystem, executor count, and credential ID.
-- Controller-held Jenkins-to-agent private key.
-- Public key delivery path for the agent host.
-- Staged agent-node template.
-
-Later integration-step outputs, not Step 8 accepted outputs:
-
-- Rendered Jenkins agent node config.
-- Agent registration marker.
-- Jenkins controller-side node registration state.
-- Shared `validate-integration` must require `--yes` for mutation and must
-  either run a real Jenkins runtime node/smoke proof against the configured
-  SSH agent or exit nonzero with a clear blocked or unsupported status.
-
-Deferred mutation side effects:
-
-- Creates or updates Jenkins node configuration through the shared integration
-  helper in the later integration step.
-- `validate-integration --dry-run` must not create Gerrit or Jenkins state.
-  Non-dry-run validation must not pass with a modeled scheduling record when
-  the later integration step runs. The agent helper owns only host-side SSH
-  readiness.
-
-Later shared helper:
-
-```bash
-scripts/integration-setup.sh \
-  --gerrit-env <reviewed-gerrit.env> \
-  --jenkins-controller-env <reviewed-jenkins-controller.env> \
-  --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  --integration-env <reviewed-integration.env> \
-  --yes validate-integration
-```
-
-## Phase 12: Deferred End-To-End Gerrit Trigger Verification
-
-End-to-end Gerrit Trigger verification is deferred to the later integration
-step. Step 8 controller-only validation must not claim patchset-created event
-streaming, agent execution, or `Verified` vote proof.
-
-Consumed inputs:
-
-- Gerrit Trigger server configuration.
-- Later integration-step agent scheduling evidence.
-- Disposable Gerrit project, branch, and verification run ID.
-- Disposable verification job template.
-
-Later integration-step outputs, not Step 8 accepted outputs:
-
-- Disposable verification job config and trigger inputs.
-- Gerrit Trigger verification evidence from real Jenkins/Gerrit interaction,
-  or a nonzero blocked/unsupported result when the real interaction cannot run.
-
-Deferred mutation side effects:
-
-- Creates disposable verification templates and records the real verification
-  result for the reviewed run ID in the later integration step.
-- Docker harness mode must not pass with modeled `patchset-created`, agent
-  build, or `Verified +1` voting. If the role gate cannot complete the real
-  verification at this step, it must fail or report blocked. Step 11 remains
-  the full cross-role Docker gate that aggregates the same real workflow across
-  all five environments.
-
-Later shared helper:
-
-```bash
-scripts/integration-setup.sh \
-  --gerrit-env <reviewed-gerrit.env> \
-  --jenkins-controller-env <reviewed-jenkins-controller.env> \
-  --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  --integration-env <reviewed-integration.env> \
-  --yes verify-trigger
-```
+Controller-only setup must not create or rotate Jenkins-to-Gerrit or
+Jenkins-to-agent keypairs, install public keys on Gerrit or the agent, register
+controller nodes, configure Gerrit Trigger, create disposable verification
+artifacts, or claim trigger/vote evidence. The shared integration workflow
+keeps private keys on the Jenkins controller, uses SSH for Gerrit Trigger
+authentication and `stream-events`, and uses the Gerrit REST review API as the
+default `Verified` vote posting path.
 
 Failure classification follows `docs/gerrit-trigger-integration.md`: SSH
 credential failures, `stream-events` failures, job/agent scheduling failures,
-and `Verified` voting failures must remain distinct.
+REST vote failures, and Gerrit review-state failures must remain distinct.
 
 ## Phase 13: Validation
 

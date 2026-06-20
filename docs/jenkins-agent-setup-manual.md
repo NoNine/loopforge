@@ -287,6 +287,10 @@ Jenkins controller scope:
   checks, bounded logs, and evidence.
 - Real cross-role trigger execution and `Verified` voting are aggregated by
   the later shared integration step after role helpers are compliant.
+- After Gerrit, Jenkins controller, and Jenkins agent role manuals are
+  complete, use `docs/integration-setup-manual.md` for the shared
+  `scripts/integration-setup.sh` workflow. The agent manual remains limited to
+  agent host readiness and does not duplicate the cross-role command sequence.
 
 ## Phase 7: Evidence Collection
 

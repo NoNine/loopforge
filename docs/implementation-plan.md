@@ -430,7 +430,8 @@ Document the default operator workflow as a phase contract, not as a full
 runnable command transcript. The contract must define phase order, execution
 environment, helper command ownership, inputs and outputs, side effects, and
 the checkpoint that lets operators stop, review evidence, and resume at a known
-boundary.
+boundary. The cross-role command sequence belongs in
+`docs/integration-setup-manual.md`.
 
 Workflow contract:
 
@@ -442,9 +443,7 @@ Workflow contract:
 | Gerrit readiness | Gerrit host | `install`, `configure`, `validate` | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit. | Step 7 role gate only: Gerrit starts, uses LDAP, exposes HTTP/SSH, records bounded logs, and stops before Jenkins integration mutation. |
 | Jenkins controller readiness | Jenkins controller | `install`, `configure-service`, `install-plugins`, `configure-jcasc`, `validate` | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, and JCasC evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files, installs plugins, and starts or restarts Jenkins. | Controller-only checkpoint: Jenkins starts, uses LDAP/JCasC, has required plugins, records bounded logs, and stops before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
 | Jenkins agent readiness | Jenkins agent | `install`, `configure-runtime`, `validate` | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Installs packages from approved sources and creates or updates agent-host runtime files and SSH service state. | Step 9 role gate only: the agent host proves OS/tooling, SSH daemon, runtime account, filesystem, staged artifact, bounded log, and evidence readiness, and stops before credential transfer, controller node registration, or scheduling proof. |
-| Later Gerrit integration | Jenkins controller and Gerrit host | `scripts/integration-setup.sh configure-gerrit-ssh` | Jenkins controller produces and owns the Jenkins-to-Gerrit private key; Gerrit consumes only the matching public key; Jenkins consumes Gerrit endpoint and account values. | Creates or updates Jenkins-held key material, Gerrit integration permissions, the `Verified` label, and related integration evidence. | Later workflow phase only: Jenkins-to-Gerrit SSH authentication, stream-events permission, `Verified` voting permission, and integration evidence are ready. |
-| Later agent integration | Jenkins controller and Jenkins agent | `scripts/integration-setup.sh configure-agent-ssh`, `scripts/integration-setup.sh validate-integration` | Jenkins controller produces and owns the agent private key; the integration workflow applies only the public key to authorize agent access; Jenkins consumes agent host, node name, labels, executor count, and remote filesystem values. | Creates or updates Jenkins-to-agent key material on Jenkins, agent SSH access, Jenkins node registration, validation job state, and integration evidence. | Later workflow phase only: Jenkins can connect to the named agent node, schedule a job on the selected label, and retain agent evidence. |
-| Later end-to-end acceptance | Jenkins controller and Gerrit host | `scripts/integration-setup.sh configure-trigger`, `scripts/integration-setup.sh verify-trigger` | Consumes disposable Gerrit project/change and Jenkins job inputs; produces build, change, and vote evidence. | Creates disposable verification project, job, change, and review vote artifacts. | Later workflow phase only: a disposable Gerrit change triggers Jenkins, runs on the agent, and receives `Verified +1`. |
+| Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/integration-setup-manual.md` for the cross-role command sequence and stop/review points. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
 Operator sequencing rules:
@@ -464,25 +463,22 @@ Operator sequencing rules:
   and verification summaries.
 - Complete Gerrit, Jenkins controller, and Jenkins agent role-only bringup
   before running the shared cross-role integration helper.
-- The integration rows above are later workflow phases, not role gate
-  requirements for Step 7, Step 8, or Step 9.
-- Run `scripts/integration-setup.sh configure-gerrit-ssh` during the later
-  integration step to keep the Jenkins-to-Gerrit private key on the Jenkins
-  controller and provide only the public key to Gerrit.
-- Run `scripts/integration-setup.sh configure-agent-ssh` during the later
-  agent integration step to keep the Jenkins-to-agent private key on the
-  Jenkins controller and provide only the public key to the agent host.
-- Run `scripts/integration-setup.sh configure-trigger` only after Gerrit SSH
-  and agent SSH integration exist.
-- Run `scripts/integration-setup.sh --yes validate-integration` and
-  `scripts/integration-setup.sh --yes verify-trigger` for cross-role
-  scheduling, trigger, and vote proof. `--dry-run` for these commands must not
-  create Gerrit or Jenkins state. Role-local `validate` remains role-only
-  readiness.
+- Use `docs/integration-setup-manual.md` for the approved cross-role helper
+  command workflow. Role manuals must hand off to that document instead of
+  duplicating the full integration command sequence.
+- Product-like integration defaults to a global `Verified` CI label in reviewed
+  `All-Projects` configuration. Jenkins read and `label-Verified -1..+1`
+  grants stay scoped to the reviewed project and ref pattern, while
+  `stream-events` remains a global capability grant.
+- Jenkins Gerrit Trigger uses SSH for authentication and `stream-events`. The
+  Gerrit REST review API is the default `Verified` vote posting path. Legacy
+  SSH review commands or flags require explicit operator justification and
+  compatibility evidence.
 - The Jenkins agent helper must not register controller nodes.
-- Treat role-local `validate` as role-only readiness validation. Treat
-  shared `verify-trigger` as later end-to-end acceptance for Gerrit event
-  streaming, Jenkins agent scheduling, and `Verified +1` voting.
+- Treat role-local `validate` as role-only readiness validation. Treat shared
+  `validate-integration` and `verify-trigger` as later cross-role acceptance
+  for Gerrit SSH, event streaming, Jenkins agent scheduling, REST vote posting,
+  and Gerrit review state.
 
 Generated key transfer contract:
 
@@ -553,8 +549,15 @@ Implementation notes:
 
 - Jenkins must authenticate to Gerrit with the Jenkins Gerrit integration
   actor, not a human Jenkins admin.
-- Gerrit must grant read, stream-events, and `Verified` voting permissions to
-  the integration actor or group.
+- Product-like setup defines the global `Verified` label through reviewed
+  `All-Projects` configuration.
+- Gerrit must grant read and `label-Verified -1..+1` permissions to the
+  integration actor or group only at the reviewed project/ref scope.
+- Gerrit must grant `stream-events` as a global capability.
+- Jenkins Gerrit Trigger uses SSH for authentication and event streaming.
+- The Gerrit REST review API is the default `Verified` vote posting path.
+- Legacy SSH review commands or flags are exception-only and require explicit
+  operator justification plus compatibility evidence.
 - Verification may create disposable projects, jobs, and changes, and must
   label those as verification artifacts.
 - Failed `Verified` voting must be surfaced separately from event-stream or
@@ -571,7 +574,8 @@ Docker simulation acceptance:
 - A disposable Gerrit change emits a `patchset-created` event.
 - Jenkins receives the event and schedules the verification job.
 - The job runs on the Jenkins agent.
-- Jenkins posts `Verified +1` to the Gerrit change.
+- Jenkins posts `Verified +1` to the Gerrit change through the Gerrit REST
+  review API.
 - Evidence records the change, build, vote, and verification mode.
 
 ## Step 6: Add Shared Docker Harness
@@ -1406,7 +1410,8 @@ simulation/docker/docker-verify.sh stage-artifacts
 simulation/docker/docker-verify.sh up
 simulation/docker/docker-verify.sh check
 simulation/docker/docker-verify.sh full-verify
-scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --dry-run validate-integration
+scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes validate-integration
+scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes verify-trigger
 scripts/collect-evidence.sh
 simulation/docker/docker-verify.sh down
 simulation/vm/vm-verify.sh --help
@@ -1420,7 +1425,8 @@ Final acceptance criteria:
 - Gerrit, Jenkins controller, and Jenkins agent have manual and helper flows.
 - LDAP-backed identity assumptions are documented and simulated.
 - Jenkins can schedule a job on the agent.
-- Gerrit Trigger posts `Verified +1` back to Gerrit.
+- Jenkins posts `Verified +1` back to Gerrit through the Gerrit REST review
+  API.
 - Validation artifacts are produced and retained for review.
 - The package does not claim strict air-gapped support in v1.
 - The package does not support offline Ubuntu dependency bundles in v1.

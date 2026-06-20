@@ -30,14 +30,14 @@ execution_contract:
     - "Schedule this disposable job when Gerrit Trigger receives patchset-created."
     - "Run the job on the selected Jenkins agent scheduling label."
     - "Keep controller built-in executors out of production-like verification unless explicitly approved."
-    - "Allow Gerrit Trigger to post Verified +1 only after the agent job succeeds."
+    - "Allow REST vote posting only after the agent job succeeds."
 
 evidence_contract:
   separate_results:
     - "Gerrit Trigger received patchset-created."
     - "Jenkins scheduled the disposable job."
     - "The disposable job ran on {{JENKINS_AGENT_NODE_NAME}} through {{JENKINS_AGENT_SCHEDULING_LABEL}}."
-    - "Jenkins posted Verified +1 to the Gerrit change."
+    - "Jenkins posted Verified +1 through the Gerrit REST review API."
   recordable_fields:
     - "verification mode"
     - "verification run ID"

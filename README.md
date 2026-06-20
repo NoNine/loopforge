@@ -12,9 +12,11 @@ Start with these references:
   and simulation accounts.
 - `docs/gerrit-setup-manual.md`,
   `docs/jenkins-controller-setup-manual.md`, and
-  `docs/jenkins-agent-setup-manual.md` will hold the role setup manuals.
-- `docs/gerrit-trigger-integration.md` will hold the Jenkins-to-Gerrit
-  integration contract.
+  `docs/jenkins-agent-setup-manual.md` hold the role setup manuals.
+- `docs/integration-setup-manual.md` holds the shared cross-role integration
+  setup manual that runs after the three role manuals are complete.
+- `docs/gerrit-trigger-integration.md` holds the Jenkins-to-Gerrit
+  integration policy and validation contract.
 - `docs/validation-and-evidence.md` will hold validation and evidence rules.
 
 ## V1 Boundary
@@ -54,7 +56,9 @@ The planned flow is:
 4. Stage prepared artifacts to the target role hosts.
 5. Follow the role manuals or matching helper commands for Gerrit, Jenkins
    controller, and Jenkins agent setup.
-6. Configure Jenkins-to-Gerrit integration and agent registration.
+6. Follow `docs/integration-setup-manual.md` for Jenkins-to-Gerrit
+   integration, agent registration, Gerrit Trigger setup, validation, and
+   evidence collection.
 7. Run validation and collect evidence with mode labels and bounded log
    references.
 

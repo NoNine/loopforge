@@ -316,66 +316,25 @@ Validation evidence:
 
 ## Phase 7: Shared Integration Handoff
 
-Jenkins integration prerequisites are intentionally deferred to the later
+Jenkins integration prerequisites are intentionally deferred to the shared
 integration step. Step 7 remains a Gerrit-only runtime proof and must not
 configure Gerrit-side Jenkins integration access or state. Cross-role SSH,
-Gerrit permissions, `Verified` label application, trigger setup, validation,
+Gerrit permissions, global `Verified` label setup, trigger setup, validation,
 and integration evidence belong to `scripts/integration-setup.sh`.
 
-Later integration inputs, not Gerrit role-local inputs:
+After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
+use `docs/integration-setup-manual.md` for the shared helper workflow. That
+manual is the command authority for `configure-gerrit-ssh`,
+`configure-agent-ssh`, `configure-trigger`, `validate-integration`,
+`verify-trigger`, and `collect-evidence`.
 
-- Jenkins Gerrit integration account.
-- Jenkins Gerrit integration group.
-- Jenkins-to-Gerrit public key file.
-- Explicit Gerrit ACL target project.
-- Production-like reviewed REST configuration mode.
-- Gerrit integration account or group id for reviewed REST ACL changes.
-- `Verified` label template.
-- Gerrit integration access template.
-- Verification ref pattern.
-
-Later integration outputs, not Gerrit role-local outputs:
-
-- Gerrit-held Jenkins public key.
-- Reviewed Gerrit config change created through REST for the explicit target
-  project.
-- Gerrit review change and revision identifiers when a review is created.
-- Planned or blocked evidence when the REST workflow cannot be executed.
-- Integration status recording the account or group, target project, inherited
-  scope, apply mode, Gerrit version, review change, and validation results.
-- Direct REST apply evidence only for explicitly labeled simulation or lab
-  behavior. Production-like mode must fail closed instead of applying directly.
-
-Mutation side effects:
-
-- None in Step 7. The Gerrit role helper does not expose cross-role
-  integration commands and cannot mutate `All-Projects.git`, `All-Users.git`,
-  Gerrit labels, Jenkins service groups, public keys, stream-events grants, or
-  vote permissions as a role-local phase.
-
-Later shared helper:
-
-```bash
-scripts/integration-setup.sh \
-  --gerrit-env <reviewed-gerrit.env> \
-  --jenkins-controller-env <reviewed-jenkins-controller.env> \
-  --jenkins-agent-env <reviewed-jenkins-agent.env> \
-  --integration-env <reviewed-integration.env> \
-  configure-gerrit-ssh
-```
-
-The shared helper may fail closed until the later real integration
-implementation is approved. Gerrit receives only the public key when that
-later step is implemented. Jenkins owns the matching private key. LDAP bind
-secrets are still read from reviewed secret input and written to
-`etc/secure.config` during Gerrit configuration; they are not recorded in
-evidence.
-
-Reviewed ACL setup is deferred to the Step 11/shared integration
-implementation. That future implementation must use production-like reviewed
-REST config changes, require an explicit target project, allow direct REST
-apply only for explicitly labeled simulation or lab runs, fail closed in
-production-like mode, and must not auto-submit reviewed ACL changes.
+Gerrit role-local setup must not mutate `All-Projects.git`, `All-Users.git`,
+Gerrit labels, Jenkins service groups, public keys, `stream-events` grants, or
+vote permissions as a role-local phase. Product-like integration defaults to a
+global `Verified` label in reviewed `All-Projects` configuration; Jenkins read
+and `label-Verified -1..+1` grants remain scoped to the reviewed project/ref
+pattern; `stream-events` remains a global capability grant; and REST review is
+the default vote posting path.
 
 ## Phase 8: Validation
 
