@@ -53,6 +53,20 @@ files remaining unchanged.
 `harness.runtime.env` retains lifecycle values and points at the runtime input
 copies.
 
+## Simulation Accounts
+
+The Docker target image includes product runtime accounts with native homes:
+`gerrit` owns `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and
+`jenkins-agent` owns `/var/lib/jenkins-agent`. These are separate from
+application admin, integration, LDAP bind, and test accounts.
+
+The Docker target image also includes a local `ci-operator` OS account with
+passwordless sudo for simulation orchestration and privileged helper
+operations. The `ci-operator` account does not own `/srv/gerrit`,
+`/var/lib/jenkins`, or `/var/lib/jenkins-agent` and is not a Gerrit, Jenkins
+controller, or Jenkins agent runtime account. Root remains available for
+privileged container operations where the harness needs it.
+
 ## Output Locations
 
 Docker-generated runtime output is not committed.

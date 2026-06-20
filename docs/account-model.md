@@ -26,11 +26,13 @@ roles in this package are accounts.
 
 | Account | Source | Purpose |
 | --- | --- | --- |
-| `operator` account | Local OS account on simulation machines | Runs orchestration, SSH access, helper commands, and evidence collection. |
+| `ci-operator` account | Local OS account on simulation machines | Runs orchestration, SSH access, helper commands, privileged simulation operations, and evidence collection. |
 
-The `operator` account is part of the simulation environment. It is not a
+The `ci-operator` account is part of the simulation environment. It is not a
 Gerrit or Jenkins runtime account, application admin account, integration
-account, LDAP bind account, or test user account.
+account, LDAP bind account, or test user account. The Docker simulation
+`ci-operator` local OS account has passwordless sudo for simulation
+orchestration and privileged helper operations.
 
 ## Separation Rules
 
@@ -77,10 +79,12 @@ human admin, test, runtime, and integration accounts because its only purpose
 is directory lookup, and it must not grant application administration,
 runtime ownership, or Gerrit voting rights.
 
-The `operator` account runs orchestration, SSH access, helper commands, and
-evidence collection in simulation. Keeping it separate makes simulation
-control-plane access distinct from product accounts and prevents evidence
-collection access from being treated as Gerrit or Jenkins authority.
+The `ci-operator` account runs orchestration, SSH access, helper commands, and
+evidence collection in simulation. In Docker simulation it has passwordless
+sudo for orchestration and privileged helper operations. Keeping it separate
+makes simulation control-plane access distinct from product accounts and
+prevents evidence collection access from being treated as Gerrit or Jenkins
+authority.
 
 ## Credential Custody
 

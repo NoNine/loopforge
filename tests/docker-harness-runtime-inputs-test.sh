@@ -45,6 +45,7 @@ HARNESS_LOG_DIR="$log_dir" \
 
 runtime_dir="$state_dir/rendered/runtime-inputs"
 runtime_env="$state_dir/rendered/harness.runtime.env"
+product_home_dir="$repo_root/simulation/product-homes/docker/runtime-inputs-$$"
 
 for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
   [ -f "$runtime_dir/$file" ] || {
@@ -63,6 +64,17 @@ grep -Fq "HARNESS_GERRIT_ENV_FILE=$runtime_dir/gerrit.env" "$runtime_env"
 grep -Fq "HARNESS_JENKINS_CONTROLLER_ENV_FILE=$runtime_dir/jenkins-controller.env" "$runtime_env"
 grep -Fq "HARNESS_JENKINS_AGENT_ENV_FILE=$runtime_dir/jenkins-agent.env" "$runtime_env"
 grep -Fq "HARNESS_INTEGRATION_ENV_FILE=$runtime_dir/integration.env" "$runtime_env"
+grep -Fq "HARNESS_PRODUCT_HOME_DIR=$product_home_dir" "$runtime_env"
+[ "$product_home_dir" != "$state_dir" ] || {
+  printf 'Product home dir must not equal harness state dir\n' >&2
+  exit 1
+}
+case "$product_home_dir" in
+  "$state_dir"/*)
+    printf 'Product home dir must not be below harness state dir\n' >&2
+    exit 1
+    ;;
+esac
 
 cat >"$tmp_dir/gerrit.env" <<'EOF'
 GERRIT_SENTINEL=mutated-after-render
@@ -81,5 +93,15 @@ loaded_gerrit_env="$(
 )"
 [ "$loaded_gerrit_env" = "$runtime_dir/gerrit.env" ] || {
   printf 'Expected lifecycle config to point at runtime copy, got %s\n' "$loaded_gerrit_env" >&2
+  exit 1
+}
+
+loaded_product_home_dir="$(
+  # shellcheck disable=SC1090
+  . "$runtime_env"
+  printf '%s\n' "$HARNESS_PRODUCT_HOME_DIR"
+)"
+[ "$loaded_product_home_dir" = "$product_home_dir" ] || {
+  printf 'Expected runtime config to preserve product home dir, got %s\n' "$loaded_product_home_dir" >&2
   exit 1
 }

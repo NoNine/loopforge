@@ -83,8 +83,10 @@ case "$*" in
         ;;
     esac
     ;;
-  inspect*)
+  inspect\ -f\ *State.Running*)
     printf 'true\n'
+    ;;
+  inspect*)
     ;;
 esac
 SH
@@ -126,23 +128,49 @@ EOF
 
 write_manifest jenkins-controller
 write_manifest jenkins-agent
-mkdir -p "$tmp_dir/state/rendered" "$tmp_dir/evidence" "$tmp_dir/logs"
+mkdir -p \
+  "$tmp_dir/state/rendered" \
+  "$tmp_dir/evidence" \
+  "$tmp_dir/logs" \
+  "$tmp_dir/product-homes/jenkins-controller/logs" \
+  "$tmp_dir/product-homes/jenkins-controller/state" \
+  "$tmp_dir/product-homes/jenkins-agent/logs"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
 cp "$repo_root/examples/jenkins-agent.env.example" "$tmp_dir/jenkins-agent.env"
+read -r gerrit_host_port jenkins_host_port <<EOF
+$(python3 - <<'PY'
+import socket
+
+ports = []
+for _ in range(2):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    ports.append(sock.getsockname()[1])
+    sock.close()
+print(*ports)
+PY
+)
+EOF
 cat >>"$tmp_dir/harness.env" <<EOF
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
+HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_host_port
+HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_host_port
 EOF
 printf 'controller log\n' >"$tmp_dir/logs/controller.log"
+printf 'controller service log\n' >"$tmp_dir/product-homes/jenkins-controller/logs/jenkins-controller.log"
+printf 'pid=123 endpoint=http://jenkins-controller-target:8080/ log=/var/lib/jenkins/logs/jenkins-controller.log\n' \
+  >"$tmp_dir/product-homes/jenkins-controller/state/runtime.status"
 printf 'agent log\n' >"$tmp_dir/logs/agent.log"
+printf 'agent service log\n' >"$tmp_dir/product-homes/jenkins-agent/logs/agent-service.log"
 cat >"$tmp_dir/evidence/jenkins-controller-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/controller.log"}
+{"bounded_log_references":"/harness/logs/controller.log;/var/lib/jenkins/logs/jenkins-controller.log;/var/lib/jenkins/state/runtime.status"}
 EOF
 cat >"$tmp_dir/evidence/jenkins-agent-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/agent.log"}
+{"bounded_log_references":"/harness/logs/agent.log;/var/lib/jenkins-agent/logs/agent-service.log"}
 EOF
 
 common_env=(
@@ -152,6 +180,7 @@ common_env=(
   HARNESS_RUN_ID="role-order-$$"
   HARNESS_PROJECT_NAME="role-order-$$"
   HARNESS_STATE_DIR="$tmp_dir/state"
+  HARNESS_PRODUCT_HOME_DIR="$tmp_dir/product-homes"
   HARNESS_STAGING_DIR="$tmp_dir/staging"
   HARNESS_EVIDENCE_DIR="$tmp_dir/evidence"
   HARNESS_LOG_DIR="$tmp_dir/logs"
@@ -165,10 +194,35 @@ env "${common_env[@]}" \
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-agent >/dev/null
 
+controller_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
+agent_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
+[ -n "$controller_host_evidence" ] || {
+  printf 'jenkins-controller normalized host evidence was not written\n' >&2
+  exit 1
+}
+[ -n "$agent_host_evidence" ] || {
+  printf 'jenkins-agent normalized host evidence was not written\n' >&2
+  exit 1
+}
+grep -Fq "$tmp_dir/product-homes/jenkins-controller/logs/jenkins-controller.log" "$controller_host_evidence" || {
+  printf 'jenkins-controller product-home log was not normalized to host path\n' >&2
+  exit 1
+}
+grep -Fq "$tmp_dir/product-homes/jenkins-controller/state/runtime.status" "$controller_host_evidence" || {
+  printf 'jenkins-controller product-home runtime status was not normalized to host path\n' >&2
+  exit 1
+}
+grep -Fq "$tmp_dir/product-homes/jenkins-agent/logs/agent-service.log" "$agent_host_evidence" || {
+  printf 'jenkins-agent product-home log was not normalized to host path\n' >&2
+  exit 1
+}
+
 controller_prepare_line="$(grep -n '^prepare-artifacts jenkins-controller$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 controller_stage_line="$(grep -n '^stage-artifacts jenkins-controller$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 agent_prepare_line="$(grep -n '^prepare-artifacts jenkins-agent$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 agent_stage_line="$(grep -n '^stage-artifacts jenkins-agent$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
+controller_chown_line="$(grep -n 'jenkins-controller-target sh -c .*chown -R jenkins:jenkins /var/lib/jenkins' "$calls" | cut -d: -f1 | head -1)"
+agent_chown_line="$(grep -n 'jenkins-agent-target sh -c .*chown -R jenkins-agent:jenkins-agent /var/lib/jenkins-agent' "$calls" | cut -d: -f1 | head -1)"
 controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.sh --env /harness/state/rendered/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /harness/state/rendered/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 
@@ -180,11 +234,19 @@ agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /
   printf 'jenkins-controller stage did not run before install\n' >&2
   exit 1
 }
+[ -n "$controller_chown_line" ] && [ "$controller_chown_line" -lt "$controller_install_line" ] || {
+  printf 'jenkins-controller product home ownership was not prepared before install\n' >&2
+  exit 1
+}
 [ "$agent_prepare_line" -lt "$agent_install_line" ] || {
   printf 'jenkins-agent prepare did not run before install\n' >&2
   exit 1
 }
 [ "$agent_stage_line" -lt "$agent_install_line" ] || {
   printf 'jenkins-agent stage did not run before install\n' >&2
+  exit 1
+}
+[ -n "$agent_chown_line" ] && [ "$agent_chown_line" -lt "$agent_install_line" ] || {
+  printf 'jenkins-agent product home ownership was not prepared before install\n' >&2
   exit 1
 }

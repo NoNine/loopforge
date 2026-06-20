@@ -22,8 +22,8 @@ Both layers use the same five-machine topology:
 | Jenkins agent | Container | VM | Runs SSH build jobs scheduled by Jenkins. |
 
 The simulation model derives account usage from `docs/account-model.md`. It
-does not introduce a separate account taxonomy. The `operator` account is a
-local OS account on simulation machines only; it is not a Gerrit or Jenkins
+does not introduce a separate account taxonomy. The `ci-operator` account is
+a local OS account on simulation machines only; it is not a Gerrit or Jenkins
 product account.
 
 ## Version Baseline

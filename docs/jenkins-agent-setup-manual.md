@@ -201,6 +201,11 @@ agent host setup does not consume controller key material and does not update
 `authorized_keys`. Jenkins-to-agent keypair generation, public-key transfer,
 and access authorization remain later integration work.
 
+The helper requires the configured local runtime account and group to already
+exist. It fails clearly when either is missing, or when the existing account
+passwd HOME is not `/var/lib/jenkins-agent`. Native account and group
+provisioning is outside the helper.
+
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
@@ -216,9 +221,8 @@ Produced outputs:
 
 Mutation side effects:
 
-- Creates or verifies the dedicated local runtime account.
-- Creates or verifies the role-local runtime group from `JENKINS_AGENT_GROUP`,
-  defaulting to `jenkins-agent`.
+- Verifies the dedicated local runtime account and role-local runtime group
+  from `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`.
 - Creates or updates the remote filesystem.
 - Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
   SSH reachability without claiming Jenkins controller scheduling.

@@ -219,7 +219,7 @@ Simulation environment account:
 
 | Account | Source | Purpose |
 | --- | --- | --- |
-| `operator` account | Local OS account on simulation machines | Runs orchestration, SSH access, helper commands, and evidence collection. |
+| `ci-operator` account | Local OS account on simulation machines | Runs orchestration, SSH access, helper commands, and evidence collection. |
 
 Implementation notes:
 
@@ -229,7 +229,7 @@ Implementation notes:
   local OS accounts by default, LDAP bind accounts are read-only LDAP service
   accounts, and the Jenkins Gerrit integration account is a Gerrit service
   account.
-- State that the `operator` account is not a Gerrit/Jenkins runtime, admin,
+- State that the `ci-operator` account is not a Gerrit/Jenkins runtime, admin,
   integration, bind, or test account.
 - Keep examples account-name neutral where possible.
 - Avoid describing runtime OS accounts as the same thing as application admin
@@ -247,7 +247,7 @@ Acceptance criteria:
 - Each product and simulation environment account has a defined source and
   purpose.
 - The document explains why Gerrit admin, Jenkins admin, Jenkins Gerrit
-  integration, test user, LDAP bind, runtime, and `operator` accounts are
+  integration, test user, LDAP bind, runtime, and `ci-operator` accounts are
   separate.
 - Any offline-related match is reference-only, non-goal, or prohibition text.
 
@@ -298,7 +298,7 @@ these Step 2 accounts:
 - Gerrit runtime account.
 - Jenkins runtime account.
 - Jenkins agent runtime account.
-- `operator` account.
+- `ci-operator` account.
 
 Implementation notes:
 
@@ -406,7 +406,7 @@ Acceptance criteria:
 - Simulation docs describe all five machines/environments.
 - Simulation docs map account usage back to Step 2 and do not define a separate
   account taxonomy.
-- The `operator` account is documented as a simulation environment OS account,
+- The `ci-operator` account is documented as a simulation environment OS account,
   not a Gerrit/Jenkins product account.
 - Simulation docs define generated-output locations for state, staged
   artifacts, evidence, and bounded logs.

@@ -139,7 +139,7 @@ apply_defaults() {
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
   JENKINS_RUNTIME_ACCOUNT="${JENKINS_RUNTIME_ACCOUNT:-jenkins}"
   JENKINS_RUNTIME_GROUP="${JENKINS_RUNTIME_GROUP:-jenkins}"
-  JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"
+  JENKINS_HOME="${JENKINS_HOME:-/var/lib/jenkins}"
   JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
   JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
@@ -729,8 +729,8 @@ ensure_verified_label_and_access() {
 EOF
   docker cp "$label_json" "$(gerrit_container):/tmp/step11-verified-label.json" >>"$log" 2>&1
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
-    PUT "/projects/$project_id/labels/Verified" "/tmp/step11-verified-label.json" >>"$log" 2>&1
-  printf 'verified_label_apply=simulation-only-direct-rest project=%s endpoint=projects.labels\n' "$GERRIT_VERIFICATION_PROJECT" >>"$log"
+    PUT "/projects/$all_projects_id/labels/Verified" "/tmp/step11-verified-label.json" >>"$log" 2>&1
+  printf 'verified_label_apply=simulation-only-direct-rest project=All-Projects endpoint=projects.labels\n' >>"$log"
 
   cat >"$global_access_json" <<EOF
 {
@@ -786,10 +786,10 @@ EOF
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     POST "/projects/$project_id/access" "/tmp/step11-integration-project-access.json" >>"$log" 2>&1
   printf 'access_apply=simulation-only-direct-rest project=%s endpoint=projects.access permissions=read,label-Verified\n' "$GERRIT_VERIFICATION_PROJECT" >>"$log"
-  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$project_id/labels/Verified" >>"$log" 2>&1
+  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$all_projects_id/labels/Verified" >>"$log" 2>&1
   gerrit_account_can_vote_verified "$project_id" >>"$log" 2>&1 ||
     die "Verified label is not voteable by Jenkins integration account on $GERRIT_VERIFICATION_PROJECT"
-  printf 'verified_label=ready project=%s voteable_by=%s\n' "$GERRIT_VERIFICATION_PROJECT" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
+  printf 'verified_label=ready project=All-Projects voteable_project=%s voteable_by=%s\n' "$GERRIT_VERIFICATION_PROJECT" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
 }
 
 gerrit_json_change_number() {

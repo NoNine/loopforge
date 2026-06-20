@@ -419,7 +419,7 @@ Transfer the artifact archive and `.sha256` file to the Jenkins host with
 approved media or an approved internal transfer path. Run on the Jenkins host:
 
 ```bash
-cd /home/operator
+cd /home/ci-operator
 sha256sum -c jenkins-artifacts-bundle.tar.gz.sha256
 sudo rm -rf /opt/jenkins-artifacts-bundle
 sudo tar -xzf jenkins-artifacts-bundle.tar.gz -C /opt

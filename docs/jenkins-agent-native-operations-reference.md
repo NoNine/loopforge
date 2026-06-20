@@ -134,6 +134,12 @@ v1 does not support installing OS dependencies from locally bundled Ubuntu
 packages. Use approved internal Ubuntu/OS package repositories for OS packages
 on target hosts.
 
+The Jenkins agent role helper requires this account and group to already exist
+and fails clearly if either is missing or if the passwd HOME is not
+`/var/lib/jenkins-agent`. Native account and group provisioning is outside the
+helper; perform it with administrator-controlled OS procedures before running
+the helper.
+
 ### 2.2 Create the Agent Artifact Bundle
 
 Run on the bundle-factory VM:
@@ -160,7 +166,7 @@ Verify the artifact archive and internal checksums on the build server, then
 configure the runtime account and SSH service:
 
 ```bash
-sha256sum -c /home/operator/jenkins-agent-artifacts-bundle.tar.gz.sha256
+sha256sum -c /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz.sha256
 
 sudo bash -s <<'EOF'
 set -euo pipefail
@@ -168,7 +174,7 @@ agent_user=jenkins-agent
 remote_fs=/var/lib/jenkins-agent
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
-tar -xzf /home/operator/jenkins-agent-artifacts-bundle.tar.gz -C "$workdir"
+tar -xzf /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz -C "$workdir"
 cd "$workdir/jenkins-agent-artifacts-bundle"
 sha256sum -c checksums/SHA256SUMS
 if ! getent group "${agent_user}" >/dev/null; then

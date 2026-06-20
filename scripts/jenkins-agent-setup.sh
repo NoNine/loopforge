@@ -12,6 +12,7 @@ default_env_file="$repo_root/examples/jenkins-agent.env.example"
 env_file=""
 dry_run=0
 assume_yes=0
+readonly JENKINS_AGENT_NATIVE_REMOTE_FS="/var/lib/jenkins-agent"
 
 usage() {
   cat <<'USAGE'
@@ -161,7 +162,7 @@ apply_env_defaults() {
   JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
   JENKINS_AGENT_GROUP="${JENKINS_AGENT_GROUP:-jenkins-agent}"
-  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/var/lib/jenkins-agent}"
+  JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-$JENKINS_AGENT_NATIVE_REMOTE_FS}"
   JENKINS_AGENT_NODE_NAME="${JENKINS_AGENT_NODE_NAME:-build-linux-x86-01}"
   JENKINS_AGENT_LABELS="${JENKINS_AGENT_LABELS:-linux x86_64 general-build gerrit-ci}"
   JENKINS_AGENT_EXECUTORS="${JENKINS_AGENT_EXECUTORS:-5}"
@@ -325,21 +326,20 @@ validate_agent_state_dir() {
 }
 
 validate_agent_remote_fs() {
-  local value allowed_home
+  local value
   value="${JENKINS_AGENT_REMOTE_FS:-}"
   validate_safe_absolute_path_string JENKINS_AGENT_REMOTE_FS "$value"
-  allowed_home="/home/$JENKINS_AGENT_ACCOUNT/workspace"
   case "$value" in
-    "$allowed_home"|"$allowed_home"/*|/var/lib/jenkins-agent|/var/lib/jenkins-agent/*|/harness/state/agent/workspace|/harness/state/agent/workspace/*)
+    "$JENKINS_AGENT_NATIVE_REMOTE_FS")
       ;;
     *)
-      die "JENKINS_AGENT_REMOTE_FS must be under $allowed_home, /var/lib/jenkins-agent, or /harness/state/agent/workspace"
+      die "JENKINS_AGENT_REMOTE_FS must be $JENKINS_AGENT_NATIVE_REMOTE_FS, got $value"
       ;;
   esac
   case "$value" in
     /|/etc|/etc/*|/usr|/usr/*|/var|/var/*|/tmp|/tmp/*|/root|/root/*|/home|/home/*)
       case "$value" in
-        "$allowed_home"|"$allowed_home"/*|/var/lib/jenkins-agent|/var/lib/jenkins-agent/*)
+        "$JENKINS_AGENT_NATIVE_REMOTE_FS")
           ;;
         *)
           die "JENKINS_AGENT_REMOTE_FS is too broad or unsafe: $value"
@@ -582,6 +582,7 @@ cmd_preflight() {
   require_command ssh
   validate_agent_render_inputs
   validate_os_dependencies
+  check_agent_runtime_account_readiness
   if [ "$dry_run" -eq 0 ]; then
     check_os_dependency_expectations
   fi
@@ -653,6 +654,7 @@ cmd_install() {
   load_env normal
   require_env_values
   validate_agent_render_inputs
+  check_agent_runtime_account_readiness
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -666,27 +668,10 @@ cmd_install() {
   printf 'status=pass command=install state_dir=%s staged=%s\n' "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_STAGED_ARTIFACT_DIR"
 }
 
-create_runtime_account_if_needed() {
-  local existing_gid expected_gid
-  if ! getent group "$JENKINS_AGENT_GROUP" >/dev/null 2>&1; then
-    if command -v groupadd >/dev/null 2>&1; then
-      groupadd "$JENKINS_AGENT_GROUP"
-    else
-      die "Runtime group $JENKINS_AGENT_GROUP does not exist and groupadd is unavailable"
-    fi
-  fi
-  if id "$JENKINS_AGENT_ACCOUNT" >/dev/null 2>&1; then
-    existing_gid="$(id -g "$JENKINS_AGENT_ACCOUNT")"
-    expected_gid="$(getent group "$JENKINS_AGENT_GROUP" | awk -F: '{print $3}')"
-    [ "$existing_gid" = "$expected_gid" ] ||
-      die "Existing runtime account $JENKINS_AGENT_ACCOUNT primary group differs from JENKINS_AGENT_GROUP=$JENKINS_AGENT_GROUP; review and fix the account primary group outside this helper before rerunning"
-    return 0
-  fi
-  if command -v useradd >/dev/null 2>&1; then
-    useradd --create-home --shell /bin/sh --gid "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_ACCOUNT"
-    return 0
-  fi
-  die "Runtime account $JENKINS_AGENT_ACCOUNT does not exist and useradd is unavailable"
+check_agent_runtime_account_readiness() {
+  validate_agent_remote_fs
+  require_runtime_account_home "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_NATIVE_REMOTE_FS" "Jenkins agent"
+  require_product_home_ownership "$JENKINS_AGENT_NATIVE_REMOTE_FS" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "Jenkins agent"
 }
 
 ensure_runtime_account_accepts_publickey() {
@@ -814,12 +799,12 @@ cmd_configure_runtime() {
   load_env normal
   require_env_values
   validate_agent_render_inputs
-  confirm_mutation configure-runtime || return 0
   require_docker_harness_simulation
+  check_agent_runtime_account_readiness
+  confirm_mutation configure-runtime || return 0
   verify_staged_artifacts
   require_command ssh-keygen
   check_os_dependency_expectations
-  create_runtime_account_if_needed
   ensure_runtime_account_accepts_publickey
   ensure_dirs
   mkdir -p "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_STATE_DIR/etc" "$JENKINS_AGENT_STATE_DIR/state"
@@ -845,7 +830,7 @@ check_ssh_reachability() {
 }
 
 check_runtime_account() {
-  id "$JENKINS_AGENT_ACCOUNT" >/dev/null 2>&1 || die "Runtime account does not exist: $JENKINS_AGENT_ACCOUNT"
+  check_agent_runtime_account_readiness
 }
 
 check_remote_fs_ownership() {

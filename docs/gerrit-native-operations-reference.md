@@ -281,7 +281,7 @@ Transfer the artifact archive and `.sha256` file to the Gerrit host with
 approved media or an approved internal transfer path. Run on the Gerrit host:
 
 ```bash
-cd /home/operator
+cd /home/ci-operator
 sha256sum -c gerrit-artifacts-bundle.tar.gz.sha256
 sudo rm -rf /opt/gerrit-artifacts-bundle
 sudo tar -xzf gerrit-artifacts-bundle.tar.gz -C /opt

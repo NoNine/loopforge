@@ -68,6 +68,7 @@ services:
     volumes:
       - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/gerrit:/harness/state"
+      - "${HARNESS_PRODUCT_HOME_DIR}/gerrit:/srv/gerrit"
       - "${HARNESS_STAGING_DIR}/gerrit:/harness/staged"
       - "${HARNESS_STATE_DIR}/gerrit-validation-secrets:/harness/validation-secrets"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
@@ -98,6 +99,7 @@ services:
     volumes:
       - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-controller:/harness/state"
+      - "${HARNESS_PRODUCT_HOME_DIR}/jenkins-controller:/var/lib/jenkins"
       - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_STAGING_DIR}/jenkins-controller:/harness/staged"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"
@@ -128,6 +130,7 @@ services:
     volumes:
       - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-agent:/harness/state"
+      - "${HARNESS_PRODUCT_HOME_DIR}/jenkins-agent:/var/lib/jenkins-agent"
       - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_STAGING_DIR}/jenkins-agent:/harness/staged"
       - "${HARNESS_EVIDENCE_DIR}:/harness/evidence"

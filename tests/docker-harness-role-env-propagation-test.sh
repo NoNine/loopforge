@@ -115,6 +115,25 @@ HARNESS_LOG_DIR="$tmp_dir/logs" \
   "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
 
 runtime_dir="$tmp_dir/state/rendered/runtime-inputs"
+product_home_dir="$repo_root/simulation/product-homes/docker/role-env-test-$$"
+[ -d "$product_home_dir/gerrit" ] || {
+  printf 'Expected Gerrit product home backing dir outside harness state: %s\n' "$product_home_dir/gerrit" >&2
+  exit 1
+}
+[ -d "$product_home_dir/jenkins-controller" ] || {
+  printf 'Expected Jenkins product home backing dir outside harness state: %s\n' "$product_home_dir/jenkins-controller" >&2
+  exit 1
+}
+[ -d "$product_home_dir/jenkins-agent" ] || {
+  printf 'Expected agent product home backing dir outside harness state: %s\n' "$product_home_dir/jenkins-agent" >&2
+  exit 1
+}
+case "$product_home_dir" in
+  "$tmp_dir/state"|"$tmp_dir/state"/*)
+    printf 'Product home backing dir must not be under harness state: %s\n' "$product_home_dir" >&2
+    exit 1
+    ;;
+esac
 cat >"$tmp_dir/gerrit.env" <<'EOF'
 GERRIT_DOWNLOAD_ARTIFACTS="0"
 GERRIT_SENTINEL=mutated-after-render
@@ -178,6 +197,9 @@ grep -Fq 'JENKINS_DOWNLOAD_ARTIFACTS="1"' "$tmp_dir/state/bundle-factory/rendere
 grep -Fq 'GERRIT_SENTINEL=original' "$tmp_dir/state/gerrit/rendered/gerrit.env"
 grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$tmp_dir/state/jenkins-controller/rendered/jenkins-controller.env"
 grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$tmp_dir/state/jenkins-agent/rendered/jenkins-agent.env"
+grep -Fq 'GERRIT_SITE_PATH="/srv/gerrit"' "$tmp_dir/state/gerrit/rendered/gerrit.env"
+grep -Fq 'JENKINS_HOME="/var/lib/jenkins"' "$tmp_dir/state/jenkins-controller/rendered/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"' "$tmp_dir/state/jenkins-agent/rendered/jenkins-agent.env"
 if grep -R -Fq 'mutated-after-render' \
   "$runtime_dir" \
   "$tmp_dir/state/bundle-factory/rendered" \

@@ -17,11 +17,19 @@ RUN printf 'public_internet_fallback=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LA
       openssh-server \
       procps \
       rsync \
+      sudo \
       tar \
       unzip \
       wget && \
     groupadd --system gerrit && \
-    useradd --system --gid gerrit --home-dir /harness/state/site --shell /bin/bash gerrit && \
+    useradd --system --gid gerrit --home-dir /srv/gerrit --shell /bin/bash gerrit && \
     groupadd --system jenkins && \
-    useradd --system --gid jenkins --home-dir /harness/state/jenkins-home --shell /bin/bash jenkins && \
+    useradd --system --gid jenkins --home-dir /var/lib/jenkins --shell /bin/bash jenkins && \
+    groupadd --system jenkins-agent && \
+    useradd --system --gid jenkins-agent --home-dir /var/lib/jenkins-agent --shell /bin/bash jenkins-agent && \
+    groupadd --system ci-operator && \
+    useradd --create-home --gid ci-operator --home-dir /home/ci-operator --shell /bin/bash ci-operator && \
+    printf '%s\n' 'ci-operator ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/harness-ci-operator && \
+    chmod 0440 /etc/sudoers.d/harness-ci-operator && \
+    visudo -cf /etc/sudoers.d/harness-ci-operator && \
     rm -rf /var/lib/apt/lists/*

@@ -19,6 +19,7 @@ supported_jenkins_java_version="21"
 supported_jenkins_plugin_manager_version="2.15.0"
 supported_jenkins_ubuntu_release="24.04"
 supported_jenkins_ubuntu_codename="noble"
+readonly JENKINS_NATIVE_HOME="/var/lib/jenkins"
 
 usage() {
   cat <<'USAGE'
@@ -301,7 +302,7 @@ apply_env_defaults() {
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
   JENKINS_RUNTIME_ACCOUNT="${JENKINS_RUNTIME_ACCOUNT:-jenkins}"
   JENKINS_RUNTIME_GROUP="${JENKINS_RUNTIME_GROUP:-jenkins}"
-  JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"
+  JENKINS_HOME="${JENKINS_HOME:-$JENKINS_NATIVE_HOME}"
   JENKINS_STAGED_ARTIFACT_DIR="${JENKINS_STAGED_ARTIFACT_DIR:-/harness/staged}"
   JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-controller}"
   JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/harness/evidence}"
@@ -342,10 +343,10 @@ ensure_dirs() {
 
 runtime_account_exists() {
   validate_runtime_owner_inputs
-  getent passwd "$JENKINS_RUNTIME_ACCOUNT" >/dev/null 2>&1 ||
-    die "Missing Jenkins runtime account: $JENKINS_RUNTIME_ACCOUNT"
-  getent group "$JENKINS_RUNTIME_GROUP" >/dev/null 2>&1 ||
-    die "Missing Jenkins runtime group: $JENKINS_RUNTIME_GROUP"
+  [ "$JENKINS_HOME" = "$JENKINS_NATIVE_HOME" ] ||
+    die "JENKINS_HOME must be $JENKINS_NATIVE_HOME, got $JENKINS_HOME"
+  require_runtime_account_home "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_NATIVE_HOME" "Jenkins"
+  require_product_home_ownership "$JENKINS_NATIVE_HOME" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "Jenkins"
 }
 
 run_as_runtime() {
@@ -1036,6 +1037,7 @@ cmd_preflight() {
   validate_os_dependencies
   require_account_separation
   validate_runtime_owner_inputs
+  runtime_account_exists
   if [ "$dry_run" -eq 0 ]; then
     check_os_dependency_expectations
   fi
@@ -1158,6 +1160,7 @@ cmd_install() {
   load_env normal
   require_env_values
   validate_runtime_owner_inputs
+  runtime_account_exists
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -1185,7 +1188,6 @@ cmd_install() {
   cp -R "$JENKINS_STAGED_ARTIFACT_DIR/templates/." "$JENKINS_HOME/templates/"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_HOME/artifact-manifest.txt"
   cp "$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_HOME/artifact-checksums.sha256"
-  runtime_account_exists
   chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME"
   write_text_file "$JENKINS_HOME/state/install.status" "installed"
   printf 'status=pass command=install home=%s staged=%s\n' "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR"
@@ -1230,6 +1232,7 @@ cmd_configure_service() {
   load_env normal
   require_env_values
   validate_runtime_owner_inputs
+  runtime_account_exists
   confirm_mutation configure-service || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -1246,12 +1249,12 @@ cmd_install_plugins() {
   load_env normal
   require_env_values
   validate_runtime_owner_inputs
+  runtime_account_exists
   confirm_mutation install-plugins || return 0
   verify_staged_artifacts
   mkdir -p "$JENKINS_HOME/plugins" "$JENKINS_HOME/state"
   cp -R "$JENKINS_STAGED_ARTIFACT_DIR/plugins/." "$JENKINS_HOME/plugins/"
   plugin_set_digest >/dev/null
-  runtime_account_exists
   chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/plugins"
   write_text_file "$JENKINS_HOME/state/plugins.status" "installed plugins=$JENKINS_PLUGIN_LIST digest=$(plugin_set_digest)"
   printf 'status=pass command=install-plugins plugin_digest=%s\n' "$(plugin_set_digest)"
@@ -1261,6 +1264,7 @@ cmd_configure_jcasc() {
   load_env normal
   require_env_values
   validate_runtime_owner_inputs
+  runtime_account_exists
   confirm_mutation configure-jcasc || return 0
   verify_staged_artifacts
   mkdir -p "$JENKINS_HOME/jcasc" "$JENKINS_HOME/state"
@@ -1270,7 +1274,6 @@ cmd_configure_jcasc() {
   grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC must keep built-in node executors at zero"
   grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP security realm is missing"
   grep -Fq -- 'managerPasswordSecret:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP manager password secret is missing"
-  runtime_account_exists
   chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/jcasc"
   chmod 0700 "$JENKINS_HOME/jcasc"
   chmod 0600 "$JENKINS_HOME/jcasc/jenkins.yaml"
@@ -1374,6 +1377,7 @@ check_jcasc_readiness() {
 }
 
 verify_base_readiness_facts() {
+  runtime_account_exists
   verify_staged_artifacts
   [ -s "$JENKINS_HOME/state/install.status" ] || die "Install marker missing"
   [ -s "$JENKINS_HOME/state/service-configured.status" ] || die "Service configuration marker missing"

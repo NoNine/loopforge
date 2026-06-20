@@ -19,6 +19,7 @@ readonly GERRIT_INTERNAL_JAVA_VERSION="21"
 readonly GERRIT_INTERNAL_UBUNTU_RELEASE="24.04"
 readonly GERRIT_INTERNAL_UBUNTU_CODENAME="noble"
 readonly GERRIT_INTERNAL_API_LINE="3.13"
+readonly GERRIT_NATIVE_SITE_PATH="/srv/gerrit"
 
 usage() {
   cat <<'USAGE'
@@ -249,7 +250,7 @@ apply_env_defaults() {
   GERRIT_RUNTIME_ACCOUNT="${GERRIT_RUNTIME_ACCOUNT:-gerrit}"
   GERRIT_RUNTIME_GROUP="${GERRIT_RUNTIME_GROUP:-$GERRIT_RUNTIME_ACCOUNT}"
   GERRIT_JAVA_HOME="${GERRIT_JAVA_HOME:-/usr/lib/jvm/java-${GERRIT_JAVA_VERSION}-openjdk-amd64}"
-  GERRIT_SITE_PATH="${GERRIT_SITE_PATH:-/harness/state/site}"
+  GERRIT_SITE_PATH="${GERRIT_SITE_PATH:-$GERRIT_NATIVE_SITE_PATH}"
   GERRIT_STAGED_ARTIFACT_DIR="${GERRIT_STAGED_ARTIFACT_DIR:-/harness/staged}"
   GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR="${GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR:-$repo_root/simulation/state/local/gerrit/artifacts}"
   if [ "${HARNESS_ENVIRONMENT:-}" = "bundle-factory" ]; then
@@ -281,7 +282,6 @@ apply_env_defaults() {
       GERRIT_LOG_DIR="/harness/logs"
       ;;
     gerrit-target)
-      GERRIT_SITE_PATH="/harness/state/site"
       GERRIT_STAGED_ARTIFACT_DIR="/harness/staged"
       GERRIT_ARTIFACT_OUTPUT_DIR="/harness/state/artifacts/gerrit"
       GERRIT_EVIDENCE_DIR="/harness/evidence"
@@ -719,10 +719,10 @@ check_host_resolution() {
 }
 
 check_runtime_account_readiness() {
-  getent passwd "$GERRIT_RUNTIME_ACCOUNT" >/dev/null 2>&1 ||
-    die "Missing Gerrit runtime account: $GERRIT_RUNTIME_ACCOUNT"
-  getent group "$GERRIT_RUNTIME_GROUP" >/dev/null 2>&1 ||
-    die "Missing Gerrit runtime group: $GERRIT_RUNTIME_GROUP"
+  [ "$GERRIT_SITE_PATH" = "$GERRIT_NATIVE_SITE_PATH" ] ||
+    die "GERRIT_SITE_PATH must be $GERRIT_NATIVE_SITE_PATH, got $GERRIT_SITE_PATH"
+  require_runtime_account_home "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "$GERRIT_NATIVE_SITE_PATH" "Gerrit"
+  require_product_home_ownership "$GERRIT_NATIVE_SITE_PATH" "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "Gerrit"
 }
 
 manifest_attribute() {
@@ -873,12 +873,12 @@ cmd_preflight() {
   require_command df
   validate_plugins
   validate_os_dependencies
+  check_runtime_account_readiness
   if [ "$dry_run" -eq 0 ]; then
     check_os_dependency_expectations
     check_disk_space "$GERRIT_ARTIFACT_OUTPUT_DIR" 1048576
     check_disk_space "$GERRIT_SITE_PATH" 1048576
     check_host_resolution
-    check_runtime_account_readiness
     check_ldap_access
   fi
   printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s ssh_port=%s mode=%s checks=%s\n' \
@@ -997,6 +997,7 @@ cmd_prepare_artifacts() {
 cmd_install() {
   load_env normal
   require_env_values
+  check_runtime_account_readiness
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -1011,6 +1012,7 @@ cmd_install() {
   cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-artifacts.manifest" "$GERRIT_SITE_PATH/etc/plugin-artifacts.manifest"
   cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-metadata.report" "$GERRIT_SITE_PATH/etc/plugin-metadata.report"
   cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-checksums.sha256" "$GERRIT_SITE_PATH/etc/plugin-checksums.sha256"
+  chown -R "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$GERRIT_SITE_PATH"
   write_text_file "$GERRIT_SITE_PATH/state/install.status" "installed"
   printf 'status=pass command=install site=%s staged=%s\n' "$GERRIT_SITE_PATH" "$GERRIT_STAGED_ARTIFACT_DIR"
 }
@@ -1018,6 +1020,7 @@ cmd_install() {
 cmd_configure() {
   load_env normal
   require_env_values
+  check_runtime_account_readiness
   confirm_mutation configure || return 0
   verify_staged_artifacts
   ensure_dirs
@@ -1303,25 +1306,9 @@ is_gerrit_site_initialized() {
     [ -d "$GERRIT_SITE_PATH/git/All-Users.git" ]
 }
 
-remove_step7_deferred_integration_grants() {
-  local repo_dir work_dir project_config
-  repo_dir="$GERRIT_SITE_PATH/git/All-Projects.git"
-  work_dir="$GERRIT_SITE_PATH/tmp/step7-all-projects-work"
-  [ -d "$repo_dir" ] || return 0
-  require_command git
-  mkdir -p "$GERRIT_SITE_PATH/tmp"
-  ensure_site_repo_worktree "$repo_dir" "$work_dir"
-  run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && git fetch origin refs/meta/config:refs/remotes/origin/meta-config >/dev/null 2>&1 && git checkout -B step7-meta-config refs/remotes/origin/meta-config >/dev/null"
-  project_config="$work_dir/project.config"
-  if [ -f "$project_config" ]; then
-    git config -f "$project_config" --unset-all capability.streamEvents >/dev/null 2>&1 || true
-    if grep -Eq 'label-Verified|\\[label "Verified"\\]|jenkins-gerrit|jenkins-gerrit-integration' "$project_config"; then
-      die "Step 7 Gerrit-only site contains Jenkins integration project config before integration step"
-    fi
-    run_as_gerrit_runtime "cd $(shell_quote "$work_dir") && git add project.config && if ! git diff --cached --quiet; then git commit -m $(shell_quote "Remove deferred integration grants for Step 7") >/dev/null; fi && git push origin HEAD:refs/meta/config >/dev/null"
-  fi
+record_step7_deferred_integration_status() {
   write_text_file "$GERRIT_SITE_PATH/state/integration-prerequisites-deferred.status" \
-    "jenkins_integration_prerequisites=deferred streamEvents_grants=absent"
+    "jenkins_integration_prerequisites=deferred role_local_config_mutation=none"
 }
 
 assert_gerrit_daemon_owner() {
@@ -1363,7 +1350,7 @@ start_real_gerrit() {
       printf 'BLOCKED: Gerrit init failed; artifact or config cannot support real startup; log=%s\n' "$log" >&2
       return 1
     fi
-    remove_step7_deferred_integration_grants
+    record_step7_deferred_integration_status
     if is_gerrit_running; then
       assert_gerrit_daemon_owner
     fi
@@ -1451,6 +1438,7 @@ check_installed_artifact_freshness() {
 }
 
 verify_readiness_facts() {
+  check_runtime_account_readiness
   verify_staged_artifacts
   [ -f "$GERRIT_SITE_PATH/state/install.status" ] || die "Install readiness marker missing"
   [ -f "$GERRIT_SITE_PATH/etc/gerrit.config" ] || die "Gerrit config is missing"
@@ -1469,6 +1457,7 @@ verify_readiness_facts() {
 cmd_validate() {
   load_env normal
   require_env_values
+  check_runtime_account_readiness
   confirm_mutation validate || return 0
   require_command ssh-keygen
   verify_readiness_facts
@@ -1480,6 +1469,7 @@ cmd_collect_evidence() {
   load_env normal
   apply_env_defaults
   require_env_values
+  check_runtime_account_readiness
   confirm_mutation collect-evidence || return 0
   require_command ssh-keygen
   verify_readiness_facts

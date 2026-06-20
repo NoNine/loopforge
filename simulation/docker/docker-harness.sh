@@ -86,6 +86,7 @@ iso_timestamp_utc() {
 HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
 HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
 HARNESS_STATE_DIR_OPERATOR_SET="${HARNESS_STATE_DIR+x}"
+HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET="${HARNESS_PRODUCT_HOME_DIR+x}"
 HARNESS_STAGING_DIR_OPERATOR_SET="${HARNESS_STAGING_DIR+x}"
 HARNESS_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_EVIDENCE_DIR+x}"
 HARNESS_LOG_DIR_OPERATOR_SET="${HARNESS_LOG_DIR+x}"
@@ -99,6 +100,7 @@ HARNESS_INTEGRATION_ENV_FILE_OPERATOR_SET="${HARNESS_INTEGRATION_ENV_FILE+x}"
 HARNESS_RUN_ID_OPERATOR_VALUE="${HARNESS_RUN_ID-}"
 HARNESS_PROJECT_NAME_OPERATOR_VALUE="${HARNESS_PROJECT_NAME-}"
 HARNESS_STATE_DIR_OPERATOR_VALUE="${HARNESS_STATE_DIR-}"
+HARNESS_PRODUCT_HOME_DIR_OPERATOR_VALUE="${HARNESS_PRODUCT_HOME_DIR-}"
 HARNESS_STAGING_DIR_OPERATOR_VALUE="${HARNESS_STAGING_DIR-}"
 HARNESS_EVIDENCE_DIR_OPERATOR_VALUE="${HARNESS_EVIDENCE_DIR-}"
 HARNESS_LOG_DIR_OPERATOR_VALUE="${HARNESS_LOG_DIR-}"
@@ -135,6 +137,7 @@ HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-password}"
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL="${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL:-simulation-only}"
 
 HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/$HARNESS_RUN_ID}"
+HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"
 HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/$HARNESS_RUN_ID}"
 HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/$HARNESS_RUN_ID}"
 HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/$HARNESS_RUN_ID}"
@@ -155,7 +158,7 @@ export HARNESS_LDAP_DOMAIN HARNESS_LDAP_BASE_DN
 export HARNESS_LDAP_ADMIN_PASSWORD HARNESS_LDAP_CONFIG_PASSWORD
 export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
 export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
-export HARNESS_STATE_DIR HARNESS_STAGING_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+export HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR HARNESS_STAGING_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
 export HARNESS_JENKINS_SHARED_STORAGE_PATH HARNESS_ENV_FILE
 export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
 export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
@@ -195,6 +198,7 @@ load_env_file() {
   require_readable_file "Harness env file" "$file"
   [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ] || unset HARNESS_PROJECT_NAME
   [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ] || unset HARNESS_STATE_DIR
+  [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ] || unset HARNESS_PRODUCT_HOME_DIR
   [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ] || unset HARNESS_STAGING_DIR
   [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ] || unset HARNESS_EVIDENCE_DIR
   [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ] || unset HARNESS_LOG_DIR
@@ -215,6 +219,9 @@ load_env_file() {
   fi
   if [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
     HARNESS_STATE_DIR="$HARNESS_STATE_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ]; then
+    HARNESS_PRODUCT_HOME_DIR="$HARNESS_PRODUCT_HOME_DIR_OPERATOR_VALUE"
   fi
   if [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
     HARNESS_STAGING_DIR="$HARNESS_STAGING_DIR_OPERATOR_VALUE"
@@ -238,6 +245,9 @@ load_env_file() {
   if [ -z "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
     HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/$HARNESS_RUN_ID}"
   fi
+  if [ -z "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ]; then
+    HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"
+  fi
   if [ -z "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
     HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/$HARNESS_RUN_ID}"
   fi
@@ -259,7 +269,7 @@ load_env_file() {
   else
     HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
   fi
-  export HARNESS_ENV_FILE HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
+  export HARNESS_ENV_FILE HARNESS_PRODUCT_HOME_DIR HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
   export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
   export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
 }
@@ -273,6 +283,9 @@ reapply_operator_overrides() {
   fi
   if [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
     HARNESS_STATE_DIR="$HARNESS_STATE_DIR_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ]; then
+    HARNESS_PRODUCT_HOME_DIR="$HARNESS_PRODUCT_HOME_DIR_OPERATOR_VALUE"
   fi
   if [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
     HARNESS_STAGING_DIR="$HARNESS_STAGING_DIR_OPERATOR_VALUE"
@@ -300,6 +313,7 @@ load_rendered_config_if_present() {
   . "$runtime"
   set +a
   reapply_operator_overrides
+  HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"
   if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ]; then
     HARNESS_RENDERED_ENV="$HARNESS_RENDERED_ENV_OPERATOR_VALUE"
   else
@@ -312,7 +326,7 @@ load_rendered_config_if_present() {
   else
     HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
   fi
-  export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
+  export HARNESS_PRODUCT_HOME_DIR HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
 }
 
 ensure_runtime_config() {
@@ -402,6 +416,15 @@ validate_absolute_mount_path() {
   esac
 }
 
+validate_product_home_dir() {
+  validate_absolute_mount_path HARNESS_PRODUCT_HOME_DIR "$HARNESS_PRODUCT_HOME_DIR"
+  case "$HARNESS_PRODUCT_HOME_DIR" in
+    "$HARNESS_STATE_DIR"|"$HARNESS_STATE_DIR"/*)
+      die "HARNESS_PRODUCT_HOME_DIR must not be under HARNESS_STATE_DIR; product runtime homes are not harness state"
+      ;;
+  esac
+}
+
 validate_shared_storage_path() {
   local name value
   name="${1:?name required}"
@@ -462,9 +485,14 @@ ensure_preflight_dirs() {
 
 ensure_dirs() {
   validate_harness_inputs
+  validate_product_home_dir
   ensure_preflight_dirs
   mkdir -p \
     "$HARNESS_STATE_DIR" \
+    "$HARNESS_PRODUCT_HOME_DIR" \
+    "$HARNESS_PRODUCT_HOME_DIR/gerrit" \
+    "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" \
+    "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" \
     "$HARNESS_STAGING_DIR" \
     "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
@@ -861,8 +889,8 @@ reset_gerrit_site_state() {
   service="${1:?service required}"
   log="${2:?log required}"
   compose exec -T -u root "$service" sh -lc '
-    pidfile=/harness/state/site/logs/gerrit.pid
-    pids="$(ps -eo pid=,args= | awk '\''index($0, "/harness/state/site") && (index($0, "GerritCodeReview") || index($0, "gerrit.war")) {print $1}'\'')"
+    pidfile=/srv/gerrit/logs/gerrit.pid
+    pids="$(ps -eo pid=,args= | awk '\''index($0, "/srv/gerrit") && (index($0, "GerritCodeReview") || index($0, "gerrit.war")) {print $1}'\'')"
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
       sleep 2
@@ -876,13 +904,13 @@ reset_gerrit_site_state() {
         kill -9 "$pid" 2>/dev/null || true
       fi
     fi
-    if [ -x /harness/state/site/bin/gerrit.sh ]; then
-      timeout 10 su -s /bin/sh gerrit -c "/harness/state/site/bin/gerrit.sh stop" >/dev/null 2>&1 || true
+    if [ -x /srv/gerrit/bin/gerrit.sh ]; then
+      timeout 10 su -s /bin/sh gerrit -c "/srv/gerrit/bin/gerrit.sh stop" >/dev/null 2>&1 || true
     fi
-    rm -rf /harness/state/site
-    mkdir -p /harness/state/site
+    rm -rf /srv/gerrit
+    mkdir -p /srv/gerrit
   ' >>"$log" 2>&1
-  printf 'site_reset role=gerrit path=%s reason=clean-step7-role-gate-runtime-state\n' "/harness/state/site" >>"$log"
+  printf 'site_reset role=gerrit path=%s reason=clean-step7-role-gate-runtime-state\n' "/srv/gerrit" >>"$log"
 }
 
 gerrit_bundle_factory_env_file() {
@@ -946,7 +974,23 @@ render_container_role_env() {
   container_env_file="$(container_env_file_for_role "$role")"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   mkdir -p "$(dirname "$host_env_file")"
-  cp -- "$src" "$host_env_file"
+  case "$role" in
+    gerrit)
+      sed -e 's|^GERRIT_SITE_PATH=.*|GERRIT_SITE_PATH="/srv/gerrit"|' \
+        "$src" >"$host_env_file"
+      ;;
+    jenkins-controller)
+      sed -e 's|^JENKINS_HOME=.*|JENKINS_HOME="/var/lib/jenkins"|' \
+        "$src" >"$host_env_file"
+      ;;
+    jenkins-agent)
+      sed -e 's|^JENKINS_AGENT_REMOTE_FS=.*|JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"|' \
+        "$src" >"$host_env_file"
+      ;;
+    *)
+      cp -- "$src" "$host_env_file"
+      ;;
+  esac
   chmod 0600 "$host_env_file"
   printf '%s\n' "$container_env_file"
 }
@@ -997,6 +1041,38 @@ require_container_role_env() {
   printf '%s\n' "$(container_env_file_for_role "$role")"
 }
 
+prepare_product_home_ownership() {
+  local role service host_env_file path account group log
+  role="${1:?role required}"
+  service="${2:?service required}"
+  log="${3:?log required}"
+  host_env_file="$(host_container_env_file_for_role "$role" "$service")"
+  require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
+  case "$role" in
+    gerrit)
+      path="/srv/gerrit"
+      account="$(env_file_value "$host_env_file" GERRIT_RUNTIME_ACCOUNT)"
+      group="$(env_file_value "$host_env_file" GERRIT_RUNTIME_GROUP)"
+      ;;
+    jenkins-controller)
+      path="/var/lib/jenkins"
+      account="$(env_file_value "$host_env_file" JENKINS_RUNTIME_ACCOUNT)"
+      group="$(env_file_value "$host_env_file" JENKINS_RUNTIME_GROUP)"
+      ;;
+    jenkins-agent)
+      path="/var/lib/jenkins-agent"
+      account="$(env_file_value "$host_env_file" JENKINS_AGENT_ACCOUNT)"
+      group="$(env_file_value "$host_env_file" JENKINS_AGENT_GROUP)"
+      ;;
+    *)
+      die "Unknown role '$role'; expected gerrit, jenkins-controller, or jenkins-agent"
+      ;;
+  esac
+  compose exec -T "$service" sh -c "mkdir -p $(shell_quote "$path") && chown -R $(shell_quote "$account:$group") $(shell_quote "$path")" >>"$log" 2>&1
+  printf 'product_home_ownership_prepared role=%s service=%s path=%s owner=%s group=%s\n' \
+    "$role" "$service" "$path" "$account" "$group" >>"$log"
+}
+
 require_gerrit_bundle_factory_env() {
   require_readable_file \
     "Rendered Gerrit bundle factory env file; run render-config first" \
@@ -1027,6 +1103,27 @@ manifest_get() {
       }
     }
   ' "$manifest"
+}
+
+env_file_value() {
+  local file key
+  file="${1:?file required}"
+  key="${2:?key required}"
+  awk -F= -v key="$key" '
+    $1 == key {
+      value = substr($0, length(key) + 2)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      print value
+      found = 1
+      exit
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+    }
+  ' "$file"
 }
 
 validate_manifest_value() {
@@ -1208,6 +1305,7 @@ HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
 HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
+HARNESS_PRODUCT_HOME_DIR=$(shell_quote "$HARNESS_PRODUCT_HOME_DIR")
 HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
 HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
 HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
@@ -1254,6 +1352,7 @@ HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
 HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
+HARNESS_PRODUCT_HOME_DIR=$(shell_quote "$HARNESS_PRODUCT_HOME_DIR")
 HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
 HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
 HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
@@ -1473,6 +1572,9 @@ cmd_up() {
   check_ubuntu_service_baseline gerrit-target gerrit
   check_ubuntu_service_baseline jenkins-controller-target jenkins-controller
   check_ubuntu_service_baseline jenkins-agent-target jenkins-agent
+  prepare_product_home_ownership gerrit gerrit-target "$log"
+  prepare_product_home_ownership jenkins-controller jenkins-controller-target "$log"
+  prepare_product_home_ownership jenkins-agent jenkins-agent-target "$log"
   require_running_service ldap
   evidence="$(write_evidence up harness pass "docker-harness.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   printf 'exit=0 log=%s evidence=%s\n' "$log" "$evidence"
@@ -1680,17 +1782,22 @@ assert_no_forbidden_success_markers() {
   return 0
 }
 
-normalize_gerrit_role_evidence_logs() {
-  local log latest
+normalize_role_evidence_logs() {
+  local log role pattern state_dir product_dir product_prefix latest
   log="${1:?log required}"
-  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name 'gerrit-readiness-*.json' -print | sort | tail -1)"
+  role="${2:?role required}"
+  pattern="${3:?pattern required}"
+  state_dir="${4:?state dir required}"
+  product_dir="${5:?product dir required}"
+  product_prefix="${6:?product prefix required}"
+  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name "$pattern" -print | sort | tail -1)"
   [ -n "$latest" ] || {
-    printf 'missing_role_evidence role=gerrit expected=gerrit-readiness-json\n' >>"$log"
+    printf 'missing_role_evidence role=%s expected=%s\n' "$role" "$pattern" >>"$log"
     return 1
   }
 
   require_command python3
-  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$HARNESS_STATE_DIR/gerrit" <<'PY' >>"$log" 2>&1
+  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$state_dir" "$product_dir" "$product_prefix" <<'PY' >>"$log" 2>&1
 import json
 import pathlib
 import sys
@@ -1699,6 +1806,8 @@ evidence = pathlib.Path(sys.argv[1])
 normalized = pathlib.Path(sys.argv[2])
 host_log = pathlib.Path(sys.argv[3])
 host_state = pathlib.Path(sys.argv[4])
+host_product = pathlib.Path(sys.argv[5])
+product_prefix = sys.argv[6].rstrip("/") + "/"
 data = json.loads(evidence.read_text())
 refs = data.get("bounded_log_references", "")
 mapped = []
@@ -1707,6 +1816,8 @@ for ref in refs.split(";"):
         mapped.append(str(host_log / ref.removeprefix("/harness/logs/")))
     elif ref.startswith("/harness/state/"):
         mapped.append(str(host_state / ref.removeprefix("/harness/state/")))
+    elif ref.startswith(product_prefix):
+        mapped.append(str(host_product / ref.removeprefix(product_prefix)))
     else:
         mapped.append(ref)
 
@@ -1720,90 +1831,42 @@ normalized.write_text(json.dumps(data, indent=2) + "\n")
 print("normalized_role_evidence=" + str(normalized))
 print("normalized_bounded_log_references=" + data["bounded_log_references"])
 PY
+}
+
+normalize_gerrit_role_evidence_logs() {
+  local log
+  log="${1:?log required}"
+  normalize_role_evidence_logs \
+    "$log" \
+    gerrit \
+    'gerrit-readiness-*.json' \
+    "$HARNESS_STATE_DIR/gerrit" \
+    "$HARNESS_PRODUCT_HOME_DIR/gerrit" \
+    /srv/gerrit
 }
 
 normalize_jenkins_controller_role_evidence_logs() {
-  local log latest
+  local log
   log="${1:?log required}"
-  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json' -print | sort | tail -1)"
-  [ -n "$latest" ] || {
-    printf 'missing_role_evidence role=jenkins-controller expected=jenkins-controller-readiness-json\n' >>"$log"
-    return 1
-  }
-
-  require_command python3
-  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$HARNESS_STATE_DIR/jenkins-controller" <<'PY' >>"$log" 2>&1
-import json
-import pathlib
-import sys
-
-evidence = pathlib.Path(sys.argv[1])
-normalized = pathlib.Path(sys.argv[2])
-host_log = pathlib.Path(sys.argv[3])
-host_state = pathlib.Path(sys.argv[4])
-data = json.loads(evidence.read_text())
-refs = data.get("bounded_log_references", "")
-mapped = []
-for ref in refs.split(";"):
-    if ref.startswith("/harness/logs/"):
-        mapped.append(str(host_log / ref.removeprefix("/harness/logs/")))
-    elif ref.startswith("/harness/state/"):
-        mapped.append(str(host_state / ref.removeprefix("/harness/state/")))
-    else:
-        mapped.append(ref)
-
-for ref in mapped:
-    path = pathlib.Path(ref)
-    if not path.is_file() or path.stat().st_size == 0:
-        raise SystemExit(f"bounded log reference missing or empty: {ref}")
-
-data["bounded_log_references"] = ";".join(mapped)
-normalized.write_text(json.dumps(data, indent=2) + "\n")
-print("normalized_role_evidence=" + str(normalized))
-print("normalized_bounded_log_references=" + data["bounded_log_references"])
-PY
+  normalize_role_evidence_logs \
+    "$log" \
+    jenkins-controller \
+    'jenkins-controller-readiness-*.json' \
+    "$HARNESS_STATE_DIR/jenkins-controller" \
+    "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" \
+    /var/lib/jenkins
 }
 
 normalize_jenkins_agent_role_evidence_logs() {
-  local log latest
+  local log
   log="${1:?log required}"
-  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json' -print | sort | tail -1)"
-  [ -n "$latest" ] || {
-    printf 'missing_role_evidence role=jenkins-agent expected=jenkins-agent-readiness-json\n' >>"$log"
-    return 1
-  }
-
-  require_command python3
-  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$HARNESS_STATE_DIR/jenkins-agent" <<'PY' >>"$log" 2>&1
-import json
-import pathlib
-import sys
-
-evidence = pathlib.Path(sys.argv[1])
-normalized = pathlib.Path(sys.argv[2])
-host_log = pathlib.Path(sys.argv[3])
-host_state = pathlib.Path(sys.argv[4])
-data = json.loads(evidence.read_text())
-refs = data.get("bounded_log_references", "")
-mapped = []
-for ref in refs.split(";"):
-    if ref.startswith("/harness/logs/"):
-        mapped.append(str(host_log / ref.removeprefix("/harness/logs/")))
-    elif ref.startswith("/harness/state/"):
-        mapped.append(str(host_state / ref.removeprefix("/harness/state/")))
-    else:
-        mapped.append(ref)
-
-for ref in mapped:
-    path = pathlib.Path(ref)
-    if not path.is_file() or path.stat().st_size == 0:
-        raise SystemExit(f"bounded log reference missing or empty: {ref}")
-
-data["bounded_log_references"] = ";".join(mapped)
-normalized.write_text(json.dumps(data, indent=2) + "\n")
-print("normalized_role_evidence=" + str(normalized))
-print("normalized_bounded_log_references=" + data["bounded_log_references"])
-PY
+  normalize_role_evidence_logs \
+    "$log" \
+    jenkins-agent \
+    'jenkins-agent-readiness-*.json' \
+    "$HARNESS_STATE_DIR/jenkins-agent" \
+    "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" \
+    /var/lib/jenkins-agent
 }
 
 ensure_gerrit_ready_for_jenkins_controller() {
@@ -1859,6 +1922,7 @@ cmd_run_role_gate() {
       if cmd_prepare_artifacts --role gerrit >>"$log" 2>&1 &&
         cmd_stage_artifacts --role gerrit >>"$log" 2>&1 &&
         reset_gerrit_site_state "$service" "$log" &&
+        prepare_product_home_ownership gerrit "$service" "$log" &&
         compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1 &&
         compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
@@ -1872,6 +1936,7 @@ cmd_run_role_gate() {
     jenkins-controller)
       if cmd_prepare_artifacts --role jenkins-controller >>"$log" 2>&1 &&
         cmd_stage_artifacts --role jenkins-controller >>"$log" 2>&1 &&
+        prepare_product_home_ownership jenkins-controller "$service" "$log" &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
@@ -1887,6 +1952,7 @@ cmd_run_role_gate() {
     jenkins-agent)
       if cmd_prepare_artifacts --role jenkins-agent >>"$log" 2>&1 &&
         cmd_stage_artifacts --role jenkins-agent >>"$log" 2>&1 &&
+        prepare_product_home_ownership jenkins-agent "$service" "$log" &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
