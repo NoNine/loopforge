@@ -632,6 +632,7 @@ Expected command surface:
 simulation/docker/docker-harness.sh preflight
 simulation/docker/docker-harness.sh render-config
 simulation/docker/docker-harness.sh up
+simulation/docker/docker-harness.sh status
 simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
 simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
@@ -1177,6 +1178,7 @@ Expected command surface:
 ```text
 simulation/docker/docker-harness.sh [--env FILE] preflight
 simulation/docker/docker-harness.sh [--env FILE] render-config
+simulation/docker/docker-harness.sh [--env FILE] status
 simulation/docker/docker-harness.sh [--env FILE] prepare-artifacts
 simulation/docker/docker-harness.sh [--env FILE] stage-artifacts
 simulation/docker/docker-harness.sh [--env FILE] up
@@ -1236,6 +1238,7 @@ bash -n simulation/docker/docker-harness.sh
 simulation/docker/docker-harness.sh --help
 simulation/docker/docker-harness.sh preflight
 simulation/docker/docker-harness.sh render-config
+simulation/docker/docker-harness.sh status
 simulation/docker/docker-harness.sh prepare-artifacts
 simulation/docker/docker-harness.sh stage-artifacts
 simulation/docker/docker-harness.sh up

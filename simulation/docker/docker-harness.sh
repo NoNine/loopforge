@@ -19,6 +19,7 @@ Commands:
   preflight
   render-config
   up
+  status
   prepare-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   stage-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   run-role-gate --role <gerrit|jenkins-controller|jenkins-agent>
@@ -665,11 +666,6 @@ resolve_browser_ports() {
     die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_JENKINS_HTTP_HOST_PORT must be different"
 
   export HARNESS_GERRIT_HTTP_HOST_PORT HARNESS_JENKINS_HTTP_HOST_PORT
-}
-
-print_browser_urls() {
-  printf 'gerrit_url=http://127.0.0.1:%s/\n' "$HARNESS_GERRIT_HTTP_HOST_PORT"
-  printf 'jenkins_url=http://127.0.0.1:%s/login\n' "$HARNESS_JENKINS_HTTP_HOST_PORT"
 }
 
 service_for_role() {
@@ -1452,6 +1448,16 @@ require_running_service() {
   [ "$running" = "true" ] || die "Harness service '$service' is not running; run up first"
 }
 
+running_loopback_port_for_service() {
+  local service container_id port
+  service="${1:?service required}"
+  container_id="$(container_id_for_service "$service")"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  port="$(docker inspect -f '{{range $p, $bindings := .NetworkSettings.Ports}}{{range $bindings}}{{if eq .HostIp "127.0.0.1"}}{{.HostPort}}{{"\n"}}{{end}}{{end}}{{end}}' "$container_id" 2>/dev/null | sed -n '1p')"
+  [ -n "$port" ] || die "Harness service '$service' has no published loopback port"
+  printf '%s\n' "$port"
+}
+
 ensure_harness_up_for_role() {
   local service
   service="${1:?service required}"
@@ -1537,7 +1543,6 @@ cmd_render_config() {
   write_rendered_env
   write_evidence render-config harness pass "docker-harness.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
   printf 'render-config: ok run-id=%s\n' "$HARNESS_RUN_ID"
-  print_browser_urls
 }
 
 cmd_up() {
@@ -1588,7 +1593,37 @@ cmd_up() {
   require_running_service ldap
   evidence="$(write_evidence up harness pass "docker-harness.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
-  print_browser_urls
+}
+
+cmd_status() {
+  local gerrit_port jenkins_port
+  bootstrap_harness_env
+  ensure_runtime_config
+  require_command docker
+  detect_compose
+  require_running_service bundle-factory
+  require_running_service ldap
+  require_running_service gerrit-target
+  require_running_service jenkins-controller-target
+  require_running_service jenkins-agent-target
+  gerrit_port="$(running_loopback_port_for_service gerrit-target)"
+  jenkins_port="$(running_loopback_port_for_service jenkins-controller-target)"
+
+  printf 'status: running\n\n'
+  printf 'Run\n'
+  printf '  %-13s %s\n' 'Run ID' "$HARNESS_RUN_ID"
+  printf '  %-13s %s\n' 'Project' "$HARNESS_PROJECT_NAME"
+  printf '  %-13s http://127.0.0.1:%s/\n' 'Gerrit URL' "$gerrit_port"
+  printf '  %-13s http://127.0.0.1:%s/login\n' 'Jenkins URL' "$jenkins_port"
+  printf '\n'
+  printf 'Login accounts\n'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' 'System' 'Username' 'Password' 'Purpose'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' '------------------' '--------------' '--------------------' '----------------------------------------'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit' 'gerrit-admin' 'admin-password' 'Gerrit admin user'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' 'Jenkins' 'jenkins-admin' 'admin-password' 'Jenkins admin user'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit' 'test-user' 'test-password' 'Test/change workflow user'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit integration' 'jenkins-gerrit' 'integration-password' 'Jenkins-to-Gerrit integration account'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' '------------------' '--------------' '--------------------' '----------------------------------------'
 }
 
 role_helper_present_in_container() {
@@ -2243,6 +2278,11 @@ main() {
       shift
       parse_env_only_args "$@"
       cmd_up
+      ;;
+    status)
+      shift
+      parse_env_only_args "$@"
+      cmd_status
       ;;
     prepare-artifacts)
       shift

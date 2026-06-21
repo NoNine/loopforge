@@ -39,8 +39,9 @@ esac
   exit 1
 }
 
-grep -Fq "gerrit_url=http://127.0.0.1:$gerrit_port/" "$tmp_dir/render-1.out"
-grep -Fq "jenkins_url=http://127.0.0.1:$jenkins_port/login" "$tmp_dir/render-1.out"
+grep -Fq "render-config: ok run-id=$run_id" "$tmp_dir/render-1.out"
+! grep -Fq "gerrit_url=" "$tmp_dir/render-1.out"
+! grep -Fq "jenkins_url=" "$tmp_dir/render-1.out"
 
 render >"$tmp_dir/render-2.out"
 grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_port" "$env_file"
@@ -78,8 +79,9 @@ HARNESS_LOG_DIR="$tmp_dir/explicit-logs" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$explicit_gerrit_port" \
 HARNESS_JENKINS_HTTP_HOST_PORT="$explicit_jenkins_port" \
   "$repo_root/simulation/docker/docker-harness.sh" render-config >"$tmp_dir/explicit.out"
-grep -Fq "gerrit_url=http://127.0.0.1:$explicit_gerrit_port/" "$tmp_dir/explicit.out"
-grep -Fq "jenkins_url=http://127.0.0.1:$explicit_jenkins_port/login" "$tmp_dir/explicit.out"
+grep -Fq "render-config: ok run-id=$run_id-explicit" "$tmp_dir/explicit.out"
+! grep -Fq "gerrit_url=" "$tmp_dir/explicit.out"
+! grep -Fq "jenkins_url=" "$tmp_dir/explicit.out"
 grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$explicit_gerrit_port" "$tmp_dir/explicit-state/rendered/harness.env"
 grep -Fq "HARNESS_JENKINS_HTTP_HOST_PORT=$explicit_jenkins_port" "$tmp_dir/explicit-state/rendered/harness.env"
 

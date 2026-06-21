@@ -17,8 +17,9 @@ verifier CLI.
 | Command | Purpose |
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
-| `render-config [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `render-config: ok run-id=...` summary plus browser URLs. |
-| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary plus browser URLs. |
+| `render-config [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `render-config: ok run-id=...` summary. |
+| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary. |
+| `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and validates manifests/checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Stages one role, or all Docker roles when `--role` is omitted, to target containers and verifies manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
@@ -66,6 +67,12 @@ operations. The `ci-operator` account does not own `/srv/gerrit`,
 `/var/lib/jenkins`, or `/var/lib/jenkins-agent` and is not a Gerrit, Jenkins
 controller, or Jenkins agent runtime account. Root remains available for
 privileged container operations where the harness needs it.
+
+Use `docker-harness.sh status --env FILE` after `up` to inspect the selected
+running simulation. The status command prints the run ID, Compose project,
+live browser URLs, and seeded Docker simulation login accounts. It is
+read-only and fails when the selected run's containers are not running, so it
+does not rely on stale port data from rendered config files.
 
 ## Output Locations
 

@@ -47,7 +47,8 @@ PATH="$fake_bin:$PATH" \
   --env "$tmp_dir/harness.env" render-config >"$tmp_dir/render.out"
 
 grep -Fq "render-config: ok run-id=bootstrap-$$" "$tmp_dir/render.out"
-grep -Fq "gerrit_url=http://127.0.0.1:" "$tmp_dir/render.out"
+! grep -Fq "gerrit_url=" "$tmp_dir/render.out"
+! grep -Fq "jenkins_url=" "$tmp_dir/render.out"
 
 runtime_env="$state_dir/rendered/harness.runtime.env"
 grep -Fq "HARNESS_RUN_ID=bootstrap-$$" "$runtime_env"
