@@ -201,6 +201,12 @@ env "${common_env[@]}" \
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-agent >/dev/null
 
+if grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
+  printf 'role dispatch must pass bare role names to internal command functions\n' >&2
+  sed -n '1,120p' "$tmp_dir/role-calls.log" >&2
+  exit 1
+fi
+
 gerrit_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
 controller_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
 agent_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"

@@ -5,7 +5,7 @@ Gerrit/Jenkins setup package. The single Docker entrypoint is:
 
 ```bash
 simulation/docker/docker-harness.sh <command>
-simulation/docker/docker-harness.sh render-config [--env FILE]
+simulation/docker/docker-harness.sh [--env FILE] <command>
 ```
 
 `docker-harness.sh` owns role-local gates and cross-role integration
@@ -16,23 +16,23 @@ verifier CLI.
 
 | Command | Purpose |
 | --- | --- |
-| `preflight` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. It does not read operator env files, render config, or copy runtime inputs. |
-| `render-config [--env FILE]` | Loads the selected harness env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. |
-| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. |
-| `prepare-artifacts [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and validates manifests/checksums. |
-| `stage-artifacts [--role ROLE]` | Stages one role, or all Docker roles when `--role` is omitted, to target containers and verifies manifests/checksums before mutation. |
-| `run-role-gate --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. |
-| `check` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. |
-| `full-verify` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. |
-| `down` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. |
+| `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
+| `render-config [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `render-config: ok run-id=...` summary plus browser URLs. |
+| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary plus browser URLs. |
+| `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and validates manifests/checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
+| `stage-artifacts [--env FILE] [--role ROLE]` | Stages one role, or all Docker roles when `--role` is omitted, to target containers and verifies manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
+| `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
+| `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
+| `full-verify [--env FILE]` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. Success prints a short `full-verify: integration ok` summary. |
+| `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
 ## Input Model
 
-If `--env FILE` is omitted, `render-config` uses
-`simulation/docker/examples/docker.env.example`. Copy that file
-outside committed examples before using real operator values.
+If `--env FILE` is omitted, the harness uses
+`simulation/docker/examples/docker.env.example` as the bootstrap env file.
+Copy that file outside committed examples before using real operator values.
 
 The harness env file must identify role and integration env inputs:
 
@@ -46,8 +46,8 @@ HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 During `render-config`, the selected harness, role, and integration env files
 are copied to `simulation/state/docker/<run-id>/rendered/runtime-inputs/` with
 mode `0600`. Later lifecycle commands load the private runtime config and use
-those run-scoped copies, so they do not depend on the original operator env
-files remaining unchanged.
+those run-scoped copies, but they still bootstrap from the same env file so
+they can resolve the correct run directory without shell exports.
 
 `harness.env` is the redacted public record for inspection. The private
 `harness.runtime.env` retains lifecycle values and points at the runtime input

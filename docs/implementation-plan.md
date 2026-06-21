@@ -655,14 +655,16 @@ Implementation notes:
   staged artifacts, evidence, and bounded logs must be written under generated
   paths.
 - `prepare-artifacts --role ...` must run only in the bundle factory
-  environment and must fail if invoked against a target container.
+  environment and must fail if invoked against a target container. Terminal
+  output should stay short and role-scoped.
 - `stage-artifacts --role ...` copies bundle factory output to the selected
   target container and verifies target-side manifests and checksums before
-  any install or configuration command can run.
+  any install or configuration command can run. Terminal output should stay
+  short and role-scoped.
 - `run-role-gate --role ...` runs the role helper readiness gate in the
   corresponding target container. It must fail on dummy success,
   `planned-checks-only`, operation-plan-only success, or modeled proof for
-  required runtime checks.
+  required runtime checks. Terminal output should stay short and role-scoped.
 - Because this step precedes the role helpers, harness verification checks the
   harness infrastructure, command surface, role validation, and missing-helper
   failure behavior. Steps 7, 8, and 9 run the role-specific gates after each
@@ -1173,14 +1175,14 @@ Create Docker simulation assets under `simulation/docker/` for:
 Expected command surface:
 
 ```text
-simulation/docker/docker-harness.sh preflight
-simulation/docker/docker-harness.sh render-config
-simulation/docker/docker-harness.sh prepare-artifacts
-simulation/docker/docker-harness.sh stage-artifacts
-simulation/docker/docker-harness.sh up
-simulation/docker/docker-harness.sh check
-simulation/docker/docker-harness.sh full-verify
-simulation/docker/docker-harness.sh down
+simulation/docker/docker-harness.sh [--env FILE] preflight
+simulation/docker/docker-harness.sh [--env FILE] render-config
+simulation/docker/docker-harness.sh [--env FILE] prepare-artifacts
+simulation/docker/docker-harness.sh [--env FILE] stage-artifacts
+simulation/docker/docker-harness.sh [--env FILE] up
+simulation/docker/docker-harness.sh [--env FILE] check
+simulation/docker/docker-harness.sh [--env FILE] full-verify
+simulation/docker/docker-harness.sh [--env FILE] down
 ```
 
 Implementation notes:
@@ -1195,6 +1197,8 @@ Implementation notes:
   integration validation, trigger verification, and integration evidence.
 - Docker simulation must use the Version Baseline for rendered inputs, prepared
   artifacts, staged artifacts, role helpers, and final evidence.
+- Docker simulation bootstraps all lifecycle commands from the harness env file
+  so `HARNESS_RUN_ID` and `HARNESS_PROJECT_NAME` do not depend on shell exports.
 - Docker simulation is the first full end-to-end integration gate for Gerrit
   Trigger behavior, Jenkins agent scheduling, and `Verified` voting.
 - `docker-harness.sh prepare-artifacts` runs role helper
