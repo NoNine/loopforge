@@ -82,6 +82,26 @@ Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
 layout.
 
+`/harness/state` is a harness sideband mount for reviewed inputs,
+coordination state, generated control scripts, fingerprints, status, and
+evidence references. It does not replace normal target runtime locations.
+Target operations still install or update product-owned paths such as
+`/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
+`$JENKINS_HOME/.ssh/known_hosts`, and agent `authorized_keys`.
+
+Transient target-local files under `/tmp` are acceptable when they stage
+payloads for normal target APIs or runtime installation, for example Gerrit
+REST JSON bodies, public-key handoff, or installing Jenkins `known_hosts`.
+They must not be used to bypass expected access to a sideband file under
+`/harness/state`.
+
+Harness sideband directories are host-owned and grant container runtime
+access by group and mode. Jenkins-owned private keys under integration keys
+are the deliberate exception: the Jenkins controller owns the
+Jenkins-to-Gerrit and Jenkins-to-agent private keys, while generated Groovy
+scripts, status files, evidence, and public-key metadata remain harness
+sideband state.
+
 ## Integration Boundary
 
 Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,

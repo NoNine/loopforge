@@ -1408,7 +1408,7 @@ cmd_collect_evidence() {
   verify_base_readiness_facts
   ensure_dirs
   local evidence input_fingerprint manifest checksum bounded_log service_log runtime_status jenkins_pid
-  local q_mode q_time q_role q_checkpoint q_command q_status q_input q_manifest q_checksum q_checks q_log q_redaction q_proof q_real q_step11
+  local q_mode q_time q_role q_checkpoint q_command q_status q_input q_manifest q_checksum q_checks q_log q_service_log q_runtime_status q_redaction q_proof q_real q_step11
   evidence="$JENKINS_EVIDENCE_DIR/jenkins-controller-readiness-$(timestamp_utc).json"
   bounded_log="$JENKINS_LOG_DIR/jenkins-controller-collect-evidence-$(timestamp_utc).log"
   service_log="$JENKINS_HOME/logs/jenkins-controller.log"
@@ -1443,7 +1443,9 @@ cmd_collect_evidence() {
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
   q_checks="$(json_quote "Real Jenkins controller process started from staged WAR, responded on /login and /api/json, retained plugin and JCasC readiness, and wrote bounded logs without secrets.")"
-  q_log="$(json_quote "$bounded_log;$service_log;$runtime_status")"
+  q_log="$(json_quote "$bounded_log")"
+  q_service_log="$(json_quote "$service_log")"
+  q_runtime_status="$(json_quote "$runtime_status")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"
   q_proof="$(json_quote "controller-runtime")"
   q_real="$(json_quote "true")"
@@ -1465,6 +1467,8 @@ cmd_collect_evidence() {
   "checksum_verification_result": "pass",
   "observed_checks": $q_checks,
   "bounded_log_references": $q_log,
+  "service_log_reference": $q_service_log,
+  "runtime_status_reference": $q_runtime_status,
   "redaction_status": $q_redaction
 }
 EOF

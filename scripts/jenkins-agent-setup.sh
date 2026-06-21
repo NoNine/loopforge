@@ -876,7 +876,7 @@ cmd_collect_evidence() {
   check_runtime_readiness
   ensure_dirs
   local evidence input_fingerprint manifest checksum bounded_log service_log q_mode q_time q_role q_checkpoint
-  local q_command q_status q_input q_manifest q_checksum q_checks q_log q_redaction
+  local q_command q_status q_input q_manifest q_checksum q_checks q_log q_service_log q_redaction
   evidence="$JENKINS_AGENT_EVIDENCE_DIR/jenkins-agent-readiness-$(timestamp_utc).json"
   bounded_log="$JENKINS_AGENT_LOG_DIR/jenkins-agent-collect-evidence-$(timestamp_utc).log"
   service_log="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
@@ -910,7 +910,8 @@ cmd_collect_evidence() {
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
   q_checks="$(json_quote "real agent-host-side readiness: static OS dependency baseline, dependency commands including java, ssh, and sshd, SSH reachability, real sshd banner, remote filesystem ownership, runtime account ownership; node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT")"
-  q_log="$(json_quote "$bounded_log;$service_log")"
+  q_log="$(json_quote "$bounded_log")"
+  q_service_log="$(json_quote "$service_log")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"
   cat >"$evidence" <<EOF
 {
@@ -926,6 +927,7 @@ cmd_collect_evidence() {
   "checksum_verification_result": "pass",
   "observed_checks": $q_checks,
   "bounded_log_references": $q_log,
+  "service_log_reference": $q_service_log,
   "redaction_status": $q_redaction
 }
 EOF

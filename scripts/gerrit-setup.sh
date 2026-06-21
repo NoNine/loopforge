@@ -1094,11 +1094,20 @@ check_ssh_endpoint() {
 }
 
 check_ldap_access() {
-  local host port
+  local host port response attempt
   read -r host port <<EOF
 $(ldap_host_port)
 EOF
-  check_tcp_connect "$host" "$port" || die "LDAP endpoint is not reachable: $host:$port"
+  response=""
+  for attempt in $(seq 1 30); do
+    if check_tcp_connect "$host" "$port" >/dev/null 2>&1 &&
+      check_ldap_bind_search >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  check_tcp_connect "$host" "$port" ||
+    die "LDAP endpoint is not reachable: $host:$port"
   check_ldap_bind_search
 }
 
@@ -1477,7 +1486,7 @@ cmd_collect_evidence() {
   local evidence input_fingerprint manifest checksum bounded_log service_log helper_version
   local q_mode q_time q_package_version q_helper_version q_role q_checkpoint q_command q_status
   local q_hosts q_endpoints q_input q_manifest q_checksum q_startup q_endpoint q_ldap q_ssh q_plugin
-  local q_runtime_account q_checks q_log q_redaction
+  local q_runtime_account q_checks q_log q_service_log q_redaction
   evidence="$GERRIT_EVIDENCE_DIR/gerrit-readiness-$(timestamp_utc).json"
   bounded_log="$GERRIT_LOG_DIR/gerrit-collect-evidence-$(timestamp_utc).log"
   service_log="$(gerrit_runtime_log)"
@@ -1517,7 +1526,8 @@ cmd_collect_evidence() {
   q_plugin="$(json_quote "pass: plugin files present and runtime plugin listing succeeded for $GERRIT_PLUGIN_LIST")"
   q_runtime_account="$(json_quote "pass: Gerrit daemon owner verified as $GERRIT_RUNTIME_ACCOUNT")"
   q_checks="$(json_quote "real Gerrit daemon process, HTTP runtime endpoint, Gerrit SSH banner, LDAP bind/search access, installed plugin set; Jenkins ACL/label/capability prerequisites deferred to later integration step; reviewed LDAP secret handling")"
-  q_log="$(json_quote "$bounded_log;$service_log")"
+  q_log="$(json_quote "$bounded_log")"
+  q_service_log="$(json_quote "$service_log")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"
   cat >"$evidence" <<EOF
 {
@@ -1543,6 +1553,7 @@ cmd_collect_evidence() {
   "runtime_account_checks": $q_runtime_account,
   "observed_checks": $q_checks,
   "bounded_log_references": $q_log,
+  "service_log_reference": $q_service_log,
   "redaction_status": $q_redaction
 }
 EOF

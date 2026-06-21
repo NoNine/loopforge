@@ -163,6 +163,7 @@ apply_defaults() {
   JENKINS_SHARED_GROUP="${JENKINS_SHARED_GROUP:-}"
   JENKINS_SHARED_GROUP_GID="${JENKINS_SHARED_GROUP_GID:-}"
   JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
+  JENKINS_OPERATOR_ACCOUNT="${JENKINS_OPERATOR_ACCOUNT:-ci-operator}"
   GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-docker-gerrit}"
   JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-docker-gerrit-verification}"
   select_agent_scheduling_label
@@ -336,6 +337,7 @@ validate_inputs() {
   validate_simple_token JENKINS_AGENT_SCHEDULING_LABEL "$JENKINS_AGENT_SCHEDULING_LABEL"
   validate_simple_token JENKINS_AGENT_CREDENTIAL_ID "$JENKINS_AGENT_CREDENTIAL_ID"
   validate_group_name JENKINS_SHARED_GROUP "$JENKINS_SHARED_GROUP"
+  validate_account_name JENKINS_OPERATOR_ACCOUNT "$JENKINS_OPERATOR_ACCOUNT"
   case "$JENKINS_SHARED_GROUP_GID" in
     ""|*[!0-9]*)
       die "JENKINS_SHARED_GROUP_GID must be numeric"
@@ -398,11 +400,11 @@ agent_container() {
 }
 
 integration_state_dir() {
-  printf '%s/integration\n' "$HARNESS_STATE_DIR"
+  printf '%s/jenkins-controller/integration\n' "$HARNESS_STATE_DIR"
 }
 
 integration_host_state_dir() {
-  printf '%s/integration\n' "$HARNESS_STATE_DIR"
+  integration_state_dir
 }
 
 integration_container_state_dir() {
@@ -418,16 +420,34 @@ integration_evidence_dir() {
 }
 
 ensure_dirs() {
-  mkdir -p "$(integration_host_state_dir)/keys" "$(integration_host_state_dir)/scripts" \
-    "$(integration_host_state_dir)/status" "$(integration_log_dir)" "$(integration_evidence_dir)"
-  chmod 0700 "$(integration_host_state_dir)" "$(integration_host_state_dir)/keys" \
-    "$(integration_host_state_dir)/scripts" "$(integration_host_state_dir)/status"
+  mkdir -p "$(integration_host_state_dir)/status" "$(integration_log_dir)" "$(integration_evidence_dir)"
+  chmod 0700 "$(integration_host_state_dir)" "$(integration_host_state_dir)/status"
+}
+
+jenkins_ops_dir() {
+  printf '%s/integration-ops\n' "$JENKINS_HOME"
+}
+
+jenkins_ops_keys_dir() {
+  printf '%s/keys\n' "$(jenkins_ops_dir)"
+}
+
+jenkins_ops_payloads_dir() {
+  printf '%s/payloads\n' "$(jenkins_ops_dir)"
+}
+
+jenkins_ops_tmp_dir() {
+  printf '%s/tmp\n' "$(jenkins_ops_dir)"
 }
 
 ensure_container_integration_dirs() {
-  docker_exec_sh "$(jenkins_container)" "install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' /harness/state/integration /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
-  docker_exec_sh "$(gerrit_container)" "install -d -m 700 /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
-  docker_exec_sh "$(agent_container)" "install -d -m 700 /harness/state/integration/keys /harness/state/integration/scripts /harness/state/integration/status" >/dev/null
+  docker exec -i -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -s <<EOF >/dev/null
+set -e
+sudo install -d -m 700 -o "$JENKINS_RUNTIME_ACCOUNT" -g "$JENKINS_RUNTIME_GROUP" "$(jenkins_ops_dir)" "$(jenkins_ops_keys_dir)" "$(jenkins_ops_payloads_dir)" "$(jenkins_ops_tmp_dir)"
+sudo -u "$JENKINS_RUNTIME_ACCOUNT" sh -c "test -d '$(jenkins_ops_keys_dir)' && test -r '$(jenkins_ops_keys_dir)' && test -w '$(jenkins_ops_keys_dir)'"
+sudo -u "$JENKINS_RUNTIME_ACCOUNT" sh -c "test -d '$(jenkins_ops_payloads_dir)' && test -r '$(jenkins_ops_payloads_dir)' && test -w '$(jenkins_ops_payloads_dir)'"
+sudo -u "$JENKINS_RUNTIME_ACCOUNT" sh -c "tmp='$(jenkins_ops_tmp_dir)'/.write-test; printf integration-ops >\"\\\$tmp\"; rm -f \"\\\$tmp\""
+EOF
 }
 
 ensure_group_with_gid() {
@@ -517,14 +537,12 @@ prove_shared_storage_rw() {
 bounded_log_path() {
   local name
   name="${1:?name required}"
-  ensure_dirs
   printf '%s/%s-%s.log\n' "$(integration_log_dir)" "$name" "$(timestamp_utc)"
 }
 
 status_file() {
   local name
   name="${1:?name required}"
-  ensure_dirs
   printf '%s/status/%s.status\n' "$(integration_host_state_dir)" "$name"
 }
 
@@ -535,7 +553,6 @@ write_evidence() {
   observed="${3:?observed required}"
   log_ref="${4:-not-applicable}"
   extra="${5:-not-applicable}"
-  ensure_dirs
   file="$(integration_evidence_dir)/integration-${checkpoint}-$(timestamp_utc).json"
   q_mode="$(json_quote "docker-simulation")"
   q_time="$(json_quote "$(iso_timestamp_utc)")"
@@ -636,7 +653,7 @@ gerrit_project_has_verified_label() {
 gerrit_account_can_vote_verified() {
   local project response
   project="${1:?project required}"
-  response="$(gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" GET "/projects/$project/labels/?voteable-on-ref=refs/heads/master")"
+  response="$(gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" GET "/projects/$project/labels/?inherited&voteable-on-ref=refs/heads/master")"
   python3 - "$response" <<'PY'
 import json
 import sys
@@ -645,7 +662,13 @@ text = sys.argv[1]
 if text.startswith(")]}'"):
     text = text.split("\n", 1)[1]
 data = json.loads(text)
-raise SystemExit(0 if "Verified" in data else 1)
+if isinstance(data, list):
+    found = any(item.get("name") == "Verified" for item in data if isinstance(item, dict))
+elif isinstance(data, dict):
+    found = "Verified" in data or data.get("name") == "Verified"
+else:
+    found = False
+raise SystemExit(0 if found else 1)
 PY
 }
 
@@ -687,7 +710,7 @@ ensure_gerrit_verification_project() {
   log="${1:?log required}"
   project="$(url_encode "$GERRIT_VERIFICATION_PROJECT")"
   project_json="$(integration_host_state_dir)/status/verification-project.json"
-  container_json="/tmp/step11-verification-project.json"
+  container_json="/tmp/verification-project.json"
   cat >"$project_json" <<EOF
 {
   "description": "Docker Step 11 disposable verification project",
@@ -727,15 +750,26 @@ ensure_verified_label_and_access() {
   }
 }
 EOF
-  docker cp "$label_json" "$(gerrit_container):/tmp/step11-verified-label.json" >>"$log" 2>&1
+  docker cp "$label_json" "$(gerrit_container):/tmp/verified-label.json" >>"$log" 2>&1
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
-    PUT "/projects/$all_projects_id/labels/Verified" "/tmp/step11-verified-label.json" >>"$log" 2>&1
+    PUT "/projects/$all_projects_id/labels/Verified" "/tmp/verified-label.json" >>"$log" 2>&1
   printf 'verified_label_apply=simulation-only-direct-rest project=All-Projects endpoint=projects.labels\n' >>"$log"
 
   cat >"$global_access_json" <<EOF
 {
   "commit_message": "Docker Step 11 simulation-only direct REST stream-events access",
   "add": {
+    "refs/meta/config": {
+      "permissions": {
+        "read": {
+          "rules": {
+            "$JENKINS_GERRIT_INTEGRATION_GROUP": {
+              "action": "ALLOW"
+            }
+          }
+        }
+      }
+    },
     "GLOBAL_CAPABILITIES": {
       "permissions": {
         "streamEvents": {
@@ -750,15 +784,26 @@ EOF
   }
 }
 EOF
-  docker cp "$global_access_json" "$(gerrit_container):/tmp/step11-integration-global-access.json" >>"$log" 2>&1
+  docker cp "$global_access_json" "$(gerrit_container):/tmp/integration-global-access.json" >>"$log" 2>&1
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
-    POST "/projects/$all_projects_id/access" "/tmp/step11-integration-global-access.json" >>"$log" 2>&1
+    POST "/projects/$all_projects_id/access" "/tmp/integration-global-access.json" >>"$log" 2>&1
   printf 'access_apply=simulation-only-direct-rest project=All-Projects endpoint=projects.access capability=streamEvents\n' >>"$log"
 
   cat >"$project_access_json" <<EOF
 {
   "commit_message": "Docker Step 11 simulation-only direct REST verification project access",
   "add": {
+    "refs/meta/config": {
+      "permissions": {
+        "read": {
+          "rules": {
+            "$JENKINS_GERRIT_INTEGRATION_GROUP": {
+              "action": "ALLOW"
+            }
+          }
+        }
+      }
+    },
     "refs/heads/*": {
       "permissions": {
         "read": {
@@ -782,9 +827,9 @@ EOF
   }
 }
 EOF
-  docker cp "$project_access_json" "$(gerrit_container):/tmp/step11-integration-project-access.json" >>"$log" 2>&1
+  docker cp "$project_access_json" "$(gerrit_container):/tmp/integration-project-access.json" >>"$log" 2>&1
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
-    POST "/projects/$project_id/access" "/tmp/step11-integration-project-access.json" >>"$log" 2>&1
+    POST "/projects/$project_id/access" "/tmp/integration-project-access.json" >>"$log" 2>&1
   printf 'access_apply=simulation-only-direct-rest project=%s endpoint=projects.access permissions=read,label-Verified\n' "$GERRIT_VERIFICATION_PROJECT" >>"$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$all_projects_id/labels/Verified" >>"$log" 2>&1
   gerrit_account_can_vote_verified "$project_id" >>"$log" 2>&1 ||
@@ -821,7 +866,7 @@ submit_review_change_number() {
   change="${1:?change required}"
   log="${2:?log required}"
   submit_json="$(integration_host_state_dir)/status/submit-$change.json"
-  container_json="/tmp/step11-submit-$change.json"
+  container_json="/tmp/submit-$change.json"
   cat >"$submit_json" <<EOF
 {
   "wait_for_merge": true
@@ -839,17 +884,25 @@ jenkins_crumb_header() {
 }
 
 jenkins_script() {
-  local script_file container_script log
+  local script_file script_name container_script container_tmp_script log
   script_file="${1:?script file required}"
   log="${2:?log required}"
-  chmod 0600 "$script_file"
-  container_script="$(integration_container_state_dir)/scripts/$(basename "$script_file")"
-  docker cp "$script_file" "$(jenkins_container):$container_script" >>"$log" 2>&1
-  docker_exec_sh "$(jenkins_container)" "chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_script' && chmod 600 '$container_script'" >>"$log" 2>&1
+  script_name="$(basename "$script_file")"
+  container_script="$(jenkins_ops_payloads_dir)/$script_name"
+  container_tmp_script="$(
+    docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" mktemp "/tmp/$script_name.XXXXXX.tmp"
+  )"
+  docker exec -i -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "cat >'$container_tmp_script'" <"$script_file" >>"$log" 2>&1
+  docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "
+    set -e
+    trap 'rm -f '\''$container_tmp_script'\''' EXIT
+    sudo install -m 600 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$container_tmp_script' '$container_script'
+    sudo -u '$JENKINS_RUNTIME_ACCOUNT' test -r '$container_script'
+  " >>"$log" 2>&1
   docker_exec_sh "$(jenkins_container)" "
     set -e
-    crumb_json=/tmp/jenkins-step11-crumb.json
-    cookie_jar=/tmp/jenkins-step11-cookies.txt
+    crumb_json='$(jenkins_ops_tmp_dir)/jenkins-crumb.json'
+    cookie_jar='$(jenkins_ops_tmp_dir)/jenkins-cookies.txt'
     curl -fsS -u '$INTEGRATION_JENKINS_ADMIN_ACCOUNT:$INTEGRATION_JENKINS_ADMIN_PASSWORD' \
       -c \"\$cookie_jar\" \
       \"http://$JENKINS_HOST:$JENKINS_HTTP_PORT/crumbIssuer/api/json\" >\"\$crumb_json\"
@@ -858,7 +911,7 @@ jenkins_script() {
     test -n \"\$crumb\"
     test -n \"\$crumb_field\"
     crumb_header=\"\$crumb_field:\$crumb\"
-    script_out=/tmp/jenkins-step11-script.out
+    script_out='$(jenkins_ops_tmp_dir)/jenkins-script.out'
     curl -fsS -u '$INTEGRATION_JENKINS_ADMIN_ACCOUNT:$INTEGRATION_JENKINS_ADMIN_PASSWORD' \
       -b \"\$cookie_jar\" -H \"\$crumb_header\" \
       --data-urlencode \"script@$container_script\" \
@@ -870,53 +923,55 @@ jenkins_script() {
   " >>"$log" 2>&1
 }
 
-key_fingerprint() {
-  local file
-  file="${1:?public key required}"
-  ssh-keygen -lf "$file" | awk '{print $2}'
-}
-
 ensure_controller_keypair() {
-  local name public_base public log container_private
+  local name log container_private
   name="${1:?name required}"
   log="${2:?log required}"
-  public_base="$(integration_host_state_dir)/keys/$name"
-  public="$public_base.pub"
-  container_private="$(integration_container_state_dir)/keys/$name"
-  docker_exec_sh "$(jenkins_container)" "
+  container_private="$(jenkins_ops_keys_dir)/$name"
+  docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "
     set -e
-    install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$(integration_container_state_dir)/keys'
-    if [ ! -s '$container_private' ]; then
-      su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh-keygen -q -t ed25519 -N '' -C '$name-docker-step11' -f '$container_private'\"
+    sudo -u '$JENKINS_RUNTIME_ACCOUNT' test -w '$(jenkins_ops_keys_dir)'
+    if ! sudo -u '$JENKINS_RUNTIME_ACCOUNT' sh -c 'test -s '\''$container_private'\'''; then
+      sudo -u '$JENKINS_RUNTIME_ACCOUNT' ssh-keygen -q -t ed25519 -N '' -C '$name-docker-simulation' -f '$container_private'
     fi
+    sudo chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private'
+    sudo chmod 600 '$container_private'
+    sudo -u '$JENKINS_RUNTIME_ACCOUNT' sh -c \"ssh-keygen -y -f '$container_private' >'$container_private.pub'\"
+    sudo chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private.pub'
+    sudo chmod 600 '$container_private.pub'
   " >>"$log" 2>&1
-  docker_exec_sh "$(jenkins_container)" "
-    set -e
-    chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private'
-    chmod 600 '$container_private'
-    su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh-keygen -y -f '$container_private' >'$container_private.pub'\"
-    chmod 644 '$container_private.pub'
-  " >>"$log" 2>&1
-  docker cp "$(jenkins_container):$container_private.pub" "$public" >>"$log" 2>&1
-  chmod 0644 "$public"
-  printf '%s\n' "$public_base"
+  printf '%s\n' "$container_private"
 }
 
 ensure_controller_private_key_permissions() {
-  local key_base name container_private
-  key_base="${1:?key base required}"
-  name="${2:?key name required}"
+  local container_private
+  container_private="${1:?key path required}"
   ensure_container_integration_dirs
-  container_private="$(integration_container_state_dir)/keys/$name"
-  docker_exec_sh "$(jenkins_container)" "test -s '$container_private' && chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private' && chmod 600 '$container_private'" >/dev/null
+  docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "sudo -u '$JENKINS_RUNTIME_ACCOUNT' test -s '$container_private' && sudo chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$container_private' && sudo chmod 600 '$container_private'" >/dev/null
+}
+
+controller_public_key_fingerprint() {
+  local public_path
+  public_path="${1:?public key path required}"
+  docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sudo -- ssh-keygen -lf "$public_path" | awk '{print $2}'
+}
+
+copy_controller_public_key_to_container() {
+  local public_path target_container target_path log
+  public_path="${1:?public key path required}"
+  target_container="${2:?target container required}"
+  target_path="${3:?target path required}"
+  log="${4:?log required}"
+  docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sudo cat "$public_path" |
+    docker_exec -i "$target_container" sh -lc "cat >'$target_path'" >>"$log" 2>&1
 }
 
 register_gerrit_public_key() {
-  local account public log
+  local account public_path log
   account="${1:?account required}"
-  public="${2:?public key required}"
+  public_path="${2:?public key required}"
   log="${3:?log required}"
-  docker cp "$public" "$(gerrit_container):/tmp/jenkins-gerrit.pub" >>"$log" 2>&1
+  copy_controller_public_key_to_container "$public_path" "$(gerrit_container)" /tmp/jenkins-gerrit.pub "$log"
   if gerrit_curl_text "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" "/accounts/self/sshkeys" "/tmp/jenkins-gerrit.pub" >>"$log" 2>&1; then
     printf 'key_registration=rest-self\n' >>"$log"
     return 0
@@ -933,23 +988,23 @@ cmd_configure_gerrit_ssh() {
   require_command docker
   require_command ssh-keygen
   ensure_dirs
-  ensure_container_integration_dirs
   log="$(bounded_log_path configure-gerrit-ssh)"
+  ensure_container_integration_dirs
   private="$(ensure_controller_keypair jenkins-gerrit "$log")"
   public="$private.pub"
-  fp="$(key_fingerprint "$public")"
-  ensure_controller_private_key_permissions "$private" jenkins-gerrit
+  fp="$(controller_public_key_fingerprint "$public")"
+  ensure_controller_private_key_permissions "$private"
   gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" GET "/accounts/self" >>"$log" 2>&1
   register_gerrit_public_key "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$public" "$log"
+  account_status="$(status_file jenkins-gerrit-account)"
+  key_status="$(status_file jenkins-gerrit-key)"
+  printf 'account=%s public_key_fingerprint=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$fp" >"$account_status"
+  printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s\n' "$fp" "$private" >"$key_status"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/accounts/self" >>"$log" 2>&1
   ensure_gerrit_rest_admin "$log"
 
   ensure_verified_label_and_access "$log"
-  account_status="$(status_file jenkins-gerrit-account)"
-  key_status="$(status_file jenkins-gerrit-key)"
   acl_status="$(status_file gerrit-acl)"
-  printf 'account=%s public_key_fingerprint=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$fp" >"$account_status"
-  printf 'private_key_custody=jenkins-controller-state public_key_fingerprint=%s\n' "$fp" >"$key_status"
   printf 'apply_mode=simulation-only-direct-rest acl_scope=docker-verification-project group=%s\n' "$JENKINS_GERRIT_INTEGRATION_GROUP" >"$acl_status"
   write_evidence jenkins-to-gerrit-ssh configured "Jenkins-owned key generated, public key registered through Gerrit REST, and Docker simulation integration ACLs applied through labeled direct Gerrit REST test automation" "$log" "public_key_fingerprint=$fp apply_mode=simulation-only-direct-rest" >/dev/null
   printf 'status=pass command=configure-gerrit-ssh public_key_fingerprint=%s acl_apply=simulation-only-direct-rest log=%s\n' "$fp" "$log"
@@ -963,13 +1018,13 @@ cmd_configure_agent_ssh() {
   require_command docker
   require_command ssh-keygen
   ensure_dirs
-  ensure_container_integration_dirs
   log="$(bounded_log_path configure-agent-ssh)"
+  ensure_container_integration_dirs
   private="$(ensure_controller_keypair jenkins-agent "$log")"
   public="$private.pub"
-  fp="$(key_fingerprint "$public")"
-  ensure_controller_private_key_permissions "$private" jenkins-agent
-  docker cp "$public" "$(agent_container):/tmp/jenkins-agent.pub" >>"$log" 2>&1
+  fp="$(controller_public_key_fingerprint "$public")"
+  ensure_controller_private_key_permissions "$private"
+  copy_controller_public_key_to_container "$public" "$(agent_container)" /tmp/jenkins-agent.pub "$log"
   docker_exec_sh "$(agent_container)" "
     set -e
     home=\$(getent passwd '$JENKINS_AGENT_ACCOUNT' | awk -F: '{print \$6}')
@@ -982,19 +1037,19 @@ cmd_configure_agent_ssh() {
     rm -rf '$JENKINS_AGENT_REMOTE_FS/remoting.jar' '$JENKINS_AGENT_REMOTE_FS/remoting'
     install -d -m 755 -o '$JENKINS_AGENT_ACCOUNT' -g '$JENKINS_AGENT_GROUP' '$JENKINS_AGENT_REMOTE_FS'
   " >>"$log" 2>&1
-  known_hosts="$(integration_host_state_dir)/keys/agent-known-hosts"
-  docker_exec_sh "$(jenkins_container)" "ssh-keyscan -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_HOST' 2>/dev/null" >"$known_hosts"
-  docker cp "$known_hosts" "$(jenkins_container):$(integration_container_state_dir)/keys/agent-known-hosts" >>"$log" 2>&1
-  docker cp "$known_hosts" "$(jenkins_container):/tmp/step11-agent-known-hosts" >>"$log" 2>&1
-  docker_exec_sh "$(jenkins_container)" "
+  known_hosts="$(jenkins_ops_keys_dir)/agent-known-hosts"
+  docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "
     set -e
-    install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$JENKINS_HOME/.ssh'
-    install -m 600 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' /tmp/step11-agent-known-hosts '$JENKINS_HOME/.ssh/known_hosts'
+    sudo -u '$JENKINS_RUNTIME_ACCOUNT' sh -c \"ssh-keyscan -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_HOST' 2>/dev/null >'$known_hosts'\"
+    sudo chown '$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP' '$known_hosts'
+    sudo chmod 600 '$known_hosts'
+    sudo install -d -m 700 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$JENKINS_HOME/.ssh'
+    sudo install -m 600 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_RUNTIME_GROUP' '$known_hosts' '$JENKINS_HOME/.ssh/known_hosts'
   " >>"$log" 2>&1
-  groovy="$(integration_host_state_dir)/scripts/configure-agent.groovy"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/configure-agent.XXXXXX.groovy")"
   q_credential="$(groovy_quote "$JENKINS_AGENT_CREDENTIAL_ID")"
   q_account="$(groovy_quote "$JENKINS_AGENT_ACCOUNT")"
-  q_key_file="$(groovy_quote "$(integration_container_state_dir)/keys/jenkins-agent")"
+  q_key_file="$(groovy_quote "$(jenkins_ops_keys_dir)/jenkins-agent")"
   q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
   q_remote_fs="$(groovy_quote "$JENKINS_AGENT_REMOTE_FS")"
   q_host="$(groovy_quote "$JENKINS_AGENT_HOST")"
@@ -1038,6 +1093,8 @@ j.save()
 println('configured_agent_node=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS credential=$JENKINS_AGENT_CREDENTIAL_ID executors=$JENKINS_AGENT_EXECUTORS')
 EOF
   jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
+  printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s known_hosts_path=%s node=%s\n' "$fp" "$private" "$known_hosts" "$JENKINS_AGENT_NODE_NAME" >"$(status_file jenkins-agent-key)"
   write_evidence agent-connection configured "Agent public key authorized, Jenkins SSH credential and node configured through Jenkins runtime script API" "$log" "agent_public_key_fingerprint=$fp" >/dev/null
   printf 'status=pass command=configure-agent-ssh public_key_fingerprint=%s node=%s labels=%s log=%s\n' "$fp" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$log"
 }
@@ -1048,14 +1105,14 @@ cmd_configure_trigger() {
   require_docker_mode
   confirm_mutation configure-trigger || return 0
   ensure_dirs
-  ensure_container_integration_dirs
   log="$(bounded_log_path configure-trigger)"
-  groovy="$(integration_host_state_dir)/scripts/configure-trigger.groovy"
+  ensure_container_integration_dirs
+  groovy="$(mktemp "${TMPDIR:-/tmp}/configure-trigger.XXXXXX.groovy")"
   q_gerrit_trigger_server="$(groovy_quote "$GERRIT_TRIGGER_SERVER_NAME")"
   q_gerrit_host="$(groovy_quote "$GERRIT_HOST")"
   q_gerrit_user="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
   q_gerrit_url="$(groovy_quote "http://$GERRIT_HOST:$GERRIT_HTTP_PORT/")"
-  q_gerrit_key="$(groovy_quote "$(integration_container_state_dir)/keys/jenkins-gerrit")"
+  q_gerrit_key="$(groovy_quote "$(jenkins_ops_keys_dir)/jenkins-gerrit")"
   q_gerrit_http_user="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
   q_gerrit_http_password="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_PASSWORD")"
   q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
@@ -1121,7 +1178,7 @@ job.assignedLabel = j.getLabel($q_label)
 job.addProperty(new ParametersDefinitionProperty(
   new StringParameterDefinition('GERRIT_CHANGE_NUMBER', ''),
   new StringParameterDefinition('GERRIT_PATCHSET_NUMBER', '1')))
-job.buildersList.add(new Shell('set -eu\\nprintf \"node=%s\\\\n\" \"\$(hostname)\" > step11-agent-proof.txt\\nprintf \"change=%s patchset=%s event=%s\\\\n\" \"\${GERRIT_CHANGE_NUMBER:-}\" \"\${GERRIT_PATCHSET_NUMBER:-}\" \"\${GERRIT_EVENT_TYPE:-}\" >> step11-agent-proof.txt\\ntest -n \"\${GERRIT_CHANGE_NUMBER:-}\"\\ntest -n \"\${GERRIT_PATCHSET_NUMBER:-}\"\\njava -version >/dev/null 2>&1\\n'))
+job.buildersList.add(new Shell('set -eu\\nprintf \"node=%s\\\\n\" \"\$(hostname)\" > agent-proof.txt\\nprintf \"change=%s patchset=%s event=%s\\\\n\" \"\${GERRIT_CHANGE_NUMBER:-}\" \"\${GERRIT_PATCHSET_NUMBER:-}\" \"\${GERRIT_EVENT_TYPE:-}\" >> agent-proof.txt\\ntest -n \"\${GERRIT_CHANGE_NUMBER:-}\"\\ntest -n \"\${GERRIT_PATCHSET_NUMBER:-}\"\\njava -version >/dev/null 2>&1\\n'))
 def branch = new Branch(CompareType.PLAIN, 'master')
 def project = new GerritProject(CompareType.PLAIN, $q_project, [branch], [], [], [], false)
 def trigger = new GerritTrigger([project])
@@ -1139,6 +1196,7 @@ trigger.start(job, true)
 println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=simulation-only-direct-rest')
 EOF
   jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
   printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=simulation-only-direct-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger)"
   write_evidence trigger configured "Jenkins Gerrit Trigger server and disposable verification job configured through the Jenkins runtime plugin API; Docker simulation posts review results through Gerrit REST" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=simulation-only-direct-rest" >/dev/null
   printf 'status=pass command=configure-trigger job=%s scheduling_label=%s log=%s\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$log"
@@ -1147,13 +1205,13 @@ EOF
 ssh_from_controller_to_gerrit() {
   local command_text
   command_text="${1:?command required}"
-  docker_exec_sh "$(jenkins_container)" "ssh -i $(integration_container_state_dir)/keys/jenkins-gerrit -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p '$GERRIT_SSH_PORT' '$JENKINS_GERRIT_INTEGRATION_ACCOUNT@$GERRIT_HOST' $command_text"
+  docker_exec_sh "$(jenkins_container)" "ssh -i $(jenkins_ops_keys_dir)/jenkins-gerrit -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p '$GERRIT_SSH_PORT' '$JENKINS_GERRIT_INTEGRATION_ACCOUNT@$GERRIT_HOST' $command_text"
 }
 
 validate_agent_online() {
   local log groovy q_node
   log="${1:?log required}"
-  groovy="$(integration_host_state_dir)/scripts/validate-agent-online.groovy"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/validate-agent-online.XXXXXX.groovy")"
   q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
@@ -1166,12 +1224,13 @@ if (!comp.isOnline()) { throw new RuntimeException('agent is not online') }
 println('agent_online=true node=$JENKINS_AGENT_NODE_NAME')
 EOF
   jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
 }
 
 schedule_smoke_build() {
   local log groovy q_job q_node q_label
   log="${1:?log required}"
-  groovy="$(integration_host_state_dir)/scripts/schedule-smoke.groovy"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/schedule-smoke.XXXXXX.groovy")"
   q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
   q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
   q_label="$(groovy_quote "$JENKINS_AGENT_SCHEDULING_LABEL")"
@@ -1193,6 +1252,7 @@ if (build.builtOnStr != $q_node) { throw new RuntimeException('smoke build did n
 println('scheduling=pass build=' + build.number + ' node=' + build.builtOnStr + ' label=' + $q_label)
 EOF
   jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
 }
 
 prove_stream_events() {
@@ -1201,8 +1261,8 @@ prove_stream_events() {
   event_project="${GERRIT_VERIFICATION_PROJECT}-stream-events"
   event_json="$(integration_host_state_dir)/status/stream-event-change.json"
   project_json="$(integration_host_state_dir)/status/stream-event-project.json"
-  container_json="/tmp/step11-stream-event-change.json"
-  container_project_json="/tmp/step11-stream-event-project.json"
+  container_json="/tmp/stream-event-change.json"
+  container_project_json="/tmp/stream-event-project.json"
   listener_log="$(integration_log_dir)/stream-events-observe-$(timestamp_utc).log"
   change_file="$(integration_host_state_dir)/status/stream-event-create-result.json"
   cat >"$project_json" <<EOF
@@ -1227,7 +1287,7 @@ EOF
   fi
   (
     docker exec "$(jenkins_container)" ssh \
-      -i "$(integration_container_state_dir)/keys/jenkins-gerrit" \
+      -i "$(jenkins_ops_keys_dir)/jenkins-gerrit" \
       -o BatchMode=yes \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
@@ -1258,16 +1318,19 @@ validate_integration_impl() {
   ensure_dirs
   ensure_container_integration_dirs
   log="$(bounded_log_path validate-integration)"
-  [ -s "$(integration_host_state_dir)/keys/jenkins-gerrit.pub" ] || die "Missing Jenkins-to-Gerrit public key; run configure-gerrit-ssh with --yes first"
-  [ -s "$(integration_host_state_dir)/keys/jenkins-agent.pub" ] || die "Missing Jenkins-to-agent public key; run configure-agent-ssh with --yes first"
-  docker_exec_sh "$(jenkins_container)" "test -s '$(integration_container_state_dir)/keys/jenkins-gerrit' && test -s '$(integration_container_state_dir)/keys/jenkins-agent'" >/dev/null ||
-    die "Missing Jenkins-controller private keys; rerun configure-gerrit-ssh and configure-agent-ssh with --yes"
+  [ -s "$(status_file jenkins-gerrit-key)" ] || die "Missing Jenkins-to-Gerrit key metadata; run configure-gerrit-ssh with --yes first"
+  [ -s "$(status_file gerrit-acl)" ] || die "Missing Gerrit integration ACL metadata; rerun configure-gerrit-ssh with --yes and inspect its bounded log"
+  [ -s "$(status_file jenkins-agent-key)" ] || die "Missing Jenkins-to-agent key metadata; run configure-agent-ssh with --yes first"
   [ -s "$(status_file trigger)" ] || die "Missing trigger configuration; run configure-trigger with --yes first"
+  docker_exec_sh "$(jenkins_container)" "test -s '$(jenkins_ops_keys_dir)/jenkins-gerrit' && test -s '$(jenkins_ops_keys_dir)/jenkins-agent'" >/dev/null ||
+    die "Missing Jenkins-controller private keys; rerun configure-gerrit-ssh and configure-agent-ssh with --yes"
+  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"test -r '$(jenkins_ops_keys_dir)/jenkins-gerrit' && test -r '$(jenkins_ops_keys_dir)/jenkins-agent'\"" >/dev/null ||
+    die "Jenkins runtime account cannot read integration private keys"
   ensure_shared_integration_storage "$log"
   prove_shared_storage_rw "$log"
   ssh_from_controller_to_gerrit "gerrit version" >>"$log" 2>&1
   prove_stream_events "$log"
-  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh -i $(integration_container_state_dir)/keys/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
+  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh -i $(jenkins_ops_keys_dir)/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
   validate_agent_online "$log"
   schedule_smoke_build "$log"
   write_evidence shared-storage pass "Controller runtime account wrote through the shared Jenkins storage path and agent runtime account read the proof through the same mounted path" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH writer=$JENKINS_RUNTIME_ACCOUNT reader=$JENKINS_AGENT_ACCOUNT" >/dev/null
@@ -1288,8 +1351,8 @@ cmd_validate_integration() {
 create_gerrit_change() {
   local log json_file result_file project_file
   log="${1:?log required}"
-  json_file="/tmp/step11-create-change.json"
-  project_file="/tmp/step11-create-project.json"
+  json_file="/tmp/create-change.json"
+  project_file="/tmp/create-project.json"
   result_file="$(integration_host_state_dir)/status/change.json"
   cat >"$(integration_host_state_dir)/status/create-project.json" <<EOF
 {
@@ -1329,7 +1392,7 @@ run_verification_build() {
   log="${1:?log required}"
   change="${2:?change required}"
   patchset="${3:?patchset required}"
-  groovy="$(integration_host_state_dir)/scripts/wait-triggered-verification.groovy"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/wait-triggered-verification.XXXXXX.groovy")"
   q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
   q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
   cat >"$groovy" <<EOF
@@ -1358,6 +1421,7 @@ if (!causes.contains('gerrit')) { throw new RuntimeException('build was not caus
 println('job_execution=pass build=' + build.number + ' node=' + build.builtOnStr + ' causes=' + causes)
 EOF
   jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
 }
 
 post_simulation_verified_vote() {
@@ -1366,14 +1430,14 @@ post_simulation_verified_vote() {
   change="${2:?change required}"
   patchset="${3:?patchset required}"
   review_post_json="$(integration_host_state_dir)/status/simulation-verified-vote.json"
-  container_json="/tmp/step11-simulation-verified-vote.json"
+  container_json="/tmp/simulation-verified-vote.json"
   cat >"$review_post_json" <<EOF
 {
   "message": "Docker Step 11 simulation-only direct REST verification passed on Jenkins agent $JENKINS_AGENT_NODE_NAME via label $JENKINS_AGENT_SCHEDULING_LABEL",
   "labels": {
     "Verified": 1
   },
-  "tag": "autogenerated:step11-simulation-direct-rest"
+  "tag": "autogenerated:simulation-direct-rest"
 }
 EOF
   docker cp "$review_post_json" "$(gerrit_container):$container_json" >>"$log" 2>&1

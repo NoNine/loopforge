@@ -109,6 +109,13 @@ public_internet_fallback=simulation-only
 bundle_contains_keys=no
 EOF
   case "$role" in
+    gerrit)
+      cat >>"$dir/manifest.txt" <<'EOF'
+gerrit_version=3.13.6
+jenkins_version=not-applicable
+jenkins_plugin_manager_version=not-applicable
+EOF
+      ;;
     jenkins-controller)
       cat >>"$dir/manifest.txt" <<'EOF'
 gerrit_version=not-applicable
@@ -126,15 +133,13 @@ EOF
   esac
 }
 
+write_manifest gerrit
 write_manifest jenkins-controller
 write_manifest jenkins-agent
 mkdir -p \
   "$tmp_dir/state/rendered" \
   "$tmp_dir/evidence" \
-  "$tmp_dir/logs" \
-  "$tmp_dir/product-homes/jenkins-controller/logs" \
-  "$tmp_dir/product-homes/jenkins-controller/state" \
-  "$tmp_dir/product-homes/jenkins-agent/logs"
+  "$tmp_dir/logs"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
@@ -160,17 +165,17 @@ HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_host_port
 HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_host_port
 EOF
+printf 'gerrit log\n' >"$tmp_dir/logs/gerrit.log"
 printf 'controller log\n' >"$tmp_dir/logs/controller.log"
-printf 'controller service log\n' >"$tmp_dir/product-homes/jenkins-controller/logs/jenkins-controller.log"
-printf 'pid=123 endpoint=http://jenkins-controller-target:8080/ log=/var/lib/jenkins/logs/jenkins-controller.log\n' \
-  >"$tmp_dir/product-homes/jenkins-controller/state/runtime.status"
 printf 'agent log\n' >"$tmp_dir/logs/agent.log"
-printf 'agent service log\n' >"$tmp_dir/product-homes/jenkins-agent/logs/agent-service.log"
+cat >"$tmp_dir/evidence/gerrit-readiness-test.json" <<'EOF'
+{"bounded_log_references":"/harness/logs/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}
+EOF
 cat >"$tmp_dir/evidence/jenkins-controller-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/controller.log;/var/lib/jenkins/logs/jenkins-controller.log;/var/lib/jenkins/state/runtime.status"}
+{"bounded_log_references":"/harness/logs/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/state/runtime.status"}
 EOF
 cat >"$tmp_dir/evidence/jenkins-agent-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/agent.log;/var/lib/jenkins-agent/logs/agent-service.log"}
+{"bounded_log_references":"/harness/logs/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}
 EOF
 
 common_env=(
@@ -190,12 +195,19 @@ env "${common_env[@]}" \
   "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
 
 env "${common_env[@]}" \
+  "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role gerrit >/dev/null
+env "${common_env[@]}" \
   "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-controller >/dev/null
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-agent >/dev/null
 
+gerrit_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
 controller_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
 agent_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
+[ -n "$gerrit_host_evidence" ] || {
+  printf 'gerrit normalized host evidence was not written\n' >&2
+  exit 1
+}
 [ -n "$controller_host_evidence" ] || {
   printf 'jenkins-controller normalized host evidence was not written\n' >&2
   exit 1
@@ -204,28 +216,56 @@ agent_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenki
   printf 'jenkins-agent normalized host evidence was not written\n' >&2
   exit 1
 }
-grep -Fq "$tmp_dir/product-homes/jenkins-controller/logs/jenkins-controller.log" "$controller_host_evidence" || {
-  printf 'jenkins-controller product-home log was not normalized to host path\n' >&2
+grep -Fq '"service_log_reference": "/srv/gerrit/logs/gerrit.log"' "$gerrit_host_evidence" || {
+  printf 'gerrit service log metadata reference was not preserved\n' >&2
   exit 1
 }
-grep -Fq "$tmp_dir/product-homes/jenkins-controller/state/runtime.status" "$controller_host_evidence" || {
-  printf 'jenkins-controller product-home runtime status was not normalized to host path\n' >&2
+grep -Fq '"service_log_reference": "/var/lib/jenkins/logs/jenkins-controller.log"' "$controller_host_evidence" || {
+  printf 'jenkins-controller service log metadata reference was not preserved\n' >&2
   exit 1
 }
-grep -Fq "$tmp_dir/product-homes/jenkins-agent/logs/agent-service.log" "$agent_host_evidence" || {
-  printf 'jenkins-agent product-home log was not normalized to host path\n' >&2
+grep -Fq '"runtime_status_reference": "/var/lib/jenkins/state/runtime.status"' "$controller_host_evidence" || {
+  printf 'jenkins-controller runtime status metadata reference was not preserved\n' >&2
   exit 1
 }
+if grep -Fq 'product-home/jenkins-controller/state/runtime.status' "$controller_host_evidence"; then
+  printf 'jenkins-controller runtime status must not be normalized as a bounded log snapshot\n' >&2
+  exit 1
+fi
+grep -Fq '"service_log_reference": "/var/lib/jenkins-agent/logs/agent-service.log"' "$agent_host_evidence" || {
+  printf 'jenkins-agent service log metadata reference was not preserved\n' >&2
+  exit 1
+}
+if grep -Fq "$tmp_dir/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
+  printf 'product-home paths must not be normalized into bounded log references\n' >&2
+  exit 1
+fi
 
+gerrit_prepare_line="$(grep -n '^prepare-artifacts gerrit$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
+gerrit_stage_line="$(grep -n '^stage-artifacts gerrit$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 controller_prepare_line="$(grep -n '^prepare-artifacts jenkins-controller$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 controller_stage_line="$(grep -n '^stage-artifacts jenkins-controller$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 agent_prepare_line="$(grep -n '^prepare-artifacts jenkins-agent$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 agent_stage_line="$(grep -n '^stage-artifacts jenkins-agent$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
+gerrit_chown_line="$(grep -n 'gerrit-target sh -c .*chown -R gerrit:gerrit /srv/gerrit' "$calls" | cut -d: -f1 | head -1)"
 controller_chown_line="$(grep -n 'jenkins-controller-target sh -c .*chown -R jenkins:jenkins /var/lib/jenkins' "$calls" | cut -d: -f1 | head -1)"
 agent_chown_line="$(grep -n 'jenkins-agent-target sh -c .*chown -R jenkins-agent:jenkins-agent /var/lib/jenkins-agent' "$calls" | cut -d: -f1 | head -1)"
+gerrit_install_line="$(grep -n '/workspace/scripts/gerrit-setup.sh --env /harness/state/rendered/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.sh --env /harness/state/rendered/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /harness/state/rendered/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 
+[ "$gerrit_prepare_line" -lt "$gerrit_install_line" ] || {
+  printf 'gerrit prepare did not run before install\n' >&2
+  exit 1
+}
+[ "$gerrit_stage_line" -lt "$gerrit_install_line" ] || {
+  printf 'gerrit stage did not run before install\n' >&2
+  exit 1
+}
+[ -n "$gerrit_chown_line" ] && [ "$gerrit_chown_line" -lt "$gerrit_install_line" ] || {
+  printf 'gerrit product home ownership was not prepared before install\n' >&2
+  exit 1
+}
 [ "$controller_prepare_line" -lt "$controller_install_line" ] || {
   printf 'jenkins-controller prepare did not run before install\n' >&2
   exit 1

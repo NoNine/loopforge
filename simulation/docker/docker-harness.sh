@@ -473,7 +473,7 @@ compose_v1_recreate_bug_detected() {
   local log
   log="${1:?log required}"
   [ "$compose_kind" = "docker-compose v1" ] || return 1
-  grep -q "KeyError: 'ContainerConfig'" "$log"
+  grep -Eq "KeyError: 'ContainerConfig'|ERROR: .*'ContainerConfig'" "$log"
 }
 
 ensure_preflight_dirs() {
@@ -1783,13 +1783,11 @@ assert_no_forbidden_success_markers() {
 }
 
 normalize_role_evidence_logs() {
-  local log role pattern state_dir product_dir product_prefix latest
+  local log role pattern state_dir latest
   log="${1:?log required}"
   role="${2:?role required}"
   pattern="${3:?pattern required}"
   state_dir="${4:?state dir required}"
-  product_dir="${5:?product dir required}"
-  product_prefix="${6:?product prefix required}"
   latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name "$pattern" -print | sort | tail -1)"
   [ -n "$latest" ] || {
     printf 'missing_role_evidence role=%s expected=%s\n' "$role" "$pattern" >>"$log"
@@ -1797,7 +1795,7 @@ normalize_role_evidence_logs() {
   }
 
   require_command python3
-  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$state_dir" "$product_dir" "$product_prefix" <<'PY' >>"$log" 2>&1
+  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$state_dir" <<'PY' >>"$log" 2>&1
 import json
 import pathlib
 import sys
@@ -1806,25 +1804,27 @@ evidence = pathlib.Path(sys.argv[1])
 normalized = pathlib.Path(sys.argv[2])
 host_log = pathlib.Path(sys.argv[3])
 host_state = pathlib.Path(sys.argv[4])
-host_product = pathlib.Path(sys.argv[5])
-product_prefix = sys.argv[6].rstrip("/") + "/"
 data = json.loads(evidence.read_text())
 refs = data.get("bounded_log_references", "")
 mapped = []
 for ref in refs.split(";"):
     if ref.startswith("/harness/logs/"):
-        mapped.append(str(host_log / ref.removeprefix("/harness/logs/")))
+        mapped_ref = str(host_log / ref.removeprefix("/harness/logs/"))
+        path = pathlib.Path(mapped_ref)
+        if not path.is_file() or path.stat().st_size == 0:
+            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
+        mapped.append(mapped_ref)
     elif ref.startswith("/harness/state/"):
-        mapped.append(str(host_state / ref.removeprefix("/harness/state/")))
-    elif ref.startswith(product_prefix):
-        mapped.append(str(host_product / ref.removeprefix(product_prefix)))
+        mapped_ref = str(host_state / ref.removeprefix("/harness/state/"))
+        path = pathlib.Path(mapped_ref)
+        if not path.is_file() or path.stat().st_size == 0:
+            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
+        mapped.append(mapped_ref)
     else:
+        path = pathlib.Path(ref)
+        if not path.is_file() or path.stat().st_size == 0:
+            raise SystemExit(f"bounded log reference missing or empty: {ref}")
         mapped.append(ref)
-
-for ref in mapped:
-    path = pathlib.Path(ref)
-    if not path.is_file() or path.stat().st_size == 0:
-        raise SystemExit(f"bounded log reference missing or empty: {ref}")
 
 data["bounded_log_references"] = ";".join(mapped)
 normalized.write_text(json.dumps(data, indent=2) + "\n")
@@ -1840,9 +1840,7 @@ normalize_gerrit_role_evidence_logs() {
     "$log" \
     gerrit \
     'gerrit-readiness-*.json' \
-    "$HARNESS_STATE_DIR/gerrit" \
-    "$HARNESS_PRODUCT_HOME_DIR/gerrit" \
-    /srv/gerrit
+    "$HARNESS_STATE_DIR/gerrit"
 }
 
 normalize_jenkins_controller_role_evidence_logs() {
@@ -1852,9 +1850,7 @@ normalize_jenkins_controller_role_evidence_logs() {
     "$log" \
     jenkins-controller \
     'jenkins-controller-readiness-*.json' \
-    "$HARNESS_STATE_DIR/jenkins-controller" \
-    "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" \
-    /var/lib/jenkins
+    "$HARNESS_STATE_DIR/jenkins-controller"
 }
 
 normalize_jenkins_agent_role_evidence_logs() {
@@ -1864,9 +1860,7 @@ normalize_jenkins_agent_role_evidence_logs() {
     "$log" \
     jenkins-agent \
     'jenkins-agent-readiness-*.json' \
-    "$HARNESS_STATE_DIR/jenkins-agent" \
-    "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" \
-    /var/lib/jenkins-agent
+    "$HARNESS_STATE_DIR/jenkins-agent"
 }
 
 ensure_gerrit_ready_for_jenkins_controller() {
@@ -2041,11 +2035,10 @@ cmd_check() {
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   integration_log="$(bounded_log_path configure-and-validate-integration)"
   {
-    set -e
-    "$integration_helper" "${integration_args[@]}" --yes configure-gerrit-ssh
-    "$integration_helper" "${integration_args[@]}" --yes configure-agent-ssh
-    "$integration_helper" "${integration_args[@]}" --yes configure-trigger
-    "$integration_helper" "${integration_args[@]}" --yes validate-integration
+    "$integration_helper" "${integration_args[@]}" --yes configure-gerrit-ssh &&
+      "$integration_helper" "${integration_args[@]}" --yes configure-agent-ssh &&
+      "$integration_helper" "${integration_args[@]}" --yes configure-trigger &&
+      "$integration_helper" "${integration_args[@]}" --yes validate-integration
   } >"$integration_log" 2>&1 || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then

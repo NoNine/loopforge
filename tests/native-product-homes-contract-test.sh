@@ -43,23 +43,190 @@ require_pattern simulation/docker/docker-harness.sh \
   'export HARNESS_PRODUCT_HOME_DIR' \
   'Docker harness must export HARNESS_PRODUCT_HOME_DIR for Compose'
 require_pattern simulation/docker/docker-harness.sh \
-  '$HARNESS_PRODUCT_HOME_DIR/gerrit' \
-  'Docker harness must normalize Gerrit product-home evidence references to host paths'
-require_pattern simulation/docker/docker-harness.sh \
   '/srv/gerrit' \
   'Docker harness must recognize Gerrit native product-home evidence references'
-require_pattern simulation/docker/docker-harness.sh \
-  '$HARNESS_PRODUCT_HOME_DIR/jenkins-controller' \
-  'Docker harness must normalize Jenkins controller product-home evidence references to host paths'
 require_pattern simulation/docker/docker-harness.sh \
   '/var/lib/jenkins' \
   'Docker harness must recognize Jenkins controller native product-home evidence references'
 require_pattern simulation/docker/docker-harness.sh \
-  '$HARNESS_PRODUCT_HOME_DIR/jenkins-agent' \
-  'Docker harness must normalize Jenkins agent product-home evidence references to host paths'
-require_pattern simulation/docker/docker-harness.sh \
   '/var/lib/jenkins-agent' \
   'Docker harness must recognize Jenkins agent native product-home evidence references'
+require_pattern scripts/gerrit-setup.sh \
+  '"service_log_reference": $q_service_log' \
+  'Gerrit evidence must record runtime service log as metadata'
+require_pattern scripts/jenkins-controller-setup.sh \
+  '"service_log_reference": $q_service_log' \
+  'Jenkins controller evidence must record runtime service log as metadata'
+require_pattern scripts/jenkins-agent-setup.sh \
+  '"service_log_reference": $q_service_log' \
+  'Jenkins agent evidence must record runtime service log as metadata'
+reject_pattern simulation/docker/docker-harness.sh \
+  'host_product' \
+  'Docker harness must not normalize product-home logs as bounded log references'
+reject_pattern simulation/docker/docker-harness.sh \
+  'product_prefix' \
+  'Docker harness must not treat product-home paths as bounded log prefixes'
+reject_pattern simulation/docker/docker-harness.sh \
+  'copy_product_home_log_reference' \
+  'Docker harness must not use temporary product-home log copies to bypass access'
+reject_pattern simulation/docker/docker-harness.sh \
+  '$HARNESS_LOG_DIR/product-home/$role' \
+  'Docker harness must not relocate product-home bounded log references to snapshots'
+require_pattern scripts/jenkins-controller-setup.sh \
+  '"runtime_status_reference": $q_runtime_status' \
+  'Jenkins controller evidence must record runtime.status as metadata'
+reject_pattern scripts/jenkins-controller-setup.sh \
+  'q_log="$(json_quote "$bounded_log;$service_log;$runtime_status")"' \
+  'Jenkins controller runtime.status must not be a bounded log reference'
+reject_pattern scripts/gerrit-setup.sh \
+  'q_log="$(json_quote "$bounded_log;$service_log")"' \
+  'Gerrit service log must not be a bounded log reference'
+reject_pattern scripts/jenkins-controller-setup.sh \
+  'q_log="$(json_quote "$bounded_log;$service_log")"' \
+  'Jenkins controller service log must not be a bounded log reference'
+reject_pattern scripts/jenkins-agent-setup.sh \
+  'q_log="$(json_quote "$bounded_log;$service_log")"' \
+  'Jenkins agent service log must not be a bounded log reference'
+require_pattern scripts/integration-setup.sh \
+  "printf '%s/jenkins-controller/integration\n' \"\$HARNESS_STATE_DIR\"" \
+  'Integration durable host state must live under Jenkins controller harness state'
+require_pattern scripts/integration-setup.sh \
+  'mkdir -p "$(integration_host_state_dir)/status" "$(integration_log_dir)" "$(integration_evidence_dir)"' \
+  'Integration host state must only create status, logs, and evidence directories'
+require_pattern scripts/integration-setup.sh \
+  "printf '%s/integration-ops\n' \"\$JENKINS_HOME\"" \
+  'Jenkins operation custody must live under Jenkins home'
+require_pattern scripts/integration-setup.sh \
+  'JENKINS_OPERATOR_ACCOUNT="${JENKINS_OPERATOR_ACCOUNT:-ci-operator}"' \
+  'Integration helper must default the Jenkins operator account'
+require_pattern examples/integration.env.example \
+  'JENKINS_OPERATOR_ACCOUNT="ci-operator"' \
+  'Integration example env must document the operator account'
+reject_pattern examples/integration.env.example \
+  'JENKINS_OPERATOR_GROUP=' \
+  'Integration example env must not define an operator group'
+require_pattern scripts/integration-setup.sh \
+  'docker exec -i -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -s <<EOF >/dev/null' \
+  'Jenkins integration operation dirs must pass setup script through operator stdin'
+require_pattern scripts/integration-setup.sh \
+  'docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc' \
+  'Jenkins-owned operation files must be prepared through the configured operator identity'
+require_pattern scripts/integration-setup.sh \
+  "sudo install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP'" \
+  'Jenkins integration operation dirs must be Jenkins-owned private directories'
+require_pattern scripts/integration-setup.sh \
+  'sudo -u '\''$JENKINS_RUNTIME_ACCOUNT'\'' test -w '\''$(jenkins_ops_keys_dir)'\''' \
+  'Integration setup must fail fast when Jenkins runtime cannot write operation keys'
+require_pattern scripts/integration-setup.sh \
+  'container_script="$(jenkins_ops_payloads_dir)/$script_name"' \
+  'Jenkins Groovy payloads must live under Jenkins operation custody'
+require_pattern scripts/integration-setup.sh \
+  'docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" mktemp "/tmp/$script_name.XXXXXX.tmp"' \
+  'Jenkins Groovy payloads must stage through transient container /tmp'
+require_pattern scripts/integration-setup.sh \
+  'docker exec -i -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "cat >'\''$container_tmp_script'\''" <"$script_file"' \
+  'Jenkins Groovy payloads must stream into container /tmp as the operator'
+require_pattern scripts/integration-setup.sh \
+  'sudo install -m 600 -o '\''$JENKINS_RUNTIME_ACCOUNT'\'' -g '\''$JENKINS_RUNTIME_GROUP'\''' \
+  'Jenkins Groovy payloads must be installed as Jenkins-owned files'
+require_pattern scripts/integration-setup.sh \
+  'sudo install -m 600 -o '\''$JENKINS_RUNTIME_ACCOUNT'\'' -g '\''$JENKINS_RUNTIME_GROUP'\'' '\''$container_tmp_script'\'' '\''$container_script'\''' \
+  'Jenkins Groovy payloads must install from transient /tmp to Jenkins custody'
+require_pattern scripts/integration-setup.sh \
+  'trap '\''rm -f '\''\'\'''\''$container_tmp_script'\''\'\'''\'''\'' EXIT' \
+  'Jenkins Groovy payload staging must be removed after install'
+reject_pattern scripts/integration-setup.sh \
+  'tmp_script="$(mktemp "${TMPDIR:-/tmp}/$(basename "$script_file").XXXXXX.tmp")"' \
+  'Jenkins Groovy payloads must not use host temp staging'
+require_pattern scripts/integration-setup.sh \
+  '"refs/meta/config": {' \
+  'Verification project access must grant read on refs/meta/config through All-Projects'
+require_pattern scripts/integration-setup.sh \
+  'if ! sudo -u '\''$JENKINS_RUNTIME_ACCOUNT'\'' sh -c '\''test -s '\''\'\'''\''$container_private'\''\'\'''\'''\''; then' \
+  'Existing Jenkins integration private keys must be probed as the runtime account before generation'
+require_pattern scripts/integration-setup.sh \
+  "Jenkins runtime account cannot read integration private keys" \
+  'Integration validation must fail clearly when Jenkins cannot read private keys'
+require_pattern scripts/integration-setup.sh \
+  'ensure_container_integration_dirs' \
+  'Integration setup must keep the Jenkins ops tree creation path available'
+validate_impl_start_line="$(
+  grep -n '^validate_integration_impl() {' "$repo_root/scripts/integration-setup.sh" | cut -d: -f1 | head -1
+)"
+validate_impl_ensure_line="$(
+  awk -v start="$validate_impl_start_line" 'NR > start && /ensure_container_integration_dirs/ { print NR; exit }' \
+    "$repo_root/scripts/integration-setup.sh"
+)"
+validate_impl_status_line="$(
+  awk -v start="$validate_impl_start_line" 'NR > start && /Missing Jenkins-to-Gerrit key metadata/ { print NR; exit }' \
+    "$repo_root/scripts/integration-setup.sh"
+)"
+[ -n "$validate_impl_ensure_line" ] || {
+  printf 'validate integration must create Jenkins ops custody before checking metadata\n' >&2
+  exit 1
+}
+[ -n "$validate_impl_status_line" ] || {
+  printf 'validate integration must still check Jenkins key metadata\n' >&2
+  exit 1
+}
+[ "$validate_impl_ensure_line" -lt "$validate_impl_status_line" ] || {
+  printf 'validate integration must create Jenkins ops custody before metadata checks\n' >&2
+  exit 1
+}
+require_pattern scripts/integration-setup.sh \
+  'docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sudo cat "$public_path" |' \
+  'Operator account must be used only as privileged simulation operator'
+require_pattern scripts/integration-setup.sh \
+  "copy_controller_public_key_to_container \"\$public_path\" \"\$(gerrit_container)\" /tmp/jenkins-gerrit.pub" \
+  'Gerrit public-key handoff must use the clear target-local /tmp name'
+require_pattern scripts/integration-setup.sh \
+  "copy_controller_public_key_to_container \"\$public\" \"\$(agent_container)\" /tmp/jenkins-agent.pub" \
+  'Agent public-key handoff must use the clear target-local /tmp name'
+reject_pattern scripts/integration-setup.sh \
+  "install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP' /harness/state/integration" \
+  'Integration setup must not transfer harness integration directory ownership to Jenkins'
+reject_pattern scripts/integration-setup.sh \
+  'mkdir -p "$(integration_host_state_dir)/keys"' \
+  'Integration host state must not contain key directories'
+reject_pattern scripts/integration-setup.sh \
+  'mkdir -p "$(integration_host_state_dir)/scripts"' \
+  'Integration host state must not contain script directories'
+reject_pattern scripts/integration-setup.sh \
+  'chmod 0770 "$(integration_host_state_dir)" "$(integration_host_state_dir)/keys"' \
+  'Host integration dirs must not be made group-writable for Jenkins operations'
+reject_pattern scripts/integration-setup.sh \
+  'test -d /harness/state/integration/keys && test -r /harness/state/integration/keys && test -w /harness/state/integration/keys' \
+  'Integration setup must not validate Jenkins writes to harness-owned keys'
+reject_pattern scripts/integration-setup.sh \
+  'docker_exec_sh "$(gerrit_container)" "install -d -m 700 /harness/state/integration' \
+  'Integration setup must not create unused Gerrit role-local integration state'
+reject_pattern scripts/integration-setup.sh \
+  'docker_exec_sh "$(agent_container)" "install -d -m 700 /harness/state/integration' \
+  'Integration setup must not create unused Jenkins-agent role-local integration state'
+reject_pattern scripts/integration-setup.sh \
+  'prepare_generated_file' \
+  'Integration setup must not repair stale generated harness scripts before writing them'
+reject_pattern scripts/integration-setup.sh \
+  'container_script="/tmp/step11-' \
+  'Integration setup must not hand generated Jenkins Groovy scripts through /tmp'
+reject_pattern scripts/integration-setup.sh \
+  'docker cp "$script_file" "$(jenkins_container):$container_script"' \
+  'Integration setup must not copy generated Jenkins Groovy scripts to bypass harness state access'
+reject_pattern scripts/integration-setup.sh \
+  '/tmp/step11-' \
+  'Integration setup must not use step11-prefixed transient payload filenames'
+reject_pattern scripts/integration-setup.sh \
+  'step11-agent-proof.txt' \
+  'Integration job payloads must not create step11-prefixed transient proof files'
+reject_pattern scripts/integration-setup.sh \
+  '$JENKINS_SHARED_STORAGE_PATH/keys' \
+  'Jenkins shared storage must not hold harness integration keys'
+reject_pattern scripts/integration-setup.sh \
+  '$JENKINS_SHARED_STORAGE_PATH/scripts' \
+  'Jenkins shared storage must not hold harness integration scripts'
+reject_pattern scripts/integration-setup.sh \
+  '$JENKINS_SHARED_STORAGE_PATH/status' \
+  'Jenkins shared storage must not hold harness integration status'
 
 reject_pattern scripts/gerrit-setup.sh \
   'GERRIT_SITE_PATH="/harness/state/site"' \

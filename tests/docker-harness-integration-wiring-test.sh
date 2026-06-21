@@ -117,3 +117,34 @@ grep -Fxq 'run-role-gate jenkins-controller' "$failing_role_calls"
   sed -n '1,120p' "$failing_integration_calls" >&2
   exit 1
 }
+
+failing_configure_calls="$tmp_dir/failing-configure-calls.log"
+failing_configure_helper="$tmp_dir/failing-configure-integration-setup.sh"
+cat >"$failing_configure_helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
+case "$*" in
+  *' configure-gerrit-ssh') exit 42 ;;
+esac
+SH
+chmod +x "$failing_configure_helper"
+
+set +e
+env "${common_env[@]}" \
+  HARNESS_TEST_INTEGRATION_HELPER="$failing_configure_helper" \
+  HARNESS_TEST_INTEGRATION_CALLS="$failing_configure_calls" \
+  "$repo_root/simulation/docker/docker-harness.sh" check >"$tmp_dir/check-failing-configure.out" 2>&1
+failing_configure_rc=$?
+set -e
+
+[ "$failing_configure_rc" -eq 42 ] || {
+  printf 'Expected check to return configure-gerrit-ssh failure rc 42, got %s\n' "$failing_configure_rc" >&2
+  exit 1
+}
+grep -Fq -- '--yes configure-gerrit-ssh' "$failing_configure_calls"
+if grep -Eq -- '--yes configure-agent-ssh|--yes configure-trigger|--yes validate-integration' "$failing_configure_calls"; then
+  printf 'check continued integration commands after configure-gerrit-ssh failure\n' >&2
+  sed -n '1,120p' "$failing_configure_calls" >&2
+  exit 1
+fi
