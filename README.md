@@ -1,12 +1,17 @@
-# Gerrit/Jenkins Setup Package
+# Loopforge
 
-This repository is the operator-facing v1 setup package for Gerrit, a Jenkins
-controller, a Jenkins SSH build agent, LDAP-backed access, Gerrit Trigger
-integration, and reviewable validation evidence.
+This repository contains Loopforge's initial experiment environment package.
+The initial environment constructs and verifies a Gerrit/Jenkins integration
+stack with a Jenkins controller, Jenkins SSH build agent, LDAP-backed access,
+Gerrit Trigger integration, `Verified` voting, and reviewable validation
+evidence.
 
 Start with these references:
 
-- `docs/prd.md` defines the product boundary and acceptance criteria.
+- `docs/prd.md` defines the Loopforge product boundary and acceptance
+  criteria for the initial Gerrit/Jenkins experiment environment.
+- `docs/system-model.md` defines the Loopforge environments, actors,
+  accounts, interfaces, lifecycle boundaries, and mode policy.
 - `docs/implementation-plan.md` defines the staged implementation plan.
 - `docs/account-model.md` defines the runtime, admin, integration, test, bind,
   and simulation accounts.
@@ -17,7 +22,7 @@ Start with these references:
   setup manual that runs after the three role manuals are complete.
 - `docs/gerrit-trigger-integration.md` holds the Jenkins-to-Gerrit
   integration policy and validation contract.
-- `docs/validation-and-evidence.md` will hold validation and evidence rules.
+- `docs/validation-and-evidence.md` holds validation and evidence rules.
 
 ## V1 Boundary
 
@@ -42,13 +47,14 @@ checksums are staged to target hosts and verified before target mutation.
 - `templates/` contains Gerrit, Jenkins controller, Jenkins agent, job, and
   integration templates.
 - `simulation/docker/` contains the first executable simulation model.
-- `simulation/vm/` contains the later production-like verification model.
+- `simulation/vm/` contains the later VM simulation and target-deployment
+  verification model.
 - `logs/` is a generated local runtime log directory. It is kept in git with a
   placeholder only; verbose runtime output must not be committed.
 
 ## Setup Flow
 
-The planned flow is:
+The planned flow for the initial Gerrit/Jenkins experiment environment is:
 
 1. Review the product boundary and account model.
 2. Create role env files from `examples/`.

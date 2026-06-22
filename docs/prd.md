@@ -1,14 +1,16 @@
-# Gerrit/Jenkins Setup Package PRD
+# Loopforge Initial Experiment Environment PRD
 
 ## Summary
-This document defines the v1 product requirements for a repeatable
-Gerrit/Jenkins setup package.
+This document defines the product requirements for Loopforge's initial
+Gerrit/Jenkins experiment environment.
 
-The product is not a strict air-gapped installer. v1 supports installation in
-controlled environments where staging can use reviewed public or upstream
-sources for curated application artifacts, and target hosts can use approved
-internal Ubuntu/OS package repositories during setup. Public internet fallback
-for target-host Ubuntu/OS dependency installation is simulation-only.
+Loopforge first provides a repeatable experiment environment for validating a
+Gerrit/Jenkins integration stack, its setup workflow, and the evidence needed
+to review the result. The product is not a strict air-gapped installer.
+Target-deployment environments may use reviewed public or upstream sources in
+the bundle factory for curated application artifacts, and target hosts can use
+approved internal Ubuntu/OS package repositories during setup. Public internet
+fallback for target-host Ubuntu/OS dependency installation is simulation-only.
 
 The product must help engineers and operators install and validate:
 
@@ -20,9 +22,10 @@ The product must help engineers and operators install and validate:
 - validation, logs, checksums, and audit evidence
 
 ## Goals
-- Provide a repeatable setup flow that operators can run from reviewed inputs.
+- Provide a repeatable experiment environment that operators can run from
+  reviewed inputs.
 - Keep the installation path deterministic enough for verification and audit.
-- Make the package usable in production-like controlled environments.
+- Make the package usable in target-deployment controlled environments.
 - Preserve a clear manual procedure and a helper-script path that matches it.
 
 ## Non-Goals
@@ -34,12 +37,13 @@ The product must help engineers and operators install and validate:
 - High-availability or clustering
 - TLS reverse-proxy implementation
 - Enterprise secrets-manager integration
-- Broad infrastructure orchestration outside Gerrit/Jenkins setup
+- Broad infrastructure orchestration outside the initial Gerrit/Jenkins
+  experiment environment
 
 ## Product Requirements
 
 ### 1. Prerequisite Readiness
-- The setup package must define required host prerequisites for Gerrit,
+- The package must define required host prerequisites for Gerrit,
   Jenkins, and the build agent.
 - The package must expose preflight checks for required commands, disk space,
   network reachability, LDAP reachability, and service-account readiness.
@@ -82,7 +86,7 @@ The product must help engineers and operators install and validate:
 
 ### 3. Repeatable Service Installation
 - Operators must be able to install Gerrit, Jenkins controller, and Jenkins
-  build-agent with reviewed inputs.
+  build-agent with reviewed inputs for the initial experiment environment.
 - The install path must support both manual commands and helper commands for
   preflight, artifact preparation, service install, integration, validation,
   and evidence collection.
@@ -113,7 +117,7 @@ The product must help engineers and operators install and validate:
   build-agent scheduling, and Gerrit Trigger voting.
 - Validation must record checksums, package versions, config inputs, and the
   verification mode used.
-- Evidence must distinguish production-like runs from simulation-only runs.
+- Evidence must distinguish target-deployment runs from simulation-only runs.
 - Integration evidence must record public key fingerprints, credential IDs,
   accounts, endpoints, bounded logs, and redaction status only. It must not
   contain private keys, passwords, tokens, or LDAP bind secrets.
