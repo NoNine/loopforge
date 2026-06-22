@@ -14,7 +14,7 @@ target, and verified by manifest and checksum before target mutation.
 Application artifacts and SSH credential material are separate from OS
 dependencies. Jenkins agent application/bootstrap artifacts must not include
 Gerrit, Jenkins, or agent SSH key material. Target-host Ubuntu/OS dependencies
-are installed only from approved internal OS repositories in production-like
+are installed only from approved internal OS repositories in target-deployment
 use. Public internet fallback for target-host Ubuntu/OS dependency installation
 is simulation-only and must be labeled that way in docs, logs, and evidence.
 

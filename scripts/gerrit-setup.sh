@@ -262,7 +262,7 @@ apply_env_defaults() {
   GERRIT_PLUGIN_SOURCE_DIR="${GERRIT_PLUGIN_SOURCE_DIR:-}"
   GERRIT_DOWNLOAD_ARTIFACTS="${GERRIT_DOWNLOAD_ARTIFACTS:-0}"
   GERRIT_OS_DEPENDENCIES="${GERRIT_OS_DEPENDENCIES:-ca-certificates,curl,git,ldap-utils,openssh-client,openjdk-21-jre-headless,rsync,tar,unzip,wget}"
-  GERRIT_VERIFICATION_MODE="${GERRIT_VERIFICATION_MODE:-docker-harness-simulation}"
+  GERRIT_VERIFICATION_MODE="${GERRIT_VERIFICATION_MODE:-docker-simulation}"
   GERRIT_EVIDENCE_DIR="${GERRIT_EVIDENCE_DIR:-/harness/evidence}"
   GERRIT_LOG_DIR="${GERRIT_LOG_DIR:-/harness/logs}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
@@ -338,10 +338,10 @@ for_each_csv_value() {
   done
 }
 
-is_docker_harness_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] &&
+is_docker_simulation() {
+  [ "${HARNESS_MODE:-}" = "docker-simulation" ] &&
     [ "${HARNESS_ENVIRONMENT:-}" = "gerrit-target" ] &&
-    [ "$GERRIT_VERIFICATION_MODE" = "docker-harness-simulation" ]
+    [ "$GERRIT_VERIFICATION_MODE" = "docker-simulation" ]
 }
 
 confirm_mutation() {
@@ -686,7 +686,7 @@ check_os_dependency_command() {
     *) return 0 ;;
   esac
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    if is_docker_harness_simulation; then
+    if is_docker_simulation; then
       return 0
     fi
     die "Missing Gerrit OS dependency command '$command_name' for package '$package'"

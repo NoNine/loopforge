@@ -330,7 +330,7 @@ manual is the command authority for `configure-gerrit-ssh`,
 
 Gerrit role-local setup must not mutate `All-Projects.git`, `All-Users.git`,
 Gerrit labels, Jenkins service groups, public keys, `stream-events` grants, or
-vote permissions as a role-local phase. Product-like integration defaults to a
+vote permissions as a role-local phase. `target-deployment` integration defaults to a
 global `Verified` label in reviewed `All-Projects` configuration; Jenkins read
 and `label-Verified -1..+1` grants remain scoped to the reviewed project/ref
 pattern; `stream-events` remains a global capability grant; and REST review is

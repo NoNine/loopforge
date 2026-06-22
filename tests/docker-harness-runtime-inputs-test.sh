@@ -27,7 +27,7 @@ cat >"$tmp_dir/jenkins-agent.env" <<'EOF'
 JENKINS_AGENT_SENTINEL=original
 EOF
 cat >"$tmp_dir/harness.env" <<EOF
-HARNESS_MODE=docker-harness-simulation
+HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=runtime-inputs-$$
 HARNESS_PROJECT_NAME=runtime-inputs-$$
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")

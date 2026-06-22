@@ -2,7 +2,7 @@
 
 VM simulation is the second planned simulation layer for the v1 Gerrit/Jenkins
 setup package. It will repeat the Docker-verified flow in a systemd-oriented,
-production-like environment after Docker behavior is stable.
+target-deployment environment after Docker behavior is stable.
 
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from

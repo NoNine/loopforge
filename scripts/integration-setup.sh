@@ -368,8 +368,8 @@ validate_inputs() {
 }
 
 require_docker_mode() {
-  [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] ||
-    die "Docker Step 11 integration requires HARNESS_MODE=docker-harness-simulation"
+  [ "${HARNESS_MODE:-}" = "docker-simulation" ] ||
+    die "Docker Step 11 integration requires HARNESS_MODE=docker-simulation"
   [ -n "${HARNESS_PROJECT_NAME:-}" ] || die "HARNESS_PROJECT_NAME is required"
   [ -n "${HARNESS_STATE_DIR:-}" ] || die "HARNESS_STATE_DIR is required"
   [ -n "${HARNESS_EVIDENCE_DIR:-}" ] || die "HARNESS_EVIDENCE_DIR is required"

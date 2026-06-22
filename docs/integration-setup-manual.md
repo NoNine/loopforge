@@ -6,7 +6,7 @@ This manual is the operator guide for `scripts/integration-setup.sh`. Use it
 after the Gerrit, Jenkins controller, and Jenkins agent role setup manuals have
 completed and each role has passing role-local readiness evidence.
 
-The current helper implementation is Docker simulation-only. Product-like
+The current helper implementation is Docker simulation-only. `target-deployment`
 behavior described in this manual is the target contract until non-simulation
 shared integration support exists.
 
@@ -16,7 +16,7 @@ trigger verification, `Verified` voting, and integration evidence. It does not
 replace the role setup manuals and it does not provide native OS operation
 instructions.
 
-Product-like workflow defaults to a global `Verified` CI label in reviewed
+`target-deployment` workflow defaults to a global `Verified` CI label in reviewed
 `All-Projects` configuration. Jenkins read access and `label-Verified -1..+1`
 grants stay scoped to the reviewed project and ref pattern. The `stream-events`
 permission remains a global capability grant. Jenkins Gerrit Trigger uses SSH
@@ -160,7 +160,7 @@ or fail closed with a clear classification. Passing integration evidence must
 cover:
 
 Current `validate-integration` evidence proves Docker simulation runtime
-checks. Product-like and other non-simulation evidence additionally requires
+checks. `target-deployment` and other non-simulation evidence additionally requires
 the global label and scoped vote permission checks below.
 
 - Jenkins-to-Gerrit SSH authentication as the Jenkins Gerrit integration

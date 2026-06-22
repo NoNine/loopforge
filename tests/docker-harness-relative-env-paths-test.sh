@@ -36,7 +36,7 @@ for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env inte
 done
 
 cat >"$tmp_dir/custom-relative.env" <<'EOF'
-HARNESS_MODE=docker-harness-simulation
+HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=custom-relative
 HARNESS_PROJECT_NAME=custom-relative
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example

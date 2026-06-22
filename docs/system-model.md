@@ -40,14 +40,9 @@ class and policy choices. They do not change the logical system being modeled.
 | `vm-simulation` | Non-production VM simulation. Uses simulation-owned VMs, accounts, LDAP data, and secrets. The bundle factory is a VM. |
 | `target-deployment` | Real controlled target deployment or acceptance environment. May run on physical hosts or managed VMs. Uses operator-approved hosts, accounts, LDAP, secrets, package sources, review approvals, and evidence custody. |
 
-`target-deployment` replaces earlier loose wording such as
-`production-like`. It is distinguished from simulation modes by the use of
+`target-deployment` is distinguished from simulation modes by the use of
 operator-approved target infrastructure and real or approved target-owned
 identity sources, not by whether the hosts are physical machines or VMs.
-
-`docker-harness-simulation` is legacy implementation wording. New contracts
-and docs should use `docker-simulation`; existing scripts and evidence may be
-aligned in later implementation work.
 
 ## Actors
 
@@ -282,10 +277,10 @@ The source boundary from `docs/prd.md` applies to every mode:
 
 ## Terminology
 
-Use these preferred terms in new docs and implementation work:
+Use these terms in docs and implementation work:
 
-- `docker-simulation`, not `docker-harness-simulation`.
-- `target-deployment`, not `production-like`.
+- `docker-simulation`.
+- `target-deployment`.
 - `operator workstation/control node` for the environment where actors invoke
   package utilities.
 - `actor` only for humans and machine runners that invoke utilities.

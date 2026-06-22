@@ -307,7 +307,7 @@ apply_env_defaults() {
   JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-controller}"
   JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/harness/evidence}"
   JENKINS_LOG_DIR="${JENKINS_LOG_DIR:-/harness/logs}"
-  JENKINS_VERIFICATION_MODE="${JENKINS_VERIFICATION_MODE:-docker-harness-simulation}"
+  JENKINS_VERIFICATION_MODE="${JENKINS_VERIFICATION_MODE:-docker-simulation}"
   JENKINS_DOWNLOAD_ARTIFACTS="${JENKINS_DOWNLOAD_ARTIFACTS:-0}"
   JENKINS_WAR_SOURCE="${JENKINS_WAR_SOURCE:-}"
   JENKINS_PLUGIN_MANAGER_SOURCE="${JENKINS_PLUGIN_MANAGER_SOURCE:-}"
@@ -383,19 +383,19 @@ for_each_csv_value() {
   done
 }
 
-require_docker_harness_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] ||
-    die "Controller runtime proof is supported only in Docker harness simulation mode"
+require_docker_simulation() {
+  [ "${HARNESS_MODE:-}" = "docker-simulation" ] ||
+    die "Controller runtime proof is supported only in Docker simulation mode"
   [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-controller-target" ] ||
     die "Controller runtime proof is supported only in the Jenkins controller Docker harness target"
-  [ "$JENKINS_VERIFICATION_MODE" = "docker-harness-simulation" ] ||
-    die "JENKINS_VERIFICATION_MODE must be docker-harness-simulation for controller runtime proof"
+  [ "$JENKINS_VERIFICATION_MODE" = "docker-simulation" ] ||
+    die "JENKINS_VERIFICATION_MODE must be docker-simulation for controller runtime proof"
 }
 
-is_docker_harness_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] &&
+is_docker_simulation() {
+  [ "${HARNESS_MODE:-}" = "docker-simulation" ] &&
     [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-controller-target" ] &&
-    [ "$JENKINS_VERIFICATION_MODE" = "docker-harness-simulation" ]
+    [ "$JENKINS_VERIFICATION_MODE" = "docker-simulation" ]
 }
 
 confirm_mutation() {
@@ -902,7 +902,7 @@ check_os_dependency_command() {
     *) return 0 ;;
   esac
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    if is_docker_harness_simulation; then
+    if is_docker_simulation; then
       return 0
     fi
     die "Missing Jenkins controller OS dependency command '$command_name' for package '$package'"
@@ -1195,7 +1195,7 @@ cmd_install() {
 
 start_real_jenkins() {
   local pidfile log_file pid deadline response
-  require_docker_harness_simulation
+  require_docker_simulation
   runtime_account_exists
   pidfile="$JENKINS_HOME/run/jenkins.pid"
   log_file="$JENKINS_HOME/logs/jenkins-controller.log"

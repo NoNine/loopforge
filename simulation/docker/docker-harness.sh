@@ -141,7 +141,7 @@ HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET="${HARNESS_JENKINS_HTTP_HOST_PORT+x}
 HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE="${HARNESS_GERRIT_HTTP_HOST_PORT-}"
 HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKINS_HTTP_HOST_PORT-}"
 
-HARNESS_MODE="${HARNESS_MODE:-docker-harness-simulation}"
+HARNESS_MODE="${HARNESS_MODE:-docker-simulation}"
 HARNESS_RUN_ID="${HARNESS_RUN_ID:-manual}"
 HARNESS_PROJECT_NAME="${HARNESS_PROJECT_NAME:-gerrit-jenkins-harness-${HARNESS_RUN_ID}}"
 HARNESS_UBUNTU_IMAGE="${HARNESS_UBUNTU_IMAGE:-ubuntu:24.04}"
@@ -1264,7 +1264,7 @@ write_evidence() {
   "observed_checks": $q_message,
   "bounded_log_references": $q_log_ref,
   "redaction_status": $q_redaction,
-  "mode_labels": ["docker-harness", "simulation-only"],
+  "mode_labels": ["docker-simulation", "simulation-only"],
   "role_name": $q_role_name,
   "container_names": {
     "bundle_factory": $q_bundle_container,

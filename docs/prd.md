@@ -7,7 +7,7 @@ Gerrit/Jenkins experiment environment.
 Loopforge first provides a repeatable experiment environment for validating a
 Gerrit/Jenkins integration stack, its setup workflow, and the evidence needed
 to review the result. The product is not a strict air-gapped installer.
-Target-deployment environments may use reviewed public or upstream sources in
+`target-deployment` environments may use reviewed public or upstream sources in
 the bundle factory for curated application artifacts, and target hosts can use
 approved internal Ubuntu/OS package repositories during setup. Public internet
 fallback for target-host Ubuntu/OS dependency installation is simulation-only.

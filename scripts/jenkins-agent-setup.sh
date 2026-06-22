@@ -172,7 +172,7 @@ apply_env_defaults() {
   JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="${JENKINS_AGENT_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-agent}"
   JENKINS_AGENT_EVIDENCE_DIR="${JENKINS_AGENT_EVIDENCE_DIR:-/harness/evidence}"
   JENKINS_AGENT_LOG_DIR="${JENKINS_AGENT_LOG_DIR:-/harness/logs}"
-  JENKINS_AGENT_VERIFICATION_MODE="${JENKINS_AGENT_VERIFICATION_MODE:-docker-harness-simulation}"
+  JENKINS_AGENT_VERIFICATION_MODE="${JENKINS_AGENT_VERIFICATION_MODE:-docker-simulation}"
   JENKINS_AGENT_OS_DEPENDENCIES="${JENKINS_AGENT_OS_DEPENDENCIES:-ca-certificates,curl,git,openssh-client,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget}"
   JENKINS_AGENT_CONTROLLER_PLUGIN="${JENKINS_AGENT_CONTROLLER_PLUGIN:-ssh-slaves}"
   JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE="${JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE:-jenkins-controller-plugin-bundle}"
@@ -217,19 +217,19 @@ for_each_csv_value() {
   done
 }
 
-require_docker_harness_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] ||
-    die "Target-local SSH readiness is supported only in Docker harness simulation mode"
+require_docker_simulation() {
+  [ "${HARNESS_MODE:-}" = "docker-simulation" ] ||
+    die "Target-local SSH readiness is supported only in Docker simulation mode"
   [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-agent-target" ] ||
     die "Target-local SSH readiness is supported only in the Jenkins agent Docker harness target"
-  [ "$JENKINS_AGENT_VERIFICATION_MODE" = "docker-harness-simulation" ] ||
-    die "JENKINS_AGENT_VERIFICATION_MODE must be docker-harness-simulation for agent readiness validation"
+  [ "$JENKINS_AGENT_VERIFICATION_MODE" = "docker-simulation" ] ||
+    die "JENKINS_AGENT_VERIFICATION_MODE must be docker-simulation for agent readiness validation"
 }
 
-is_docker_harness_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-harness-simulation" ] &&
+is_docker_simulation() {
+  [ "${HARNESS_MODE:-}" = "docker-simulation" ] &&
     [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-agent-target" ] &&
-    [ "$JENKINS_AGENT_VERIFICATION_MODE" = "docker-harness-simulation" ]
+    [ "$JENKINS_AGENT_VERIFICATION_MODE" = "docker-simulation" ]
 }
 
 reject_control_chars() {
@@ -799,7 +799,7 @@ cmd_configure_runtime() {
   load_env normal
   require_env_values
   validate_agent_render_inputs
-  require_docker_harness_simulation
+  require_docker_simulation
   check_agent_runtime_account_readiness
   confirm_mutation configure-runtime || return 0
   verify_staged_artifacts

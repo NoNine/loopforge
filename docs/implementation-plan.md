@@ -81,44 +81,11 @@ comparable verification when the environment does not match the baseline.
 
 ## Evidence Contract
 
-Checkpoint-level evidence requirements define what must be proven at each
-workflow boundary. The common evidence record schema defines how that proof is
-recorded so role helpers, Docker/VM verifiers, and final audits can be compared
-consistently.
-
-Common evidence records must include:
-
-- Verification mode.
-- Timestamp.
-- Role or environment name.
-- Checkpoint name.
-- Command name.
-- Pass, fail, blocked, unsupported, or not-applicable status.
-- Reviewed input fingerprint or sanitized config input manifest.
-- Artifact manifest references.
-- Checksum references and verification result.
-- Observed checks for the checkpoint.
-- Bounded log references.
-- Redaction status.
-
-Producer rules:
-
-- Role-local `collect-evidence` commands emit role-scoped checkpoint records
-  using this schema.
-- `scripts/integration-setup.sh collect-evidence` emits integration-scoped
-  records for cross-role SSH, trigger, scheduling, and vote checkpoints.
-- Docker and VM verifiers aggregate role-local records and add simulation,
-  production-like, and end-to-end records.
-- Global evidence collection audits and combines role-local and verifier
-  records into the final evidence package.
-- Records may mark fields as not applicable when they are outside the producer's
-  scope, but required behavior must not be reported as success when it is
-  failed, unproven, dummy, modeled, operation-plan-only, or
-  `planned-checks-only`.
-- Evidence must not include secrets, private keys, tokens, passwords, LDAP bind
-  secrets, or full secret-bearing env values.
-- Verbose Docker, Jenkins, Gerrit, package-manager, SSH, VM, and verification
-  logs must be referenced as bounded log files, not streamed.
+`docs/validation-and-evidence.md` owns the evidence schema, mode labels,
+redaction rules, producer responsibilities, and global aggregation behavior.
+Implementation steps below should add producers and verification commands that
+emit records conforming to that topic document instead of redefining evidence
+fields here.
 
 ## Step 1: Establish The Repository Structure
 
@@ -170,7 +137,7 @@ Implementation notes:
 - `scripts/` contains helper commands that match manual phases.
 - `templates/` contains service config, JCasC, job, and integration templates.
 - `simulation/docker/` contains the first executable simulation model.
-- `simulation/vm/` contains the later production-like verification model.
+- `simulation/vm/` contains the later target-deployment verification model.
 - `logs/` is used for local command logs and should not store committed
   verbose runtime output.
 
@@ -196,44 +163,17 @@ Acceptance criteria:
 
 ## Step 2: Define The Account Model
 
-Start with the account model in `docs/reference-digest.md`.
-
-Create `docs/account-model.md` with the v1 account model. Use `identity`
-only when discussing LDAP-backed identity integration; use `account` for
-concrete roles.
-
-Product accounts:
-
-| Account | Source | Purpose |
-| --- | --- | --- |
-| Gerrit runtime account | Local OS | Runs Gerrit only. |
-| Jenkins runtime account | Local OS | Runs the Jenkins controller only. |
-| Jenkins agent runtime account | Local OS | Runs SSH build-agent sessions only. |
-| Gerrit admin account | LDAP-backed human account or group | Administers Gerrit. |
-| Jenkins admin account | LDAP-backed human account or group | Administers Jenkins. |
-| Jenkins Gerrit integration account | Gerrit service account | Lets Jenkins authenticate to Gerrit, stream events, and vote `Verified`. |
-| Test user account | LDAP-backed human-style test account | Verifies login and change workflow. |
-| LDAP bind account | LDAP service account | Lets Gerrit and Jenkins search the directory read-only. |
-
-Simulation environment account:
-
-| Account | Source | Purpose |
-| --- | --- | --- |
-| `ci-operator` account | Local OS account on simulation machines | Runs orchestration, SSH access, helper commands, and evidence collection. |
+Create and maintain `docs/account-model.md` as the account authority for v1.
+The implementation plan must not duplicate the account taxonomy, source
+classification, credential custody rules, or separation rules.
 
 Implementation notes:
 
-- Preserve the separation between runtime, human admin, integration, test, bind,
-  and simulation environment accounts.
-- State that human admin and test accounts are LDAP-backed, runtime accounts are
-  local OS accounts by default, LDAP bind accounts are read-only LDAP service
-  accounts, and the Jenkins Gerrit integration account is a Gerrit service
-  account.
-- State that the `ci-operator` account is not a Gerrit/Jenkins runtime, admin,
-  integration, bind, or test account.
+- Topic docs, examples, templates, and helpers must use the account roles and
+  custody boundaries from `docs/account-model.md`.
+- `docs/system-model.md` may place accounts in the end-to-end system, but
+  `docs/account-model.md` owns account definitions and separation rules.
 - Keep examples account-name neutral where possible.
-- Avoid describing runtime OS accounts as the same thing as application admin
-  accounts.
 
 Verification:
 
@@ -244,25 +184,16 @@ rg -n "air-gapped|offline bundle|offline-bundle" docs/account-model.md
 
 Acceptance criteria:
 
-- Each product and simulation environment account has a defined source and
-  purpose.
-- The document explains why Gerrit admin, Jenkins admin, Jenkins Gerrit
-  integration, test user, LDAP bind, runtime, and `ci-operator` accounts are
-  separate.
+- `docs/account-model.md` defines product accounts, the shared integration
+  group, the simulation environment account, and credential custody.
+- Topic docs reference the account model instead of restating the full
+  taxonomy.
 - Any offline-related match is reference-only, non-goal, or prohibition text.
 
 ## Step 3: Define The Simulation Model
 
-Create `simulation/README.md` and simulation model docs for two machinery
-layers:
-
-- Docker-based simulation first, with the bundle factory represented as a
-  container.
-- VM-based simulation second.
-
-Step 3 owns documentation and directory-model definition only. It does not add
-executable verifier scripts; those are introduced by the Docker harness,
-Docker simulation, and VM simulation steps.
+Create the simulation model docs without duplicating the system, account,
+source-boundary, or evidence authorities.
 
 Step 3-owned files:
 
@@ -272,120 +203,22 @@ simulation/docker/README.md
 simulation/vm/README.md
 ```
 
-The simulation docs must describe generated-output locations for state, staged
-artifacts, evidence, and bounded logs. Generated runtime output must be ignored
-or clearly documented as generated.
-
-The simulation model must include five machines/environments:
-
-| Machine/environment | Docker form | VM form | Responsibility |
-| --- | --- | --- | --- |
-| Bundle factory | Container | VM | Runs role helper `prepare-artifacts` commands and produces curated application artifacts, plugins, manifests, and checksums. |
-| LDAP | Container | VM | Hosts LDAP bind, admin, and test accounts and groups. |
-| Gerrit | Container | VM | Runs Gerrit with LDAP authentication, SSH access, integration permissions, and the `Verified` label. |
-| Jenkins controller | Container | VM | Runs Jenkins, LDAP/JCasC configuration, Gerrit Trigger, and agent registration. |
-| Jenkins agent | Container | VM | Runs SSH build jobs scheduled by Jenkins. |
-
-The simulation model derives account usage from the account model defined in
-Step 2. It must not introduce a separate account taxonomy. It must exercise
-these Step 2 accounts:
-
-- Gerrit admin account.
-- Jenkins admin account.
-- Jenkins Gerrit integration account.
-- Test user account.
-- LDAP bind account.
-- Gerrit runtime account.
-- Jenkins runtime account.
-- Jenkins agent runtime account.
-- `ci-operator` account.
-
 Implementation notes:
 
-- A shared Docker harness is introduced before the role helper steps so Gerrit,
-  Jenkins controller, and Jenkins agent readiness gates can run in real
-  containers.
-- The full Docker simulation remains the first end-to-end integration gate for
-  Gerrit Trigger behavior, Jenkins agent scheduling, and `Verified` voting.
-- The Docker bundle factory container prepares curated application artifacts,
-  plugins, manifests, and checksums before service containers start.
-- The bundle factory is an environment, not a public API. Do not add a
-  `bundle-factory-helper.sh`; artifact preparation remains exposed through the
-  role helpers' `prepare-artifacts` commands.
-- VM simulation should repeat Docker-verified flows in a systemd-oriented,
-  production-like environment after Docker behavior is stable.
-- Follow the source-boundary terminology in `docs/prd.md`: Ubuntu/OS
-  dependencies and application artifacts are separate supply lanes. Target
-  hosts may use approved internal Ubuntu/OS package repositories for OS
-  dependencies, while application artifacts are prepared only in the bundle
-  factory or staging environment, staged to target hosts, and verified by
-  manifest and checksum before mutation.
-- Public internet fallback for target-host Ubuntu/OS dependency installation is
-  simulation-only and must be labeled `simulation-only` in docs, logs, and
-  summaries. Target hosts must not download Gerrit/Jenkins application artifacts
-  from the public internet as fallback.
-- Docker and VM simulation inputs must preserve the Version Baseline. A
-  simulation or verifier must fail or report blocked rather than claim
-  comparable readiness when the Ubuntu, Java, Gerrit, Jenkins controller,
-  plugin-manager, or Jenkins agent/plugin-bundle versions differ.
+- `simulation/README.md` owns the common five-environment topology, version
+  baseline, source boundaries, generated-output conventions, and checkpoint
+  meanings for simulation layers.
+- `simulation/docker/README.md` owns Docker simulation command behavior and
+  Docker-specific generated paths.
+- `simulation/vm/README.md` owns VM simulation and future VM verifier command
+  behavior.
+- The simulation docs must derive account usage from `docs/account-model.md`
+  and mode terminology from `docs/system-model.md`.
+- The bundle factory remains an environment, not a public helper API.
+  Artifact preparation stays exposed through role helpers' `prepare-artifacts`
+  commands.
 - Do not port the reference repo's supported offline Ubuntu dependency bundle
   workflow into v1 simulation.
-
-Shared simulation workflow:
-
-| Checkpoint | Docker execution | VM execution | Required verifier evidence |
-| --- | --- | --- | --- |
-| Preflight | Check local Docker/Compose tooling, env values, ports, disk, and generated-state paths. | Check host tooling, env values, SSH reachability, target addresses, disk, and approval-sensitive options. | Preflight summary with mode label and no target mutation. |
-| Input rendering | Render Docker simulation config from reviewed env values. | Bootstrap reviewed env values and machine connection inputs. | Rendered-input manifest with secret values redacted. |
-| Artifact preparation | Run role helper `prepare-artifacts` commands in the bundle factory container. | Run role helper `prepare-artifacts` commands on the bundle factory VM. | Role artifact directories, manifests, checksums, and any `simulation-only` internet-use labels. |
-| Artifact staging | Stage prepared artifacts from bundle factory output to Gerrit, Jenkins controller, and Jenkins agent containers. | Transfer prepared artifacts from the bundle factory VM to Gerrit, Jenkins controller, and Jenkins agent VMs. | Target-side staged paths and manifest/checksum verification before service mutation. |
-| Service configuration | Start or configure LDAP, Gerrit, Jenkins controller, and Jenkins agent containers from staged artifacts. | Configure LDAP, Gerrit, Jenkins controller, and Jenkins agent VMs with systemd-oriented service behavior. | Runtime-account, service-startup, endpoint, LDAP, plugin, and config evidence. |
-| Readiness checks | Run independently repeatable Docker checks before end-to-end verification. | Run independently repeatable VM checks before end-to-end verification. | Separate pass/fail results for LDAP, local OS runtime accounts, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugins, Jenkins-to-Gerrit SSH, stream-events, and agent readiness. |
-| End-to-end execution | Run disposable change, Jenkins trigger, agent job, and `Verified +1` verification. | Repeat the Docker-proven disposable change, Jenkins trigger, agent job, and `Verified +1` verification. | Separate event-stream, job-scheduling, agent-execution, and vote-posting evidence. |
-| Evidence audit | Collect Docker simulation summaries and bounded log references. | Collect VM simulation or production-like summaries and bounded log references. | Mode-labeled evidence, checksums, fingerprints, and redacted bounded log references. |
-
-Checkpoint ownership map:
-
-| Checkpoint | Docker owner | VM owner |
-| --- | --- | --- |
-| Preflight | `simulation/docker/docker-harness.sh preflight`. | `simulation/vm/vm-verify.sh check --preflight-only` or `simulation/vm/vm-verify.sh full --preflight-only`. |
-| Input rendering | `simulation/docker/docker-harness.sh render-config`. | `simulation/vm/vm-verify.sh bootstrap`. |
-| Artifact preparation | `simulation/docker/docker-harness.sh prepare-artifacts [--role ...]`. | `simulation/vm/vm-verify.sh prepare-artifacts`. |
-| Artifact staging | `simulation/docker/docker-harness.sh stage-artifacts [--role ...]`. | `simulation/vm/vm-verify.sh stage-artifacts`. |
-| Service configuration | `simulation/docker/docker-harness.sh up`. | `simulation/vm/vm-verify.sh configure`. |
-| Readiness checks | `simulation/docker/docker-harness.sh check` for full Docker readiness; `simulation/docker/docker-harness.sh run-role-gate --role ...` for a single role. | `simulation/vm/vm-verify.sh check`. |
-| End-to-end execution | `simulation/docker/docker-harness.sh full-verify`. | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full`. |
-| Evidence audit | Role-local `collect-evidence`, Docker harness evidence, and later global aggregation. | `simulation/vm/vm-verify.sh audit` and later global aggregation. |
-
-Ownership rules:
-
-- Step 3 documents the shared simulation model, checkpoint semantics, and
-  command ownership only.
-- Step 6 implements Docker harness ownership for role-step readiness gates.
-- Step 11 implements full Docker simulation ownership for end-to-end
-  integration verification.
-- Step 12 implements the non-mutating VM verifier scaffold for command
-  contract, env parsing, approval guardrails, bounded logging, and evidence
-  schema integration.
-- Step 15 is the future real VM implementation and verification gate. It is
-  documented for later work and skipped in the current default plan.
-- Simulation wrappers orchestrate role helpers but must not replace role
-  behavior with modeled success.
-- The Docker harness owns role-step readiness gates and Docker end-to-end
-  integration.
-
-Command convention model:
-
-- Every command surface uses one owning script plus a subcommand.
-- Role helpers use `scripts/<role>-setup.sh <command>`.
-- Cross-role integration uses `scripts/integration-setup.sh <command>`.
-- Docker simulation uses `simulation/docker/docker-harness.sh <command>`.
-- VM simulation uses `simulation/vm/vm-verify.sh <command>`.
-- Do not add standalone role phase scripts such as `scripts/preflight.sh`,
-  Docker phase scripts such as `simulation/docker/check.sh`, or VM phase
-  scripts such as `simulation/vm/check.sh`.
-- Cross-role commands must not be exposed by role helpers. They belong to
-  `scripts/integration-setup.sh`.
 
 Verification:
 
@@ -393,34 +226,22 @@ Verification:
 test -f simulation/README.md
 test -f simulation/docker/README.md
 test -f simulation/vm/README.md
-rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|operator" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "Docker|VM|simulation-only|Verified|Gerrit Trigger" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "Checkpoint ownership|docker-harness.sh|vm-verify.sh" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "Ubuntu/OS dependencies|Application artifacts|approved internal Ubuntu/OS package repositories" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "local OS|LDAP-backed|prepare-artifacts|bundle-factory-helper" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|ci-operator" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+rg -n "docker-simulation|vm-simulation|target-deployment|simulation-only" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 rg -n "supported offline|offline Ubuntu|offline-bundle" simulation/README.md simulation/docker/README.md simulation/vm/README.md
 ```
 
 Acceptance criteria:
 
-- Simulation docs describe all five machines/environments.
-- Simulation docs map account usage back to Step 2 and do not define a separate
-  account taxonomy.
-- The `ci-operator` account is documented as a simulation environment OS account,
-  not a Gerrit/Jenkins product account.
-- Simulation docs define generated-output locations for state, staged
-  artifacts, evidence, and bounded logs.
-- No bundle factory helper or bundle factory public API is introduced.
-- Docker is documented as the first full integration verification gate.
-- Docker harness and VM verifier responsibilities are distinguishable by
-  checkpoint.
-- Real VM verification is documented as a future follow-up gate, not a
-  prerequisite for early Docker milestones or current default acceptance.
-- Ubuntu/OS dependency handling and application artifact handling are documented
-  as separate lanes.
-- Any target-host public internet fallback wording is limited to Ubuntu/OS
-  dependency installation and is explicitly simulation-only.
-- Any offline-related match is reference-only, non-goal, or prohibition text.
+- Simulation docs describe the shared topology and point to the account,
+  system-model, source-boundary, and evidence authorities instead of redefining
+  them.
+- Docker is documented as the first full integration verification gate, and VM
+  verification is documented as later work.
+- Generated state, staged artifacts, evidence, and bounded logs are documented
+  as generated output.
+- No bundle factory helper or offline Ubuntu dependency bundle workflow is
+  introduced.
 
 ## Step 4: Define The Operator Workflow Contract
 
@@ -464,7 +285,7 @@ Operator sequencing rules:
 - Use `docs/integration-setup-manual.md` for the approved cross-role helper
   command workflow. Role manuals must hand off to that document instead of
   duplicating the full integration command sequence.
-- Product-like integration defaults to a global `Verified` CI label in reviewed
+- `target-deployment` integration defaults to a global `Verified` CI label in reviewed
   `All-Projects` configuration. Jenkins read and `label-Verified -1..+1`
   grants stay scoped to the reviewed project and ref pattern, while
   `stream-events` remains a global capability grant.
@@ -533,7 +354,8 @@ Acceptance criteria:
 ## Step 5: Define Gerrit Trigger Integration
 
 Use the trigger behavior summarized in `docs/reference-digest.md` as source
-material.
+material, and make `docs/gerrit-trigger-integration.md` the topic authority
+for Gerrit Trigger, ACL, label, vote, and failure-classification behavior.
 
 Create `docs/gerrit-trigger-integration.md` and templates for:
 
@@ -545,36 +367,25 @@ Create `docs/gerrit-trigger-integration.md` and templates for:
 
 Implementation notes:
 
-- Jenkins must authenticate to Gerrit with the Jenkins Gerrit integration
-  actor, not a human Jenkins admin.
-- Product-like setup defines the global `Verified` label through reviewed
-  `All-Projects` configuration.
-- Gerrit must grant read and `label-Verified -1..+1` permissions to the
-  integration actor or group only at the reviewed project/ref scope.
-- Gerrit must grant `stream-events` as a global capability.
-- Jenkins Gerrit Trigger uses SSH for authentication and event streaming.
-- The Gerrit REST review API is the default `Verified` vote posting path.
-- Legacy SSH review commands or flags are exception-only and require explicit
-  operator justification plus compatibility evidence.
-- Verification may create disposable projects, jobs, and changes, and must
-  label those as verification artifacts.
-- Failed `Verified` voting must be surfaced separately from event-stream or
-  job-scheduling failures.
+- Keep detailed ACL, `All-Projects`, `Verified`, `stream-events`, REST vote,
+  disposable artifact, and failure-classification policy in
+  `docs/gerrit-trigger-integration.md`, not in this implementation plan.
+- Templates must remain placeholders for reviewed operator values and must not
+  become standalone automation.
+- Cross-role helper command workflow belongs in `docs/integration-setup-manual.md`.
 
 Verification:
 
 ```bash
-rg -n "Verified|Gerrit Trigger|stream-events|patchset-created|integration" docs templates scripts simulation
+rg -n "Verified|Gerrit Trigger|stream-events|patchset-created|integration" docs/gerrit-trigger-integration.md templates scripts simulation
 ```
 
-Docker simulation acceptance:
+Acceptance criteria:
 
-- A disposable Gerrit change emits a `patchset-created` event.
-- Jenkins receives the event and schedules the verification job.
-- The job runs on the Jenkins agent.
-- Jenkins posts `Verified +1` to the Gerrit change through the Gerrit REST
-  review API.
-- Evidence records the change, build, vote, and verification mode.
+- The trigger topic doc defines the integration contract and Docker simulation
+  acceptance behavior.
+- This implementation plan does not duplicate the topic doc's ACL or voting
+  policy.
 
 ## Step 6: Add Shared Docker Harness
 
@@ -930,7 +741,7 @@ Implementation notes:
 - `collect-evidence` must emit role-local Jenkins controller checkpoint evidence
   using the Evidence Contract defined above.
 - Do not run builds on the controller except for explicit simulation-only
-  checks; production-like validation should use the Jenkins agent.
+  checks; target-deployment validation should use the Jenkins agent.
 
 Verification:
 
@@ -1046,7 +857,7 @@ Implementation notes:
   policy, scheduling, validation jobs, and Gerrit Trigger execution are later
   integration-step outputs, not Step 9 acceptance outputs.
 - The controller's built-in node should remain at zero executors in
-  production-like docs.
+  target-deployment docs.
 - Agent validation must prove OS/tooling readiness, SSH daemon reachability,
   runtime account ownership, remote filesystem readiness, staged artifact
   checks, bounded logs, and role-local evidence. Jenkins node name and labels
@@ -1102,47 +913,26 @@ Acceptance criteria:
 ## Step 10: Standardize Validation And Evidence Collection
 
 Create `docs/validation-and-evidence.md` and `scripts/collect-evidence.sh`.
-This step documents the Evidence Contract for operators and implements global
-evidence aggregation over role-local and verifier-produced records.
-
-The operator-facing evidence model must cover:
-
-- Verification mode.
-- Timestamp, package version, and helper command version or git commit.
-- Role or environment name.
-- Checkpoint and command names.
-- Pass, fail, blocked, unsupported, or not-applicable status.
-- Hostnames and service endpoints.
-- Sanitized config input manifest.
-- Artifact manifest and checksums.
-- Service startup, endpoint, LDAP, SSH, plugin, JCasC, and runtime-account
-  checks where applicable.
-- Jenkins agent scheduling and execution results where applicable.
-- Gerrit Trigger event, build, and `Verified` vote results where applicable.
-- Bounded log references.
-- Redaction status.
+The topic doc owns evidence schema, mode labels, redaction rules, producer
+responsibilities, review guidance, and aggregation behavior.
 
 Implementation notes:
 
-- Role-local `collect-evidence` commands from Steps 7, 8, and 9 produce
-  role-scoped records using the Evidence Contract.
+- Role-local `collect-evidence` commands from Steps 7, 8, and 9 must emit
+  records that conform to `docs/validation-and-evidence.md`.
 - `scripts/collect-evidence.sh` validates and aggregates role-local records,
   Docker/VM verifier records, and end-to-end integration records into the final
   evidence package.
 - Do not store secrets in evidence.
 - Do not stream verbose Docker, Jenkins, Gerrit, package-manager, SSH, VM, or
   verification logs into normal command output.
-- Collect evidence at every operator workflow checkpoint so failed runs can be
-  reviewed from the last completed boundary.
-- Summaries must distinguish simulation-only runs from production-like runs.
-- Evidence should be useful for audit review without requiring repo history.
 
 Verification:
 
 ```bash
 bash -n scripts/collect-evidence.sh
 scripts/collect-evidence.sh --help
-rg -n "Evidence Contract|role-local|aggregate|simulation-only|production-like|checksums|Verified|LDAP|agent" docs/validation-and-evidence.md scripts/collect-evidence.sh
+rg -n "Evidence Contract|role-local|aggregate|simulation-only|target-deployment|checksums|Verified|LDAP|agent" docs/validation-and-evidence.md scripts/collect-evidence.sh
 ```
 
 Acceptance criteria:
@@ -1152,12 +942,8 @@ Acceptance criteria:
 - Global evidence collection consumes role-local evidence from Gerrit, Jenkins
   controller, and Jenkins agent helpers, plus Docker/VM verifier evidence when
   present.
-- Evidence collection can retain per-checkpoint summaries for inputs,
-  artifacts, artifact staging, role readiness, integration, agent validation,
-  end-to-end acceptance, and final evidence.
-- Evidence summaries follow the Evidence Contract and include mode labels,
-  checksum references, bounded log references, and redaction status.
-- Secret-looking env values are omitted or redacted.
+- Evidence summaries follow `docs/validation-and-evidence.md` and omit or
+  redact secret-looking values.
 
 ## Step 11: Build Docker Simulation
 
@@ -1315,13 +1101,13 @@ Implementation notes:
   and verify manifests and checksums on each target VM before install or
   configuration.
 - VM verification must use the Step 10 evidence model for scaffold,
-  production-like, or simulation mode labels.
+  target-deployment, or simulation mode labels.
 - VM verification must use the same version combination as the Docker harness
   and Docker simulation: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, Gerrit
   `3.13.6`, Jenkins `2.555.3 LTS`, Jenkins Plugin Installation Manager Tool
   `2.15.0`, and the Jenkins SSH Build Agents plugin from the controller plugin
   bundle.
-- The future VM model is production-like validation, not strict air-gap
+- The future VM model is target-deployment validation, not strict air-gap
   verification.
 - The VM scaffold must reference `scripts/integration-setup.sh` as the future
   cross-role SSH, trigger, validation, verification, and integration-evidence
@@ -1444,7 +1230,7 @@ Final acceptance criteria:
 ## Step 15: Future Real VM Implementation And Verification
 
 Step 15 is future work and must be skipped in the current default plan. It
-exists to preserve the intended production-like VM verification path without
+exists to preserve the intended target-deployment VM verification path without
 claiming that the repository implements it now.
 
 When explicitly scheduled later, Step 15 should implement the real VM behavior
@@ -1464,7 +1250,7 @@ behind the Step 12 scaffold:
   Gerrit/Jenkins integration, and agent readiness.
 - Run the Docker-proven Gerrit Trigger, Jenkins scheduling, agent execution,
   and `Verified +1` vote flow.
-- Collect and aggregate production-like or VM simulation evidence using the
+- Collect and aggregate target-deployment or VM simulation evidence using the
   Step 10 evidence model.
 - Record the Version Baseline in VM evidence and fail or block the run when the
   VM version combination differs.

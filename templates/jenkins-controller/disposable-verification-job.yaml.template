@@ -29,7 +29,7 @@ execution_contract:
   required_behavior:
     - "Schedule this disposable job when Gerrit Trigger receives patchset-created."
     - "Run the job on the selected Jenkins agent scheduling label."
-    - "Keep controller built-in executors out of production-like verification unless explicitly approved."
+    - "Keep controller built-in executors out of target-deployment verification unless explicitly approved."
     - "Allow REST vote posting only after the agent job succeeds."
 
 evidence_contract:

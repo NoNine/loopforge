@@ -56,7 +56,7 @@ become a supported product surface.
 | Gerrit integration | Jenkins controller and Gerrit host | Give Jenkins a Gerrit integration account that can stream events and vote. | Jenkins-generated public key, Gerrit admin credentials, Gerrit account/group values. | Gerrit integration account key registration, global `Verified` label in reviewed `All-Projects` config, project/ref access grants, Jenkins Gerrit Trigger server config, and REST vote posting config. | Creates or updates Gerrit permissions, label config, Jenkins credentials, and trigger server config. | SSH auth, stream-events permission, global label existence, scoped vote permission, trigger connection, REST vote posting, and Gerrit review state are validated separately. |
 | Agent integration | Jenkins controller and Jenkins agent | Let Jenkins connect to an SSH build agent and schedule work on a label. | Jenkins-generated agent public key, agent host/user/node-name/labels/remote FS values. | Agent authorized key, runtime filesystem, Jenkins node, smoke job evidence. | Creates or updates agent SSH access, runtime directories, Jenkins credentials, node config, and validation job state. | Jenkins connects to the named node and runs a smoke job on the selected scheduling label. |
 | End-to-end acceptance | Jenkins controller and Gerrit | Prove that a Gerrit change triggers Jenkins and receives `Verified +1`. | Disposable project, branch, uploader identity, Jenkins job, trigger server config. | Gerrit change, Jenkins build, Gerrit review vote, evidence summary. | Creates disposable verification project/job/change and vote artifacts. | Event streaming, job scheduling, agent execution, and vote posting all pass. |
-| Evidence | All role environments | Preserve reviewable proof without leaking secrets or streaming verbose logs. | Validation outputs, manifests, checksums, sanitized config inputs, bounded logs. | Mode-labeled summaries with checksums, fingerprints, endpoints, and bounded log references. | Writes evidence summaries only. | Evidence identifies simulation vs production-like mode and redacts secrets. |
+| Evidence | All role environments | Preserve reviewable proof without leaking secrets or streaming verbose logs. | Validation outputs, manifests, checksums, sanitized config inputs, bounded logs. | Mode-labeled summaries with checksums, fingerprints, endpoints, and bounded log references. | Writes evidence summaries only. | Evidence identifies simulation vs target-deployment mode and redacts secrets. |
 
 ## Account And Credential Model
 
@@ -149,7 +149,7 @@ Jenkins controller behavior notes:
 - Jenkins should use the LTS/controller version selected by reviewed inputs.
 - Jenkins uses LDAP-backed human admin users or groups; it should not use
   runtime or integration accounts as human admin accounts.
-- The built-in node should be kept at zero executors for production-like
+- The built-in node should be kept at zero executors for target-deployment
   validation.
 - Gerrit Trigger should connect as the Jenkins Gerrit integration account.
 - The Jenkins agent node name is identity and lookup metadata. Scheduling uses
@@ -255,7 +255,7 @@ VM simulation should expose:
 VM simulation behavior notes:
 
 - VM verification repeats Docker-proven behavior in a systemd-oriented,
-  production-like environment.
+  target-deployment environment.
 - VM verification uses separate bundle factory, LDAP, Gerrit, Jenkins
   controller, and Jenkins agent VMs.
 - VM artifact preparation runs on the bundle factory VM, and staged artifacts
@@ -263,7 +263,7 @@ VM simulation behavior notes:
   agent VMs before service mutation.
 - VM commands that mutate host, VM, or remote state require explicit operator
   approval and must describe expected side effects.
-- VM evidence should be labeled as VM simulation or production-like
+- VM evidence should be labeled as VM simulation or target-deployment
   validation, depending on the run.
 
 ## Gerrit Trigger Integration Behavior
@@ -304,7 +304,7 @@ verbose runtime logs.
 Evidence should include:
 
 - Verification mode, such as Docker simulation, VM simulation, or
-  production-like validation.
+  target-deployment validation.
 - Timestamp and helper/package version or git commit.
 - Hostnames, ports, and service endpoint URLs.
 - Sanitized config input manifest.
@@ -340,7 +340,7 @@ Do not carry these draft concepts into v1 as supported behavior:
 - Public internet fallback on target hosts outside simulation-only labeling.
 - A bundle-factory helper as a public API.
 - Reuse of runtime accounts as human admin accounts.
-- Jenkins builds on the controller for production-like validation.
+- Jenkins builds on the controller for target-deployment validation.
 - Evidence that exposes secrets or depends on unbounded runtime logs.
 
 ## Document Map
@@ -382,7 +382,7 @@ allowed for implementation in this repository.
 | `/home/ubuntu/ai-assisted/gerrit-jenkins/docs/gerrit-install-air-gapped.md` | Gerrit phase order, host readiness checks, LDAP assumptions, integration readiness, and validation categories. | No |
 | `/home/ubuntu/ai-assisted/gerrit-jenkins/docs/jenkins-install-air-gapped.md` | Jenkins controller phase order, LDAP/JCasC/plugin concepts, Gerrit Trigger behavior, and controller-side validation categories. | No |
 | `/home/ubuntu/ai-assisted/gerrit-jenkins/docs/jenkins-agent-install-air-gapped.md` | SSH build-agent runtime expectations, public-key handoff, remote filesystem readiness, and scheduling validation split. | No |
-| `/home/ubuntu/ai-assisted/gerrit-jenkins/docs/offline-bundle-verification.md` | Five-environment VM verification topology, clean-run expectations, audit outputs, and production-like verification intent. | No |
+| `/home/ubuntu/ai-assisted/gerrit-jenkins/docs/offline-bundle-verification.md` | Five-environment VM verification topology, clean-run expectations, audit outputs, and target-deployment verification intent. | No |
 | `/home/ubuntu/ai-assisted/gerrit-jenkins/lab/README.md` | Docker integration gate, browser-visible URL handling, LDAP/Gerrit/Jenkins/agent checks, and proven trigger-vote outcome. | No |
 | `/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/gerrit-operator.sh` | Gerrit helper command intent, confirmation/dry-run concepts, manifest/checksum behavior, and integration validation categories. | No |
 | `/home/ubuntu/ai-assisted/gerrit-jenkins/scripts/jenkins-operator.sh` | Jenkins helper command intent, key ownership, JCasC/plugin behavior, agent registration, trigger verification, and validation categories. | No |

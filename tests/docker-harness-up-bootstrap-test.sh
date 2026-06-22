@@ -28,7 +28,7 @@ evidence_dir="$tmp_dir/evidence"
 log_dir="$tmp_dir/logs"
 
 cat >"$tmp_dir/harness.env" <<EOF
-HARNESS_MODE=docker-harness-simulation
+HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=bootstrap-up-$$
 HARNESS_PROJECT_NAME=bootstrap-up-$$
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example

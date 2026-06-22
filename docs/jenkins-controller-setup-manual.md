@@ -315,7 +315,7 @@ Produced outputs:
 Mutation side effects:
 
 - Creates or updates Jenkins role-local runtime service settings.
-- Production-like service management remains an operator-controlled action.
+- `target-deployment` service management remains an operator-controlled action.
 
 Helper:
 

@@ -71,11 +71,11 @@ Use mode labels consistently:
 
 - `simulation-only` for Docker or VM simulation environment evidence and for
   explicitly labeled bundle-factory public-download fallback in simulation.
-- `production-like` for realistic but non-production verification.
-- `docker-harness-simulation` for the shared Docker harness path.
+- `target-deployment` for realistic but non-production verification.
+- `docker-simulation` for the shared Docker harness path.
 - `vm-simulation` for VM-scaffold or VM-simulation evidence.
 
-Summaries must clearly distinguish simulation-only runs from production-like
+Summaries must clearly distinguish simulation-only runs from target-deployment
 runs. A `pass` status must be backed by real runtime checks for the claimed
 checkpoint. Use `blocked`, `unsupported`, or `not-applicable` for lifecycle
 work that did not run; do not use modeled records as passing service
@@ -184,7 +184,7 @@ Use the summaries to confirm:
 - Which manifests and checksums were verified.
 - Which shared integration group, GID, and storage path were verified.
 - Which logs support the result.
-- Whether the run was simulation-only or production-like.
+- Whether the run was simulation-only or target-deployment.
 - Whether any sensitive data was redacted.
 
 ## Verification
@@ -192,5 +192,5 @@ Use the summaries to confirm:
 ```bash
 bash -n scripts/collect-evidence.sh
 scripts/collect-evidence.sh --help
-rg -n "Evidence Contract|role-local|aggregate|simulation-only|production-like|checksums|Verified|LDAP|agent" docs/validation-and-evidence.md scripts/collect-evidence.sh
+rg -n "Evidence Contract|role-local|aggregate|simulation-only|target-deployment|checksums|Verified|LDAP|agent" docs/validation-and-evidence.md scripts/collect-evidence.sh
 ```

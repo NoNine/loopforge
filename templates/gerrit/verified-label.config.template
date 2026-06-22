@@ -2,7 +2,7 @@
 #
 # Purpose:
 # - Define the Verified label required by Jenkins Gerrit Trigger voting.
-# - Product-like workflow applies this label globally through reviewed
+# - `target-deployment` workflow applies this label globally through reviewed
 #   All-Projects project configuration in the shared integration step.
 #
 # This is a declarative template, not an executable script.

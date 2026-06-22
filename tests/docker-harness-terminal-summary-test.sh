@@ -34,7 +34,7 @@ evidence_dir="$tmp_dir/evidence"
 log_dir="$tmp_dir/logs"
 
 cat >"$tmp_dir/harness.env" <<EOF
-HARNESS_MODE=docker-harness-simulation
+HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=summary-$$
 HARNESS_PROJECT_NAME=summary-$$
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
@@ -49,7 +49,7 @@ HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
   "$repo_root/simulation/docker/docker-harness.sh" --env "$tmp_dir/harness.env" preflight >"$tmp_dir/preflight.out"
-grep -Fq "preflight: ok mode=docker-harness-simulation compose=" "$tmp_dir/preflight.out"
+grep -Fq "preflight: ok mode=docker-simulation compose=" "$tmp_dir/preflight.out"
 
 PATH="$fake_bin:$PATH" \
 HARNESS_STATE_DIR="$state_dir" \

@@ -46,12 +46,12 @@ controller-write/agent-read proof.
    through the controller integration-key workflow.
 2. Gerrit receives only the Jenkins-to-Gerrit public key and associates it with
    the Jenkins Gerrit integration account.
-3. Product-like setup defines the global `Verified` label in reviewed
+3. `target-deployment` setup defines the global `Verified` label in reviewed
    `All-Projects` configuration.
 4. The operator chooses an explicit Gerrit project and ref scope for Jenkins
    read access and `label-Verified -1..+1` grants.
 5. Gerrit grants `stream-events` as a global capability to the Jenkins Gerrit
-   integration actor or group. Production-like setup uses reviewed Gerrit
+   integration actor or group. `target-deployment` setup uses reviewed Gerrit
    configuration changes created through the REST API and must not auto-submit
    them; Docker and VM simulation may use labeled direct Gerrit REST test
    automation.
@@ -94,7 +94,7 @@ using these templates in later helper steps.
 ## Gerrit Permissions
 
 REST API is the selected Gerrit configuration and review interface for the
-package. Production-like label and ACL setup must create reviewable Gerrit
+package. `target-deployment` label and ACL setup must create reviewable Gerrit
 config changes through REST and must not auto-submit them. Direct editing of
 `All-Projects.git` is not the automation path, even though
 `refs/meta/config/project.config` remains Gerrit's underlying storage model.
@@ -105,19 +105,19 @@ Apply modes:
 
 - `--dry-run` reads reviewed inputs and renders a bounded planned ACL summary
   without mutation.
-- `--create-review` is the production-like path. It creates a Gerrit config
+- `--create-review` is the target-deployment path. It creates a Gerrit config
   review through REST when real implementation is available, and it never
   auto-submits.
 - `--apply-direct` is allowed only for explicitly labeled
-  `simulation-only`, `docker-harness-simulation`, or `vm-simulation` lab
-  modes and requires `--yes`. It must fail closed in `production-like` mode
+  `simulation-only`, `docker-simulation`, or `vm-simulation` lab
+  modes and requires `--yes`. It must fail closed in `target-deployment` mode
   even when credentials would permit direct mutation.
 
 Docker and VM simulation may use direct Gerrit REST calls for test automation,
 including label, access, disposable project, and disposable verification setup,
 when the run is explicitly labeled as simulation-only. Direct REST simulation
 automation must be recorded in logs and evidence as simulation behavior and
-must not be presented as production-like reviewed ACL proof. This simulation
+must not be presented as target-deployment reviewed ACL proof. This simulation
 allowance does not permit direct `All-Projects.git` editing, direct site-Git
 mutation, direct `refs/meta/config` Git editing, or `gerrit set-account`
 fallbacks.
@@ -139,12 +139,12 @@ membership. For Step 11 Docker simulation only, Gerrit admin rights may be
 bootstrapped through Gerrit's documented first-registered-user internal
 `Administrators` behavior and repaired through Gerrit REST group membership.
 
-This waiver does not accept LDAP admin-group resolution as production-like
+This waiver does not accept LDAP admin-group resolution as target-deployment
 proof. It also does not waive Jenkins integration group validation,
 `stream-events`, `Verified` label and voting proof, or the prohibition on
 direct `All-Projects.git`, direct site-Git mutation, and `gerrit set-account`
 fallbacks. Gerrit LDAP admin-group mapping must be fixed or separately
-verified before LDAP admin-group resolution can be treated as production-like
+verified before LDAP admin-group resolution can be treated as target-deployment
 evidence.
 
 Gerrit must grant the Jenkins Gerrit integration actor or group:

@@ -99,7 +99,7 @@ GERRIT_ADMIN_ACCOUNT="gerrit-admin"
 GERRIT_ADMIN_GROUP="gerrit-admins"
 GERRIT_VERIFICATION_PROJECT="verification-disposable-gerrit"
 GERRIT_VERIFICATION_REF_PATTERN="refs/*"
-GERRIT_VERIFICATION_MODE="docker-harness-simulation"
+GERRIT_VERIFICATION_MODE="docker-simulation"
 GERRIT_EVIDENCE_DIR="/unused/evidence"
 EOF
 
@@ -122,7 +122,7 @@ LDAP_USER_BASE="ou=people,dc=example,dc=test"
 LDAP_GROUP_BASE="ou=groups,dc=example,dc=test"
 JENKINS_ADMIN_ACCOUNT="jenkins-admin"
 JENKINS_ADMIN_GROUP="jenkins-admins"
-JENKINS_VERIFICATION_MODE="docker-harness-simulation"
+JENKINS_VERIFICATION_MODE="docker-simulation"
 JENKINS_EVIDENCE_DIR="/unused/evidence"
 EOF
 
@@ -144,7 +144,7 @@ JENKINS_AGENT_STAGED_ARTIFACT_DIR="/unused/staged"
 JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/unused/artifacts"
 JENKINS_AGENT_EVIDENCE_DIR="/unused/evidence"
 JENKINS_AGENT_LOG_DIR="/unused/logs"
-JENKINS_AGENT_VERIFICATION_MODE="docker-harness-simulation"
+JENKINS_AGENT_VERIFICATION_MODE="docker-simulation"
 JENKINS_AGENT_OS_DEPENDENCIES="ca-certificates,curl,git,openssh-client,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget"
 JENKINS_AGENT_CONTROLLER_PLUGIN="ssh-slaves"
 JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE="jenkins-controller-plugin-bundle"
@@ -190,7 +190,7 @@ JENKINS_AGENT_STAGED_ARTIFACT_DIR="$tmp_dir/agent-staged"
 JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/unused/artifacts"
 JENKINS_AGENT_EVIDENCE_DIR="$mutation_dir/evidence"
 JENKINS_AGENT_LOG_DIR="$mutation_dir/logs"
-JENKINS_AGENT_VERIFICATION_MODE="docker-harness-simulation"
+JENKINS_AGENT_VERIFICATION_MODE="docker-simulation"
 JENKINS_AGENT_OS_DEPENDENCIES="ca-certificates,curl,git,openssh-client,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget"
 JENKINS_AGENT_CONTROLLER_PLUGIN="ssh-slaves"
 JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE="jenkins-controller-plugin-bundle"
@@ -224,7 +224,7 @@ expect_agent_home_failure_for_command() {
   set +e
   output="$(
     PATH="$fake_bin:$PATH" \
-    HARNESS_MODE=docker-harness-simulation \
+    HARNESS_MODE=docker-simulation \
     HARNESS_ENVIRONMENT=jenkins-agent-target \
     "$repo_root/scripts/jenkins-agent-setup.sh" --env "$tmp_dir/jenkins-agent.env" --yes "$command" 2>&1
   )"
@@ -271,7 +271,7 @@ expect_configured_path_failure() {
       output="$(
         PATH="$fake_bin:$PATH" \
         FAKE_AGENT_HOME="$configured_path" \
-        HARNESS_MODE=docker-harness-simulation \
+        HARNESS_MODE=docker-simulation \
         HARNESS_ENVIRONMENT=jenkins-agent-target \
         "$repo_root/$script" --env "$tmp_dir/$role-custom.env" --yes configure-runtime 2>&1
       )"
@@ -346,7 +346,7 @@ expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$t
   'Jenkins runtime account jenkins passwd HOME must be /var/lib/jenkins, got /wrong/jenkins'
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/jenkins-agent.env" \
   'Jenkins agent runtime account jenkins-agent passwd HOME must be /var/lib/jenkins-agent, got /wrong/agent' \
-  HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+  HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit.env" \
   'Missing Gerrit runtime account: gerrit' \
@@ -356,7 +356,7 @@ expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$t
   FAKE_GETENT_MISSING=passwd:jenkins
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/jenkins-agent.env" \
   'Missing Jenkins agent runtime account: jenkins-agent' \
-  FAKE_GETENT_MISSING=passwd:jenkins-agent HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+  FAKE_GETENT_MISSING=passwd:jenkins-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit-dry-custom-path.env" \
   'GERRIT_SITE_PATH must be /srv/gerrit, got /custom/gerrit' \
@@ -366,7 +366,7 @@ expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$t
   FAKE_JENKINS_HOME=/var/lib/jenkins
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/agent-dry-custom-path.env" \
   'JENKINS_AGENT_REMOTE_FS must be /var/lib/jenkins-agent, got /custom/agent' \
-  FAKE_AGENT_HOME=/var/lib/jenkins-agent HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+  FAKE_AGENT_HOME=/var/lib/jenkins-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_pass() {
   local role script env_file output rc
@@ -389,7 +389,7 @@ expect_dry_run_preflight_pass Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit-dr
 expect_dry_run_preflight_pass Jenkins scripts/jenkins-controller-setup.sh "$tmp_dir/jenkins-dry-custom-account.env" \
   FAKE_JENKINS_HOME=/var/lib/jenkins FAKE_JENKINS_OWNER=custom-jenkins FAKE_JENKINS_GROUP=custom-jenkins
 expect_dry_run_preflight_pass Agent scripts/jenkins-agent-setup.sh "$tmp_dir/agent-dry-custom-account.env" \
-  FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=custom-agent FAKE_AGENT_GROUP=custom-agent HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+  FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=custom-agent FAKE_AGENT_GROUP=custom-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit-dry-custom-account.env" \
   'Missing Gerrit runtime account: custom-gerrit' \
@@ -399,7 +399,7 @@ expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$t
   FAKE_JENKINS_HOME=/var/lib/jenkins FAKE_JENKINS_OWNER=custom-jenkins FAKE_JENKINS_GROUP=custom-jenkins FAKE_GETENT_MISSING=group:custom-jenkins
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/agent-dry-custom-account.env" \
   'Jenkins agent runtime account custom-agent primary group must be custom-agent' \
-  FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=custom-agent FAKE_AGENT_GROUP=custom-agent FAKE_AGENT_PRIMARY_GID=9999 HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+  FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=custom-agent FAKE_AGENT_GROUP=custom-agent FAKE_AGENT_PRIMARY_GID=9999 HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit.env" \
   'Gerrit product home /srv/gerrit owner/group must be gerrit:gerrit, got root:gerrit' \
@@ -409,7 +409,7 @@ expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$t
   FAKE_JENKINS_HOME=/var/lib/jenkins FAKE_JENKINS_GROUP=root
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/jenkins-agent.env" \
   'Jenkins agent product home /var/lib/jenkins-agent owner/group must be jenkins-agent:jenkins-agent, got root:root' \
-  FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=root FAKE_AGENT_GROUP=root HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+  FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=root FAKE_AGENT_GROUP=root HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_command_failure() {
   local role script env_file command expected output rc
@@ -452,17 +452,17 @@ done
 for command in install configure-runtime; do
   expect_dry_run_command_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/jenkins-agent.env" "$command" \
     'Jenkins agent runtime account jenkins-agent passwd HOME must be /var/lib/jenkins-agent, got /wrong/agent' \
-    HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+    HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
   expect_dry_run_command_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/agent-dry-custom-path.env" "$command" \
     'JENKINS_AGENT_REMOTE_FS must be /var/lib/jenkins-agent, got /custom/agent' \
-    FAKE_AGENT_HOME=/var/lib/jenkins-agent HARNESS_MODE=docker-harness-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+    FAKE_AGENT_HOME=/var/lib/jenkins-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 done
 
 set +e
 missing_agent_output="$(
   PATH="$fake_bin:$PATH" \
   FAKE_GETENT_MISSING="passwd:jenkins-agent" \
-  HARNESS_MODE=docker-harness-simulation \
+  HARNESS_MODE=docker-simulation \
   HARNESS_ENVIRONMENT=jenkins-agent-target \
   "$repo_root/scripts/jenkins-agent-setup.sh" --env "$tmp_dir/jenkins-agent.env" preflight 2>&1
 )"
