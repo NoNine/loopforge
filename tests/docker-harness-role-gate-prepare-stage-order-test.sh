@@ -192,14 +192,14 @@ common_env=(
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role gerrit >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role gerrit >/dev/null
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-controller >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role jenkins-controller >/dev/null
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-agent >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role jenkins-agent >/dev/null
 
 if grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
   printf 'role dispatch must pass bare role names to internal command functions\n' >&2

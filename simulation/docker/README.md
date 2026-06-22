@@ -4,11 +4,11 @@ Docker simulation is the first executable simulation layer for the v1
 Gerrit/Jenkins setup package. The single Docker entrypoint is:
 
 ```bash
-simulation/docker/docker-harness.sh <command>
-simulation/docker/docker-harness.sh [--env FILE] <command>
+simulation/docker/simulate.sh <command>
+simulation/docker/simulate.sh [--env FILE] <command>
 ```
 
-`docker-harness.sh` owns role-local gates and cross-role integration
+`simulate.sh` owns role-local gates and cross-role integration
 orchestration. Do not add standalone Docker phase scripts or a second Docker
 verifier CLI.
 
@@ -68,7 +68,7 @@ operations. The `ci-operator` account does not own `/srv/gerrit`,
 controller, or Jenkins agent runtime account. Root remains available for
 privileged container operations where the harness needs it.
 
-Use `docker-harness.sh status --env FILE` after `up` to inspect the selected
+Use `simulate.sh status --env FILE` after `up` to inspect the selected
 running simulation. The status command prints the run ID, Compose project,
 live browser URLs, and seeded Docker simulation login accounts. It is
 read-only and fails when the selected run's containers are not running, so it

@@ -1,73 +1,127 @@
 # Loopforge
 
-This repository contains Loopforge's initial experiment environment package.
-The initial environment constructs and verifies a Gerrit/Jenkins integration
-stack with a Jenkins controller, Jenkins SSH build agent, LDAP-backed access,
-Gerrit Trigger integration, `Verified` voting, and reviewable validation
-evidence.
+Loopforge is an experiment environment package for building and verifying a
+Gerrit/Jenkins integration stack. It models Gerrit, a Jenkins controller, a
+Jenkins SSH build agent, LDAP-backed identity, Gerrit Trigger integration,
+`Verified` voting, and reviewable validation evidence.
 
-Start with these references:
+The first user-facing surface is the Docker simulation. It gives operators a
+repeatable way to exercise the setup flow before moving into VM simulation or
+target-deployment documentation.
 
-- `docs/prd.md` defines the Loopforge product boundary and acceptance
-  criteria for the initial Gerrit/Jenkins experiment environment.
-- `docs/system-model.md` defines the Loopforge environments, actors,
-  accounts, interfaces, lifecycle boundaries, and mode policy.
-- `docs/implementation-plan.md` defines the staged implementation plan.
-- `docs/account-model.md` defines the runtime, admin, integration, test, bind,
-  and simulation accounts.
-- `docs/gerrit-setup-manual.md`,
-  `docs/jenkins-controller-setup-manual.md`, and
-  `docs/jenkins-agent-setup-manual.md` hold the role setup manuals.
-- `docs/integration-setup-manual.md` holds the shared cross-role integration
-  setup manual that runs after the three role manuals are complete.
-- `docs/gerrit-trigger-integration.md` holds the Jenkins-to-Gerrit
-  integration policy and validation contract.
-- `docs/validation-and-evidence.md` holds validation and evidence rules.
+## What You Can Do
 
-## V1 Boundary
+- Run the Docker simulation from one CLI entrypoint.
+- Prepare and stage reviewed Gerrit, Jenkins controller, and Jenkins agent
+  artifacts before service mutation.
+- Validate role readiness, cross-role integration, agent scheduling, and
+  Gerrit `Verified` voting.
+- Review generated evidence, checksums, bounded log references, and redaction
+  summaries.
+- Use the role manuals as the source of truth for target-oriented setup steps.
 
-v1 is not a strict air-gapped installer. It does not support offline Ubuntu
-dependency bundles. Target hosts may use approved internal Ubuntu/OS package
-repositories for OS dependencies, but they must not download Gerrit or Jenkins
-application artifacts from the public internet as a fallback.
+## Architecture At A Glance
 
-Any public internet fallback for target-host Ubuntu/OS dependency installation
-is simulation-only and must be labeled that way in documentation, logs, and
-verification summaries.
+```text
++---------------------------------------------------------------+
+| Operator workstation / control node                           |
+| Runs harness/helpers and can reach Gerrit, Jenkins, and agent |
++---------------------------------------------------------------+
+          |                    |                    |
+          v                    v                    v
++----------------+     +-------------+     +--------------------+
+| Bundle factory |---->| Gerrit      |<--->| Jenkins controller |
+| Prepares       |     | target      |     | target             |
+| artifacts      |     +-------------+     +--------------------+
++----------------+             ^                    |
+          |                    |                    |
+          |                    |                    |
+          |             +-------------+             |
+          +------------>| Jenkins SSH |<------------+
+                        | agent       |
+                        +-------------+
 
-Artifact preparation is separate from target-host installation. Prepared
-Gerrit and Jenkins application artifacts, plugins, templates, manifests, and
-checksums are staged to target hosts and verified before target mutation.
++---------------------------------------------------------------+
+| LDAP                                                          |
+| Shared identity service for Gerrit and Jenkins                |
++---------------------------------------------------------------+
+```
 
-## Repository Layout
+Docker, VM, and target-deployment modes realize the same logical environments
+with different infrastructure boundaries. Detailed interfaces and lifecycle
+ownership are documented in `docs/system-model.md`.
 
-- `docs/` contains product references and operator manuals.
+## Docker Simulation Flow
+
+```mermaid
+flowchart LR
+  preflight[preflight]
+  render[render-config]
+  up[up]
+  status[status]
+  prepare[prepare-artifacts]
+  stage[stage-artifacts]
+  check[check]
+  verify[full-verify]
+  down[down]
+
+  preflight --> render --> up --> status --> prepare --> stage --> check --> verify --> down
+```
+
+## Start With Docker Simulation
+
+The Docker simulation CLI is the first executable entrypoint:
+
+```bash
+simulation/docker/simulate.sh preflight
+simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh up
+simulation/docker/simulate.sh status
+simulation/docker/simulate.sh prepare-artifacts
+simulation/docker/simulate.sh stage-artifacts
+simulation/docker/simulate.sh check
+simulation/docker/simulate.sh full-verify
+simulation/docker/simulate.sh down
+```
+
+To use a copied harness env file instead of the default example, pass
+`--env FILE` to each command. See `simulation/docker/README.md` for command
+details, inputs, outputs, generated paths, and simulation accounts.
+
+## Repository Map
+
+- `simulation/docker/` contains the Docker simulation harness, Compose file,
+  and Docker-specific operator docs.
+- `simulation/vm/` contains the planned VM simulation model and command
+  contract.
+- `docs/` contains the PRD, system model, account model, integration policy,
+  validation rules, and role setup manuals.
 - `examples/` contains reviewed env-file examples with placeholder values.
-- `scripts/` contains role helpers that will mirror manual phases.
+- `scripts/` contains role-local helpers, shared integration setup, and
+  evidence collection.
 - `templates/` contains Gerrit, Jenkins controller, Jenkins agent, job, and
   integration templates.
-- `simulation/docker/` contains the first executable simulation model.
-- `simulation/vm/` contains the later VM simulation and target-deployment
-  verification model.
-- `logs/` is a generated local runtime log directory. It is kept in git with a
-  placeholder only; verbose runtime output must not be committed.
+- `logs/` is generated local runtime output and should contain bounded command
+  logs only.
 
-## Setup Flow
+## Documentation Guide
 
-The planned flow for the initial Gerrit/Jenkins experiment environment is:
-
-1. Review the product boundary and account model.
-2. Create role env files from `examples/`.
-3. Prepare curated application artifacts outside target-host installation.
-4. Stage prepared artifacts to the target role hosts.
-5. Follow the role manuals or matching helper commands for Gerrit, Jenkins
-   controller, and Jenkins agent setup.
-6. Follow `docs/integration-setup-manual.md` for Jenkins-to-Gerrit
-   integration, agent registration, Gerrit Trigger setup, validation, and
-   evidence collection.
-7. Run validation and collect evidence with mode labels and bounded log
-   references.
-
-Helper command behavior is introduced in later implementation steps. Current
-helper files are placeholders and must not be treated as implemented lifecycle
-commands.
+- `docs/prd.md` defines product goals, non-goals, requirements, and acceptance
+  criteria.
+- `docs/system-model.md` defines environments, actors, accounts, utilities,
+  interfaces, lifecycle checkpoints, modes, and evidence relationships.
+- `simulation/README.md` defines the shared simulation topology, version
+  baseline, output conventions, and checkpoint contract.
+- `simulation/docker/README.md` documents the Docker simulation CLI command
+  surface.
+- `docs/account-model.md` defines runtime, admin, integration, test, bind, and
+  simulation accounts.
+- `docs/gerrit-trigger-integration.md` defines Gerrit Trigger, ACL, and
+  `Verified` voting behavior.
+- `docs/validation-and-evidence.md` defines validation evidence and redaction
+  rules.
+- `docs/gerrit-setup-manual.md`,
+  `docs/jenkins-controller-setup-manual.md`, and
+  `docs/jenkins-agent-setup-manual.md` document role-local setup.
+- `docs/integration-setup-manual.md` documents the shared cross-role
+  integration workflow.

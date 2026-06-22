@@ -39,7 +39,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" prepare-artifacts >"$tmp_dir/prepare.out"
+  "$repo_root/simulation/docker/simulate.sh" prepare-artifacts >"$tmp_dir/prepare.out"
 
 HARNESS_TEST_STUB_ROLE_COMMANDS="$calls" \
 HARNESS_RUN_ID="dispatch-$$" \
@@ -48,7 +48,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" stage-artifacts >"$tmp_dir/stage.out"
+  "$repo_root/simulation/docker/simulate.sh" stage-artifacts >"$tmp_dir/stage.out"
 
 grep -Fxq 'prepare-artifacts gerrit' "$calls"
 grep -Fxq 'prepare-artifacts jenkins-controller' "$calls"

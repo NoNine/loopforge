@@ -112,7 +112,7 @@ HARNESS_STATE_DIR="$tmp_dir/state" \
 HARNESS_STAGING_DIR="$tmp_dir/staging" \
 HARNESS_EVIDENCE_DIR="$tmp_dir/evidence" \
 HARNESS_LOG_DIR="$tmp_dir/logs" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
 
 runtime_dir="$tmp_dir/state/rendered/runtime-inputs"
 product_home_dir="$repo_root/simulation/product-homes/docker/role-env-test-$$"
@@ -178,11 +178,11 @@ common_env=(
 
 set +e
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" prepare-artifacts --role gerrit >/dev/null 2>&1
+  "$repo_root/simulation/docker/simulate.sh" prepare-artifacts --role gerrit >/dev/null 2>&1
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-controller >/dev/null 2>&1
+  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role jenkins-controller >/dev/null 2>&1
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" run-role-gate --role jenkins-agent >/dev/null 2>&1
+  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role jenkins-agent >/dev/null 2>&1
 set -e
 
 grep -Fq -- '/workspace/scripts/gerrit-setup.sh --env /harness/state/rendered/gerrit-bundle-factory.env --yes prepare-artifacts' "$calls"

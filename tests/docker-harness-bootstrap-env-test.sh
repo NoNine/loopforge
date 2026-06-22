@@ -34,7 +34,7 @@ HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 EOF
 
 PATH="$fake_bin:$PATH" \
-  "$repo_root/simulation/docker/docker-harness.sh" \
+  "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" preflight >"$tmp_dir/preflight.out"
 grep -Fq "mode=docker-simulation" "$tmp_dir/preflight.out"
 
@@ -43,7 +43,7 @@ PATH="$fake_bin:$PATH" \
   HARNESS_STAGING_DIR="$staging_dir" \
   HARNESS_EVIDENCE_DIR="$evidence_dir" \
   HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" \
+  "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" render-config >"$tmp_dir/render.out"
 
 grep -Fq "render-config: ok run-id=bootstrap-$$" "$tmp_dir/render.out"

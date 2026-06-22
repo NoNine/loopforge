@@ -15,7 +15,7 @@ state_dir="$tmp_dir/state"
 staging_dir="$tmp_dir/staging"
 evidence_dir="$tmp_dir/evidence"
 log_dir="$tmp_dir/logs"
-script="$repo_root/simulation/docker/docker-harness.sh"
+script="$repo_root/simulation/docker/simulate.sh"
 
 (
   cd /tmp

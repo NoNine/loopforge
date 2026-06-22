@@ -40,7 +40,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" \
+  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
   >"$tmp_dir/render.out"
 
 runtime_dir="$state_dir/rendered/runtime-inputs"

@@ -30,7 +30,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" preflight >"$tmp_dir/preflight.out"
+  "$repo_root/simulation/docker/simulate.sh" preflight >"$tmp_dir/preflight.out"
 
 [ ! -e "$state_dir/rendered/harness.env" ] || {
   printf 'preflight unexpectedly created rendered harness env\n' >&2

@@ -36,19 +36,19 @@ require_pattern scripts/integration-setup.sh \
   'JENKINS_HOME="${JENKINS_HOME:-/var/lib/jenkins}"' \
   'Integration helper must default JENKINS_HOME to /var/lib/jenkins'
 
-require_pattern simulation/docker/docker-harness.sh \
+require_pattern simulation/docker/simulate.sh \
   'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"' \
   'Docker harness must default product-home backing outside HARNESS_STATE_DIR'
-require_pattern simulation/docker/docker-harness.sh \
+require_pattern simulation/docker/simulate.sh \
   'export HARNESS_PRODUCT_HOME_DIR' \
   'Docker harness must export HARNESS_PRODUCT_HOME_DIR for Compose'
-require_pattern simulation/docker/docker-harness.sh \
+require_pattern simulation/docker/simulate.sh \
   '/srv/gerrit' \
   'Docker harness must recognize Gerrit native product-home evidence references'
-require_pattern simulation/docker/docker-harness.sh \
+require_pattern simulation/docker/simulate.sh \
   '/var/lib/jenkins' \
   'Docker harness must recognize Jenkins controller native product-home evidence references'
-require_pattern simulation/docker/docker-harness.sh \
+require_pattern simulation/docker/simulate.sh \
   '/var/lib/jenkins-agent' \
   'Docker harness must recognize Jenkins agent native product-home evidence references'
 require_pattern scripts/gerrit-setup.sh \
@@ -60,16 +60,16 @@ require_pattern scripts/jenkins-controller-setup.sh \
 require_pattern scripts/jenkins-agent-setup.sh \
   '"service_log_reference": $q_service_log' \
   'Jenkins agent evidence must record runtime service log as metadata'
-reject_pattern simulation/docker/docker-harness.sh \
+reject_pattern simulation/docker/simulate.sh \
   'host_product' \
   'Docker harness must not normalize product-home logs as bounded log references'
-reject_pattern simulation/docker/docker-harness.sh \
+reject_pattern simulation/docker/simulate.sh \
   'product_prefix' \
   'Docker harness must not treat product-home paths as bounded log prefixes'
-reject_pattern simulation/docker/docker-harness.sh \
+reject_pattern simulation/docker/simulate.sh \
   'copy_product_home_log_reference' \
   'Docker harness must not use temporary product-home log copies to bypass access'
-reject_pattern simulation/docker/docker-harness.sh \
+reject_pattern simulation/docker/simulate.sh \
   '$HARNESS_LOG_DIR/product-home/$role' \
   'Docker harness must not relocate product-home bounded log references to snapshots'
 require_pattern scripts/jenkins-controller-setup.sh \

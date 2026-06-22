@@ -210,7 +210,7 @@ scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes prepare-artifacts
 Harness:
 
 ```bash
-simulation/docker/docker-harness.sh prepare-artifacts --role gerrit
+simulation/docker/simulate.sh prepare-artifacts --role gerrit
 ```
 
 ## Phase 4: Gerrit Installation
@@ -384,7 +384,7 @@ scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes validate
 Harness gate:
 
 ```bash
-simulation/docker/docker-harness.sh run-role-gate --role gerrit
+simulation/docker/simulate.sh run-role-gate --role gerrit
 ```
 
 ## Phase 9: Evidence Collection

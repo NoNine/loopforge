@@ -31,7 +31,7 @@ run_lifecycle_without_render() {
   HARNESS_STAGING_DIR="$staging" \
   HARNESS_EVIDENCE_DIR="$evidence" \
   HARNESS_LOG_DIR="$logs" \
-    "$repo_root/simulation/docker/docker-harness.sh" "$@" \
+    "$repo_root/simulation/docker/simulate.sh" "$@" \
     >"$output" 2>&1
   rc=$?
   set -e

@@ -158,7 +158,7 @@ scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> prepare-artifacts
 Harness:
 
 ```bash
-simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-agent
+simulation/docker/simulate.sh prepare-artifacts --role jenkins-agent
 ```
 
 ## Phase 4: Agent Host Installation

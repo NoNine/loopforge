@@ -48,7 +48,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" --env "$tmp_dir/harness.env" preflight >"$tmp_dir/preflight.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" preflight >"$tmp_dir/preflight.out"
 grep -Fq "preflight: ok mode=docker-simulation compose=" "$tmp_dir/preflight.out"
 
 PATH="$fake_bin:$PATH" \
@@ -56,7 +56,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" --env "$tmp_dir/harness.env" render-config >"$tmp_dir/render.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >"$tmp_dir/render.out"
 grep -Fq "render-config: ok run-id=summary-$$" "$tmp_dir/render.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/render.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/render.out"
@@ -66,7 +66,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"
 grep -Fq "up: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/up.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/up.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/up.out"
@@ -76,7 +76,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" --env "$tmp_dir/harness.env" status >"$tmp_dir/status.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" status >"$tmp_dir/status.out"
 grep -Fq "status: running" "$tmp_dir/status.out"
 grep -Fq "Run ID        summary-$$" "$tmp_dir/status.out"
 grep -Fq "Project       summary-$$" "$tmp_dir/status.out"
@@ -94,5 +94,5 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" --env "$tmp_dir/harness.env" down >"$tmp_dir/down.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" down >"$tmp_dir/down.out"
 grep -Fq "down: stopped harness containers" "$tmp_dir/down.out"

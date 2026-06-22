@@ -42,7 +42,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" \
+  "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" render-config >/dev/null
 
 PATH="$fake_bin:$PATH" \
@@ -50,7 +50,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" \
+  "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"
 
 grep -Fq "HARNESS_RUN_ID=bootstrap-up-$$" "$state_dir/rendered/harness.runtime.env"

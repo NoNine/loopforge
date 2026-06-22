@@ -8,7 +8,7 @@ output conventions, and checkpoint meanings.
 The model has two layers:
 
 1. Docker-based simulation first, owned by
-   `simulation/docker/docker-harness.sh`.
+   `simulation/docker/simulate.sh`.
 2. VM-based simulation second.
 
 Both layers use the same five-machine topology:

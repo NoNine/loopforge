@@ -256,7 +256,7 @@ scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> prepare-artifac
 Harness:
 
 ```bash
-simulation/docker/docker-harness.sh prepare-artifacts --role jenkins-controller
+simulation/docker/simulate.sh prepare-artifacts --role jenkins-controller
 ```
 
 ## Phase 5: Jenkins Installation
@@ -430,7 +430,7 @@ scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> validate
 Harness gate:
 
 ```bash
-simulation/docker/docker-harness.sh run-role-gate --role jenkins-controller
+simulation/docker/simulate.sh run-role-gate --role jenkins-controller
 ```
 
 ## Phase 14: Evidence Collection

@@ -86,11 +86,11 @@ if grep -Eq '\$\{HARNESS_STATE_DIR\}/[^:]*:(/srv/gerrit|/var/lib/jenkins|/var/li
   exit 1
 fi
 
-grep -Fq -- 'prepare_product_home_ownership' "$repo_root/simulation/docker/docker-harness.sh" || {
+grep -Fq -- 'prepare_product_home_ownership' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Docker harness must prepare product home ownership inside target containers\n' >&2
   exit 1
 }
-grep -Fq -- 'chown -R $(shell_quote "$account:$group") $(shell_quote "$path")' "$repo_root/simulation/docker/docker-harness.sh" || {
+grep -Fq -- 'chown -R $(shell_quote "$account:$group") $(shell_quote "$path")' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Docker harness product home preparation must chown configured account/group\n' >&2
   exit 1
 }

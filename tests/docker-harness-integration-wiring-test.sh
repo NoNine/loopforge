@@ -43,7 +43,7 @@ HARNESS_STATE_DIR="$state_dir" \
 HARNESS_STAGING_DIR="$staging_dir" \
 HARNESS_EVIDENCE_DIR="$evidence_dir" \
 HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" \
+  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
   >"$tmp_dir/render.out"
 
 runtime_dir="$state_dir/rendered/runtime-inputs"
@@ -65,7 +65,7 @@ common_env=(
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" check >"$tmp_dir/check.out"
+  "$repo_root/simulation/docker/simulate.sh" check >"$tmp_dir/check.out"
 
 grep -Fxq 'run-role-gate gerrit' "$role_calls"
 grep -Fxq 'run-role-gate jenkins-controller' "$role_calls"
@@ -84,7 +84,7 @@ fi
 : >"$role_calls"
 : >"$integration_calls"
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" full-verify >"$tmp_dir/full.out"
+  "$repo_root/simulation/docker/simulate.sh" full-verify >"$tmp_dir/full.out"
 
 grep -Fq -- '--yes validate-integration' "$integration_calls"
 grep -Fq -- '--yes verify-trigger' "$integration_calls"
@@ -103,7 +103,7 @@ env \
   HARNESS_STAGING_DIR="$staging_dir" \
   HARNESS_EVIDENCE_DIR="$evidence_dir" \
   HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/docker-harness.sh" full-verify >"$tmp_dir/full-failing.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" full-verify >"$tmp_dir/full-failing.out" 2>&1
 failing_rc=$?
 set -e
 
@@ -134,7 +134,7 @@ set +e
 env "${common_env[@]}" \
   HARNESS_TEST_INTEGRATION_HELPER="$failing_configure_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$failing_configure_calls" \
-  "$repo_root/simulation/docker/docker-harness.sh" check >"$tmp_dir/check-failing-configure.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" check >"$tmp_dir/check-failing-configure.out" 2>&1
 failing_configure_rc=$?
 set -e
 

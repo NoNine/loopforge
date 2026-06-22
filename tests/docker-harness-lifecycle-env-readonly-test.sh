@@ -112,7 +112,7 @@ common_env=(
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config --env "$tmp_dir/harness.env" \
+  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
   >/dev/null
 
 snapshot="$tmp_dir/env-files.before"
@@ -130,7 +130,7 @@ for command in \
 do
   set +e
   # shellcheck disable=SC2086
-  env "${common_env[@]}" "$repo_root/simulation/docker/docker-harness.sh" $command \
+  env "${common_env[@]}" "$repo_root/simulation/docker/simulate.sh" $command \
     >"$tmp_dir/${command// /-}.out" 2>&1
   rc=$?
   set -e

@@ -149,7 +149,7 @@ not actors.
 | --- | --- |
 | Role helpers: `scripts/gerrit-setup.sh`, `scripts/jenkins-controller-setup.sh`, `scripts/jenkins-agent-setup.sh` | Own role-local lifecycle work only: preflight, artifact preparation, target-local install/configuration, role-local validation, and role-local evidence. |
 | Shared integration helper: `scripts/integration-setup.sh` | Owns cross-role work: Jenkins-held keys, Gerrit public-key registration, Gerrit integration ACL/label workflow, Jenkins credentials, Jenkins node registration, Gerrit Trigger configuration, cross-role validation, trigger verification, and integration evidence. |
-| Docker simulation utility: `simulation/docker/docker-harness.sh` | Realizes the logical environments in containers and orchestrates Docker simulation checkpoints. Docker APIs are simulation lifecycle internals, not the product communication surface. |
+| Docker simulation utility: `simulation/docker/simulate.sh` | Realizes the logical environments in containers and orchestrates Docker simulation checkpoints. Docker APIs are simulation lifecycle internals, not the product communication surface. |
 | VM verifier: `simulation/vm/vm-verify.sh` | Realizes or checks the logical environments in VMs when VM support exists. |
 | Global evidence collector: `scripts/collect-evidence.sh` | Validates and aggregates generated evidence. It must not create runtime success or replace lifecycle proof. |
 

@@ -19,7 +19,7 @@ render() {
   HARNESS_STAGING_DIR="$staging_dir" \
   HARNESS_EVIDENCE_DIR="$evidence_dir" \
   HARNESS_LOG_DIR="$log_dir" \
-    "$repo_root/simulation/docker/docker-harness.sh" render-config
+    "$repo_root/simulation/docker/simulate.sh" render-config
 }
 
 render >"$tmp_dir/render-1.out"
@@ -78,7 +78,7 @@ HARNESS_EVIDENCE_DIR="$tmp_dir/explicit-evidence" \
 HARNESS_LOG_DIR="$tmp_dir/explicit-logs" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$explicit_gerrit_port" \
 HARNESS_JENKINS_HTTP_HOST_PORT="$explicit_jenkins_port" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config >"$tmp_dir/explicit.out"
+  "$repo_root/simulation/docker/simulate.sh" render-config >"$tmp_dir/explicit.out"
 grep -Fq "render-config: ok run-id=$run_id-explicit" "$tmp_dir/explicit.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/explicit.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/explicit.out"
@@ -93,7 +93,7 @@ HARNESS_STAGING_DIR="$tmp_dir/invalid-staging" \
 HARNESS_EVIDENCE_DIR="$tmp_dir/invalid-evidence" \
 HARNESS_LOG_DIR="$tmp_dir/invalid-logs" \
 HARNESS_GERRIT_HTTP_HOST_PORT=not-a-port \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config >"$tmp_dir/invalid.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" render-config >"$tmp_dir/invalid.out" 2>&1
 invalid_rc=$?
 set -e
 [ "$invalid_rc" -ne 0 ] || {
@@ -140,7 +140,7 @@ HARNESS_STAGING_DIR="$tmp_dir/busy-staging" \
 HARNESS_EVIDENCE_DIR="$tmp_dir/busy-evidence" \
 HARNESS_LOG_DIR="$tmp_dir/busy-logs" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$busy_port" \
-  "$repo_root/simulation/docker/docker-harness.sh" render-config >"$tmp_dir/busy.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" render-config >"$tmp_dir/busy.out" 2>&1
 busy_rc=$?
 set -e
 [ "$busy_rc" -ne 0 ] || {

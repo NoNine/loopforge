@@ -13,7 +13,7 @@ roles=(gerrit jenkins-controller jenkins-agent)
 usage() {
   cat <<'USAGE'
 Usage:
-  simulation/docker/docker-harness.sh <command> [options]
+  simulation/docker/simulate.sh <command> [options]
 
 Commands:
   preflight
@@ -1478,18 +1478,18 @@ check_target_os_release() {
   log="$(bounded_log_path "os-release-$role")"
 
   if ! compose exec -T "$service" sh -c '. /etc/os-release && printf "%s %s\n" "$VERSION_ID" "$VERSION_CODENAME"' >"$log" 2>&1; then
-    evidence="$(write_evidence os-release "$role" fail "docker-harness.sh run-role-gate" "$log" "Could not read target OS release")"
+    evidence="$(write_evidence os-release "$role" fail "simulate.sh run-role-gate" "$log" "Could not read target OS release")"
     die "Failed to read OS release for $role; evidence=$evidence log=$log"
   fi
 
   os_release="$(awk '{print $1}' "$log")"
   os_codename="$(awk '{print $2}' "$log")"
   if [ "$os_release" != "$HARNESS_UBUNTU_BASELINE_RELEASE" ] || [ "$os_codename" != "$HARNESS_UBUNTU_BASELINE_CODENAME" ]; then
-    evidence="$(write_evidence os-release "$role" blocked "docker-harness.sh run-role-gate" "$log" "Target OS $os_release $os_codename does not match Version Baseline")"
+    evidence="$(write_evidence os-release "$role" blocked "simulate.sh run-role-gate" "$log" "Target OS $os_release $os_codename does not match Version Baseline")"
     die "Target OS drift for $role; expected $HARNESS_UBUNTU_BASELINE_RELEASE $HARNESS_UBUNTU_BASELINE_CODENAME, evidence=$evidence log=$log"
   fi
 
-  write_evidence os-release "$role" pass "docker-harness.sh run-role-gate" "$log" "Target OS release matches Version Baseline" >/dev/null
+  write_evidence os-release "$role" pass "simulate.sh run-role-gate" "$log" "Target OS release matches Version Baseline" >/dev/null
 }
 
 check_ubuntu_service_baseline() {
@@ -1500,7 +1500,7 @@ check_ubuntu_service_baseline() {
 
   require_running_service "$service"
   if ! compose exec -T "$service" sh -c '. /etc/os-release && printf "release=%s codename=%s pretty=%s\n" "$VERSION_ID" "$VERSION_CODENAME" "$PRETTY_NAME"' >"$log" 2>&1; then
-    evidence="$(write_evidence baseline "$label" fail "docker-harness.sh up" "$log" "Could not read container OS release")"
+    evidence="$(write_evidence baseline "$label" fail "simulate.sh up" "$log" "Could not read container OS release")"
     die "Failed to read OS release for $label; evidence=$evidence log=$log"
   fi
 
@@ -1510,11 +1510,11 @@ check_ubuntu_service_baseline() {
   printf 'image_id=%s\n' "$image_id" >>"$log"
 
   if [ "$os_release" != "$HARNESS_UBUNTU_BASELINE_RELEASE" ] || [ "$os_codename" != "$HARNESS_UBUNTU_BASELINE_CODENAME" ]; then
-    evidence="$(write_evidence baseline "$label" blocked "docker-harness.sh up" "$log" "Container OS does not match Version Baseline")"
+    evidence="$(write_evidence baseline "$label" blocked "simulate.sh up" "$log" "Container OS does not match Version Baseline")"
     die "Container OS drift for $label; expected $HARNESS_UBUNTU_BASELINE_RELEASE $HARNESS_UBUNTU_BASELINE_CODENAME, evidence=$evidence log=$log"
   fi
 
-  write_evidence baseline "$label" pass "docker-harness.sh up" "$log" "Container OS release matches Version Baseline; resolved image id recorded" >/dev/null
+  write_evidence baseline "$label" pass "simulate.sh up" "$log" "Container OS release matches Version Baseline; resolved image id recorded" >/dev/null
 }
 
 cmd_preflight() {
@@ -1533,7 +1533,7 @@ cmd_preflight() {
   [ -f "$docker_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
   [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
   [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
-  write_evidence preflight harness pass "docker-harness.sh preflight" "not-applicable" "Compose provider: $compose_kind; generated output paths are ignored local state" >/dev/null
+  write_evidence preflight harness pass "simulate.sh preflight" "not-applicable" "Compose provider: $compose_kind; generated output paths are ignored local state" >/dev/null
   print_command_summary preflight "" "ok mode=$HARNESS_MODE compose=$compose_kind"
 }
 
@@ -1541,7 +1541,7 @@ cmd_render_config() {
   bootstrap_harness_env
   require_baseline_label
   write_rendered_env
-  write_evidence render-config harness pass "docker-harness.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
+  write_evidence render-config harness pass "simulate.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
   printf 'render-config: ok run-id=%s\n' "$HARNESS_RUN_ID"
 }
 
@@ -1579,7 +1579,7 @@ cmd_up() {
     fi
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence up harness fail "docker-harness.sh up" "$log" "Compose up failed")"
+    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Compose up failed")"
     print_command_failure up "" failed "$log" "$evidence"
     return "$rc"
   fi
@@ -1591,7 +1591,7 @@ cmd_up() {
   prepare_product_home_ownership jenkins-controller jenkins-controller-target "$log"
   prepare_product_home_ownership jenkins-agent jenkins-agent-target "$log"
   require_running_service ldap
-  evidence="$(write_evidence up harness pass "docker-harness.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
+  evidence="$(write_evidence up harness pass "simulate.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
 }
 
@@ -1660,7 +1660,7 @@ cmd_prepare_artifacts() {
 
   log="$(bounded_log_path "prepare-artifacts-$role")"
   if ! role_helper_present_in_container "$service" "$helper"; then
-    evidence="$(write_evidence prepare-artifacts "$role" blocked "docker-harness.sh prepare-artifacts" "$log" "Missing executable role helper /workspace/$helper in bundle factory")"
+    evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Missing executable role helper /workspace/$helper in bundle factory")"
     printf 'ERROR: Missing role helper for %s in bundle factory: /workspace/%s\n' "$role" "$helper" >"$log"
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence" >&2
     return 1
@@ -1701,10 +1701,10 @@ cmd_prepare_artifacts() {
   fi
   if [ "$rc" -ne 0 ]; then
     if grep -Eq "is not implemented in this repository step|is a placeholder" "$log"; then
-      evidence="$(write_evidence prepare-artifacts "$role" blocked "docker-harness.sh prepare-artifacts" "$log" "Role helper exists but prepare-artifacts is not implemented yet")"
+      evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Role helper exists but prepare-artifacts is not implemented yet")"
       printf 'ERROR: Role helper for %s exists but prepare-artifacts is not implemented yet\n' "$role" >&2
     else
-      evidence="$(write_evidence prepare-artifacts "$role" fail "docker-harness.sh prepare-artifacts" "$log" "Role helper prepare-artifacts failed in bundle factory")"
+      evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper prepare-artifacts failed in bundle factory")"
     fi
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
     return "$rc"
@@ -1712,19 +1712,19 @@ cmd_prepare_artifacts() {
 
   artifact_dir="$HARNESS_STATE_DIR/bundle-factory/artifacts/$role"
   if [ ! -f "$artifact_dir/manifest.txt" ] || [ ! -f "$artifact_dir/checksums.sha256" ]; then
-    evidence="$(write_evidence prepare-artifacts "$role" fail "docker-harness.sh prepare-artifacts" "$log" "Role helper did not produce manifest.txt and checksums.sha256")"
+    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper did not produce manifest.txt and checksums.sha256")"
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
 
   if ! validate_role_baseline_manifest "$role" "$artifact_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence prepare-artifacts "$role" blocked "docker-harness.sh prepare-artifacts" "$log" "Artifact manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
+    evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Artifact manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
     printf 'ERROR: Artifact baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
     print_command_failure prepare-artifacts "$role" blocked "$log" "$evidence" >&2
     return 1
   fi
 
-  evidence="$(write_evidence prepare-artifacts "$role" pass "docker-harness.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory with manifest and checksums")"
+  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory with manifest and checksums")"
   print_command_summary prepare-artifacts "$role" ok
 }
 
@@ -1753,14 +1753,14 @@ cmd_stage_artifacts() {
 
   : >"$log"
   if ! validate_role_baseline_manifest "$role" "$artifact_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence stage-artifacts "$role" blocked "docker-harness.sh stage-artifacts" "$log" "Bundle factory manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
+    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Bundle factory manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
     printf 'ERROR: Bundle factory baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
     return 1
   fi
 
   mkdir -p "$stage_dir"
   if ! compose exec -T "$service" sh -c 'mkdir -p /harness/staged && find /harness/staged -mindepth 1 -maxdepth 1 -exec rm -rf {} +' >>"$log" 2>&1; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "docker-harness.sh stage-artifacts" "$log" "Failed to prepare target staging path in container")"
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Failed to prepare target staging path in container")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
@@ -1771,7 +1771,7 @@ cmd_stage_artifacts() {
     rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "docker-harness.sh stage-artifacts" "$log" "Failed to copy artifacts to target staging path")"
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Failed to copy artifacts to target staging path")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return "$rc"
   fi
@@ -1782,25 +1782,25 @@ cmd_stage_artifacts() {
     rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "docker-harness.sh stage-artifacts" "$log" "Target-side checksum verification failed")"
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Target-side checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return "$rc"
   fi
 
   if ! validate_role_baseline_manifest "$role" "$stage_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence stage-artifacts "$role" blocked "docker-harness.sh stage-artifacts" "$log" "Target staged manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
+    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Target staged manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
     printf 'ERROR: Target staged baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
     print_command_failure stage-artifacts "$role" blocked "$log" "$evidence" >&2
     return 1
   fi
 
   if ! compose exec -T "$service" sh -c 'test -f /harness/staged/manifest.txt && test -f /harness/staged/checksums.sha256 && cd /harness/staged && sha256sum -c checksums.sha256' >>"$log" 2>&1; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "docker-harness.sh stage-artifacts" "$log" "Container target-side manifest/checksum verification failed")"
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Container target-side manifest/checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
 
-  evidence="$(write_evidence stage-artifacts "$role" pass "docker-harness.sh stage-artifacts" "$log" "Artifacts staged to target and verified by manifest/checksum before mutation")"
+  evidence="$(write_evidence stage-artifacts "$role" pass "simulate.sh stage-artifacts" "$log" "Artifacts staged to target and verified by manifest/checksum before mutation")"
   print_command_summary stage-artifacts "$role" ok
 }
 
@@ -1953,7 +1953,7 @@ cmd_run_role_gate() {
   log="$(bounded_log_path "run-role-gate-$role")"
   : >"$log"
   if ! role_helper_present_in_container "$service" "$helper"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "docker-harness.sh run-role-gate" "$log" "Missing executable role helper /workspace/$helper in target container")"
+    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Missing executable role helper /workspace/$helper in target container")"
     printf 'ERROR: Missing role helper for %s in target container: /workspace/%s\n' "$role" "$helper" >>"$log"
     printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
     return 1
@@ -2018,29 +2018,29 @@ cmd_run_role_gate() {
 
   if [ "$rc" -eq 0 ]; then
     if ! validate_role_baseline_manifest "$role" "$HARNESS_STAGING_DIR/$role/manifest.txt" "$log"; then
-      evidence="$(write_evidence run-role-gate "$role" blocked "docker-harness.sh run-role-gate" "$log" "Staged artifact baseline metadata is missing or drifted; role readiness cannot be comparable")"
+      evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Staged artifact baseline metadata is missing or drifted; role readiness cannot be comparable")"
       print_command_failure run-role-gate "$role" blocked "$log" "$evidence" >&2
       return 1
     fi
 
     if ! assert_no_placeholder_success "$log"; then
-      evidence="$(write_evidence run-role-gate "$role" fail "docker-harness.sh run-role-gate" "$log" "Role gate produced dummy, placeholder, operation-plan-only, planned-checks-only, or modeled success")"
+      evidence="$(write_evidence run-role-gate "$role" fail "simulate.sh run-role-gate" "$log" "Role gate produced dummy, placeholder, operation-plan-only, planned-checks-only, or modeled success")"
       print_command_failure run-role-gate "$role" failed "$log" "$evidence"
       return 1
     fi
-    evidence="$(write_evidence run-role-gate "$role" pass "docker-harness.sh run-role-gate" "$log" "Role helper validated required real behavior without placeholder success markers")"
+    evidence="$(write_evidence run-role-gate "$role" pass "simulate.sh run-role-gate" "$log" "Role helper validated required real behavior without placeholder success markers")"
     print_command_summary run-role-gate "$role" ok
     return 0
   fi
 
   if grep -Eq "BLOCKED:" "$log"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "docker-harness.sh run-role-gate" "$log" "Role helper reported a blocked runtime behavior requirement")"
+    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Role helper reported a blocked runtime behavior requirement")"
     printf 'ERROR: Role helper for %s reported blocked runtime behavior\n' "$role" >&2
   elif grep -Eq "is not implemented in this repository step|is a placeholder" "$log"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "docker-harness.sh run-role-gate" "$log" "Role helper exists but validate is not implemented yet")"
+    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Role helper exists but validate is not implemented yet")"
     printf 'ERROR: Role helper for %s exists but validate is not implemented yet\n' "$role" >&2
   else
-    evidence="$(write_evidence run-role-gate "$role" fail "docker-harness.sh run-role-gate" "$log" "Role helper validate failed; readiness is not proven")"
+    evidence="$(write_evidence run-role-gate "$role" fail "simulate.sh run-role-gate" "$log" "Role helper validate failed; readiness is not proven")"
   fi
   print_command_failure run-role-gate "$role" failed "$log" "$evidence"
   return "$rc"
@@ -2073,7 +2073,7 @@ cmd_check() {
   run_all_roles run-role-gate || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence check roles fail "docker-harness.sh check" "not-applicable" "One or more role gates failed; cross-role integration was not attempted")"
+    evidence="$(write_evidence check roles fail "simulate.sh check" "not-applicable" "One or more role gates failed; cross-role integration was not attempted")"
     print_command_summary check "" "role gates failed"
     return "$rc"
   fi
@@ -2090,11 +2090,11 @@ cmd_check() {
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$integration_log"; then
-      evidence="$(write_evidence check integration fail "docker-harness.sh check" "$integration_log" "Forbidden success marker found in integration validation log")"
+      evidence="$(write_evidence check integration fail "simulate.sh check" "$integration_log" "Forbidden success marker found in integration validation log")"
       print_command_failure check "" failed "$integration_log" "$evidence"
       return 1
     fi
-    evidence="$(write_evidence check integration pass "docker-harness.sh check" "$integration_log" "Shared integration helper proved Jenkins-to-Gerrit SSH, stream-events, Jenkins-to-agent SSH, node readiness, and agent scheduling")"
+    evidence="$(write_evidence check integration pass "simulate.sh check" "$integration_log" "Shared integration helper proved Jenkins-to-Gerrit SSH, stream-events, Jenkins-to-agent SSH, node readiness, and agent scheduling")"
     print_command_summary check "" "integration ok"
     return 0
   fi
@@ -2103,7 +2103,7 @@ cmd_check() {
   write_blocked_integration_evidence stream-events "$integration_log" "Blocked: shared integration helper has not implemented real Gerrit stream-events validation"
   write_blocked_integration_evidence agent-connection "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins-to-agent SSH connection validation"
   write_blocked_integration_evidence scheduling "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins agent scheduling validation"
-  evidence="$(write_evidence check integration blocked "docker-harness.sh check" "$integration_log" "Shared integration helper reported blocked cross-role validation; Docker simulation cannot claim readiness")"
+  evidence="$(write_evidence check integration blocked "simulate.sh check" "$integration_log" "Shared integration helper reported blocked cross-role validation; Docker simulation cannot claim readiness")"
   print_command_summary check "" "blocked"
   return "$rc"
 }
@@ -2120,7 +2120,7 @@ cmd_full_verify() {
     printf 'full_verify_blocked=check_failed_or_blocked\n' >"$log"
     write_blocked_integration_evidence job-execution "$log" "Blocked: readiness check did not prove real cross-role integration, so job execution was not attempted"
     write_blocked_integration_evidence verified-vote "$log" "Blocked: readiness check did not prove real cross-role integration, so Verified +1 was not attempted"
-    evidence="$(write_evidence full-verify integration blocked "docker-harness.sh full-verify" "$log" "Full verification blocked before end-to-end trigger execution")"
+    evidence="$(write_evidence full-verify integration blocked "simulate.sh full-verify" "$log" "Full verification blocked before end-to-end trigger execution")"
     print_command_summary full-verify "" "blocked"
     return "$rc"
   fi
@@ -2132,18 +2132,18 @@ cmd_full_verify() {
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then
-      evidence="$(write_evidence full-verify integration fail "docker-harness.sh full-verify" "$log" "Forbidden success marker found in trigger verification log")"
+      evidence="$(write_evidence full-verify integration fail "simulate.sh full-verify" "$log" "Forbidden success marker found in trigger verification log")"
       print_command_failure full-verify "" failed "$log" "$evidence"
       return 1
     fi
-    evidence="$(write_evidence full-verify integration pass "docker-harness.sh full-verify" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
+    evidence="$(write_evidence full-verify integration pass "simulate.sh full-verify" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
     print_command_summary full-verify "" "integration ok"
     return 0
   fi
 
   write_blocked_integration_evidence job-execution "$log" "Blocked: shared integration helper has not implemented real disposable Jenkins job execution proof"
   write_blocked_integration_evidence verified-vote "$log" "Blocked: shared integration helper has not implemented real Gerrit Verified +1 vote proof"
-  evidence="$(write_evidence full-verify integration blocked "docker-harness.sh full-verify" "$log" "Shared integration helper reported blocked trigger verification; Docker simulation cannot claim end-to-end success")"
+  evidence="$(write_evidence full-verify integration blocked "simulate.sh full-verify" "$log" "Shared integration helper reported blocked trigger verification; Docker simulation cannot claim end-to-end success")"
   print_command_summary full-verify "" "blocked"
   return "$rc"
 }
@@ -2160,11 +2160,11 @@ cmd_down() {
     rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence down harness fail "docker-harness.sh down" "$log" "Compose down failed")"
+    evidence="$(write_evidence down harness fail "simulate.sh down" "$log" "Compose down failed")"
     print_command_failure down "" failed "$log" "$evidence"
     return "$rc"
   fi
-  evidence="$(write_evidence down harness pass "docker-harness.sh down" "$log" "Stopped harness containers without deleting retained evidence")"
+  evidence="$(write_evidence down harness pass "simulate.sh down" "$log" "Stopped harness containers without deleting retained evidence")"
   print_command_summary down "" "stopped harness containers"
 }
 
