@@ -400,7 +400,7 @@ agent_container() {
 }
 
 integration_state_dir() {
-  printf '%s/jenkins-controller/integration\n' "$HARNESS_STATE_DIR"
+  printf '%s/integration\n' "$HARNESS_STATE_DIR"
 }
 
 integration_host_state_dir() {

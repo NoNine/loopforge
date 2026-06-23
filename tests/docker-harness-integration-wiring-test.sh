@@ -44,6 +44,7 @@ for file in gerrit jenkins-controller jenkins-agent integration; do
   printf '%s\n' "SENTINEL=mutated-$file" >"$tmp_dir/$file.env"
   grep -Fq "SENTINEL=original-$file" "$runtime_dir/$file.env"
 done
+chmod 0555 "$state_dir/jenkins-controller"
 
 common_env=(
   HARNESS_TEST_STUB_ROLE_COMMANDS="$role_calls"
@@ -68,6 +69,11 @@ if grep -Fq -- "$tmp_dir/gerrit.env" "$integration_calls"; then
   printf 'integration wiring used original Gerrit env path after render\n' >&2
   exit 1
 fi
+[ ! -e "$state_dir/jenkins-controller/integration" ] || {
+  printf 'check must not create integration state under Jenkins controller helper state\n' >&2
+  exit 1
+}
+chmod 0755 "$state_dir/jenkins-controller"
 
 : >"$role_calls"
 : >"$integration_calls"

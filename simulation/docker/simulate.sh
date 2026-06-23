@@ -589,10 +589,9 @@ ensure_dirs() {
     "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" \
     "$HARNESS_STAGING_DIR" \
     "$HARNESS_EXPORTED_ARTIFACT_DIR" \
+    "$HARNESS_STATE_DIR/bundle-factory/rendered" \
+    "$HARNESS_STATE_DIR/bundle-factory/evidence" \
     "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work" \
-    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/gerrit" \
-    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/jenkins-controller" \
-    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/jenkins-agent" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
     "$HARNESS_STATE_DIR/shared-jenkins-storage" \
@@ -902,11 +901,22 @@ target_container_for_evidence() {
 }
 
 manifest_reference_for_evidence() {
-  local role
-  role="${1:?role required}"
+  local checkpoint role
+  checkpoint="${1:?checkpoint required}"
+  role="${2:?role required}"
   case "$role" in
     gerrit|jenkins-controller|jenkins-agent)
-      printf '%s/manifest.txt\n' "$(host_bundle_factory_work_dir_for_role "$role")"
+      case "$checkpoint" in
+        prepare-artifacts)
+          printf '%s/manifest.txt\n' "$(container_bundle_factory_work_dir_for_role "$role")"
+          ;;
+        stage-artifacts|run-role-gate)
+          printf '%s/manifest.txt\n' "$(target_payload_dir_for_role "$role")"
+          ;;
+        *)
+          printf '%s/manifest.txt\n' "$(target_payload_dir_for_role "$role")"
+          ;;
+      esac
       ;;
     *)
       printf '%s\n' "not-applicable"
@@ -915,11 +925,30 @@ manifest_reference_for_evidence() {
 }
 
 checksum_reference_for_evidence() {
-  local role
-  role="${1:?role required}"
+  local checkpoint role
+  checkpoint="${1:?checkpoint required}"
+  role="${2:?role required}"
   case "$role" in
     gerrit|jenkins-controller|jenkins-agent)
-      printf '%s/checksums.sha256\n' "$(host_bundle_factory_work_dir_for_role "$role")"
+      case "$checkpoint" in
+        prepare-artifacts)
+          printf '%s/checksums.sha256\n' "$(container_bundle_factory_work_dir_for_role "$role")"
+          ;;
+        stage-artifacts)
+          printf '%s;%s/checksums/SHA256SUMS;%s/checksums.sha256\n' \
+            "$(exported_artifact_checksum_for_role "$role")" \
+            "$(target_bundle_dir_for_role "$role")" \
+            "$(target_payload_dir_for_role "$role")"
+          ;;
+        run-role-gate)
+          printf '%s/checksums/SHA256SUMS;%s/checksums.sha256\n' \
+            "$(target_bundle_dir_for_role "$role")" \
+            "$(target_payload_dir_for_role "$role")"
+          ;;
+        *)
+          printf '%s/checksums.sha256\n' "$(target_payload_dir_for_role "$role")"
+          ;;
+      esac
       ;;
     *)
       printf '%s\n' "not-applicable"
@@ -952,13 +981,13 @@ bundle_payload_dir_for_role() {
 container_bundle_factory_work_dir_for_role() {
   local role
   role="${1:?role required}"
-  printf '%s\n' "$(host_bundle_factory_work_dir_for_role "$role")"
+  printf '/var/lib/loopforge/artifact-bundle-work/%s\n' "$role"
 }
 
 host_bundle_factory_work_dir_for_role() {
   local role
   role="${1:?role required}"
-  printf '%s/bundle-factory/artifact-bundle-work/%s\n' "$HARNESS_STATE_DIR" "$role"
+  printf '%s/.bundle-factory-copy/%s\n' "$HARNESS_EXPORTED_ARTIFACT_DIR" "$role"
 }
 
 exported_artifact_archive_for_role() {
@@ -1077,7 +1106,7 @@ ensure_gerrit_ldap_bind_secret() {
 }
 
 gerrit_target_secret_env() {
-  printf '%s\n' "LDAP_BIND_PASSWORD_FILE=/harness/validation-secrets/ldap-bind-password"
+  printf '%s\n' "LDAP_BIND_PASSWORD_FILE=/var/lib/loopforge/validation-secrets/ldap-bind-password"
 }
 
 reset_gerrit_site_state() {
@@ -1110,32 +1139,50 @@ reset_gerrit_site_state() {
 }
 
 gerrit_bundle_factory_env_file() {
-  printf '%s\n' "/harness/state/rendered/gerrit-bundle-factory.env"
+  printf '%s\n' "/var/lib/loopforge/rendered/gerrit-bundle-factory.env"
 }
 
 jenkins_controller_bundle_factory_env_file() {
-  printf '%s\n' "/harness/state/rendered/jenkins-controller-bundle-factory.env"
+  printf '%s\n' "/var/lib/loopforge/rendered/jenkins-controller-bundle-factory.env"
 }
 
 container_env_file_for_role() {
-  local role
+  local role service state_dir
   role="${1:?role required}"
-  printf '/harness/state/rendered/%s.env\n' "$role"
+  service="${2:?service required}"
+  if [ "$service" = "bundle-factory" ]; then
+    printf '/var/lib/loopforge/rendered/%s.env\n' "$role"
+    return 0
+  fi
+  state_dir="$(container_state_dir_for_service "$service")"
+  printf '%s/rendered/%s.env\n' "$state_dir" "$role"
+}
+
+container_state_dir_for_service() {
+  local service
+  service="${1:?service required}"
+  case "$service" in
+    bundle-factory) printf '%s\n' "/var/lib/loopforge" ;;
+    gerrit-target|jenkins-controller-target|jenkins-agent-target)
+      printf '%s\n' "/var/lib/loopforge"
+      ;;
+    *) die "Unknown harness service for container state dir: $service" ;;
+  esac
 }
 
 host_container_env_file_for_role() {
   local role service
   role="${1:?role required}"
   service="${2:?service required}"
-  printf '%s/rendered/%s.env\n' "$(host_state_dir_for_service "$service")" "$role"
+  printf '%s/helper-envs/%s/%s.env\n' "$HARNESS_RUNTIME_INPUT_DIR" "$service" "$role"
 }
 
 host_gerrit_bundle_factory_env_file() {
-  printf '%s/bundle-factory/rendered/gerrit-bundle-factory.env\n' "$HARNESS_STATE_DIR"
+  printf '%s/helper-envs/bundle-factory/gerrit-bundle-factory.env\n' "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 host_jenkins_controller_bundle_factory_env_file() {
-  printf '%s/bundle-factory/rendered/jenkins-controller-bundle-factory.env\n' "$HARNESS_STATE_DIR"
+  printf '%s/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env\n' "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 host_state_dir_for_service() {
@@ -1167,21 +1214,33 @@ render_container_role_env() {
   service="${2:?service required}"
   src="$(source_env_file_for_role "$role")"
   require_readable_file "Harness $role env file" "$src"
-  container_env_file="$(container_env_file_for_role "$role")"
+  container_env_file="$(container_env_file_for_role "$role" "$service")"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   mkdir -p "$(dirname "$host_env_file")"
   case "$role" in
     gerrit)
       sed -e 's|^GERRIT_SITE_PATH=.*|GERRIT_SITE_PATH="/srv/gerrit"|' \
+        -e 's|^GERRIT_EVIDENCE_DIR=.*|GERRIT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
+        -e 's|^GERRIT_LOG_DIR=.*|GERRIT_LOG_DIR="/var/log/loopforge"|' \
         "$src" >"$host_env_file"
       ;;
     jenkins-controller)
       sed -e 's|^JENKINS_HOME=.*|JENKINS_HOME="/var/lib/jenkins"|' \
+        -e 's|^JENKINS_EVIDENCE_DIR=.*|JENKINS_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
+        -e 's|^JENKINS_LOG_DIR=.*|JENKINS_LOG_DIR="/var/log/loopforge"|' \
         "$src" >"$host_env_file"
       ;;
     jenkins-agent)
-      sed -e 's|^JENKINS_AGENT_REMOTE_FS=.*|JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"|' \
-        "$src" >"$host_env_file"
+      if [ "$service" = "bundle-factory" ]; then
+        sed \
+          -e 's|^JENKINS_AGENT_ARTIFACT_OUTPUT_DIR=.*|JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-agent"|' \
+          "$src" >"$host_env_file"
+      else
+        sed -e 's|^JENKINS_AGENT_REMOTE_FS=.*|JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"|' \
+          -e 's|^JENKINS_AGENT_EVIDENCE_DIR=.*|JENKINS_AGENT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
+          -e 's|^JENKINS_AGENT_LOG_DIR=.*|JENKINS_AGENT_LOG_DIR="/var/log/loopforge"|' \
+          "$src" >"$host_env_file"
+      fi
       ;;
     *)
       cp -- "$src" "$host_env_file"
@@ -1200,6 +1259,8 @@ render_gerrit_bundle_factory_env() {
   mkdir -p "$(dirname "$host_env_file")"
   sed \
     -e 's|^GERRIT_DOWNLOAD_ARTIFACTS=.*|GERRIT_DOWNLOAD_ARTIFACTS="1"|' \
+    -e 's|^GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR=.*|GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"|' \
+    -e 's|^GERRIT_ARTIFACT_OUTPUT_DIR=.*|GERRIT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"|' \
     "$src" >"$host_env_file"
   chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
@@ -1214,6 +1275,7 @@ render_jenkins_controller_bundle_factory_env() {
   mkdir -p "$(dirname "$host_env_file")"
   sed \
     -e 's|^JENKINS_DOWNLOAD_ARTIFACTS=.*|JENKINS_DOWNLOAD_ARTIFACTS="1"|' \
+    -e 's|^JENKINS_ARTIFACT_OUTPUT_DIR=.*|JENKINS_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-controller"|' \
     "$src" >"$host_env_file"
   chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
@@ -1234,7 +1296,18 @@ require_container_role_env() {
   service="${2:?service required}"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
-  printf '%s\n' "$(container_env_file_for_role "$role")"
+  printf '%s\n' "$(container_env_file_for_role "$role" "$service")"
+}
+
+stage_container_role_env() {
+  local role service log host_env_file container_env_file
+  role="${1:?role required}"
+  service="${2:?service required}"
+  log="${3:?log required}"
+  host_env_file="$(host_container_env_file_for_role "$role" "$service")"
+  container_env_file="$(container_env_file_for_role "$role" "$service")"
+  require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
+  stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" root root "$log"
 }
 
 prepare_product_home_ownership() {
@@ -1267,6 +1340,84 @@ prepare_product_home_ownership() {
   compose exec -T "$service" sh -c "mkdir -p $(shell_quote "$path") && chown -R $(shell_quote "$account:$group") $(shell_quote "$path")" >>"$log" 2>&1
   printf 'product_home_ownership_prepared role=%s service=%s path=%s owner=%s group=%s\n' \
     "$role" "$service" "$path" "$account" "$group" >>"$log"
+}
+
+prepare_bundle_factory_workspace_ownership() {
+  local role log state_root log_root input_root work_root workspace
+  role="${1:?role required}"
+  log="${2:?log required}"
+  state_root="/var/lib/loopforge"
+  log_root="/var/log/loopforge"
+  input_root="/var/lib/loopforge/rendered"
+  work_root="/var/lib/loopforge/artifact-bundle-work"
+  workspace="$(container_bundle_factory_work_dir_for_role "$role")"
+  if ! compose exec -T -u root bundle-factory sh -c \
+    "mkdir -p $(shell_quote "$state_root") $(shell_quote "$log_root") $(shell_quote "$input_root") $(shell_quote "$workspace") && chown -R ci-operator:ci-operator $(shell_quote "$state_root") $(shell_quote "$log_root") $(shell_quote "$input_root") $(shell_quote "$work_root")" \
+    >>"$log" 2>&1; then
+    return 1
+  fi
+  printf 'bundle_factory_workspace_ownership_prepared role=%s service=bundle-factory state=%s logs=%s inputs=%s artifacts=%s owner=ci-operator group=ci-operator\n' \
+    "$role" "$state_root" "$log_root" "$input_root" "$work_root" >>"$log"
+}
+
+copy_bundle_factory_artifacts_to_host() {
+  local role service log container_dir host_dir container_id
+  role="${1:?role required}"
+  service="${2:?service required}"
+  log="${3:?log required}"
+  container_dir="$(container_bundle_factory_work_dir_for_role "$role")"
+  host_dir="$(host_bundle_factory_work_dir_for_role "$role")"
+  if ! compose exec -T "$service" sh -c \
+    "test -f $(shell_quote "$container_dir/manifest.txt") && test -f $(shell_quote "$container_dir/checksums.sha256") && cd $(shell_quote "$container_dir") && sha256sum -c checksums.sha256" \
+    >>"$log" 2>&1; then
+    return 1
+  fi
+  container_id="$(container_id_for_service "$service")"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  rm -rf "$host_dir"
+  mkdir -p "$(dirname "$host_dir")"
+  if ! docker cp "$container_id:$container_dir" "$host_dir" >>"$log" 2>&1; then
+    return 1
+  fi
+  printf 'bundle_factory_artifact_export role=%s service=%s source=%s destination=%s transfer_mode=docker-cp-collector scope=docker-simulation-only\n' \
+    "$role" "$service" "$container_dir" "$host_dir" >>"$log"
+  printf '%s\n' "$host_dir"
+}
+
+docker_cp_file_to_service() {
+  local host_file service container_path owner group mode log container_id tmp_path dest_dir
+  host_file="${1:?host file required}"
+  service="${2:?service required}"
+  container_path="${3:?container path required}"
+  owner="${4:?owner required}"
+  group="${5:?group required}"
+  mode="${6:?mode required}"
+  log="${7:?log required}"
+  require_readable_file "Docker cp source file" "$host_file"
+  container_id="$(container_id_for_service "$service")"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  tmp_path="/tmp/loopforge-docker-cp-$$-$(basename "$container_path")"
+  dest_dir="$(dirname "$container_path")"
+  if ! docker cp "$host_file" "$container_id:$tmp_path" >>"$log" 2>&1; then
+    return 1
+  fi
+  compose exec -T -u root "$service" sh -c \
+    "install -d -m 0750 -o $(shell_quote "$owner") -g $(shell_quote "$group") $(shell_quote "$dest_dir") && mv $(shell_quote "$tmp_path") $(shell_quote "$container_path") && chown $(shell_quote "$owner:$group") $(shell_quote "$container_path") && chmod $(shell_quote "$mode") $(shell_quote "$container_path")" \
+    >>"$log" 2>&1
+  printf 'transfer_mode=docker-cp-waiver source=%s service=%s destination=%s owner=%s group=%s mode=%s scope=docker-simulation-only\n' \
+    "$host_file" "$service" "$container_path" "$owner" "$group" "$mode" >>"$log"
+}
+
+stage_rendered_env_file() {
+  local service host_env_file container_env_file owner group log
+  service="${1:?service required}"
+  host_env_file="${2:?host env file required}"
+  container_env_file="${3:?container env file required}"
+  owner="${4:?owner required}"
+  group="${5:?group required}"
+  log="${6:?log required}"
+  docker_cp_file_to_service "$host_env_file" "$service" "$container_env_file" "$owner" "$group" 0640 "$log"
+  printf '%s\n' "$container_env_file"
 }
 
 require_gerrit_bundle_factory_env() {
@@ -1389,6 +1540,95 @@ validate_role_baseline_manifest() {
   printf 'baseline_ok role=%s manifest=%s\n' "$role" "$manifest" >>"$log"
 }
 
+validate_role_baseline_manifest_in_target() {
+  local role service manifest log gerrit_version jenkins_version plugin_manager_version script
+  role="${1:?role required}"
+  service="${2:?service required}"
+  log="${3:?log required}"
+  manifest="$(target_payload_dir_for_role "$role")/manifest.txt"
+  case "$role" in
+    gerrit)
+      gerrit_version="$HARNESS_GERRIT_BASELINE"
+      jenkins_version="not-applicable"
+      plugin_manager_version="not-applicable"
+      ;;
+    jenkins-controller)
+      gerrit_version="not-applicable"
+      jenkins_version="$HARNESS_JENKINS_BASELINE"
+      plugin_manager_version="$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE"
+      ;;
+    jenkins-agent)
+      gerrit_version="not-applicable"
+      jenkins_version="not-applicable"
+      plugin_manager_version="not-applicable"
+      ;;
+    *)
+      die "Unknown role for target manifest validation: $role"
+      ;;
+  esac
+  script='
+manifest="$1"
+role="$2"
+ubuntu_release="$3"
+ubuntu_codename="$4"
+java_version="$5"
+gerrit_version="$6"
+jenkins_version="$7"
+plugin_manager_version="$8"
+test -f "$manifest" || {
+  printf "baseline_drift role=%s field=manifest expected=present actual=missing manifest=%s\n" "$role" "$manifest"
+  exit 1
+}
+expect_manifest_value() {
+  key="$1"
+  expected="$2"
+  actual="$(awk -F= -v key="$key" '\''
+    $1 == key {
+      print substr($0, length(key) + 2)
+      found = 1
+      exit
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+    }
+  '\'' "$manifest")" || {
+    printf "baseline_drift role=%s field=%s expected=%s actual=<missing> manifest=%s\n" "$role" "$key" "$expected" "$manifest"
+    exit 1
+  }
+  [ "$actual" = "$expected" ] || {
+    printf "baseline_drift role=%s field=%s expected=%s actual=%s manifest=%s\n" "$role" "$key" "$expected" "$actual" "$manifest"
+    exit 1
+  }
+}
+expect_manifest_value harness_manifest_version 1
+expect_manifest_value role "$role"
+expect_manifest_value ubuntu_release "$ubuntu_release"
+expect_manifest_value ubuntu_codename "$ubuntu_codename"
+expect_manifest_value java_version "$java_version"
+expect_manifest_value artifact_source curated-bundle-factory
+expect_manifest_value os_dependency_source approved-internal-os-repos
+expect_manifest_value public_internet_fallback simulation-only
+expect_manifest_value bundle_contains_keys no
+expect_manifest_value gerrit_version "$gerrit_version"
+expect_manifest_value jenkins_version "$jenkins_version"
+expect_manifest_value jenkins_plugin_manager_version "$plugin_manager_version"
+'
+  if ! compose exec -T "$service" sh -c "$script" sh \
+    "$manifest" \
+    "$role" \
+    "$HARNESS_UBUNTU_BASELINE_RELEASE" \
+    "$HARNESS_UBUNTU_BASELINE_CODENAME" \
+    "$HARNESS_JAVA_BASELINE" \
+    "$gerrit_version" \
+    "$jenkins_version" \
+    "$plugin_manager_version" >>"$log" 2>&1; then
+    return 1
+  fi
+  printf 'baseline_ok role=%s manifest=%s location=target-container\n' "$role" "$manifest" >>"$log"
+}
+
 write_evidence() {
   local checkpoint role status command_name log_ref message file
   local manifest_ref checksum_ref target_container
@@ -1411,8 +1651,8 @@ write_evidence() {
     ensure_dirs
   fi
   file="$HARNESS_EVIDENCE_DIR/${checkpoint}-${role}-$(timestamp_utc).json"
-  manifest_ref="$(manifest_reference_for_evidence "$role")"
-  checksum_ref="$(checksum_reference_for_evidence "$role")"
+  manifest_ref="$(manifest_reference_for_evidence "$checkpoint" "$role")"
+  checksum_ref="$(checksum_reference_for_evidence "$checkpoint" "$role")"
   target_container="$(target_container_for_evidence "$role")"
   q_mode="$(json_quote "$HARNESS_MODE")"
   q_timestamp="$(json_quote "$(iso_timestamp_utc)")"
@@ -1437,7 +1677,7 @@ write_evidence() {
   q_gerrit="$(json_quote "$HARNESS_GERRIT_BASELINE")"
   q_jenkins="$(json_quote "$HARNESS_JENKINS_BASELINE")"
   q_plugin_manager="$(json_quote "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE")"
-  q_source_boundary="$(json_quote "Application artifacts are prepared in bundle factory and staged to targets; target-host public internet fallback is simulation-only for Ubuntu/OS dependencies.")"
+  q_source_boundary="$(json_quote "Application artifacts are prepared in bundle factory and transferred to targets with a Docker cp simulation-only waiver; target-host public internet fallback is simulation-only for Ubuntu/OS dependencies.")"
 
   cat >"$file" <<EOF
 {
@@ -1829,7 +2069,7 @@ role_helper_present_in_container() {
 }
 
 cmd_prepare_artifacts() {
-  local role helper service log rc evidence artifact_dir export_dir gerrit_env_file jenkins_env_file
+  local role helper service log rc evidence artifact_dir export_dir host_env_file role_env_file export_archive
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -1843,6 +2083,23 @@ cmd_prepare_artifacts() {
   fi
   helper="$(helper_for_role "$role")"
   service="bundle-factory"
+  case "$role" in
+    gerrit)
+      host_env_file="$(host_gerrit_bundle_factory_env_file)"
+      role_env_file="$(gerrit_bundle_factory_env_file)"
+      require_readable_file "Rendered Gerrit bundle factory env file; run render-config first" "$host_env_file"
+      ;;
+    jenkins-controller)
+      host_env_file="$(host_jenkins_controller_bundle_factory_env_file)"
+      role_env_file="$(jenkins_controller_bundle_factory_env_file)"
+      require_readable_file "Rendered Jenkins controller bundle factory env file; run render-config first" "$host_env_file"
+      ;;
+    jenkins-agent)
+      host_env_file="$(host_container_env_file_for_role jenkins-agent "$service")"
+      role_env_file="$(container_env_file_for_role jenkins-agent "$service")"
+      require_readable_file "Rendered jenkins-agent env file; run render-config first" "$host_env_file"
+      ;;
+  esac
   ensure_harness_up_for_role "$service"
   require_running_service "$service"
 
@@ -1862,34 +2119,39 @@ cmd_prepare_artifacts() {
   fi
 
   : >"$log"
+  if ! prepare_bundle_factory_workspace_ownership "$role" "$log"; then
+    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Bundle factory workspace ownership preparation failed")"
+    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
   if [ "$role" = "gerrit" ]; then
     ensure_gerrit_ldap_bind_secret "$log"
-    gerrit_env_file="$(require_gerrit_bundle_factory_env)"
   elif [ "$role" = "jenkins-controller" ]; then
-    jenkins_env_file="$(require_jenkins_controller_bundle_factory_env)"
+    :
   elif [ "$role" = "jenkins-agent" ]; then
-    jenkins_env_file="$(require_container_role_env jenkins-agent "$service")"
+    :
   fi
+  role_env_file="$(stage_rendered_env_file "$service" "$host_env_file" "$role_env_file" ci-operator ci-operator "$log")"
 
   if [ "$role" = "gerrit" ]; then
-    if compose exec -T "$service" "/workspace/$helper" --env "$gerrit_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+    if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
     fi
   elif [ "$role" = "jenkins-controller" ]; then
-    if compose exec -T "$service" "/workspace/$helper" --env "$jenkins_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+    if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
     fi
   elif [ "$role" = "jenkins-agent" ]; then
-    if compose exec -T "$service" "/workspace/$helper" --env "$jenkins_env_file" prepare-artifacts >>"$log" 2>&1; then
+    if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
     fi
-  elif compose exec -T "$service" "/workspace/$helper" prepare-artifacts >>"$log" 2>&1; then
+  elif compose exec -T -u ci-operator "$service" "/workspace/$helper" prepare-artifacts >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
@@ -1905,7 +2167,11 @@ cmd_prepare_artifacts() {
     return "$rc"
   fi
 
-  artifact_dir="$(host_bundle_factory_work_dir_for_role "$role")"
+  if ! artifact_dir="$(copy_bundle_factory_artifacts_to_host "$role" "$service" "$log")"; then
+    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper did not produce valid manifest/checksum artifacts in bundle factory")"
+    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
   if [ ! -f "$artifact_dir/manifest.txt" ] || [ ! -f "$artifact_dir/checksums.sha256" ]; then
     evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper did not produce manifest.txt and checksums.sha256")"
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
@@ -1931,7 +2197,8 @@ cmd_prepare_artifacts() {
 }
 
 cmd_stage_artifacts() {
-  local role service archive checksum stage_dir payload_dir target_bundle_dir target_payload_dir log rc evidence
+  local role service archive checksum target_bundle_dir target_payload_dir log evidence
+  local incoming_dir archive_name checksum_name container_archive container_checksum extract_script
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -1946,10 +2213,13 @@ cmd_stage_artifacts() {
   service="$(service_for_role "$role")"
   archive="$(exported_artifact_archive_for_role "$role")"
   checksum="$(exported_artifact_checksum_for_role "$role")"
-  stage_dir="$(stage_bundle_dir_for_role "$role")"
-  payload_dir="$(stage_payload_dir_for_role "$role")"
   target_bundle_dir="$(target_bundle_dir_for_role "$role")"
   target_payload_dir="$(target_payload_dir_for_role "$role")"
+  incoming_dir="/var/lib/loopforge/staging/$role/incoming"
+  archive_name="$(basename "$archive")"
+  checksum_name="$(basename "$checksum")"
+  container_archive="$incoming_dir/$archive_name"
+  container_checksum="$incoming_dir/$checksum_name"
   log="$(bounded_log_path "stage-artifacts-$role")"
 
   ensure_harness_up_for_role "$service"
@@ -1964,61 +2234,56 @@ cmd_stage_artifacts() {
     return 1
   fi
 
-  rm -rf "$stage_dir"
-  mkdir -p "$(dirname "$stage_dir")"
-  if tar -xzf "$archive" -C "$(dirname "$stage_dir")" >>"$log" 2>&1; then
-    rc=0
-  else
-    rc=$?
-  fi
-  if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Failed to extract artifact bundle archive")"
+  if ! docker_cp_file_to_service "$archive" "$service" "$container_archive" root root 0644 "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact archive failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
-    return "$rc"
+    return 1
   fi
-
-  if ! validate_role_baseline_manifest "$role" "$payload_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Extracted artifact manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
-    printf 'ERROR: Extracted artifact baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
+  if ! docker_cp_file_to_service "$checksum" "$service" "$container_checksum" root root 0644 "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact checksum failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
 
-  if (cd "$stage_dir" && sha256sum -c checksums/SHA256SUMS) >>"$log" 2>&1; then
-    rc=0
-  else
-    rc=$?
-  fi
-  if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Extracted bundle checksum verification failed")"
+  extract_script='
+incoming_dir="$1"
+checksum_name="$2"
+archive_name="$3"
+target_bundle_dir="$4"
+target_payload_dir="$5"
+cd "$incoming_dir"
+sha256sum -c "$checksum_name"
+rm -rf "$target_bundle_dir"
+tar -xzf "$archive_name" -C /opt
+test -d "$target_bundle_dir"
+test -f "$target_payload_dir/manifest.txt"
+test -f "$target_payload_dir/checksums.sha256"
+cd "$target_bundle_dir"
+sha256sum -c checksums/SHA256SUMS
+cd "$target_payload_dir"
+sha256sum -c checksums.sha256
+'
+  if ! compose exec -T -u root "$service" sh -c "$extract_script" sh \
+    "$incoming_dir" \
+    "$checksum_name" \
+    "$archive_name" \
+    "$target_bundle_dir" \
+    "$target_payload_dir" >>"$log" 2>&1; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Target-side artifact extraction and checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
-    return "$rc"
+    return 1
   fi
+  printf 'target_artifact_extract role=%s service=%s transfer_mode=docker-cp-waiver bundle=%s payload=%s scope=docker-simulation-only\n' \
+    "$role" "$service" "$target_bundle_dir" "$target_payload_dir" >>"$log"
 
-  if (cd "$payload_dir" && sha256sum -c checksums.sha256) >>"$log" 2>&1; then
-    rc=0
-  else
-    rc=$?
-  fi
-  if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Role payload checksum verification failed")"
-    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
-    return "$rc"
-  fi
-
-  if ! validate_role_baseline_manifest "$role" "$payload_dir/manifest.txt" "$log"; then
+  if ! validate_role_baseline_manifest_in_target "$role" "$service" "$log"; then
     evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Target staged manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
     printf 'ERROR: Target staged baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
     print_command_failure stage-artifacts "$role" blocked "$log" "$evidence" >&2
     return 1
   fi
 
-  if ! compose exec -T "$service" sh -c "test -d $(shell_quote "$target_bundle_dir") && test -f $(shell_quote "$target_payload_dir/manifest.txt") && test -f $(shell_quote "$target_payload_dir/checksums.sha256") && cd $(shell_quote "$target_bundle_dir") && sha256sum -c checksums/SHA256SUMS && cd $(shell_quote "$target_payload_dir") && sha256sum -c checksums.sha256" >>"$log" 2>&1; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Container target-side manifest/checksum verification failed")"
-    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
-    return 1
-  fi
-
-  evidence="$(write_evidence stage-artifacts "$role" pass "simulate.sh stage-artifacts" "$log" "Artifacts staged to target and verified by manifest/checksum before mutation")"
+  evidence="$(write_evidence stage-artifacts "$role" pass "simulate.sh stage-artifacts" "$log" "Artifacts transferred with Docker cp simulation-only waiver, extracted in target, and verified by manifest/checksum before mutation")"
   print_command_summary stage-artifacts "$role" ok
 }
 
@@ -2075,7 +2340,19 @@ data = json.loads(evidence.read_text())
 refs = data.get("bounded_log_references", "")
 mapped = []
 for ref in refs.split(";"):
-    if ref.startswith("/harness/logs/"):
+    if ref.startswith("/var/log/loopforge/"):
+        mapped_ref = str(host_log / ref.removeprefix("/var/log/loopforge/"))
+        path = pathlib.Path(mapped_ref)
+        if not path.is_file() or path.stat().st_size == 0:
+            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
+        mapped.append(mapped_ref)
+    elif ref.startswith("/var/lib/loopforge/"):
+        mapped_ref = str(host_state / ref.removeprefix("/var/lib/loopforge/"))
+        path = pathlib.Path(mapped_ref)
+        if not path.is_file() or path.stat().st_size == 0:
+            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
+        mapped.append(mapped_ref)
+    elif ref.startswith("/harness/logs/"):
         mapped_ref = str(host_log / ref.removeprefix("/harness/logs/"))
         path = pathlib.Path(mapped_ref)
         if not path.is_file() or path.stat().st_size == 0:
@@ -2138,7 +2415,7 @@ ensure_gerrit_ready_for_jenkins_controller() {
 
   ensure_harness_up_for_role "$gerrit_service"
   require_running_service "$gerrit_service"
-  gerrit_env_file="$(require_container_role_env gerrit "$gerrit_service")"
+  gerrit_env_file="$(stage_container_role_env gerrit "$gerrit_service" "$log")"
 
   if compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes validate >>"$log" 2>&1; then
     printf 'dependency_ready role=gerrit reason=real-gerrit-validation-already-passing\n' >>"$log"
@@ -2176,7 +2453,7 @@ cmd_run_role_gate() {
     printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
     return 1
   fi
-  role_env_file="$(require_container_role_env "$role" "$service")"
+  role_env_file="$(stage_container_role_env "$role" "$service" "$log")"
 
   case "$role" in
     gerrit)
@@ -2235,7 +2512,7 @@ cmd_run_role_gate() {
   esac
 
   if [ "$rc" -eq 0 ]; then
-    if ! validate_role_baseline_manifest "$role" "$HARNESS_STAGING_DIR/$role/manifest.txt" "$log"; then
+    if ! validate_role_baseline_manifest_in_target "$role" "$service" "$log"; then
       evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Staged artifact baseline metadata is missing or drifted; role readiness cannot be comparable")"
       print_command_failure run-role-gate "$role" blocked "$log" "$evidence" >&2
       return 1

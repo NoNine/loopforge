@@ -138,7 +138,7 @@ Staged artifact paths:
 | Location | Path |
 | --- | --- |
 | Bundle factory output | `JENKINS_AGENT_ARTIFACT_OUTPUT_DIR` |
-| Bundle-factory workspace | `$HOME/artifact-bundle-work/jenkins-agent` in operator-oriented examples |
+| Bundle-factory workspace | `/var/lib/loopforge/artifact-bundle-work/jenkins-agent` |
 | Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/jenkins-agent-artifacts-bundle.tar.gz` |
 
 Side effects:

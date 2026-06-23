@@ -236,7 +236,7 @@ Staged artifact paths:
 | Location | Path |
 | --- | --- |
 | Bundle factory output | `JENKINS_ARTIFACT_OUTPUT_DIR` |
-| Bundle-factory workspace | `$HOME/artifact-bundle-work/jenkins-controller` in operator-oriented examples |
+| Bundle-factory workspace | `/var/lib/loopforge/artifact-bundle-work/jenkins-controller` |
 | Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/jenkins-artifacts-bundle.tar.gz` |
 
 Side effects:

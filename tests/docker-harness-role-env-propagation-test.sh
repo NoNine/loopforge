@@ -51,6 +51,9 @@ case "$*" in
       exec)
         shift
         [ "${1:-}" = "-T" ] && shift
+        if [ "${1:-}" = "-u" ]; then
+          shift 2
+        fi
         service="${1:-}"
         shift
         case "$*" in
@@ -145,12 +148,12 @@ JENKINS_AGENT_SENTINEL=mutated-after-render
 EOF
 
 for file in \
-  "$state_dir/bundle-factory/rendered/gerrit-bundle-factory.env" \
-  "$state_dir/bundle-factory/rendered/jenkins-controller-bundle-factory.env" \
-  "$state_dir/bundle-factory/rendered/jenkins-agent.env" \
-  "$state_dir/gerrit/rendered/gerrit.env" \
-  "$state_dir/jenkins-controller/rendered/jenkins-controller.env" \
-  "$state_dir/jenkins-agent/rendered/jenkins-agent.env"
+  "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env" \
+  "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env" \
+  "$runtime_dir/helper-envs/bundle-factory/jenkins-agent.env" \
+  "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
+  "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \
+  "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 do
   [ -f "$file" ] || {
     printf 'Expected render-config to create helper env file: %s\n' "$file" >&2
@@ -178,27 +181,53 @@ env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-agent >/dev/null 2>&1
 set -e
 
-grep -Fq -- '/workspace/scripts/gerrit-setup.sh --env /harness/state/rendered/gerrit-bundle-factory.env --yes prepare-artifacts' "$calls"
-grep -Fq -- '/workspace/scripts/jenkins-controller-setup.sh --env /harness/state/rendered/jenkins-controller-bundle-factory.env --yes prepare-artifacts' "$calls"
-grep -Fq -- '/workspace/scripts/jenkins-agent-setup.sh --env /harness/state/rendered/jenkins-agent.env prepare-artifacts' "$calls"
+grep -Fq -- 'exec -T -u root bundle-factory sh -c' "$calls"
+grep -Fq -- 'exec -T -u ci-operator bundle-factory /workspace/scripts/gerrit-setup.sh --env /var/lib/loopforge/rendered/gerrit-bundle-factory.env --yes prepare-artifacts' "$calls"
+grep -Fq -- 'exec -T -u ci-operator bundle-factory /workspace/scripts/jenkins-controller-setup.sh --env /var/lib/loopforge/rendered/jenkins-controller-bundle-factory.env --yes prepare-artifacts' "$calls"
+grep -Fq -- 'exec -T -u ci-operator bundle-factory /workspace/scripts/jenkins-agent-setup.sh --env /var/lib/loopforge/rendered/jenkins-agent.env prepare-artifacts' "$calls"
+grep -Fq -- 'cp ' "$calls"
+grep -Fq -- 'container-id:/tmp/loopforge-docker-cp-' "$calls"
+grep -Fq -- '/var/lib/loopforge/rendered/jenkins-controller.env' "$calls"
+grep -Fq -- '/var/lib/loopforge/rendered/jenkins-agent.env' "$calls"
 
 grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/gerrit.env"
 grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/jenkins-controller.env"
 grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$runtime_dir/jenkins-agent.env"
-grep -Fq 'GERRIT_DOWNLOAD_ARTIFACTS="1"' "$state_dir/bundle-factory/rendered/gerrit-bundle-factory.env"
-grep -Fq 'JENKINS_DOWNLOAD_ARTIFACTS="1"' "$state_dir/bundle-factory/rendered/jenkins-controller-bundle-factory.env"
-grep -Fq 'GERRIT_SENTINEL=original' "$state_dir/gerrit/rendered/gerrit.env"
-grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$state_dir/jenkins-controller/rendered/jenkins-controller.env"
-grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$state_dir/jenkins-agent/rendered/jenkins-agent.env"
-grep -Fq 'GERRIT_SITE_PATH="/srv/gerrit"' "$state_dir/gerrit/rendered/gerrit.env"
-grep -Fq 'JENKINS_HOME="/var/lib/jenkins"' "$state_dir/jenkins-controller/rendered/jenkins-controller.env"
-grep -Fq 'JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"' "$state_dir/jenkins-agent/rendered/jenkins-agent.env"
+grep -Fq 'GERRIT_DOWNLOAD_ARTIFACTS="1"' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
+grep -Fq 'GERRIT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
+grep -Fq 'JENKINS_DOWNLOAD_ARTIFACTS="1"' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
+grep -Fq 'JENKINS_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-controller"' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
+grep -Fq 'JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-agent"' "$runtime_dir/helper-envs/bundle-factory/jenkins-agent.env"
+grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'GERRIT_SITE_PATH="/srv/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'GERRIT_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'GERRIT_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'JENKINS_HOME="/var/lib/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+if grep -Fq '/harness/evidence' \
+  "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
+  "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \
+  "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+then
+  printf 'Target rendered envs must not expose /harness/evidence\n' >&2
+  exit 1
+fi
+if grep -Fq '/harness/logs' \
+  "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
+  "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \
+  "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+then
+  printf 'Target rendered envs must not expose /harness/logs\n' >&2
+  exit 1
+fi
 if grep -R -Fq 'mutated-after-render' \
-  "$runtime_dir" \
-  "$state_dir/bundle-factory/rendered" \
-  "$state_dir/gerrit/rendered" \
-  "$state_dir/jenkins-controller/rendered" \
-  "$state_dir/jenkins-agent/rendered"
+  "$runtime_dir"
 then
   printf 'Rendered helper envs used mutated original operator env files\n' >&2
   exit 1

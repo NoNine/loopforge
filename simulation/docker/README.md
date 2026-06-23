@@ -21,7 +21,7 @@ verifier CLI.
 | `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary. |
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
-| `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, extracts them to `/opt/gerrit-artifacts-bundle`, `/opt/jenkins-artifacts-bundle`, or `/opt/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
+| `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/opt/gerrit-artifacts-bundle`, `/opt/jenkins-artifacts-bundle`, or `/opt/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
 | `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
 | `full-verify [--env FILE] [--skip-check]` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. `--skip-check` requires a matching successful check marker for the same run and still lets `verify-trigger` perform its own validation. Success prints a short `full-verify: integration ok` summary. |
@@ -93,7 +93,7 @@ generated/simulation/docker/<run-id>/
 | --- | --- |
 | Harness/container state | `generated/simulation/docker/<run-id>/state/` |
 | Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
-| Staged artifacts | `generated/simulation/docker/<run-id>/staging/<environment>/` |
+| Transfer scratch | `generated/simulation/docker/<run-id>/staging/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<bundle>.tar.gz` |
 | Evidence | `generated/simulation/docker/<run-id>/evidence/` |
 | Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
@@ -102,15 +102,25 @@ Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
 layout.
 
-`prepare-artifacts` first writes role artifacts inside the bundle-factory
-workspace, then exports successful bundles as archive handoff files to
+`prepare-artifacts` first writes role artifacts inside the container-owned
+bundle-factory workspace, then copies successful outputs back to the host
+collector and exports archive handoff files to
 `exported-artifacts/<bundle>.tar.gz` plus `.sha256`. `stage-artifacts`
-consumes those archives and extracts them under the role-specific `/opt`
-bundle roots before helper validation.
+consumes those archives through an explicit Docker simulation-only `docker cp`
+waiver, then extracts and verifies them inside the target container under the
+role-specific `/opt` bundle roots before helper validation. Docker target
+containers do not bind-mount host staging directories onto `/opt`.
 
-`/harness/state` is a harness sideband mount for reviewed inputs,
-coordination state, generated control scripts, fingerprints, status, and
-evidence references. It does not replace normal target runtime locations.
+Bundle-factory and target helper state are helper-visible at
+`/var/lib/loopforge`, and helper logs are helper-visible at
+`/var/log/loopforge`. Bundle-factory `/var/lib/loopforge` debug subdirectories
+are host-backed under `state/bundle-factory/`, not `product-homes/`.
+Successful artifacts still leave that environment through the explicit export
+step. Rendered helper env files are operator-reviewed runtime inputs first,
+then copied into helper paths before helper execution. The host-side generated
+directories are for operator review, debugging, evidence collection, and
+cleanup; they are not a target payload transfer mechanism.
+
 Target operations still install or update product-owned paths such as
 `/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
 `$JENKINS_HOME/.ssh/known_hosts`, and agent `authorized_keys`.
@@ -118,12 +128,14 @@ Target operations still install or update product-owned paths such as
 Transient target-local files under `/tmp` are acceptable when they stage
 payloads for normal target APIs or runtime installation, for example Gerrit
 REST JSON bodies, public-key handoff, or installing Jenkins `known_hosts`.
-They must not be used to bypass expected access to a sideband file under
-`/harness/state`.
+They must not be used to bypass expected access to reviewed helper inputs or
+helper-owned state.
 
-Harness sideband directories are host-owned and grant container runtime
-access by group and mode. Jenkins-owned private keys under integration keys
-are the deliberate exception: the Jenkins controller owns the
+Helper-owned sideband directories may be backed by host directories in the
+Docker simulation, but the container helper owns the runtime files. The host
+collector may read generated evidence, logs, and exported artifacts and may
+clean up the selected run root. Jenkins-owned private keys under integration
+keys are the deliberate exception: the Jenkins controller owns the
 Jenkins-to-Gerrit and Jenkins-to-agent private keys, while generated Groovy
 scripts, status files, evidence, and public-key metadata remain harness
 sideband state.

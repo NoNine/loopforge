@@ -172,7 +172,7 @@ Staged artifact paths:
 | Location | Path |
 | --- | --- |
 | Bundle factory output | `GERRIT_ARTIFACT_OUTPUT_DIR` |
-| Bundle-factory workspace | `$HOME/artifact-bundle-work/gerrit` in operator-oriented examples; see `docs/artifact-bundle-contract.md` |
+| Bundle-factory workspace | `/var/lib/loopforge/artifact-bundle-work/gerrit`; see `docs/artifact-bundle-contract.md` |
 | Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/gerrit-artifacts-bundle.tar.gz` |
 
 Side effects:

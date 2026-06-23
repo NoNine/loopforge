@@ -88,8 +88,11 @@ reject_pattern scripts/jenkins-agent-setup.sh \
   'q_log="$(json_quote "$bounded_log;$service_log")"' \
   'Jenkins agent service log must not be a bounded log reference'
 require_pattern scripts/integration-setup.sh \
+  "printf '%s/integration\n' \"\$HARNESS_STATE_DIR\"" \
+  'Integration durable host state must live under operator-owned integration state'
+reject_pattern scripts/integration-setup.sh \
   "printf '%s/jenkins-controller/integration\n' \"\$HARNESS_STATE_DIR\"" \
-  'Integration durable host state must live under Jenkins controller harness state'
+  'Integration host state must not live under Jenkins controller helper state'
 require_pattern scripts/integration-setup.sh \
   'mkdir -p "$(integration_host_state_dir)/status" "$(integration_log_dir)" "$(integration_evidence_dir)"' \
   'Integration host state must only create status, logs, and evidence directories'

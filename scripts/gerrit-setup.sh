@@ -20,7 +20,7 @@ readonly GERRIT_INTERNAL_UBUNTU_RELEASE="24.04"
 readonly GERRIT_INTERNAL_UBUNTU_CODENAME="noble"
 readonly GERRIT_INTERNAL_API_LINE="3.13"
 readonly GERRIT_NATIVE_SITE_PATH="/srv/gerrit"
-readonly GERRIT_BUNDLE_FACTORY_WORK_DIR="/home/ci-operator/artifact-bundle-work/gerrit"
+readonly GERRIT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"
 readonly GERRIT_STAGED_BUNDLE_PAYLOAD_DIR="/opt/gerrit-artifacts-bundle/gerrit"
 
 usage() {
@@ -261,8 +261,8 @@ apply_env_defaults() {
   GERRIT_DOWNLOAD_ARTIFACTS="${GERRIT_DOWNLOAD_ARTIFACTS:-0}"
   GERRIT_OS_DEPENDENCIES="${GERRIT_OS_DEPENDENCIES:-ca-certificates,curl,git,ldap-utils,openssh-client,openjdk-21-jre-headless,rsync,tar,unzip,wget}"
   GERRIT_VERIFICATION_MODE="${GERRIT_VERIFICATION_MODE:-docker-simulation}"
-  GERRIT_EVIDENCE_DIR="${GERRIT_EVIDENCE_DIR:-/harness/evidence}"
-  GERRIT_LOG_DIR="${GERRIT_LOG_DIR:-/harness/logs}"
+  GERRIT_EVIDENCE_DIR="${GERRIT_EVIDENCE_DIR:-/var/lib/loopforge/evidence}"
+  GERRIT_LOG_DIR="${GERRIT_LOG_DIR:-/var/log/loopforge}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
   LDAP_BIND_PASSWORD_FILE="${LDAP_BIND_PASSWORD_FILE:-}"
@@ -276,14 +276,10 @@ apply_env_defaults() {
   case "${HARNESS_ENVIRONMENT:-}" in
     bundle-factory)
       GERRIT_ARTIFACT_OUTPUT_DIR="$GERRIT_BUNDLE_FACTORY_WORK_DIR"
-      GERRIT_EVIDENCE_DIR="/harness/evidence"
-      GERRIT_LOG_DIR="/harness/logs"
       ;;
     gerrit-target)
       GERRIT_STAGED_ARTIFACT_DIR="$GERRIT_STAGED_BUNDLE_PAYLOAD_DIR"
       GERRIT_ARTIFACT_OUTPUT_DIR="$GERRIT_BUNDLE_FACTORY_WORK_DIR"
-      GERRIT_EVIDENCE_DIR="/harness/evidence"
-      GERRIT_LOG_DIR="/harness/logs"
       ;;
   esac
 }

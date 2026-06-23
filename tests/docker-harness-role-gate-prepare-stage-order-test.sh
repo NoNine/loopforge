@@ -57,6 +57,9 @@ case "$*" in
       exec)
         shift
         [ "${1:-}" = "-T" ] && shift
+        if [ "${1:-}" = "-u" ]; then
+          shift 2
+        fi
         service="${1:-}"
         shift
         case "$*" in
@@ -94,50 +97,6 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-write_manifest() {
-  local role dir
-  role="${1:?role required}"
-  dir="$run_dir/staging/$role"
-  mkdir -p "$dir"
-  cat >"$dir/manifest.txt" <<EOF
-harness_manifest_version=1
-role=$role
-ubuntu_release=24.04
-ubuntu_codename=noble
-java_version=21
-artifact_source=curated-bundle-factory
-os_dependency_source=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no
-EOF
-  case "$role" in
-    gerrit)
-      cat >>"$dir/manifest.txt" <<'EOF'
-gerrit_version=3.13.6
-jenkins_version=not-applicable
-jenkins_plugin_manager_version=not-applicable
-EOF
-      ;;
-    jenkins-controller)
-      cat >>"$dir/manifest.txt" <<'EOF'
-gerrit_version=not-applicable
-jenkins_version=2.555.3
-jenkins_plugin_manager_version=2.15.0
-EOF
-      ;;
-    jenkins-agent)
-      cat >>"$dir/manifest.txt" <<'EOF'
-gerrit_version=not-applicable
-jenkins_version=not-applicable
-jenkins_plugin_manager_version=not-applicable
-EOF
-      ;;
-  esac
-}
-
-write_manifest gerrit
-write_manifest jenkins-controller
-write_manifest jenkins-agent
 mkdir -p \
   "$run_dir/state/rendered" \
   "$run_dir/evidence" \
@@ -173,13 +132,13 @@ printf 'gerrit log\n' >"$run_dir/logs/gerrit.log"
 printf 'controller log\n' >"$run_dir/logs/controller.log"
 printf 'agent log\n' >"$run_dir/logs/agent.log"
 cat >"$run_dir/evidence/gerrit-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}
+{"bounded_log_references":"/var/log/loopforge/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}
 EOF
 cat >"$run_dir/evidence/jenkins-controller-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/state/runtime.status"}
+{"bounded_log_references":"/var/log/loopforge/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/state/runtime.status"}
 EOF
 cat >"$run_dir/evidence/jenkins-agent-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/harness/logs/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}
+{"bounded_log_references":"/var/log/loopforge/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}
 EOF
 
 common_env=(
@@ -254,9 +213,12 @@ agent_stage_line="$(grep -n '^stage-artifacts jenkins-agent$' "$tmp_dir/role-cal
 gerrit_chown_line="$(grep -n 'gerrit-target sh -c .*chown -R gerrit:gerrit /srv/gerrit' "$calls" | cut -d: -f1 | head -1)"
 controller_chown_line="$(grep -n 'jenkins-controller-target sh -c .*chown -R jenkins:jenkins /var/lib/jenkins' "$calls" | cut -d: -f1 | head -1)"
 agent_chown_line="$(grep -n 'jenkins-agent-target sh -c .*chown -R jenkins-agent:jenkins-agent /var/lib/jenkins-agent' "$calls" | cut -d: -f1 | head -1)"
-gerrit_install_line="$(grep -n '/workspace/scripts/gerrit-setup.sh --env /harness/state/rendered/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
-controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.sh --env /harness/state/rendered/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
-agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /harness/state/rendered/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
+gerrit_env_copy_line="$(grep -n 'helper-envs/gerrit-target/gerrit.env container-id:/tmp/loopforge-docker-cp-' "$calls" | cut -d: -f1 | head -1)"
+controller_env_copy_line="$(grep -n 'helper-envs/jenkins-controller-target/jenkins-controller.env container-id:/tmp/loopforge-docker-cp-' "$calls" | cut -d: -f1 | head -1)"
+agent_env_copy_line="$(grep -n 'helper-envs/jenkins-agent-target/jenkins-agent.env container-id:/tmp/loopforge-docker-cp-' "$calls" | cut -d: -f1 | head -1)"
+gerrit_install_line="$(grep -n '/workspace/scripts/gerrit-setup.sh --env /var/lib/loopforge/rendered/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
+controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.sh --env /var/lib/loopforge/rendered/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
+agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /var/lib/loopforge/rendered/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 
 [ "$gerrit_prepare_line" -lt "$gerrit_install_line" ] || {
   printf 'gerrit prepare did not run before install\n' >&2
@@ -268,6 +230,10 @@ agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /
 }
 [ -n "$gerrit_chown_line" ] && [ "$gerrit_chown_line" -lt "$gerrit_install_line" ] || {
   printf 'gerrit product home ownership was not prepared before install\n' >&2
+  exit 1
+}
+[ -n "$gerrit_env_copy_line" ] && [ "$gerrit_env_copy_line" -lt "$gerrit_install_line" ] || {
+  printf 'gerrit rendered env was not Docker-copied before install\n' >&2
   exit 1
 }
 [ "$controller_prepare_line" -lt "$controller_install_line" ] || {
@@ -282,6 +248,10 @@ agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /
   printf 'jenkins-controller product home ownership was not prepared before install\n' >&2
   exit 1
 }
+[ -n "$controller_env_copy_line" ] && [ "$controller_env_copy_line" -lt "$controller_install_line" ] || {
+  printf 'jenkins-controller rendered env was not Docker-copied before install\n' >&2
+  exit 1
+}
 [ "$agent_prepare_line" -lt "$agent_install_line" ] || {
   printf 'jenkins-agent prepare did not run before install\n' >&2
   exit 1
@@ -292,5 +262,9 @@ agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /
 }
 [ -n "$agent_chown_line" ] && [ "$agent_chown_line" -lt "$agent_install_line" ] || {
   printf 'jenkins-agent product home ownership was not prepared before install\n' >&2
+  exit 1
+}
+[ -n "$agent_env_copy_line" ] && [ "$agent_env_copy_line" -lt "$agent_install_line" ] || {
+  printf 'jenkins-agent rendered env was not Docker-copied before install\n' >&2
   exit 1
 }

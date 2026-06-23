@@ -8,12 +8,12 @@ manual.
 
 ## Workspaces
 
-- Bundle-factory workspaces may live under operator-owned subdirectories such
-  as `$HOME/artifact-bundle-work/<role>`.
+- Bundle-factory workspaces live under helper-owned state, currently
+  `/var/lib/loopforge/artifact-bundle-work/<role>`.
 - Bundle-factory workspaces produce the role's release-unit contents before
   packaging.
-- Target transfer inboxes may live under operator-owned subdirectories such
-  as `$HOME/artifact-bundle-inbox/`.
+- Target transfer inboxes live under helper-owned target state, currently
+  `/var/lib/loopforge/staging/<role>/incoming`.
 - Helper-owned generated execution state on target environments lives under
   `/var/lib/loopforge/`.
 - Helper-owned logs on target environments live under `/var/log/loopforge/`.

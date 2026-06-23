@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-mkdir -p /harness/state /harness/evidence /harness/logs
+mkdir -p /var/lib/loopforge/evidence /var/log/loopforge
 printf '%s\n' "simulation-only public internet fallback is not production support" \
-  > /harness/state/source-boundary.txt
+  > /var/lib/loopforge/source-boundary.txt
 exec sleep infinity

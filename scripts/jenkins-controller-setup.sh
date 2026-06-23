@@ -20,7 +20,7 @@ supported_jenkins_plugin_manager_version="2.15.0"
 supported_jenkins_ubuntu_release="24.04"
 supported_jenkins_ubuntu_codename="noble"
 readonly JENKINS_NATIVE_HOME="/var/lib/jenkins"
-readonly JENKINS_BUNDLE_FACTORY_WORK_DIR="/home/ci-operator/artifact-bundle-work/jenkins-controller"
+readonly JENKINS_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-controller"
 readonly JENKINS_STAGED_BUNDLE_PAYLOAD_DIR="/opt/jenkins-artifacts-bundle/jenkins"
 
 usage() {
@@ -307,8 +307,8 @@ apply_env_defaults() {
   JENKINS_HOME="${JENKINS_HOME:-$JENKINS_NATIVE_HOME}"
   JENKINS_STAGED_ARTIFACT_DIR="${JENKINS_STAGED_ARTIFACT_DIR:-$JENKINS_STAGED_BUNDLE_PAYLOAD_DIR}"
   JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-$JENKINS_BUNDLE_FACTORY_WORK_DIR}"
-  JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/harness/evidence}"
-  JENKINS_LOG_DIR="${JENKINS_LOG_DIR:-/harness/logs}"
+  JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/var/lib/loopforge/evidence}"
+  JENKINS_LOG_DIR="${JENKINS_LOG_DIR:-/var/log/loopforge}"
   JENKINS_VERIFICATION_MODE="${JENKINS_VERIFICATION_MODE:-docker-simulation}"
   JENKINS_DOWNLOAD_ARTIFACTS="${JENKINS_DOWNLOAD_ARTIFACTS:-0}"
   JENKINS_WAR_SOURCE="${JENKINS_WAR_SOURCE:-}"
@@ -951,17 +951,13 @@ validate_artifact_output_dir() {
       ;;
   esac
   case "$dir" in
+    "$allowed_work"|"$allowed_work"/*)
+      ;;
     /|/tmp|/tmp/*|/var|/var/*|/etc|/etc/*|/usr|/usr/*|"$repo_root"|"$repo_root"/*)
       die "Unsafe JENKINS_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
       ;;
     /home|/home/*|"$HOME"|"$HOME"/*)
-      case "$dir" in
-        "$allowed_work"|"$allowed_work"/*)
-          ;;
-        *)
-          die "Unsafe JENKINS_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
-          ;;
-      esac
+      die "Unsafe JENKINS_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
       ;;
   esac
   for base in "$allowed_work"; do

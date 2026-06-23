@@ -53,6 +53,9 @@ case "$*" in
       exec)
         shift
         [ "${1:-}" = "-T" ] && shift
+        if [ "${1:-}" = "-u" ]; then
+          shift 2
+        fi
         service="${1:-}"
         shift
         case "$*" in

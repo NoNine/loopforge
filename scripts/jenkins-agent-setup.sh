@@ -13,7 +13,7 @@ env_file=""
 dry_run=0
 assume_yes=0
 readonly JENKINS_AGENT_NATIVE_REMOTE_FS="/var/lib/jenkins-agent"
-readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/home/ci-operator/artifact-bundle-work/jenkins-agent"
+readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-agent"
 readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/opt/jenkins-agent-artifacts-bundle/jenkins-agent"
 
 usage() {
@@ -172,8 +172,8 @@ apply_env_defaults() {
   JENKINS_AGENT_STATE_DIR="${JENKINS_AGENT_STATE_DIR:-$JENKINS_AGENT_NATIVE_REMOTE_FS}"
   JENKINS_AGENT_STAGED_ARTIFACT_DIR="${JENKINS_AGENT_STAGED_ARTIFACT_DIR:-$JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR}"
   JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="${JENKINS_AGENT_ARTIFACT_OUTPUT_DIR:-$JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR}"
-  JENKINS_AGENT_EVIDENCE_DIR="${JENKINS_AGENT_EVIDENCE_DIR:-/harness/evidence}"
-  JENKINS_AGENT_LOG_DIR="${JENKINS_AGENT_LOG_DIR:-/harness/logs}"
+  JENKINS_AGENT_EVIDENCE_DIR="${JENKINS_AGENT_EVIDENCE_DIR:-/var/lib/loopforge/evidence}"
+  JENKINS_AGENT_LOG_DIR="${JENKINS_AGENT_LOG_DIR:-/var/log/loopforge}"
   JENKINS_AGENT_VERIFICATION_MODE="${JENKINS_AGENT_VERIFICATION_MODE:-docker-simulation}"
   JENKINS_AGENT_OS_DEPENDENCIES="${JENKINS_AGENT_OS_DEPENDENCIES:-ca-certificates,curl,git,openssh-client,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget}"
   JENKINS_AGENT_CONTROLLER_PLUGIN="${JENKINS_AGENT_CONTROLLER_PLUGIN:-ssh-slaves}"
@@ -501,17 +501,13 @@ validate_artifact_output_dir() {
       ;;
   esac
   case "$dir" in
+    "$allowed_work"|"$allowed_work"/*)
+      ;;
     /|/tmp|/tmp/*|/var|/var/*|/etc|/etc/*|/usr|/usr/*|"$repo_root"|"$repo_root"/*)
       die "Unsafe JENKINS_AGENT_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
       ;;
     /home|/home/*|"$HOME"|"$HOME"/*)
-      case "$dir" in
-        "$allowed_work"|"$allowed_work"/*)
-          ;;
-        *)
-          die "Unsafe JENKINS_AGENT_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
-          ;;
-      esac
+      die "Unsafe JENKINS_AGENT_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
       ;;
   esac
   for base in "$allowed_work"; do
