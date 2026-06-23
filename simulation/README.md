@@ -58,27 +58,38 @@ Ubuntu dependency bundle workflows are not supported.
 
 ## Output Locations
 
-Generated runtime output is not committed. Docker and VM steps write generated
-state, staged artifacts, evidence, and bounded logs under layer- and
-run-scoped paths so separate runs do not collide.
+Generated runtime output is not committed. Docker v1 writes lifecycle output
+under a single repo-local generated run root so lifecycle and cleanup commands
+share the same path contract:
 
-Use these canonical roots and subpath patterns:
+```text
+generated/simulation/docker/<run-id>/
+```
 
-| Output kind | Canonical root | Run-scoped pattern |
-| --- | --- | --- |
-| State | `simulation/state/` | `simulation/state/<layer>/<run-id>/` |
-| Staged artifacts | `simulation/staging/` | `simulation/staging/<layer>/<run-id>/<environment>/` |
-| Evidence | `simulation/evidence/` | `simulation/evidence/<layer>/<run-id>/` |
-| Bounded logs | `logs/` | `logs/<layer>/<run-id>/` |
+Docker lifecycle and cleanup commands do not support arbitrary generated
+roots in v1. Use a distinct run ID to isolate separate runs.
 
-`<layer>` is `docker` or `vm`. `<run-id>` is a unique run identifier, such as
-a UTC timestamp plus a short label. `<environment>` is one of
-`bundle-factory`, `ldap`, `gerrit`, `jenkins-controller`, or
-`jenkins-agent`.
+Docker uses these subpath patterns:
+
+| Output kind | Run-scoped pattern |
+| --- | --- |
+| State | `generated/simulation/docker/<run-id>/state/` |
+| Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
+| Staged artifacts | `generated/simulation/docker/<run-id>/staging/<environment>/` |
+| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<role>/` |
+| Evidence | `generated/simulation/docker/<run-id>/evidence/` |
+| Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
+
+`<run-id>` is a unique run identifier, such as a UTC timestamp plus a short
+label. `<environment>` is one of `bundle-factory`, `ldap`, `gerrit`,
+`jenkins-controller`, or `jenkins-agent`.
 
 These paths are generated runtime output unless a file in the tree states
 otherwise. Keep them ignored or documented as generated when created by
 simulation steps.
+
+Docker `clean` is manual and conservative: it removes mutable environment
+state while preserving exported artifacts, evidence, and logs.
 
 ## Checkpoint Contract
 

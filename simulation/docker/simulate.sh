@@ -24,8 +24,9 @@ Commands:
   stage-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   run-role-gate --role <gerrit|jenkins-controller|jenkins-agent>
   check
-  full-verify
+  full-verify [--skip-check]
   down
+  clean
 
 Options:
   --env FILE        Harness env file for bootstrap and render-config.
@@ -100,6 +101,127 @@ validate_harness_inputs() {
   validate_compose_name "HARNESS_PROJECT_NAME" "$HARNESS_PROJECT_NAME"
 }
 
+canonical_generated_run_dir() {
+  printf '%s/generated/simulation/docker/%s\n' "$repo_root" "$HARNESS_RUN_ID"
+}
+
+apply_canonical_output_paths() {
+  HARNESS_GENERATED_RUN_DIR="$(canonical_generated_run_dir)"
+  HARNESS_STATE_DIR="$HARNESS_GENERATED_RUN_DIR/state"
+  HARNESS_PRODUCT_HOME_DIR="$HARNESS_GENERATED_RUN_DIR/product-homes"
+  HARNESS_STAGING_DIR="$HARNESS_GENERATED_RUN_DIR/staging"
+  HARNESS_EXPORTED_ARTIFACT_DIR="$HARNESS_GENERATED_RUN_DIR/exported-artifacts"
+  HARNESS_EVIDENCE_DIR="$HARNESS_GENERATED_RUN_DIR/evidence"
+  HARNESS_LOG_DIR="$HARNESS_GENERATED_RUN_DIR/logs"
+  HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
+  HARNESS_RUNTIME_ENV="$HARNESS_STATE_DIR/rendered/harness.runtime.env"
+  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
+  HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
+  HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env"
+  export HARNESS_GENERATED_RUN_DIR HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
+  export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+  export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR
+  export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
+}
+
+reject_custom_output_paths() {
+  local name value expected
+  for name in \
+    HARNESS_GENERATED_RUN_DIR \
+    HARNESS_STATE_DIR \
+    HARNESS_PRODUCT_HOME_DIR \
+    HARNESS_STAGING_DIR \
+    HARNESS_EXPORTED_ARTIFACT_DIR \
+    HARNESS_EVIDENCE_DIR \
+    HARNESS_LOG_DIR \
+    HARNESS_RENDERED_ENV \
+    HARNESS_BASELINE_CONTRACT
+  do
+    eval "value=\${$name-}"
+    [ -n "$value" ] || continue
+    case "$name" in
+      HARNESS_GENERATED_RUN_DIR) expected="$(canonical_generated_run_dir)" ;;
+      HARNESS_STATE_DIR) expected="$(canonical_generated_run_dir)/state" ;;
+      HARNESS_PRODUCT_HOME_DIR) expected="$(canonical_generated_run_dir)/product-homes" ;;
+      HARNESS_STAGING_DIR) expected="$(canonical_generated_run_dir)/staging" ;;
+      HARNESS_EXPORTED_ARTIFACT_DIR) expected="$(canonical_generated_run_dir)/exported-artifacts" ;;
+      HARNESS_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/evidence" ;;
+      HARNESS_LOG_DIR) expected="$(canonical_generated_run_dir)/logs" ;;
+      HARNESS_RENDERED_ENV) expected="$(canonical_generated_run_dir)/state/rendered/harness.env" ;;
+      HARNESS_BASELINE_CONTRACT) expected="$(canonical_generated_run_dir)/state/rendered/artifact-manifest-contract.txt" ;;
+      *) die "Internal error: unknown output path $name" ;;
+    esac
+    [ "$value" = "$expected" ] ||
+      die "$name must use the canonical repo-local generated path for v1: $expected"
+  done
+}
+
+validate_canonical_run_root() {
+  local expected actual_real expected_real child
+  expected="$(canonical_generated_run_dir)"
+  [ "$HARNESS_GENERATED_RUN_DIR" = "$expected" ] ||
+    die "HARNESS_GENERATED_RUN_DIR must be $expected"
+  [ -d "$HARNESS_GENERATED_RUN_DIR" ] || die "Missing generated run directory: $HARNESS_GENERATED_RUN_DIR"
+  [ ! -L "$HARNESS_GENERATED_RUN_DIR" ] || die "Generated run directory must not be a symlink"
+  actual_real="$(realpath "$HARNESS_GENERATED_RUN_DIR")"
+  expected_real="$(realpath "$expected")"
+  [ "$actual_real" = "$expected_real" ] ||
+    die "Generated run directory resolved outside the canonical run root"
+  for child in state product-homes staging exported-artifacts evidence logs; do
+    [ ! -L "$HARNESS_GENERATED_RUN_DIR/$child" ] ||
+      die "Generated run child must not be a symlink: $HARNESS_GENERATED_RUN_DIR/$child"
+  done
+}
+
+sha256_file() {
+  sha256sum "$1" | awk '{print $1}'
+}
+
+runtime_env_fingerprint() {
+  sha256_file "$HARNESS_RUNTIME_ENV"
+}
+
+marker_value() {
+  local file key
+  file="${1:?file required}"
+  key="${2:?key required}"
+  awk -F= -v key="$key" '$1 == key { print substr($0, length(key) + 2); found = 1; exit } END { exit !found }' "$file"
+}
+
+write_run_marker() {
+  local fingerprint
+  fingerprint="$(runtime_env_fingerprint)"
+  cat >"$HARNESS_RUN_MARKER" <<EOF
+mode=$HARNESS_MODE
+run_id=$HARNESS_RUN_ID
+project_name=$HARNESS_PROJECT_NAME
+repo_root=$repo_root
+generated_run_dir=$HARNESS_GENERATED_RUN_DIR
+runtime_env_fingerprint=$fingerprint
+EOF
+  chmod 0600 "$HARNESS_RUN_MARKER"
+}
+
+verify_run_marker() {
+  local marker fingerprint
+  marker="${HARNESS_RUN_MARKER:-$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env}"
+  validate_canonical_run_root
+  [ -f "$marker" ] || die "Missing Docker harness run marker: $marker"
+  [ "$(marker_value "$marker" mode)" = "$HARNESS_MODE" ] ||
+    die "Run marker mode does not match selected runtime config"
+  [ "$(marker_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] ||
+    die "Run marker run ID does not match selected runtime config"
+  [ "$(marker_value "$marker" project_name)" = "$HARNESS_PROJECT_NAME" ] ||
+    die "Run marker project name does not match selected runtime config"
+  [ "$(marker_value "$marker" repo_root)" = "$repo_root" ] ||
+    die "Run marker repo root does not match this checkout"
+  [ "$(marker_value "$marker" generated_run_dir)" = "$HARNESS_GENERATED_RUN_DIR" ] ||
+    die "Run marker generated run dir does not match selected runtime config"
+  fingerprint="$(runtime_env_fingerprint)"
+  [ "$(marker_value "$marker" runtime_env_fingerprint)" = "$fingerprint" ] ||
+    die "Run marker runtime env fingerprint does not match selected runtime config"
+}
+
 timestamp_utc() {
   date -u +%Y%m%dT%H%M%SZ
 }
@@ -110,9 +232,11 @@ iso_timestamp_utc() {
 
 HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
 HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
+HARNESS_GENERATED_RUN_DIR_OPERATOR_SET="${HARNESS_GENERATED_RUN_DIR+x}"
 HARNESS_STATE_DIR_OPERATOR_SET="${HARNESS_STATE_DIR+x}"
 HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET="${HARNESS_PRODUCT_HOME_DIR+x}"
 HARNESS_STAGING_DIR_OPERATOR_SET="${HARNESS_STAGING_DIR+x}"
+HARNESS_EXPORTED_ARTIFACT_DIR_OPERATOR_SET="${HARNESS_EXPORTED_ARTIFACT_DIR+x}"
 HARNESS_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_EVIDENCE_DIR+x}"
 HARNESS_LOG_DIR_OPERATOR_SET="${HARNESS_LOG_DIR+x}"
 HARNESS_RENDERED_ENV_OPERATOR_SET="${HARNESS_RENDERED_ENV+x}"
@@ -124,9 +248,11 @@ HARNESS_JENKINS_AGENT_ENV_FILE_OPERATOR_SET="${HARNESS_JENKINS_AGENT_ENV_FILE+x}
 HARNESS_INTEGRATION_ENV_FILE_OPERATOR_SET="${HARNESS_INTEGRATION_ENV_FILE+x}"
 HARNESS_RUN_ID_OPERATOR_VALUE="${HARNESS_RUN_ID-}"
 HARNESS_PROJECT_NAME_OPERATOR_VALUE="${HARNESS_PROJECT_NAME-}"
+HARNESS_GENERATED_RUN_DIR_OPERATOR_VALUE="${HARNESS_GENERATED_RUN_DIR-}"
 HARNESS_STATE_DIR_OPERATOR_VALUE="${HARNESS_STATE_DIR-}"
 HARNESS_PRODUCT_HOME_DIR_OPERATOR_VALUE="${HARNESS_PRODUCT_HOME_DIR-}"
 HARNESS_STAGING_DIR_OPERATOR_VALUE="${HARNESS_STAGING_DIR-}"
+HARNESS_EXPORTED_ARTIFACT_DIR_OPERATOR_VALUE="${HARNESS_EXPORTED_ARTIFACT_DIR-}"
 HARNESS_EVIDENCE_DIR_OPERATOR_VALUE="${HARNESS_EVIDENCE_DIR-}"
 HARNESS_LOG_DIR_OPERATOR_VALUE="${HARNESS_LOG_DIR-}"
 HARNESS_RENDERED_ENV_OPERATOR_VALUE="${HARNESS_RENDERED_ENV-}"
@@ -161,11 +287,13 @@ HARNESS_LDAP_BIND_USER="${HARNESS_LDAP_BIND_USER:-readonly}"
 HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-password}"
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL="${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL:-simulation-only}"
 
-HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/$HARNESS_RUN_ID}"
-HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"
-HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/$HARNESS_RUN_ID}"
-HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/$HARNESS_RUN_ID}"
-HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/$HARNESS_RUN_ID}"
+HARNESS_GENERATED_RUN_DIR="${HARNESS_GENERATED_RUN_DIR:-$repo_root/generated/simulation/docker/$HARNESS_RUN_ID}"
+HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$HARNESS_GENERATED_RUN_DIR/state}"
+HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_GENERATED_RUN_DIR/product-homes}"
+HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$HARNESS_GENERATED_RUN_DIR/staging}"
+HARNESS_EXPORTED_ARTIFACT_DIR="${HARNESS_EXPORTED_ARTIFACT_DIR:-$HARNESS_GENERATED_RUN_DIR/exported-artifacts}"
+HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$HARNESS_GENERATED_RUN_DIR/evidence}"
+HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$HARNESS_GENERATED_RUN_DIR/logs}"
 HARNESS_INTEGRATION_ENV_FILE="${HARNESS_INTEGRATION_ENV_FILE:-$repo_root/examples/integration.env.example}"
 HARNESS_GERRIT_ENV_FILE="${HARNESS_GERRIT_ENV_FILE:-$repo_root/examples/gerrit.env.example}"
 HARNESS_JENKINS_CONTROLLER_ENV_FILE="${HARNESS_JENKINS_CONTROLLER_ENV_FILE:-$repo_root/examples/jenkins-controller.env.example}"
@@ -183,7 +311,8 @@ export HARNESS_LDAP_DOMAIN HARNESS_LDAP_BASE_DN
 export HARNESS_LDAP_ADMIN_PASSWORD HARNESS_LDAP_CONFIG_PASSWORD
 export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
 export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
-export HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR HARNESS_STAGING_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+export HARNESS_GENERATED_RUN_DIR HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
+export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
 export HARNESS_JENKINS_SHARED_STORAGE_PATH HARNESS_ENV_FILE
 export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
 export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
@@ -222,11 +351,20 @@ load_env_file() {
   file="${1:?env file required}"
   require_readable_file "Harness env file" "$file"
   [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ] || unset HARNESS_PROJECT_NAME
-  [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ] || unset HARNESS_STATE_DIR
-  [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ] || unset HARNESS_PRODUCT_HOME_DIR
-  [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ] || unset HARNESS_STAGING_DIR
-  [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ] || unset HARNESS_EVIDENCE_DIR
-  [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ] || unset HARNESS_LOG_DIR
+  if [ -n "$HARNESS_GENERATED_RUN_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_EXPORTED_ARTIFACT_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_BASELINE_CONTRACT_OPERATOR_SET" ]; then
+    die "Docker harness output paths are fixed under generated/simulation/docker/<run-id> for v1; unset HARNESS_* output path overrides"
+  fi
+  unset HARNESS_GENERATED_RUN_DIR HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
+  unset HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+  unset HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
   HARNESS_INTEGRATION_ENV_FILE="$repo_root/examples/integration.env.example"
   HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
@@ -242,21 +380,6 @@ load_env_file() {
   if [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
     HARNESS_PROJECT_NAME="$HARNESS_PROJECT_NAME_OPERATOR_VALUE"
   fi
-  if [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
-    HARNESS_STATE_DIR="$HARNESS_STATE_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ]; then
-    HARNESS_PRODUCT_HOME_DIR="$HARNESS_PRODUCT_HOME_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
-    HARNESS_STAGING_DIR="$HARNESS_STAGING_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ]; then
-    HARNESS_EVIDENCE_DIR="$HARNESS_EVIDENCE_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ]; then
-    HARNESS_LOG_DIR="$HARNESS_LOG_DIR_OPERATOR_VALUE"
-  fi
   if [ -n "$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET" ]; then
     HARNESS_GERRIT_HTTP_HOST_PORT="$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE"
   fi
@@ -264,54 +387,14 @@ load_env_file() {
     HARNESS_JENKINS_HTTP_HOST_PORT="$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE"
   fi
   HARNESS_ENV_FILE="$file"
-  if [ -z "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
-    HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$repo_root/simulation/state/docker/$HARNESS_RUN_ID}"
-  fi
-  if [ -z "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ]; then
-    HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"
-  fi
-  if [ -z "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
-    HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$repo_root/simulation/staging/docker/$HARNESS_RUN_ID}"
-  fi
-  if [ -z "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ]; then
-    HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$repo_root/simulation/evidence/docker/$HARNESS_RUN_ID}"
-  fi
-  if [ -z "$HARNESS_LOG_DIR_OPERATOR_SET" ]; then
-    HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$repo_root/logs/docker/$HARNESS_RUN_ID}"
-  fi
-  if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ]; then
-    HARNESS_RENDERED_ENV="$HARNESS_RENDERED_ENV_OPERATOR_VALUE"
-  else
-    HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
-  fi
-  HARNESS_RUNTIME_ENV="${HARNESS_RENDERED_ENV%.env}.runtime.env"
-  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
-  if [ -n "$HARNESS_BASELINE_CONTRACT_OPERATOR_SET" ]; then
-    HARNESS_BASELINE_CONTRACT="$HARNESS_BASELINE_CONTRACT_OPERATOR_VALUE"
-  else
-    HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
-  fi
-  export HARNESS_ENV_FILE HARNESS_PRODUCT_HOME_DIR HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
+  reject_custom_output_paths
+  apply_canonical_output_paths
+  export HARNESS_ENV_FILE
   export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
   export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
 }
 
 reapply_operator_overrides() {
-  if [ -n "$HARNESS_STATE_DIR_OPERATOR_SET" ]; then
-    HARNESS_STATE_DIR="$HARNESS_STATE_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_PRODUCT_HOME_DIR_OPERATOR_SET" ]; then
-    HARNESS_PRODUCT_HOME_DIR="$HARNESS_PRODUCT_HOME_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_STAGING_DIR_OPERATOR_SET" ]; then
-    HARNESS_STAGING_DIR="$HARNESS_STAGING_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ]; then
-    HARNESS_EVIDENCE_DIR="$HARNESS_EVIDENCE_DIR_OPERATOR_VALUE"
-  fi
-  if [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ]; then
-    HARNESS_LOG_DIR="$HARNESS_LOG_DIR_OPERATOR_VALUE"
-  fi
   if [ -n "$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET" ]; then
     HARNESS_GERRIT_HTTP_HOST_PORT="$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE"
   fi
@@ -329,27 +412,18 @@ load_rendered_config_if_present() {
   . "$runtime"
   set +a
   reapply_operator_overrides
-  HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"
-  if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ]; then
-    HARNESS_RENDERED_ENV="$HARNESS_RENDERED_ENV_OPERATOR_VALUE"
-  else
-    HARNESS_RENDERED_ENV="$HARNESS_STATE_DIR/rendered/harness.env"
-  fi
-  HARNESS_RUNTIME_ENV="${HARNESS_RENDERED_ENV%.env}.runtime.env"
-  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
-  if [ -n "$HARNESS_BASELINE_CONTRACT_OPERATOR_SET" ]; then
-    HARNESS_BASELINE_CONTRACT="$HARNESS_BASELINE_CONTRACT_OPERATOR_VALUE"
-  else
-    HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
-  fi
+  reject_custom_output_paths
+  apply_canonical_output_paths
   export HARNESS_PRODUCT_HOME_DIR HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
 }
 
 ensure_runtime_config() {
   if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] && load_rendered_config_if_present; then
+    verify_run_marker
     return 0
   fi
   if load_rendered_config_if_present; then
+    verify_run_marker
     return 0
   fi
   die "Missing Docker harness runtime config: run render-config first"
@@ -514,6 +588,7 @@ ensure_dirs() {
     "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" \
     "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" \
     "$HARNESS_STAGING_DIR" \
+    "$HARNESS_EXPORTED_ARTIFACT_DIR" \
     "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
@@ -847,6 +922,31 @@ checksum_reference_for_evidence() {
       printf '%s\n' "not-applicable"
       ;;
   esac
+}
+
+exported_artifact_dir_for_role() {
+  local role
+  role="${1:?role required}"
+  printf '%s/%s\n' "$HARNESS_EXPORTED_ARTIFACT_DIR" "$role"
+}
+
+export_role_artifacts() {
+  local role src dest log rc
+  role="${1:?role required}"
+  src="${2:?source required}"
+  log="${3:?log required}"
+  dest="$(exported_artifact_dir_for_role "$role")"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  if compose exec -T bundle-factory tar -C "/harness/state/artifacts/$role" -cf - . | tar -C "$dest" -xf - >>"$log" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  [ "$rc" -eq 0 ] || return "$rc"
+  chmod -R u+rwX,go+rX "$dest"
+  validate_role_baseline_manifest "$role" "$dest/manifest.txt" "$log" || return 1
+  (cd "$dest" && sha256sum -c checksums.sha256) >>"$log" 2>&1
 }
 
 ensure_gerrit_validation_key() {
@@ -1216,7 +1316,7 @@ write_evidence() {
   message="${6:-}"
 
   validate_harness_inputs
-  if [ "$checkpoint" = "preflight" ]; then
+  if [ "$checkpoint" = "preflight" ] || [ "$checkpoint" = "clean" ]; then
     ensure_preflight_dirs
   else
     ensure_dirs
@@ -1311,9 +1411,11 @@ HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
 HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
 HARNESS_PRODUCT_HOME_DIR=$(shell_quote "$HARNESS_PRODUCT_HOME_DIR")
 HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
+HARNESS_EXPORTED_ARTIFACT_DIR=$(shell_quote "$HARNESS_EXPORTED_ARTIFACT_DIR")
 HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
 HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
 HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
@@ -1333,6 +1435,7 @@ integration_env=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 EOF
   write_runtime_env
   write_manifest_contract
+  write_run_marker
 }
 
 write_runtime_env() {
@@ -1358,9 +1461,11 @@ HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "$HARNESS_LDAP_CONFIG_PASSWORD")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
 HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
 HARNESS_PRODUCT_HOME_DIR=$(shell_quote "$HARNESS_PRODUCT_HOME_DIR")
 HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
+HARNESS_EXPORTED_ARTIFACT_DIR=$(shell_quote "$HARNESS_EXPORTED_ARTIFACT_DIR")
 HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
 HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
 HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
@@ -1376,6 +1481,7 @@ HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
 HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
 HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
 HARNESS_BASELINE_CONTRACT=$(shell_quote "$HARNESS_BASELINE_CONTRACT")
+HARNESS_RUN_MARKER=$(shell_quote "$HARNESS_RUN_MARKER")
 public_internet_fallback=simulation-only
 gerrit_env=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
 jenkins_controller_env=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
@@ -1634,7 +1740,7 @@ role_helper_present_in_container() {
 }
 
 cmd_prepare_artifacts() {
-  local role helper service log rc evidence artifact_dir gerrit_env_file jenkins_env_file
+  local role helper service log rc evidence artifact_dir export_dir gerrit_env_file jenkins_env_file
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -1724,8 +1830,15 @@ cmd_prepare_artifacts() {
     return 1
   fi
 
-  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory with manifest and checksums")"
-  print_command_summary prepare-artifacts "$role" ok
+  if ! export_role_artifacts "$role" "$artifact_dir" "$log"; then
+    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role artifacts were produced but export to operator-owned generated output failed")"
+    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+  export_dir="$(exported_artifact_dir_for_role "$role")"
+
+  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory and exported for operator handoff: source=$artifact_dir export=$export_dir")"
+  print_command_summary prepare-artifacts "$role" "ok artifact-export=$export_dir"
 }
 
 cmd_stage_artifacts() {
@@ -1742,19 +1855,19 @@ cmd_stage_artifacts() {
     return "$?"
   fi
   service="$(service_for_role "$role")"
-  artifact_dir="$HARNESS_STATE_DIR/bundle-factory/artifacts/$role"
+  artifact_dir="$(exported_artifact_dir_for_role "$role")"
   stage_dir="$HARNESS_STAGING_DIR/$role"
   log="$(bounded_log_path "stage-artifacts-$role")"
 
   ensure_harness_up_for_role "$service"
   require_running_service "$service"
-  [ -f "$artifact_dir/manifest.txt" ] || die "Missing bundle factory manifest for $role: $artifact_dir/manifest.txt"
-  [ -f "$artifact_dir/checksums.sha256" ] || die "Missing bundle factory checksums for $role: $artifact_dir/checksums.sha256"
+  [ -f "$artifact_dir/manifest.txt" ] || die "Missing exported artifact manifest for $role: $artifact_dir/manifest.txt"
+  [ -f "$artifact_dir/checksums.sha256" ] || die "Missing exported artifact checksums for $role: $artifact_dir/checksums.sha256"
 
   : >"$log"
   if ! validate_role_baseline_manifest "$role" "$artifact_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Bundle factory manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
-    printf 'ERROR: Bundle factory baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
+    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Exported artifact manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
+    printf 'ERROR: Exported artifact baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
     return 1
   fi
 
@@ -2065,6 +2178,39 @@ write_blocked_integration_evidence() {
   write_evidence "$checkpoint" integration blocked "scripts/integration-setup.sh" "$log" "$reason" >/dev/null
 }
 
+check_pass_marker_path() {
+  printf '%s/rendered/check-pass.env\n' "$HARNESS_STATE_DIR"
+}
+
+write_check_pass_marker() {
+  local marker fingerprint
+  marker="$(check_pass_marker_path)"
+  fingerprint="$(runtime_env_fingerprint)"
+  mkdir -p "$(dirname "$marker")"
+  cat >"$marker" <<EOF
+mode=$HARNESS_MODE
+run_id=$HARNESS_RUN_ID
+project_name=$HARNESS_PROJECT_NAME
+runtime_env_fingerprint=$fingerprint
+EOF
+  chmod 0600 "$marker"
+}
+
+verify_check_pass_marker() {
+  local marker fingerprint
+  marker="$(check_pass_marker_path)"
+  [ -f "$marker" ] || die "Missing successful check marker; run check first or omit --skip-check"
+  [ "$(marker_value "$marker" mode)" = "$HARNESS_MODE" ] ||
+    die "Check marker mode does not match selected runtime config"
+  [ "$(marker_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] ||
+    die "Check marker run ID does not match selected runtime config"
+  [ "$(marker_value "$marker" project_name)" = "$HARNESS_PROJECT_NAME" ] ||
+    die "Check marker project name does not match selected runtime config"
+  fingerprint="$(runtime_env_fingerprint)"
+  [ "$(marker_value "$marker" runtime_env_fingerprint)" = "$fingerprint" ] ||
+    die "Check marker runtime env fingerprint does not match selected runtime config"
+}
+
 cmd_check() {
   local integration_log rc evidence
   bootstrap_harness_env
@@ -2095,6 +2241,7 @@ cmd_check() {
       return 1
     fi
     evidence="$(write_evidence check integration pass "simulate.sh check" "$integration_log" "Shared integration helper proved Jenkins-to-Gerrit SSH, stream-events, Jenkins-to-agent SSH, node readiness, and agent scheduling")"
+    write_check_pass_marker
     print_command_summary check "" "integration ok"
     return 0
   fi
@@ -2109,22 +2256,27 @@ cmd_check() {
 }
 
 cmd_full_verify() {
-  local log rc evidence
+  local skip_check log rc evidence
+  skip_check="${1:-0}"
   bootstrap_harness_env
   ensure_runtime_config
   refresh_integration_args
-  cmd_check || rc=$?
-  rc="${rc:-0}"
-  if [ "$rc" -ne 0 ]; then
-    log="$(bounded_log_path full-verify-blocked)"
-    printf 'full_verify_blocked=check_failed_or_blocked\n' >"$log"
-    write_blocked_integration_evidence job-execution "$log" "Blocked: readiness check did not prove real cross-role integration, so job execution was not attempted"
-    write_blocked_integration_evidence verified-vote "$log" "Blocked: readiness check did not prove real cross-role integration, so Verified +1 was not attempted"
-    evidence="$(write_evidence full-verify integration blocked "simulate.sh full-verify" "$log" "Full verification blocked before end-to-end trigger execution")"
-    print_command_summary full-verify "" "blocked"
-    return "$rc"
+  if [ "$skip_check" -eq 1 ]; then
+    verify_check_pass_marker
+  else
+    cmd_check || rc=$?
+    rc="${rc:-0}"
+    if [ "$rc" -ne 0 ]; then
+      log="$(bounded_log_path full-verify-blocked)"
+      printf 'full_verify_blocked=check_failed_or_blocked\n' >"$log"
+      write_blocked_integration_evidence job-execution "$log" "Blocked: readiness check did not prove real cross-role integration, so job execution was not attempted"
+      write_blocked_integration_evidence verified-vote "$log" "Blocked: readiness check did not prove real cross-role integration, so Verified +1 was not attempted"
+      evidence="$(write_evidence full-verify integration blocked "simulate.sh full-verify" "$log" "Full verification blocked before end-to-end trigger execution")"
+      print_command_summary full-verify "" "blocked"
+      return "$rc"
+    fi
+    unset rc
   fi
-  unset rc
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   log="$(bounded_log_path verify-trigger)"
@@ -2166,6 +2318,65 @@ cmd_down() {
   fi
   evidence="$(write_evidence down harness pass "simulate.sh down" "$log" "Stopped harness containers without deleting retained evidence")"
   print_command_summary down "" "stopped harness containers"
+}
+
+cleanup_mutable_paths_host() {
+  local path
+  for path in "$HARNESS_STATE_DIR" "$HARNESS_PRODUCT_HOME_DIR" "$HARNESS_STAGING_DIR"; do
+    [ -e "$path" ] || continue
+    rm -rf -- "$path" || return 1
+  done
+}
+
+cleanup_mutable_paths_container() {
+  local log
+  log="${1:?log required}"
+  docker run --rm \
+    --mount "type=bind,source=$HARNESS_GENERATED_RUN_DIR,target=/cleanup-root" \
+    "$HARNESS_UBUNTU_IMAGE" \
+    sh -c 'rm -rf -- /cleanup-root/state /cleanup-root/product-homes /cleanup-root/staging' \
+    >>"$log" 2>&1
+}
+
+verify_preserved_clean_outputs() {
+  [ -d "$HARNESS_EXPORTED_ARTIFACT_DIR" ] || mkdir -p "$HARNESS_EXPORTED_ARTIFACT_DIR"
+  [ -d "$HARNESS_EVIDENCE_DIR" ] || mkdir -p "$HARNESS_EVIDENCE_DIR"
+  [ -d "$HARNESS_LOG_DIR" ] || mkdir -p "$HARNESS_LOG_DIR"
+}
+
+cmd_clean() {
+  local log rc evidence cleanup_fallback
+  bootstrap_harness_env
+  ensure_runtime_config
+  detect_compose
+  validate_canonical_run_root
+  log="$(bounded_log_path clean)"
+  cleanup_fallback=host
+  if compose down --remove-orphans >"$log" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(write_evidence clean harness fail "simulate.sh clean" "$log" "Compose shutdown before cleanup failed")"
+    print_command_failure clean "" failed "$log" "$evidence"
+    return "$rc"
+  fi
+
+  if ! cleanup_mutable_paths_host >>"$log" 2>&1; then
+    cleanup_fallback=container
+    cleanup_mutable_paths_container "$log" || rc=$?
+    rc="${rc:-0}"
+    if [ "$rc" -ne 0 ]; then
+      evidence="$(write_evidence clean harness fail "simulate.sh clean" "$log" "Generated runtime cleanup failed")"
+      print_command_failure clean "" failed "$log" "$evidence"
+      return "$rc"
+    fi
+  fi
+  ensure_preflight_dirs
+  verify_preserved_clean_outputs
+  evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed mutable generated runtime data and preserved exported artifacts, evidence, and logs")"
+  print_command_summary clean "" "removed runtime data preserved exported-artifacts evidence logs cleanup=$cleanup_fallback"
 }
 
 parse_env_and_role_args() {
@@ -2237,6 +2448,39 @@ parse_env_only_args() {
   HARNESS_ENV_FILE="$env_file"
 }
 
+parse_full_verify_args() {
+  local env_file skip_check
+  env_file="${HARNESS_ENV_FILE:-$docker_env_example}"
+  skip_check=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --env)
+        [ "$#" -ge 2 ] || die "--env requires a file"
+        env_file="$2"
+        shift 2
+        ;;
+      --env=*)
+        env_file="${1#--env=}"
+        [ -n "$env_file" ] || die "--env requires a file"
+        shift
+        ;;
+      --skip-check)
+        skip_check=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for full-verify: $1"
+        ;;
+    esac
+  done
+  HARNESS_ENV_FILE="$env_file"
+  PARSED_SKIP_CHECK="$skip_check"
+}
+
 main() {
   local command_name env_file
   env_file="$docker_env_example"
@@ -2306,13 +2550,18 @@ main() {
       ;;
     full-verify)
       shift
-      parse_env_only_args "$@"
-      cmd_full_verify
+      parse_full_verify_args "$@"
+      cmd_full_verify "$PARSED_SKIP_CHECK"
       ;;
     down)
       shift
       parse_env_only_args "$@"
       cmd_down
+      ;;
+    clean)
+      shift
+      parse_env_only_args "$@"
+      cmd_clean
       ;;
     "")
       usage

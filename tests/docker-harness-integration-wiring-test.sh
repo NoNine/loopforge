@@ -4,12 +4,11 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir" 2>/dev/null || true' EXIT
+run_id="integration-$$"
+run_dir="$repo_root/generated/simulation/docker/$run_id"
+trap 'rm -rf "$tmp_dir" "$run_dir" 2>/dev/null || true' EXIT
 
-state_dir="$tmp_dir/state"
-staging_dir="$tmp_dir/staging"
-evidence_dir="$tmp_dir/evidence"
-log_dir="$tmp_dir/logs"
+state_dir="$run_dir/state"
 role_calls="$tmp_dir/role-calls.log"
 integration_calls="$tmp_dir/integration-calls.log"
 integration_helper="$tmp_dir/integration-setup.sh"
@@ -22,8 +21,8 @@ JENKINS_SHARED_STORAGE_PATH=/mnt/harness-shared
 EOF
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
-HARNESS_RUN_ID=integration-$$
-HARNESS_PROJECT_NAME=integration-$$
+HARNESS_RUN_ID=$run_id
+HARNESS_PROJECT_NAME=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
@@ -37,12 +36,6 @@ printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
 SH
 chmod +x "$integration_helper"
 
-HARNESS_RUN_ID="integration-$$" \
-HARNESS_PROJECT_NAME="integration-$$" \
-HARNESS_STATE_DIR="$state_dir" \
-HARNESS_STAGING_DIR="$staging_dir" \
-HARNESS_EVIDENCE_DIR="$evidence_dir" \
-HARNESS_LOG_DIR="$log_dir" \
   "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
   >"$tmp_dir/render.out"
 
@@ -56,16 +49,11 @@ common_env=(
   HARNESS_TEST_STUB_ROLE_COMMANDS="$role_calls"
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper"
   HARNESS_TEST_INTEGRATION_CALLS="$integration_calls"
-  HARNESS_RUN_ID="integration-$$"
-  HARNESS_PROJECT_NAME="integration-$$"
-  HARNESS_STATE_DIR="$state_dir"
-  HARNESS_STAGING_DIR="$staging_dir"
-  HARNESS_EVIDENCE_DIR="$evidence_dir"
-  HARNESS_LOG_DIR="$log_dir"
+  HARNESS_ENV_FILE="$tmp_dir/harness.env"
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" check >"$tmp_dir/check.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" check >"$tmp_dir/check.out"
 
 grep -Fxq 'run-role-gate gerrit' "$role_calls"
 grep -Fxq 'run-role-gate jenkins-controller' "$role_calls"
@@ -84,9 +72,25 @@ fi
 : >"$role_calls"
 : >"$integration_calls"
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" full-verify >"$tmp_dir/full.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full.out"
 
 grep -Fq -- '--yes validate-integration' "$integration_calls"
+grep -Fq -- '--yes verify-trigger' "$integration_calls"
+
+: >"$role_calls"
+: >"$integration_calls"
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify --skip-check >"$tmp_dir/full-skip.out"
+
+[ ! -s "$role_calls" ] || {
+  printf 'full-verify --skip-check unexpectedly ran role gates\n' >&2
+  exit 1
+}
+if grep -Eq -- '--yes configure-gerrit-ssh|--yes configure-agent-ssh|--yes configure-trigger|--yes validate-integration' "$integration_calls"; then
+  printf 'full-verify --skip-check unexpectedly ran wrapper check commands\n' >&2
+  sed -n '1,120p' "$integration_calls" >&2
+  exit 1
+fi
 grep -Fq -- '--yes verify-trigger' "$integration_calls"
 
 failing_role_calls="$tmp_dir/failing-role-calls.log"
@@ -97,13 +101,7 @@ env \
   HARNESS_TEST_STUB_ROLE_FAIL="jenkins-controller" \
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$failing_integration_calls" \
-  HARNESS_RUN_ID="integration-$$" \
-  HARNESS_PROJECT_NAME="integration-$$" \
-  HARNESS_STATE_DIR="$state_dir" \
-  HARNESS_STAGING_DIR="$staging_dir" \
-  HARNESS_EVIDENCE_DIR="$evidence_dir" \
-  HARNESS_LOG_DIR="$log_dir" \
-  "$repo_root/simulation/docker/simulate.sh" full-verify >"$tmp_dir/full-failing.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full-failing.out" 2>&1
 failing_rc=$?
 set -e
 
@@ -134,7 +132,7 @@ set +e
 env "${common_env[@]}" \
   HARNESS_TEST_INTEGRATION_HELPER="$failing_configure_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$failing_configure_calls" \
-  "$repo_root/simulation/docker/simulate.sh" check >"$tmp_dir/check-failing-configure.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" check >"$tmp_dir/check-failing-configure.out" 2>&1
 failing_configure_rc=$?
 set -e
 

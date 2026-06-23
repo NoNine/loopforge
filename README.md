@@ -25,25 +25,25 @@ target-deployment documentation.
 ```text
 +---------------------------------------------------------------+
 | Operator workstation / control node                           |
-| Runs harness/helpers and can reach Gerrit, Jenkins, and agent |
+| Runs harness/helpers and coordinates setup and validation     |
 +---------------------------------------------------------------+
-          |                    |                    |
-          v                    v                    v
-+----------------+     +-------------+     +--------------------+
-| Bundle factory |---->| Gerrit      |<--->| Jenkins controller |
-| Prepares       |     | target      |     | target             |
-| artifacts      |     +-------------+     +--------------------+
-+----------------+             ^                    |
-          |                    |                    |
-          |                    |                    |
-          |             +-------------+             |
-          +------------>| Jenkins SSH |<------------+
-                        | agent       |
-                        +-------------+
+      |                        |                        |
+      v                        v                        v
++-----------+       +--------------------+       +--------------+
+| Gerrit    |<----->| Jenkins controller |<----->| Jenkins agent|
++-----------+       +--------------------+       +--------------+
+      ^                        ^                        ^
+      |                        |                        |
+      +------------------------+------------------------+
+                               |
+                    +----------------------+
+                    | Bundle factory       |
+                    | Prepares artifacts   |
+                    +----------------------+
 
 +---------------------------------------------------------------+
 | LDAP                                                          |
-| Shared identity service for Gerrit and Jenkins                |
+| Shared identity service                                       |
 +---------------------------------------------------------------+
 ```
 

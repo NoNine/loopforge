@@ -171,11 +171,13 @@ Staged artifact paths:
 | --- | --- |
 | Bundle factory output | `GERRIT_ARTIFACT_OUTPUT_DIR` |
 | Docker harness bundle output | `/harness/state/artifacts/gerrit` inside the bundle factory |
-| Docker harness host state | `simulation/state/docker/<run-id>/bundle-factory/artifacts/gerrit/` |
+| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/gerrit/` |
 
 Side effects:
 
 - Writes artifact files only in the bundle factory output path.
+- In Docker simulation, successful preparation exports the bundle to the
+  host-owned `exported-artifacts/gerrit/` handoff path.
 - Does not install, configure, or start Gerrit.
 - Does not write SSH private keys, public keys, `authorized_keys`, or
   generated key handoff files into the artifact bundle. Artifact preparation
@@ -402,7 +404,7 @@ Produced outputs:
 - A helper bounded log file under `GERRIT_LOG_DIR`.
 - Gerrit daemon startup and runtime logs under `GERRIT_SITE_PATH/logs/`.
 - In the shared Docker harness, canonical evidence under
-  `simulation/evidence/docker/<run-id>/`.
+  `generated/simulation/docker/<run-id>/evidence/`.
 
 Evidence Contract fields:
 

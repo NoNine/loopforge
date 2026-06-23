@@ -4,33 +4,23 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
+trap 'rm -rf "$tmp_dir" "$repo_root/generated/simulation/docker"/requires-render-*-"$$" 2>/dev/null || true' EXIT
 
-state_dir="$tmp_dir/state"
-staging_dir="$tmp_dir/staging"
-evidence_dir="$tmp_dir/evidence"
-log_dir="$tmp_dir/logs"
 calls="$tmp_dir/calls.log"
 
 run_lifecycle_without_render() {
-  local label state staging evidence logs output rc
+  local label run_id state output rc
   label="${1:?label required}"
   shift
-  state="$state_dir/$label"
-  staging="$staging_dir/$label"
-  evidence="$evidence_dir/$label"
-  logs="$log_dir/$label"
+  run_id="requires-render-$label-$$"
+  state="$repo_root/generated/simulation/docker/$run_id/state"
   output="$tmp_dir/$label.out"
   rm -f "$calls"
 
   set +e
   HARNESS_TEST_STUB_ROLE_COMMANDS="$calls" \
-  HARNESS_RUN_ID="requires-render-$label-$$" \
-  HARNESS_PROJECT_NAME="requires-render-$label-$$" \
-  HARNESS_STATE_DIR="$state" \
-  HARNESS_STAGING_DIR="$staging" \
-  HARNESS_EVIDENCE_DIR="$evidence" \
-  HARNESS_LOG_DIR="$logs" \
+  HARNESS_RUN_ID="$run_id" \
+  HARNESS_PROJECT_NAME="$run_id" \
     "$repo_root/simulation/docker/simulate.sh" "$@" \
     >"$output" 2>&1
   rc=$?

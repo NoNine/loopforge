@@ -10,7 +10,7 @@ matches="$(
   grep -v '^tests/docker-harness-layout-test.sh$' |
   grep -v '^simulation/docker/docker-verify.sh$' |
   grep -v '^simulation/docker/harness/' |
-  xargs -r rg -n 'HARNESS_LEGACY_EVIDENCE_DIR|simulation/docker/state/evidence|simulation/docker/state/|simulation/docker/logs/|simulation/state/docker/harness/<run-id>|simulation/state/docker/harness/|simulation/docker/harness|harness.env.example|DOCKER_VERIFY_' || true
+  xargs -r rg -n 'HARNESS_LEGACY_EVIDENCE_DIR|simulation/docker/state/evidence|simulation/docker/state/|simulation/docker/logs/|simulation/state/docker|simulation/staging/docker|simulation/evidence/docker|simulation/product-homes/docker|logs/docker/<run-id>|simulation/state/docker/harness/<run-id>|simulation/state/docker/harness/|simulation/docker/harness|harness.env.example|DOCKER_VERIFY_' || true
 )"
 if [ -n "$matches" ]; then
   printf '%s\n' "$matches"

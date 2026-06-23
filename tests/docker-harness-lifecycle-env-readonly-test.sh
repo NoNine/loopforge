@@ -6,6 +6,8 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
+run_id="env-readonly-$$"
+run_dir="$repo_root/generated/simulation/docker/$run_id"
 cleanup() {
   rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -14,7 +16,7 @@ cleanup() {
       sed -n '1,220p' "$calls" >&2
     fi
   fi
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" "$run_dir"
   exit "$rc"
 }
 trap cleanup EXIT
@@ -89,12 +91,13 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-mkdir -p "$tmp_dir/state/rendered" "$tmp_dir/staging" "$tmp_dir/evidence" "$tmp_dir/logs"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
 cp "$repo_root/examples/jenkins-agent.env.example" "$tmp_dir/jenkins-agent.env"
 cat >>"$tmp_dir/harness.env" <<EOF
+HARNESS_RUN_ID=$run_id
+HARNESS_PROJECT_NAME=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
@@ -103,12 +106,6 @@ EOF
 common_env=(
   PATH="$fake_bin:$PATH"
   DOCKER_CALLS_LOG="$calls"
-  HARNESS_RUN_ID="env-readonly-$$"
-  HARNESS_PROJECT_NAME="env-readonly-$$"
-  HARNESS_STATE_DIR="$tmp_dir/state"
-  HARNESS_STAGING_DIR="$tmp_dir/staging"
-  HARNESS_EVIDENCE_DIR="$tmp_dir/evidence"
-  HARNESS_LOG_DIR="$tmp_dir/logs"
 )
 
 env "${common_env[@]}" \
@@ -116,7 +113,7 @@ env "${common_env[@]}" \
   >/dev/null
 
 snapshot="$tmp_dir/env-files.before"
-find "$tmp_dir/state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
+find "$run_dir/state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
   sort -z |
   xargs -0 sha256sum >"$snapshot"
 
@@ -141,7 +138,7 @@ do
 done
 
 after="$tmp_dir/env-files.after"
-find "$tmp_dir/state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
+find "$run_dir/state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
   sort -z |
   xargs -0 sha256sum >"$after"
 

@@ -24,8 +24,9 @@ verifier CLI.
 | `stage-artifacts [--env FILE] [--role ROLE]` | Stages one role, or all Docker roles when `--role` is omitted, to target containers and verifies manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
 | `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
-| `full-verify [--env FILE]` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. Success prints a short `full-verify: integration ok` summary. |
+| `full-verify [--env FILE] [--skip-check]` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. `--skip-check` requires a matching successful check marker for the same run and still lets `verify-trigger` perform its own validation. Success prints a short `full-verify: integration ok` summary. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
+| `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
@@ -45,14 +46,19 @@ HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 ```
 
 During `render-config`, the selected harness, role, and integration env files
-are copied to `simulation/state/docker/<run-id>/rendered/runtime-inputs/` with
-mode `0600`. Later lifecycle commands load the private runtime config and use
-those run-scoped copies, but they still bootstrap from the same env file so
-they can resolve the correct run directory without shell exports.
+are copied to
+`generated/simulation/docker/<run-id>/state/rendered/runtime-inputs/` with
+mode `0600`. `render-config` also writes a run marker under
+`generated/simulation/docker/<run-id>/`. Later lifecycle and cleanup commands
+load the private runtime config and verify that marker before operating.
 
 `harness.env` is the redacted public record for inspection. The private
 `harness.runtime.env` retains lifecycle values and points at the runtime input
 copies.
+
+For v1, Docker simulation does not support arbitrary generated/output roots.
+All lifecycle and cleanup commands use the repo-local
+`generated/simulation/docker/<run-id>/` tree.
 
 ## Simulation Accounts
 
@@ -76,18 +82,31 @@ does not rely on stale port data from rendered config files.
 
 ## Output Locations
 
-Docker-generated runtime output is not committed.
+Docker-generated runtime output is not committed. Docker v1 uses one
+repo-local generated run root:
+
+```text
+generated/simulation/docker/<run-id>/
+```
 
 | Output kind | Docker run-scoped pattern |
 | --- | --- |
-| State | `simulation/state/docker/<run-id>/` |
-| Staged artifacts | `simulation/staging/docker/<run-id>/<environment>/` |
-| Evidence | `simulation/evidence/docker/<run-id>/` |
-| Bounded logs | `logs/docker/<run-id>/` |
+| Harness/container state | `generated/simulation/docker/<run-id>/state/` |
+| Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
+| Staged artifacts | `generated/simulation/docker/<run-id>/staging/<environment>/` |
+| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<role>/` |
+| Evidence | `generated/simulation/docker/<run-id>/evidence/` |
+| Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
 
 Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
 layout.
+
+`prepare-artifacts` first writes role artifacts inside the bundle-factory
+environment, then exports successful bundles to
+`exported-artifacts/<role>/` as host-owned/readable handoff output. That
+exported directory is the durable source for `stage-artifacts` and for any
+target-deployment handoff review.
 
 `/harness/state` is a harness sideband mount for reviewed inputs,
 coordination state, generated control scripts, fingerprints, status, and
@@ -108,6 +127,35 @@ are the deliberate exception: the Jenkins controller owns the
 Jenkins-to-Gerrit and Jenkins-to-agent private keys, while generated Groovy
 scripts, status files, evidence, and public-key metadata remain harness
 sideband state.
+
+## Cleanup Contract
+
+`down` and `clean` are deliberately separate. `down` maps to Docker Compose
+teardown and retains generated output for review. Docker bind mounts can leave
+host files owned by container users, and Compose does not delete those
+bind-mounted directories, so `clean` is the explicit housekeeping command.
+
+`clean` verifies the selected run marker and operates only under the canonical
+repo-local generated run root. It removes only mutable environment data:
+`state/`, `product-homes/`, and `staging/`. It preserves
+`exported-artifacts/`, `evidence/`, and `logs/`. If the host user cannot
+remove container-owned files, `clean` may use a one-shot cleanup container
+mounted only to the validated run root.
+
+Typical flows:
+
+```bash
+simulation/docker/simulate.sh --env FILE render-config
+simulation/docker/simulate.sh --env FILE up
+simulation/docker/simulate.sh --env FILE check
+simulation/docker/simulate.sh --env FILE full-verify --skip-check
+simulation/docker/simulate.sh --env FILE down
+simulation/docker/simulate.sh --env FILE clean
+```
+
+Use `check` for readiness only. Use `full-verify` directly for a
+self-contained readiness-plus-trigger proof. Use `full-verify --skip-check`
+only after `check` has already passed for the same rendered run.
 
 ## Integration Boundary
 

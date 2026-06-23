@@ -139,11 +139,13 @@ Staged artifact paths:
 | --- | --- |
 | Bundle factory output | `JENKINS_AGENT_ARTIFACT_OUTPUT_DIR` |
 | Docker harness bundle output | `/harness/state/artifacts/jenkins-agent` inside the bundle factory |
-| Docker harness host state | `simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-agent/` |
+| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/jenkins-agent/` |
 
 Side effects:
 
 - Writes artifact files only in the bundle factory output path.
+- In Docker simulation, successful preparation exports the bundle to the
+  host-owned `exported-artifacts/jenkins-agent/` handoff path.
 - Does not write private keys, public keys, `authorized_keys`, or other SSH
   credential material to the artifact bundle.
 - Does not install packages, configure SSH, create accounts, or register a

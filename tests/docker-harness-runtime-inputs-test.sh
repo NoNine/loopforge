@@ -4,12 +4,11 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
+run_id="runtime-inputs-$$"
+run_dir="$repo_root/generated/simulation/docker/$run_id"
+trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
 
-state_dir="$tmp_dir/state"
-staging_dir="$tmp_dir/staging"
-evidence_dir="$tmp_dir/evidence"
-log_dir="$tmp_dir/logs"
+state_dir="$run_dir/state"
 
 cat >"$tmp_dir/integration.env" <<'EOF'
 JENKINS_SHARED_STORAGE_PATH=/mnt/harness-shared
@@ -28,24 +27,20 @@ JENKINS_AGENT_SENTINEL=original
 EOF
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
-HARNESS_RUN_ID=runtime-inputs-$$
-HARNESS_PROJECT_NAME=runtime-inputs-$$
+HARNESS_RUN_ID=$run_id
+HARNESS_PROJECT_NAME=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_INTEGRATION_ENV_FILE=$(printf '%q' "$tmp_dir/integration.env")
 EOF
 
-HARNESS_STATE_DIR="$state_dir" \
-HARNESS_STAGING_DIR="$staging_dir" \
-HARNESS_EVIDENCE_DIR="$evidence_dir" \
-HARNESS_LOG_DIR="$log_dir" \
   "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
   >"$tmp_dir/render.out"
 
 runtime_dir="$state_dir/rendered/runtime-inputs"
 runtime_env="$state_dir/rendered/harness.runtime.env"
-product_home_dir="$repo_root/simulation/product-homes/docker/runtime-inputs-$$"
+product_home_dir="$run_dir/product-homes"
 
 for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
   [ -f "$runtime_dir/$file" ] || {
@@ -64,6 +59,7 @@ grep -Fq "HARNESS_GERRIT_ENV_FILE=$runtime_dir/gerrit.env" "$runtime_env"
 grep -Fq "HARNESS_JENKINS_CONTROLLER_ENV_FILE=$runtime_dir/jenkins-controller.env" "$runtime_env"
 grep -Fq "HARNESS_JENKINS_AGENT_ENV_FILE=$runtime_dir/jenkins-agent.env" "$runtime_env"
 grep -Fq "HARNESS_INTEGRATION_ENV_FILE=$runtime_dir/integration.env" "$runtime_env"
+grep -Fq "HARNESS_GENERATED_RUN_DIR=$run_dir" "$runtime_env"
 grep -Fq "HARNESS_PRODUCT_HOME_DIR=$product_home_dir" "$runtime_env"
 [ "$product_home_dir" != "$state_dir" ] || {
   printf 'Product home dir must not equal harness state dir\n' >&2

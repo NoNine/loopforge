@@ -5,7 +5,9 @@ set -euo pipefail
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
-trap 'rm -rf "$tmp_dir"' EXIT
+run_id="preflight-no-render-$$"
+run_dir="$repo_root/generated/simulation/docker/$run_id"
+trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
@@ -18,18 +20,11 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-state_dir="$tmp_dir/state"
-staging_dir="$tmp_dir/staging"
-evidence_dir="$tmp_dir/evidence"
-log_dir="$tmp_dir/logs"
+state_dir="$run_dir/state"
 
 PATH="$fake_bin:$PATH" \
-HARNESS_RUN_ID="preflight-no-render-$$" \
-HARNESS_PROJECT_NAME="preflight-no-render-$$" \
-HARNESS_STATE_DIR="$state_dir" \
-HARNESS_STAGING_DIR="$staging_dir" \
-HARNESS_EVIDENCE_DIR="$evidence_dir" \
-HARNESS_LOG_DIR="$log_dir" \
+HARNESS_RUN_ID="$run_id" \
+HARNESS_PROJECT_NAME="$run_id" \
   "$repo_root/simulation/docker/simulate.sh" preflight >"$tmp_dir/preflight.out"
 
 [ ! -e "$state_dir/rendered/harness.env" ] || {

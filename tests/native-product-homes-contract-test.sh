@@ -37,7 +37,7 @@ require_pattern scripts/integration-setup.sh \
   'Integration helper must default JENKINS_HOME to /var/lib/jenkins'
 
 require_pattern simulation/docker/simulate.sh \
-  'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$repo_root/simulation/product-homes/docker/$HARNESS_RUN_ID}"' \
+  'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_GENERATED_RUN_DIR/product-homes}"' \
   'Docker harness must default product-home backing outside HARNESS_STATE_DIR'
 require_pattern simulation/docker/simulate.sh \
   'export HARNESS_PRODUCT_HOME_DIR' \

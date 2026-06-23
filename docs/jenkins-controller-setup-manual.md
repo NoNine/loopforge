@@ -237,11 +237,13 @@ Staged artifact paths:
 | --- | --- |
 | Bundle factory output | `JENKINS_ARTIFACT_OUTPUT_DIR` |
 | Docker harness bundle output | `/harness/state/artifacts/jenkins-controller` inside the bundle factory |
-| Docker harness host state | `simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-controller/` |
+| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller/` |
 
 Side effects:
 
 - Writes artifact files only in the bundle factory output path.
+- In Docker simulation, successful preparation exports the bundle to the
+  host-owned `exported-artifacts/jenkins-controller/` handoff path.
 - Does not install, configure, or start Jenkins.
 - Does not write SSH private keys, public keys, `authorized_keys`, or
   generated key handoff files into the artifact bundle. Artifact preparation
@@ -450,7 +452,7 @@ Produced outputs:
 - Role-local Jenkins controller evidence JSON under `JENKINS_EVIDENCE_DIR`.
 - A helper bounded log file under `JENKINS_LOG_DIR`.
 - In the shared Docker harness, canonical evidence under
-  `simulation/evidence/docker/<run-id>/`.
+  `generated/simulation/docker/<run-id>/evidence/`.
 
 Evidence Contract fields:
 

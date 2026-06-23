@@ -6,30 +6,26 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 cleanup() {
   rc=$?
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" \
+    "$repo_root/generated/simulation/docker/relative-default-$$" \
+    "$repo_root/generated/simulation/docker/custom-relative"
   exit "$rc"
 }
 trap cleanup EXIT
 
-state_dir="$tmp_dir/state"
-staging_dir="$tmp_dir/staging"
-evidence_dir="$tmp_dir/evidence"
-log_dir="$tmp_dir/logs"
 script="$repo_root/simulation/docker/simulate.sh"
+default_state_dir="$repo_root/generated/simulation/docker/relative-default-$$/state"
+custom_state_dir="$repo_root/generated/simulation/docker/custom-relative/state"
 
 (
   cd /tmp
   HARNESS_RUN_ID="relative-default-$$" \
   HARNESS_PROJECT_NAME="relative-default-$$" \
-  HARNESS_STATE_DIR="$state_dir/default-state" \
-  HARNESS_STAGING_DIR="$staging_dir/default-staging" \
-  HARNESS_EVIDENCE_DIR="$evidence_dir/default-evidence" \
-  HARNESS_LOG_DIR="$log_dir/default-logs" \
     "$script" render-config >"$tmp_dir/default-render.out"
 )
 
 for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-  [ -f "$state_dir/default-state/rendered/runtime-inputs/$file" ] || {
+  [ -f "$default_state_dir/rendered/runtime-inputs/$file" ] || {
     printf 'Expected default render runtime input copy from non-repo cwd: %s\n' "$file" >&2
     exit 1
   }
@@ -47,17 +43,11 @@ EOF
 
 (
   cd "$repo_root"
-  HARNESS_RUN_ID="relative-custom-$$" \
-  HARNESS_PROJECT_NAME="relative-custom-$$" \
-  HARNESS_STATE_DIR="$state_dir/custom-state" \
-  HARNESS_STAGING_DIR="$staging_dir/custom-staging" \
-  HARNESS_EVIDENCE_DIR="$evidence_dir/custom-evidence" \
-  HARNESS_LOG_DIR="$log_dir/custom-logs" \
     "$script" render-config --env "$tmp_dir/custom-relative.env" >"$tmp_dir/custom-render.out"
 )
 
-runtime_env="$state_dir/custom-state/rendered/harness.runtime.env"
-runtime_dir="$state_dir/custom-state/rendered/runtime-inputs"
+runtime_env="$custom_state_dir/rendered/harness.runtime.env"
+runtime_dir="$custom_state_dir/rendered/runtime-inputs"
 grep -Fq "HARNESS_GERRIT_ENV_FILE=$runtime_dir/gerrit.env" "$runtime_env"
 for file in gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
   [ -f "$runtime_dir/$file" ] || {

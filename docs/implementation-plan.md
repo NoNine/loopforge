@@ -429,10 +429,10 @@ Harness implementation decisions:
 - If Docker Compose v2 is unavailable but `docker-compose` v1 is available, the
   Step 6 harness may use `docker-compose`. The command implementation should
   detect and report the Compose command it will use.
-- Existing generated `simulation/state/docker/<run-id>/`,
-  `simulation/staging/docker/<run-id>/`, `simulation/evidence/docker/<run-id>/`,
-  and `logs/docker/<run-id>/` content is not source material. Treat those paths
-  as generated output and do not commit retained state or verbose logs.
+- Existing generated `generated/simulation/docker/<run-id>/` content is not
+  source material. Treat the run-scoped `state/`, `product-homes/`,
+  `staging/`, `exported-artifacts/`, `evidence/`, and `logs/` children as
+  generated output and do not commit retained state or verbose logs.
 - Harness evidence must record the Version Baseline values used by the run and
   must not report comparable readiness when container OS or artifact versions
   drift from that baseline.
@@ -608,10 +608,10 @@ scripts/gerrit-setup.sh --env examples/gerrit.env.example --dry-run preflight
 simulation/docker/simulate.sh prepare-artifacts --role gerrit
 simulation/docker/simulate.sh stage-artifacts --role gerrit
 simulation/docker/simulate.sh run-role-gate --role gerrit
-find simulation/evidence/docker -type f -name '*gerrit*' -print -quit | rg .
-! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/evidence/docker -type f -name '*gerrit*')
-rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/state/docker/<run-id>/bundle-factory/artifacts/gerrit/manifest.txt simulation/staging/docker/<run-id>/gerrit/manifest.txt
-! find simulation/state/docker/<run-id>/bundle-factory/artifacts/gerrit simulation/staging/docker/<run-id>/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
+find generated/simulation/docker/<run-id>/evidence -type f -name '*gerrit*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/evidence -type f -name '*gerrit*')
+rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/exported-artifacts/gerrit/manifest.txt generated/simulation/docker/<run-id>/staging/gerrit/manifest.txt
+! find generated/simulation/docker/<run-id>/exported-artifacts/gerrit generated/simulation/docker/<run-id>/staging/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "prepare-artifacts|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ! scripts/gerrit-setup.sh --help | rg -n "configure-integration|verify-trigger|configure-agent"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
@@ -753,10 +753,10 @@ scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.exampl
 simulation/docker/simulate.sh prepare-artifacts --role jenkins-controller
 simulation/docker/simulate.sh stage-artifacts --role jenkins-controller
 simulation/docker/simulate.sh run-role-gate --role jenkins-controller
-find simulation/evidence/docker -type f -name '*jenkins-controller*' -print -quit | rg .
-! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/evidence/docker -type f -name '*jenkins-controller*')
-rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-controller/manifest.txt simulation/staging/docker/<run-id>/jenkins-controller/manifest.txt
-! find simulation/state/docker/<run-id>/bundle-factory/artifacts/jenkins-controller simulation/staging/docker/<run-id>/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
+find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-controller*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-controller*')
+rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller/manifest.txt generated/simulation/docker/<run-id>/staging/jenkins-controller/manifest.txt
+! find generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller generated/simulation/docker/<run-id>/staging/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|verify-trigger"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
@@ -881,8 +881,8 @@ scripts/jenkins-agent-setup.sh --env examples/jenkins-agent.env.example --dry-ru
 simulation/docker/simulate.sh prepare-artifacts --role jenkins-agent
 simulation/docker/simulate.sh stage-artifacts --role jenkins-agent
 simulation/docker/simulate.sh run-role-gate --role jenkins-agent
-find simulation/evidence/docker -type f -name '*jenkins-agent*' -print -quit | rg .
-! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find simulation/evidence/docker -type f -name '*jenkins-agent*')
+find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-agent*' -print -quit | rg .
+! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-agent*')
 rg -n "agent|SSH|label|executor|collect-evidence" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes|configure-" docs/jenkins-agent-native-operations-reference.md
@@ -969,8 +969,9 @@ simulation/docker/simulate.sh [--env FILE] prepare-artifacts
 simulation/docker/simulate.sh [--env FILE] stage-artifacts
 simulation/docker/simulate.sh [--env FILE] up
 simulation/docker/simulate.sh [--env FILE] check
-simulation/docker/simulate.sh [--env FILE] full-verify
+simulation/docker/simulate.sh [--env FILE] full-verify [--skip-check]
 simulation/docker/simulate.sh [--env FILE] down
+simulation/docker/simulate.sh [--env FILE] clean
 ```
 
 Implementation notes:

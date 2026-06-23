@@ -6,6 +6,8 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
+run_id="role-order-$$"
+run_dir="$repo_root/generated/simulation/docker/$run_id"
 cleanup() {
   rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -18,7 +20,7 @@ cleanup() {
       sed -n '1,200p' "$calls" >&2
     fi
   fi
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" "$run_dir"
   exit "$rc"
 }
 trap cleanup EXIT
@@ -95,7 +97,7 @@ chmod +x "$fake_bin/docker"
 write_manifest() {
   local role dir
   role="${1:?role required}"
-  dir="$tmp_dir/staging/$role"
+  dir="$run_dir/staging/$role"
   mkdir -p "$dir"
   cat >"$dir/manifest.txt" <<EOF
 harness_manifest_version=1
@@ -137,9 +139,9 @@ write_manifest gerrit
 write_manifest jenkins-controller
 write_manifest jenkins-agent
 mkdir -p \
-  "$tmp_dir/state/rendered" \
-  "$tmp_dir/evidence" \
-  "$tmp_dir/logs"
+  "$run_dir/state/rendered" \
+  "$run_dir/evidence" \
+  "$run_dir/logs"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
@@ -159,22 +161,24 @@ PY
 )
 EOF
 cat >>"$tmp_dir/harness.env" <<EOF
+HARNESS_RUN_ID=$run_id
+HARNESS_PROJECT_NAME=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_host_port
 HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_host_port
 EOF
-printf 'gerrit log\n' >"$tmp_dir/logs/gerrit.log"
-printf 'controller log\n' >"$tmp_dir/logs/controller.log"
-printf 'agent log\n' >"$tmp_dir/logs/agent.log"
-cat >"$tmp_dir/evidence/gerrit-readiness-test.json" <<'EOF'
+printf 'gerrit log\n' >"$run_dir/logs/gerrit.log"
+printf 'controller log\n' >"$run_dir/logs/controller.log"
+printf 'agent log\n' >"$run_dir/logs/agent.log"
+cat >"$run_dir/evidence/gerrit-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/harness/logs/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}
 EOF
-cat >"$tmp_dir/evidence/jenkins-controller-readiness-test.json" <<'EOF'
+cat >"$run_dir/evidence/jenkins-controller-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/harness/logs/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/state/runtime.status"}
 EOF
-cat >"$tmp_dir/evidence/jenkins-agent-readiness-test.json" <<'EOF'
+cat >"$run_dir/evidence/jenkins-agent-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/harness/logs/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}
 EOF
 
@@ -182,24 +186,18 @@ common_env=(
   PATH="$fake_bin:$PATH"
   DOCKER_CALLS_LOG="$calls"
   HARNESS_TEST_STUB_ROLE_COMMANDS="$tmp_dir/role-calls.log"
-  HARNESS_RUN_ID="role-order-$$"
-  HARNESS_PROJECT_NAME="role-order-$$"
-  HARNESS_STATE_DIR="$tmp_dir/state"
-  HARNESS_PRODUCT_HOME_DIR="$tmp_dir/product-homes"
-  HARNESS_STAGING_DIR="$tmp_dir/staging"
-  HARNESS_EVIDENCE_DIR="$tmp_dir/evidence"
-  HARNESS_LOG_DIR="$tmp_dir/logs"
+  HARNESS_ENV_FILE="$tmp_dir/harness.env"
 )
 
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role gerrit >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role gerrit >/dev/null
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role jenkins-controller >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-controller >/dev/null
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" run-role-gate --role jenkins-agent >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-agent >/dev/null
 
 if grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
   printf 'role dispatch must pass bare role names to internal command functions\n' >&2
@@ -207,9 +205,9 @@ if grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
   exit 1
 fi
 
-gerrit_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
-controller_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
-agent_host_evidence="$(find "$tmp_dir/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
+gerrit_host_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
+controller_host_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
+agent_host_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
 [ -n "$gerrit_host_evidence" ] || {
   printf 'gerrit normalized host evidence was not written\n' >&2
   exit 1
@@ -242,7 +240,7 @@ grep -Fq '"service_log_reference": "/var/lib/jenkins-agent/logs/agent-service.lo
   printf 'jenkins-agent service log metadata reference was not preserved\n' >&2
   exit 1
 }
-if grep -Fq "$tmp_dir/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
+if grep -Fq "$run_dir/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
   printf 'product-home paths must not be normalized into bounded log references\n' >&2
   exit 1
 fi
