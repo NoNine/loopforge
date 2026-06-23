@@ -21,9 +21,9 @@ Authority order:
 2. `docs/system-model.md`: system entities, relationships, interfaces, modes,
    lifecycle boundaries, and ownership rules.
 3. Topic docs and manuals, including `docs/account-model.md`,
-   `docs/artifact-bundle-contract.md`, `docs/validation-and-evidence.md`,
-   `docs/gerrit-trigger-integration.md`, role setup manuals, and simulation
-   docs.
+   `docs/directory-model.md`, `docs/artifact-bundle-contract.md`,
+   `docs/validation-and-evidence.md`, `docs/gerrit-trigger-integration.md`,
+   role setup manuals, and simulation docs.
 4. Helper scripts and verifier scripts, which implement the documented model.
 
 If this model exposes a new product requirement or changes the product
@@ -67,20 +67,17 @@ must not be presented as `target-deployment` proof.
 
 ## Helper-Owned Generated State
 
-Helper-owned generated execution state lives under `/var/lib/loopforge/` on
-target environments. Helper-owned logs live under `/var/log/loopforge/`.
-These paths hold rendered inputs, runtime inputs, staging handoff, evidence
-inputs, bounded logs, and related helper-managed state.
-
-Service-owned state remains under the native service homes:
-
-- Gerrit under `/srv/gerrit`
-- Jenkins controller under `/var/lib/jenkins`
-- Jenkins agent under `/var/lib/jenkins-agent`
+Helper-owned generated execution state is separate from service-owned product
+homes. Helper state holds rendered inputs, runtime inputs, staging handoff,
+evidence inputs, bounded logs, and related helper-managed state. Service-owned
+state remains under the native Gerrit, Jenkins controller, and Jenkins agent
+homes.
 
 The helper-owned paths are not service homes. They are the workspace used by
 helper scripts and integration workflows to prepare, stage, validate, and
-record execution state.
+record execution state. `docs/directory-model.md` defines the concrete paths,
+ownership, permission model, sensitivity, evidence behavior, and simulation
+backing rules.
 
 ## Actors
 
@@ -185,8 +182,8 @@ not actors.
 
 | Utility | Ownership boundary |
 | --- | --- |
-| Role helpers: `scripts/gerrit-setup.sh`, `scripts/jenkins-controller-setup.sh`, `scripts/jenkins-agent-setup.sh` | Own role-local lifecycle work only: preflight, artifact preparation, target-local install/configuration, role-local validation, and role-local evidence. They also own helper-generated state under `/var/lib/loopforge/` and helper logs under `/var/log/loopforge/`. |
-| Shared integration helper: `scripts/integration-setup.sh` | Owns cross-role work: Jenkins-held keys, Gerrit public-key registration, Gerrit integration ACL/label workflow, Jenkins credentials, Jenkins node registration, Gerrit Trigger configuration, cross-role validation, trigger verification, and integration evidence. It also owns helper-generated shared state under `/var/lib/loopforge/` and helper logs under `/var/log/loopforge/`. |
+| Role helpers: `scripts/gerrit-setup.sh`, `scripts/jenkins-controller-setup.sh`, `scripts/jenkins-agent-setup.sh` | Own role-local lifecycle work only: preflight, artifact preparation, target-local install/configuration, role-local validation, role-local evidence, and role-local helper-generated state. |
+| Shared integration helper: `scripts/integration-setup.sh` | Owns cross-role work: Jenkins-held keys, Gerrit public-key registration, Gerrit integration ACL/label workflow, Jenkins credentials, Jenkins node registration, Gerrit Trigger configuration, cross-role validation, trigger verification, integration evidence, and shared helper-generated state. |
 | Docker simulation utility: `simulation/docker/simulate.sh` | Realizes the logical environments in containers and orchestrates Docker simulation checkpoints. Docker APIs are simulation lifecycle internals, not the product communication surface. |
 | VM verifier: `simulation/vm/vm-verify.sh` | Realizes or checks the logical environments in VMs when VM support exists. |
 | Global evidence collector: `scripts/collect-evidence.sh` | Validates and aggregates generated evidence. It must not create runtime success or replace lifecycle proof. |

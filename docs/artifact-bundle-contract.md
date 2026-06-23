@@ -4,7 +4,8 @@ This document defines the artifact bundle contract for bundle-factory
 workspaces, release archive layout, target transfer, target extraction,
 helper-owned execution state, helper-visible artifact paths, and mode
 parity. It is a contract and validation authority, not an operator command
-manual.
+manual. `docs/directory-model.md` defines directory ownership, permissions,
+sensitivity, evidence behavior, and simulation backing for these paths.
 
 ## Workspaces
 
@@ -14,9 +15,8 @@ manual.
   packaging.
 - Target transfer inboxes live under helper-owned target state, currently
   `/var/lib/loopforge/staging/<role>/incoming`.
-- Helper-owned generated execution state on target environments lives under
-  `/var/lib/loopforge/`.
-- Helper-owned logs on target environments live under `/var/log/loopforge/`.
+- Helper-owned generated execution state and logs use the directory model's
+  helper-owned path contract.
 
 ## Release Archives
 
@@ -47,8 +47,7 @@ manual.
   mutation.
 - Role helpers consume the extracted payload directory only.
 - Helper-owned generated state, runtime inputs, staging handoff, evidence
-  inputs, and bounded logs use `/var/lib/loopforge/` and `/var/log/loopforge/`
-  on target environments.
+  inputs, and bounded logs follow `docs/directory-model.md`.
 - Docker and VM simulation may back these paths with generated host
   directories, bind mounts, container copies, or VM transfer paths, but the
   helper-visible paths stay product-like and the lifecycle checks remain
