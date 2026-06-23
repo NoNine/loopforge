@@ -54,10 +54,12 @@ redacted.
 Integration-scoped records from `scripts/integration-setup.sh` are distinct
 from role-local readiness records and from the final global aggregation. They
 may record public key fingerprints, Jenkins credential IDs, account names,
-service endpoints, the shared integration group name and GID, shared storage
-path, bounded read/write proof, bounded log paths, trigger/build/change
-identifiers, and redaction status. They must not record private keys, tokens,
-passwords, LDAP bind secrets, or full secret-bearing env values.
+service endpoints, helper-owned `/var/lib/loopforge/` and
+`/var/log/loopforge/` references, the shared integration group name and GID,
+shared storage path, bounded read/write proof, bounded log paths,
+trigger/build/change identifiers, and redaction status. They must not record
+private keys, tokens, passwords, LDAP bind secrets, or full secret-bearing
+env values.
 
 The global collector accepts legacy Step 7-9 records that do not yet carry
 explicit `package_version` or `helper_command_version` fields. It enriches
@@ -125,7 +127,8 @@ aggregation.
 
 `examples/integration.env.example` is the single reviewed source for the
 cross-role Jenkins shared group name, shared group GID, and shared storage
-path.
+path. Helper-generated shared state and helper logs live under
+`/var/lib/loopforge/` and `/var/log/loopforge/` on target environments.
 
 Docker simulation evidence must prove the shared path is mounted into both
 Jenkins containers by writing a file as the controller runtime account and

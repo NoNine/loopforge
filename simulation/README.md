@@ -75,8 +75,8 @@ Docker uses these subpath patterns:
 | --- | --- |
 | State | `generated/simulation/docker/<run-id>/state/` |
 | Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
-| Staged artifacts | `generated/simulation/docker/<run-id>/staging/<environment>/` |
-| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<role>/` |
+| Staged artifacts | `generated/simulation/docker/<run-id>/staging/<role>/` |
+| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<bundle>.tar.gz` |
 | Evidence | `generated/simulation/docker/<run-id>/evidence/` |
 | Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
 
@@ -88,8 +88,9 @@ These paths are generated runtime output unless a file in the tree states
 otherwise. Keep them ignored or documented as generated when created by
 simulation steps.
 
-Docker `clean` is manual and conservative: it removes mutable environment
-state while preserving exported artifacts, evidence, and logs.
+Docker `clean` is manual and conservative: it removes mutable generated
+runtime state while preserving exported artifact archives, evidence, and
+logs.
 
 ## Checkpoint Contract
 

@@ -20,8 +20,8 @@ verifier CLI.
 | `render-config [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `render-config: ok run-id=...` summary. |
 | `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary. |
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
-| `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and validates manifests/checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
-| `stage-artifacts [--env FILE] [--role ROLE]` | Stages one role, or all Docker roles when `--role` is omitted, to target containers and verifies manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
+| `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
+| `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, extracts them to `/opt/gerrit-artifacts-bundle`, `/opt/jenkins-artifacts-bundle`, or `/opt/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
 | `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
 | `full-verify [--env FILE] [--skip-check]` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. `--skip-check` requires a matching successful check marker for the same run and still lets `verify-trigger` perform its own validation. Success prints a short `full-verify: integration ok` summary. |
@@ -94,7 +94,7 @@ generated/simulation/docker/<run-id>/
 | Harness/container state | `generated/simulation/docker/<run-id>/state/` |
 | Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
 | Staged artifacts | `generated/simulation/docker/<run-id>/staging/<environment>/` |
-| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<role>/` |
+| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<bundle>.tar.gz` |
 | Evidence | `generated/simulation/docker/<run-id>/evidence/` |
 | Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
 
@@ -103,10 +103,10 @@ those roots, but the operator-facing Docker model has one run-scoped output
 layout.
 
 `prepare-artifacts` first writes role artifacts inside the bundle-factory
-environment, then exports successful bundles to
-`exported-artifacts/<role>/` as host-owned/readable handoff output. That
-exported directory is the durable source for `stage-artifacts` and for any
-target-deployment handoff review.
+workspace, then exports successful bundles as archive handoff files to
+`exported-artifacts/<bundle>.tar.gz` plus `.sha256`. `stage-artifacts`
+consumes those archives and extracts them under the role-specific `/opt`
+bundle roots before helper validation.
 
 `/harness/state` is a harness sideband mount for reviewed inputs,
 coordination state, generated control scripts, fingerprints, status, and
@@ -136,7 +136,7 @@ host files owned by container users, and Compose does not delete those
 bind-mounted directories, so `clean` is the explicit housekeeping command.
 
 `clean` verifies the selected run marker and operates only under the canonical
-repo-local generated run root. It removes only mutable environment data:
+repo-local generated run root. It removes only mutable generated runtime data:
 `state/`, `product-homes/`, and `staging/`. It preserves
 `exported-artifacts/`, `evidence/`, and `logs/`. If the host user cannot
 remove container-owned files, `clean` may use a one-shot cleanup container
@@ -168,5 +168,5 @@ readiness when real integration proof is unavailable. Forbidden synthetic
 success markers in role or integration logs are treated as failures.
 
 Public internet fallback on target hosts is simulation-only and applies only
-to Ubuntu/OS dependency installation. It is not support for target-host
+to Ubuntu/OS dependency installation. It is not a fallback for target-host
 application artifact downloads, and v1 is not a strict air-gapped installer.

@@ -13,6 +13,8 @@ env_file=""
 dry_run=0
 assume_yes=0
 readonly JENKINS_AGENT_NATIVE_REMOTE_FS="/var/lib/jenkins-agent"
+readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/home/ci-operator/artifact-bundle-work/jenkins-agent"
+readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/opt/jenkins-agent-artifacts-bundle/jenkins-agent"
 
 usage() {
   cat <<'USAGE'
@@ -167,9 +169,9 @@ apply_env_defaults() {
   JENKINS_AGENT_LABELS="${JENKINS_AGENT_LABELS:-linux x86_64 general-build gerrit-ci}"
   JENKINS_AGENT_EXECUTORS="${JENKINS_AGENT_EXECUTORS:-5}"
   JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
-  JENKINS_AGENT_STATE_DIR="${JENKINS_AGENT_STATE_DIR:-/harness/state/agent}"
-  JENKINS_AGENT_STAGED_ARTIFACT_DIR="${JENKINS_AGENT_STAGED_ARTIFACT_DIR:-/harness/staged}"
-  JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="${JENKINS_AGENT_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-agent}"
+  JENKINS_AGENT_STATE_DIR="${JENKINS_AGENT_STATE_DIR:-$JENKINS_AGENT_NATIVE_REMOTE_FS}"
+  JENKINS_AGENT_STAGED_ARTIFACT_DIR="${JENKINS_AGENT_STAGED_ARTIFACT_DIR:-$JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR}"
+  JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="${JENKINS_AGENT_ARTIFACT_OUTPUT_DIR:-$JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR}"
   JENKINS_AGENT_EVIDENCE_DIR="${JENKINS_AGENT_EVIDENCE_DIR:-/harness/evidence}"
   JENKINS_AGENT_LOG_DIR="${JENKINS_AGENT_LOG_DIR:-/harness/logs}"
   JENKINS_AGENT_VERIFICATION_MODE="${JENKINS_AGENT_VERIFICATION_MODE:-docker-simulation}"
@@ -317,10 +319,10 @@ validate_agent_state_dir() {
   value="${JENKINS_AGENT_STATE_DIR:-}"
   validate_safe_absolute_path_string JENKINS_AGENT_STATE_DIR "$value"
   case "$value" in
-    /harness/state/agent|/harness/state/agent/*)
+    "$JENKINS_AGENT_NATIVE_REMOTE_FS"|"$JENKINS_AGENT_NATIVE_REMOTE_FS"/*)
       ;;
     *)
-      die "JENKINS_AGENT_STATE_DIR must be under /harness/state/agent"
+      die "JENKINS_AGENT_STATE_DIR must be under $JENKINS_AGENT_NATIVE_REMOTE_FS"
       ;;
   esac
 }
@@ -485,11 +487,9 @@ check_os_dependency_expectations() {
 }
 
 validate_artifact_output_dir() {
-  local dir repo_generated allowed_harness allowed_repo base suffix
+  local dir allowed_work base suffix
   dir="${JENKINS_AGENT_ARTIFACT_OUTPUT_DIR:-}"
-  repo_generated="$repo_root/simulation/state/generated-artifacts/jenkins-agent"
-  allowed_harness="/harness/state/artifacts/jenkins-agent"
-  allowed_repo="$repo_generated"
+  allowed_work="$JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR"
   [ -n "$dir" ] || die "JENKINS_AGENT_ARTIFACT_OUTPUT_DIR must not be empty"
   case "$dir" in
     /*) ;;
@@ -501,9 +501,12 @@ validate_artifact_output_dir() {
       ;;
   esac
   case "$dir" in
-    /|/tmp|/tmp/*|/var|/var/*|/etc|/etc/*|/usr|/usr/*|/home|/home/*|"$HOME"|"$HOME"/*|"$repo_root"|"$repo_root"/*)
+    /|/tmp|/tmp/*|/var|/var/*|/etc|/etc/*|/usr|/usr/*|"$repo_root"|"$repo_root"/*)
+      die "Unsafe JENKINS_AGENT_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
+      ;;
+    /home|/home/*|"$HOME"|"$HOME"/*)
       case "$dir" in
-        "$allowed_repo"|"$allowed_repo"/*)
+        "$allowed_work"|"$allowed_work"/*)
           ;;
         *)
           die "Unsafe JENKINS_AGENT_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
@@ -511,7 +514,7 @@ validate_artifact_output_dir() {
       esac
       ;;
   esac
-  for base in "$allowed_harness" "$allowed_repo"; do
+  for base in "$allowed_work"; do
     if [ "$dir" = "$base" ]; then
       return 0
     fi
@@ -528,7 +531,7 @@ validate_artifact_output_dir() {
         ;;
     esac
   done
-  die "JENKINS_AGENT_ARTIFACT_OUTPUT_DIR must be under $allowed_harness or $allowed_repo"
+  die "JENKINS_AGENT_ARTIFACT_OUTPUT_DIR must be under $allowed_work"
 }
 
 assert_no_ssh_key_material() {

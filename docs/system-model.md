@@ -21,8 +21,9 @@ Authority order:
 2. `docs/system-model.md`: system entities, relationships, interfaces, modes,
    lifecycle boundaries, and ownership rules.
 3. Topic docs and manuals, including `docs/account-model.md`,
-   `docs/validation-and-evidence.md`, `docs/gerrit-trigger-integration.md`,
-   role setup manuals, and simulation docs.
+   `docs/artifact-bundle-contract.md`, `docs/validation-and-evidence.md`,
+   `docs/gerrit-trigger-integration.md`, role setup manuals, and simulation
+   docs.
 4. Helper scripts and verifier scripts, which implement the documented model.
 
 If this model exposes a new product requirement or changes the product
@@ -43,6 +44,43 @@ class and policy choices. They do not change the logical system being modeled.
 `target-deployment` is distinguished from simulation modes by the use of
 operator-approved target infrastructure and real or approved target-owned
 identity sources, not by whether the hosts are physical machines or VMs.
+
+## Product Behavior Modeling
+
+Product behavior should be modeled as early as practical and as much as
+practical. New or changed behavior should document the intended
+`target-deployment` behavior, simulation realization, ownership boundaries,
+interfaces, lifecycle checkpoints, and evidence limits before or alongside
+implementation.
+
+Simulation modes model the same logical product behavior as target deployment.
+Simulation-specific mechanisms may create, host, or observe the lab
+environment, but they must not replace normal product lifecycle operations.
+Simulation must not bypass role helpers, shared integration helper ownership,
+staged artifact verification, native product paths, declared service APIs,
+runtime accounts, or real runtime and evidence checks to manufacture success.
+
+Any simulation-only waiver must be narrow, explicit, opt-in, clearly labeled in
+docs, logs, and evidence, and fail closed outside simulation modes. Waivers may
+explain a lab limitation, but they do not become a supported product path and
+must not be presented as `target-deployment` proof.
+
+## Helper-Owned Generated State
+
+Helper-owned generated execution state lives under `/var/lib/loopforge/` on
+target environments. Helper-owned logs live under `/var/log/loopforge/`.
+These paths hold rendered inputs, runtime inputs, staging handoff, evidence
+inputs, bounded logs, and related helper-managed state.
+
+Service-owned state remains under the native service homes:
+
+- Gerrit under `/srv/gerrit`
+- Jenkins controller under `/var/lib/jenkins`
+- Jenkins agent under `/var/lib/jenkins-agent`
+
+The helper-owned paths are not service homes. They are the workspace used by
+helper scripts and integration workflows to prepare, stage, validate, and
+record execution state.
 
 ## Actors
 
@@ -147,8 +185,8 @@ not actors.
 
 | Utility | Ownership boundary |
 | --- | --- |
-| Role helpers: `scripts/gerrit-setup.sh`, `scripts/jenkins-controller-setup.sh`, `scripts/jenkins-agent-setup.sh` | Own role-local lifecycle work only: preflight, artifact preparation, target-local install/configuration, role-local validation, and role-local evidence. |
-| Shared integration helper: `scripts/integration-setup.sh` | Owns cross-role work: Jenkins-held keys, Gerrit public-key registration, Gerrit integration ACL/label workflow, Jenkins credentials, Jenkins node registration, Gerrit Trigger configuration, cross-role validation, trigger verification, and integration evidence. |
+| Role helpers: `scripts/gerrit-setup.sh`, `scripts/jenkins-controller-setup.sh`, `scripts/jenkins-agent-setup.sh` | Own role-local lifecycle work only: preflight, artifact preparation, target-local install/configuration, role-local validation, and role-local evidence. They also own helper-generated state under `/var/lib/loopforge/` and helper logs under `/var/log/loopforge/`. |
+| Shared integration helper: `scripts/integration-setup.sh` | Owns cross-role work: Jenkins-held keys, Gerrit public-key registration, Gerrit integration ACL/label workflow, Jenkins credentials, Jenkins node registration, Gerrit Trigger configuration, cross-role validation, trigger verification, and integration evidence. It also owns helper-generated shared state under `/var/lib/loopforge/` and helper logs under `/var/log/loopforge/`. |
 | Docker simulation utility: `simulation/docker/simulate.sh` | Realizes the logical environments in containers and orchestrates Docker simulation checkpoints. Docker APIs are simulation lifecycle internals, not the product communication surface. |
 | VM verifier: `simulation/vm/vm-verify.sh` | Realizes or checks the logical environments in VMs when VM support exists. |
 | Global evidence collector: `scripts/collect-evidence.sh` | Validates and aggregates generated evidence. It must not create runtime success or replace lifecycle proof. |
@@ -230,8 +268,10 @@ Mode-specific behavior:
 | `vm-simulation` | Create the same `All-Projects` config review and auto-submit it as simulation test automation, then validate effective state. |
 
 Direct ACL mutation without a review is an explicit simulation-only fallback.
+It is a narrow waiver for lab automation only, not an alternate product path.
 It must require explicit opt-in, must be labeled `simulation-only direct
-Gerrit REST apply`, and must fail closed outside simulation modes.
+Gerrit REST apply` in docs, logs, and evidence, must validate effective state
+after mutation, and must fail closed outside simulation modes.
 
 Project selection for Jenkins Trigger and disposable verification is still
 configured in trigger/job inputs. In v1, the Gerrit ACL review itself is owned

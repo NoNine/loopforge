@@ -589,7 +589,10 @@ ensure_dirs() {
     "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" \
     "$HARNESS_STAGING_DIR" \
     "$HARNESS_EXPORTED_ARTIFACT_DIR" \
-    "$HARNESS_STATE_DIR/bundle-factory/artifacts" \
+    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work" \
+    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/gerrit" \
+    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/jenkins-controller" \
+    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/jenkins-agent" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
     "$HARNESS_STATE_DIR/shared-jenkins-storage" \
@@ -903,7 +906,7 @@ manifest_reference_for_evidence() {
   role="${1:?role required}"
   case "$role" in
     gerrit|jenkins-controller|jenkins-agent)
-      printf '%s/bundle-factory/artifacts/%s/manifest.txt\n' "$HARNESS_STATE_DIR" "$role"
+      printf '%s/manifest.txt\n' "$(host_bundle_factory_work_dir_for_role "$role")"
       ;;
     *)
       printf '%s\n' "not-applicable"
@@ -916,7 +919,7 @@ checksum_reference_for_evidence() {
   role="${1:?role required}"
   case "$role" in
     gerrit|jenkins-controller|jenkins-agent)
-      printf '%s/bundle-factory/artifacts/%s/checksums.sha256\n' "$HARNESS_STATE_DIR" "$role"
+      printf '%s/checksums.sha256\n' "$(host_bundle_factory_work_dir_for_role "$role")"
       ;;
     *)
       printf '%s\n' "not-applicable"
@@ -924,29 +927,115 @@ checksum_reference_for_evidence() {
   esac
 }
 
-exported_artifact_dir_for_role() {
+bundle_name_for_role() {
   local role
   role="${1:?role required}"
-  printf '%s/%s\n' "$HARNESS_EXPORTED_ARTIFACT_DIR" "$role"
+  case "$role" in
+    gerrit) printf '%s\n' "gerrit-artifacts-bundle" ;;
+    jenkins-controller) printf '%s\n' "jenkins-artifacts-bundle" ;;
+    jenkins-agent) printf '%s\n' "jenkins-agent-artifacts-bundle" ;;
+    *) die "Unknown role for artifact bundle: $role" ;;
+  esac
+}
+
+bundle_payload_dir_for_role() {
+  local role
+  role="${1:?role required}"
+  case "$role" in
+    gerrit) printf '%s\n' "gerrit" ;;
+    jenkins-controller) printf '%s\n' "jenkins" ;;
+    jenkins-agent) printf '%s\n' "jenkins-agent" ;;
+    *) die "Unknown role for artifact payload: $role" ;;
+  esac
+}
+
+container_bundle_factory_work_dir_for_role() {
+  local role
+  role="${1:?role required}"
+  printf '%s\n' "$(host_bundle_factory_work_dir_for_role "$role")"
+}
+
+host_bundle_factory_work_dir_for_role() {
+  local role
+  role="${1:?role required}"
+  printf '%s/bundle-factory/artifact-bundle-work/%s\n' "$HARNESS_STATE_DIR" "$role"
+}
+
+exported_artifact_archive_for_role() {
+  local role bundle
+  role="${1:?role required}"
+  bundle="$(bundle_name_for_role "$role")"
+  printf '%s/%s.tar.gz\n' "$HARNESS_EXPORTED_ARTIFACT_DIR" "$bundle"
+}
+
+exported_artifact_checksum_for_role() {
+  local role
+  role="${1:?role required}"
+  printf '%s.sha256\n' "$(exported_artifact_archive_for_role "$role")"
+}
+
+stage_bundle_dir_for_role() {
+  local role bundle
+  role="${1:?role required}"
+  bundle="$(bundle_name_for_role "$role")"
+  printf '%s/%s/%s\n' "$HARNESS_STAGING_DIR" "$role" "$bundle"
+}
+
+stage_payload_dir_for_role() {
+  local role payload
+  role="${1:?role required}"
+  payload="$(bundle_payload_dir_for_role "$role")"
+  printf '%s/%s\n' "$(stage_bundle_dir_for_role "$role")" "$payload"
+}
+
+target_bundle_dir_for_role() {
+  local role bundle
+  role="${1:?role required}"
+  bundle="$(bundle_name_for_role "$role")"
+  printf '/opt/%s\n' "$bundle"
+}
+
+target_payload_dir_for_role() {
+  local role payload
+  role="${1:?role required}"
+  payload="$(bundle_payload_dir_for_role "$role")"
+  printf '%s/%s\n' "$(target_bundle_dir_for_role "$role")" "$payload"
 }
 
 export_role_artifacts() {
-  local role src dest log rc
+  local role src archive checksum log rc bundle payload tmp_root tmp_bundle tmp_payload
   role="${1:?role required}"
   src="${2:?source required}"
   log="${3:?log required}"
-  dest="$(exported_artifact_dir_for_role "$role")"
-  rm -rf "$dest"
-  mkdir -p "$dest"
-  if compose exec -T bundle-factory tar -C "/harness/state/artifacts/$role" -cf - . | tar -C "$dest" -xf - >>"$log" 2>&1; then
+  bundle="$(bundle_name_for_role "$role")"
+  payload="$(bundle_payload_dir_for_role "$role")"
+  archive="$(exported_artifact_archive_for_role "$role")"
+  checksum="$(exported_artifact_checksum_for_role "$role")"
+  rm -f "$archive" "$checksum"
+  mkdir -p "$HARNESS_EXPORTED_ARTIFACT_DIR"
+  tmp_root="$(mktemp -d)"
+  tmp_bundle="$tmp_root/$bundle"
+  tmp_payload="$tmp_bundle/$payload"
+  mkdir -p "$tmp_payload"
+  cp -R "$src/." "$tmp_payload/"
+  mkdir -p "$tmp_bundle/checksums"
+  (cd "$tmp_bundle" && find . -type f ! -path './checksums/SHA256SUMS' -print0 | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS)
+  if tar -C "$tmp_root" -czf "$archive" "$bundle" >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
   fi
+  rm -rf "$tmp_root"
   [ "$rc" -eq 0 ] || return "$rc"
-  chmod -R u+rwX,go+rX "$dest"
-  validate_role_baseline_manifest "$role" "$dest/manifest.txt" "$log" || return 1
-  (cd "$dest" && sha256sum -c checksums.sha256) >>"$log" 2>&1
+  chmod u+rw,go+r "$archive"
+  sha256sum "$archive" >"$checksum"
+  chmod u+rw,go+r "$checksum"
+  tar -xOf "$archive" "$bundle/$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
+  if ! validate_role_baseline_manifest "$role" "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp" "$log"; then
+    rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
+    return 1
+  fi
+  rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
 }
 
 ensure_gerrit_validation_key() {
@@ -1816,7 +1905,7 @@ cmd_prepare_artifacts() {
     return "$rc"
   fi
 
-  artifact_dir="$HARNESS_STATE_DIR/bundle-factory/artifacts/$role"
+  artifact_dir="$(host_bundle_factory_work_dir_for_role "$role")"
   if [ ! -f "$artifact_dir/manifest.txt" ] || [ ! -f "$artifact_dir/checksums.sha256" ]; then
     evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper did not produce manifest.txt and checksums.sha256")"
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
@@ -1835,14 +1924,14 @@ cmd_prepare_artifacts() {
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
-  export_dir="$(exported_artifact_dir_for_role "$role")"
+  export_archive="$(exported_artifact_archive_for_role "$role")"
 
-  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory and exported for operator handoff: source=$artifact_dir export=$export_dir")"
-  print_command_summary prepare-artifacts "$role" "ok artifact-export=$export_dir"
+  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory and exported for operator handoff: source=$artifact_dir export=$export_archive")"
+  print_command_summary prepare-artifacts "$role" "ok artifact-export=$(basename "$export_archive")"
 }
 
 cmd_stage_artifacts() {
-  local role service artifact_dir stage_dir log rc evidence
+  local role service archive checksum stage_dir payload_dir target_bundle_dir target_payload_dir log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -1855,59 +1944,75 @@ cmd_stage_artifacts() {
     return "$?"
   fi
   service="$(service_for_role "$role")"
-  artifact_dir="$(exported_artifact_dir_for_role "$role")"
-  stage_dir="$HARNESS_STAGING_DIR/$role"
+  archive="$(exported_artifact_archive_for_role "$role")"
+  checksum="$(exported_artifact_checksum_for_role "$role")"
+  stage_dir="$(stage_bundle_dir_for_role "$role")"
+  payload_dir="$(stage_payload_dir_for_role "$role")"
+  target_bundle_dir="$(target_bundle_dir_for_role "$role")"
+  target_payload_dir="$(target_payload_dir_for_role "$role")"
   log="$(bounded_log_path "stage-artifacts-$role")"
 
   ensure_harness_up_for_role "$service"
   require_running_service "$service"
-  [ -f "$artifact_dir/manifest.txt" ] || die "Missing exported artifact manifest for $role: $artifact_dir/manifest.txt"
-  [ -f "$artifact_dir/checksums.sha256" ] || die "Missing exported artifact checksums for $role: $artifact_dir/checksums.sha256"
+  [ -f "$archive" ] || die "Missing exported artifact archive for $role: $archive"
+  [ -f "$checksum" ] || die "Missing exported artifact archive checksum for $role: $checksum"
 
   : >"$log"
-  if ! validate_role_baseline_manifest "$role" "$artifact_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Exported artifact manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
-    printf 'ERROR: Exported artifact baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
-    return 1
-  fi
-
-  mkdir -p "$stage_dir"
-  if ! compose exec -T "$service" sh -c 'mkdir -p /harness/staged && find /harness/staged -mindepth 1 -maxdepth 1 -exec rm -rf {} +' >>"$log" 2>&1; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Failed to prepare target staging path in container")"
+  if ! (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$checksum")") >>"$log" 2>&1; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Exported artifact archive checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
 
-  if tar -C "$artifact_dir" -cf - . | compose exec -T "$service" tar -C /harness/staged -xf - >>"$log" 2>&1; then
+  rm -rf "$stage_dir"
+  mkdir -p "$(dirname "$stage_dir")"
+  if tar -xzf "$archive" -C "$(dirname "$stage_dir")" >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Failed to copy artifacts to target staging path")"
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Failed to extract artifact bundle archive")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return "$rc"
   fi
 
-  if (cd "$stage_dir" && sha256sum -c checksums.sha256) >>"$log" 2>&1; then
+  if ! validate_role_baseline_manifest "$role" "$payload_dir/manifest.txt" "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Extracted artifact manifest baseline metadata is missing or drifted; staging cannot report comparable readiness")"
+    printf 'ERROR: Extracted artifact baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
+    return 1
+  fi
+
+  if (cd "$stage_dir" && sha256sum -c checksums/SHA256SUMS) >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Target-side checksum verification failed")"
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Extracted bundle checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return "$rc"
   fi
 
-  if ! validate_role_baseline_manifest "$role" "$stage_dir/manifest.txt" "$log"; then
+  if (cd "$payload_dir" && sha256sum -c checksums.sha256) >>"$log" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Role payload checksum verification failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return "$rc"
+  fi
+
+  if ! validate_role_baseline_manifest "$role" "$payload_dir/manifest.txt" "$log"; then
     evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Target staged manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
     printf 'ERROR: Target staged baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
     print_command_failure stage-artifacts "$role" blocked "$log" "$evidence" >&2
     return 1
   fi
 
-  if ! compose exec -T "$service" sh -c 'test -f /harness/staged/manifest.txt && test -f /harness/staged/checksums.sha256 && cd /harness/staged && sha256sum -c checksums.sha256' >>"$log" 2>&1; then
+  if ! compose exec -T "$service" sh -c "test -d $(shell_quote "$target_bundle_dir") && test -f $(shell_quote "$target_payload_dir/manifest.txt") && test -f $(shell_quote "$target_payload_dir/checksums.sha256") && cd $(shell_quote "$target_bundle_dir") && sha256sum -c checksums/SHA256SUMS && cd $(shell_quote "$target_payload_dir") && sha256sum -c checksums.sha256" >>"$log" 2>&1; then
     evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Container target-side manifest/checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1

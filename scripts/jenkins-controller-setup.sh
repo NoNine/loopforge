@@ -20,6 +20,8 @@ supported_jenkins_plugin_manager_version="2.15.0"
 supported_jenkins_ubuntu_release="24.04"
 supported_jenkins_ubuntu_codename="noble"
 readonly JENKINS_NATIVE_HOME="/var/lib/jenkins"
+readonly JENKINS_BUNDLE_FACTORY_WORK_DIR="/home/ci-operator/artifact-bundle-work/jenkins-controller"
+readonly JENKINS_STAGED_BUNDLE_PAYLOAD_DIR="/opt/jenkins-artifacts-bundle/jenkins"
 
 usage() {
   cat <<'USAGE'
@@ -303,8 +305,8 @@ apply_env_defaults() {
   JENKINS_RUNTIME_ACCOUNT="${JENKINS_RUNTIME_ACCOUNT:-jenkins}"
   JENKINS_RUNTIME_GROUP="${JENKINS_RUNTIME_GROUP:-jenkins}"
   JENKINS_HOME="${JENKINS_HOME:-$JENKINS_NATIVE_HOME}"
-  JENKINS_STAGED_ARTIFACT_DIR="${JENKINS_STAGED_ARTIFACT_DIR:-/harness/staged}"
-  JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-/harness/state/artifacts/jenkins-controller}"
+  JENKINS_STAGED_ARTIFACT_DIR="${JENKINS_STAGED_ARTIFACT_DIR:-$JENKINS_STAGED_BUNDLE_PAYLOAD_DIR}"
+  JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-$JENKINS_BUNDLE_FACTORY_WORK_DIR}"
   JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/harness/evidence}"
   JENKINS_LOG_DIR="${JENKINS_LOG_DIR:-/harness/logs}"
   JENKINS_VERIFICATION_MODE="${JENKINS_VERIFICATION_MODE:-docker-simulation}"
@@ -935,11 +937,9 @@ JENKINS_DOWNLOAD_ARTIFACTS
 }
 
 validate_artifact_output_dir() {
-  local dir repo_generated allowed_harness allowed_repo base suffix
+  local dir allowed_work base suffix
   dir="${JENKINS_ARTIFACT_OUTPUT_DIR:-}"
-  repo_generated="$repo_root/simulation/state/generated-artifacts/jenkins-controller"
-  allowed_harness="/harness/state/artifacts/jenkins-controller"
-  allowed_repo="$repo_generated"
+  allowed_work="$JENKINS_BUNDLE_FACTORY_WORK_DIR"
   [ -n "$dir" ] || die "JENKINS_ARTIFACT_OUTPUT_DIR must not be empty"
   case "$dir" in
     /*) ;;
@@ -951,9 +951,12 @@ validate_artifact_output_dir() {
       ;;
   esac
   case "$dir" in
-    /|/tmp|/tmp/*|/var|/var/*|/etc|/etc/*|/usr|/usr/*|/home|/home/*|"$HOME"|"$HOME"/*|"$repo_root"|"$repo_root"/*)
+    /|/tmp|/tmp/*|/var|/var/*|/etc|/etc/*|/usr|/usr/*|"$repo_root"|"$repo_root"/*)
+      die "Unsafe JENKINS_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
+      ;;
+    /home|/home/*|"$HOME"|"$HOME"/*)
       case "$dir" in
-        "$allowed_repo"|"$allowed_repo"/*)
+        "$allowed_work"|"$allowed_work"/*)
           ;;
         *)
           die "Unsafe JENKINS_ARTIFACT_OUTPUT_DIR for prepare-artifacts: $dir"
@@ -961,7 +964,7 @@ validate_artifact_output_dir() {
       esac
       ;;
   esac
-  for base in "$allowed_harness" "$allowed_repo"; do
+  for base in "$allowed_work"; do
     if [ "$dir" = "$base" ]; then
       return 0
     fi
@@ -978,7 +981,7 @@ validate_artifact_output_dir() {
         ;;
     esac
   done
-  die "JENKINS_ARTIFACT_OUTPUT_DIR must be under $allowed_harness or $allowed_repo"
+  die "JENKINS_ARTIFACT_OUTPUT_DIR must be under $allowed_work"
 }
 
 verify_staged_artifacts() {

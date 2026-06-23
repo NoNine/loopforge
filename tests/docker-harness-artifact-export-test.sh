@@ -52,8 +52,8 @@ case "$*" in
             esac
             ;;
           *"/workspace/scripts/gerrit-setup.sh "*" prepare-artifacts")
-            dir="$HARNESS_STATE_DIR/bundle-factory/artifacts/gerrit"
-            mkdir -p "$dir"
+            dir="$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work/gerrit"
+            mkdir -p "$dir/plugins"
             cat >"$dir/manifest.txt" <<'EOF'
 harness_manifest_version=1
 role=gerrit
@@ -68,11 +68,8 @@ gerrit_version=3.13.6
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
 EOF
-            printf 'payload\n' >"$dir/payload.txt"
-            (cd "$dir" && sha256sum manifest.txt payload.txt >checksums.sha256)
-            ;;
-          "tar -C /harness/state/artifacts/gerrit -cf - .")
-            tar -C "$HARNESS_STATE_DIR/bundle-factory/artifacts/gerrit" -cf - .
+            printf 'payload\n' >"$dir/plugins/payload.txt"
+            (cd "$dir" && sha256sum manifest.txt plugins/payload.txt >checksums.sha256)
             ;;
           *)
             exit 0
@@ -107,10 +104,11 @@ PATH="$fake_bin:$PATH" \
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit >"$tmp_dir/prepare.out"
 
-export_dir="$run_dir/exported-artifacts/gerrit"
-grep -Fq "artifact-export=$export_dir" "$tmp_dir/prepare.out"
-[ -f "$export_dir/manifest.txt" ] || {
-  printf 'Expected exported Gerrit manifest\n' >&2
+export_archive="$run_dir/exported-artifacts/gerrit-artifacts-bundle.tar.gz"
+grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
+[ -f "$export_archive" ] || {
+  printf 'Expected exported Gerrit archive\n' >&2
   exit 1
 }
-(cd "$export_dir" && sha256sum -c checksums.sha256) >/dev/null
+tar -tzf "$export_archive" | grep -Fq 'gerrit-artifacts-bundle/gerrit/manifest.txt'
+tar -xOf "$export_archive" gerrit-artifacts-bundle/checksums/SHA256SUMS >/dev/null

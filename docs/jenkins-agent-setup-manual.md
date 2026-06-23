@@ -138,8 +138,8 @@ Staged artifact paths:
 | Location | Path |
 | --- | --- |
 | Bundle factory output | `JENKINS_AGENT_ARTIFACT_OUTPUT_DIR` |
-| Docker harness bundle output | `/harness/state/artifacts/jenkins-agent` inside the bundle factory |
-| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/jenkins-agent/` |
+| Bundle-factory workspace | `$HOME/artifact-bundle-work/jenkins-agent` in operator-oriented examples |
+| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/jenkins-agent-artifacts-bundle.tar.gz` |
 
 Side effects:
 
@@ -171,8 +171,7 @@ Installation consumes only staged bundle factory output. The target verifies
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
-- Staged artifact directory, normally `/harness/staged` in the Docker role
-  gate.
+- Extracted artifact bundle root, normally `/opt/jenkins-agent-artifacts-bundle` in Docker simulation and target deployment.
 - `manifest.txt` and `checksums.sha256`.
 
 Produced outputs:

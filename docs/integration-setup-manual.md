@@ -23,6 +23,9 @@ permission remains a global capability grant. Jenkins Gerrit Trigger uses SSH
 for authentication and event streaming, while the Gerrit REST review API is the
 default path for posting `Verified` votes.
 
+Helper-generated shared state and helper logs on target environments live
+under `/var/lib/loopforge/` and `/var/log/loopforge/`.
+
 Legacy SSH review commands and flags are not part of the default workflow. Use
 them only with explicit operator justification and runtime compatibility
 evidence for the installed Gerrit and Gerrit Trigger versions.

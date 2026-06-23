@@ -19,7 +19,9 @@ Gerrit application artifact bundles are key-free. They may contain reviewed
 templates, manifests, checksums, WAR files, and plugin jars, but they must not
 contain SSH private keys, public keys, `authorized_keys`, or generated
 public-key handoff files. Jenkins-to-Gerrit keypair generation and public-key
-handoff are later integration-step work.
+handoff are later integration-step work. Use
+`docs/artifact-bundle-contract.md` for the bundle workspace, archive, and
+extraction-root contract.
 
 Default baseline:
 
@@ -170,8 +172,8 @@ Staged artifact paths:
 | Location | Path |
 | --- | --- |
 | Bundle factory output | `GERRIT_ARTIFACT_OUTPUT_DIR` |
-| Docker harness bundle output | `/harness/state/artifacts/gerrit` inside the bundle factory |
-| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/gerrit/` |
+| Bundle-factory workspace | `$HOME/artifact-bundle-work/gerrit` in operator-oriented examples; see `docs/artifact-bundle-contract.md` |
+| Docker harness exported output | `generated/simulation/docker/<run-id>/exported-artifacts/gerrit-artifacts-bundle.tar.gz` |
 
 Side effects:
 
@@ -224,8 +226,7 @@ mutation.
 Consumed inputs:
 
 - Reviewed Gerrit env file.
-- Staged artifact directory, normally `/harness/staged` in the Docker role
-  gate.
+- Extracted artifact bundle root, normally `/opt/gerrit-artifacts-bundle` in Docker simulation and target deployment. See `docs/artifact-bundle-contract.md`.
 - `manifest.txt`, `checksums.sha256`, `plugin-artifacts.manifest`,
   `plugin-metadata.report`, and `plugin-checksums.sha256`.
 

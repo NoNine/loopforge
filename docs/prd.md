@@ -51,6 +51,16 @@ The product must help engineers and operators install and validate:
 - The package must document when a target host may use approved internal
   package sources and when simulation-only public fallback is allowed.
 
+### 1.1. Product Behavior Modeling
+- New or changed product behavior should document the intended
+  `target-deployment` behavior before or alongside implementation.
+- Simulation realization should model the normal product behavior as early as
+  practical and as much as practical, including ownership boundaries,
+  interfaces, lifecycle checkpoints, and evidence limits.
+- Simulation-specific mechanisms must not bypass normal product operation to
+  create success. Any explicit simulation-only waiver must be labeled,
+  evidenced, and fail closed outside simulation modes.
+
 ### 2. Curated Artifact Preparation
 - The product must support version-pinned application artifacts and plugins for
   Gerrit and Jenkins.
