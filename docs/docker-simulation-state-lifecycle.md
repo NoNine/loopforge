@@ -71,7 +71,7 @@ The user must recover with `down` or `clean`.
 | Situation | Expected behavior |
 | --- | --- |
 | Fresh repo state: no selected containers and no generated run state | `render-config` may create the selected generated run state. `up` requires that rendered runtime config already exists. |
-| Selected containers exist and generated bind mounts match the selected run | Resume/rerun phases may continue after validating their own prerequisites. |
+| Selected containers exist and generated bind mounts match the selected run | Resume/rerun phases may continue after validating their own prerequisites. Use `verify-state` for the explicit bind-mount audit when needed. |
 | Selected containers exist but `generated/` was removed or recreated | Resume/rerun phases must fail clearly because existing containers are bound to missing or stale host paths. Use `down` or `clean` recovery before starting again. |
 | No selected containers exist but a previous generated folder remains | `render-config` may create or overwrite generated runtime config for the selected run. Later phases use the newly rendered state. |
 | Partial or inconsistent generated state exists | Lifecycle phases must fail clearly. If containers exist, use `down` or `clean` recovery. If no containers exist, rerun `render-config` to create a consistent run. |
@@ -109,3 +109,11 @@ simulation/docker/simulate.sh up
 In both examples, `down` and `clean` are the only phases allowed to recover
 from stale existing containers. Other phases should report the inconsistent
 state and stop.
+
+## Verify State
+
+`verify-state` is the explicit read-only command for the expensive container
+and bind-mount sweep. It checks the live selected containers against the
+selected run root and is meant for operator inspection, not for the default
+path of `status`, `check`, `full-verify`, `prepare-artifacts`, or
+`stage-artifacts`.

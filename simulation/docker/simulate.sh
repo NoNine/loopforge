@@ -26,6 +26,7 @@ Commands:
   run-role-gate --role <gerrit|jenkins-controller|jenkins-agent>
   check
   full-verify
+  verify-state
   down
   clean
 
@@ -519,13 +520,11 @@ ensure_runtime_config() {
   if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] && load_rendered_config_if_present; then
     verify_run_marker
     validate_core_generated_state
-    validate_selected_container_mounts
     return 0
   fi
   if load_rendered_config_if_present; then
     verify_run_marker
     validate_core_generated_state
-    validate_selected_container_mounts
     return 0
   fi
   if selected_containers_exist; then
@@ -540,6 +539,10 @@ runtime_config_valid() {
     verify_run_marker >/dev/null 2>&1 &&
     validate_core_generated_state >/dev/null 2>&1
   ) >/dev/null 2>&1
+}
+
+verify_selected_container_mounts() {
+  validate_selected_container_mounts
 }
 
 bootstrap_harness_env() {
@@ -2924,6 +2927,15 @@ cmd_full_verify() {
   return "$rc"
 }
 
+cmd_verify_state() {
+  bootstrap_harness_env
+  ensure_runtime_config
+  require_command docker
+  detect_compose
+  verify_selected_container_mounts
+  print_command_summary verify-state "" "ok"
+}
+
 cmd_down() {
   local log rc evidence container
   bootstrap_harness_env
@@ -3187,6 +3199,11 @@ main() {
       shift
       parse_env_only_args "$@"
       cmd_full_verify
+      ;;
+    verify-state)
+      shift
+      parse_env_only_args "$@"
+      cmd_verify_state
       ;;
     down)
       shift

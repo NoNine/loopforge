@@ -33,6 +33,7 @@ is not authority for native target-host baselines. See
 | `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
 | `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
 | `full-verify [--env FILE]` | Requires a matching successful check marker for the same run, then calls `scripts/integration-setup.sh verify-trigger`. It does not run `check` implicitly. Success prints a short `full-verify: integration ok` summary. |
+| `verify-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 | `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
 
@@ -178,6 +179,8 @@ simulation/docker/simulate.sh --env FILE clean
 
 Use `check` for readiness only. Use `full-verify` only after `check` has
 already passed for the same rendered run.
+Use `verify-state` when you need the slower bind-mount audit for an existing
+run. Normal lifecycle phases keep the cheap runtime-config check only.
 
 ## Integration Boundary
 

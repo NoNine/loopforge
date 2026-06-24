@@ -74,6 +74,7 @@ run_lifecycle_without_render stage stage-artifacts
 run_lifecycle_without_render gate run-role-gate --role gerrit
 run_lifecycle_without_render check check
 run_lifecycle_without_render full full-verify
+run_lifecycle_without_render verify verify-state
 
 run_recovery_without_render() {
   local label run_id state output

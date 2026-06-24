@@ -987,6 +987,7 @@ simulation/docker/simulate.sh [--env FILE] stage-artifacts
 simulation/docker/simulate.sh [--env FILE] up
 simulation/docker/simulate.sh [--env FILE] check
 simulation/docker/simulate.sh [--env FILE] full-verify
+simulation/docker/simulate.sh [--env FILE] verify-state
 simulation/docker/simulate.sh [--env FILE] down
 simulation/docker/simulate.sh [--env FILE] clean
 ```
@@ -1030,6 +1031,9 @@ Implementation notes:
   stream-events, modeled agent scheduling, modeled `Verified` voting, or a
   successful full verification summary without runtime proof from the real
   Gerrit, Jenkins controller, and Jenkins agent services.
+- `simulate.sh verify-state` is the explicit read-only command for the
+  expensive container and bind-mount sweep. Normal lifecycle phases use the
+  cheap runtime-config checks only and do not rerun other phases implicitly.
 - Docker logs must be written to bounded log files, not streamed verbosely into
   normal operator output.
 - Any internet use during Docker artifact preparation or fallback must be

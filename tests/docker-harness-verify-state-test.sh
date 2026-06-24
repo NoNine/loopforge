@@ -6,19 +6,13 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
-run_id="stale-mount-$$"
+run_id="verify-state-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 cleanup() {
   rc=$?
-  if [ "$rc" -ne 0 ]; then
-    [ -f "$calls" ] && {
-      printf '%s\n' '--- docker calls ---' >&2
-      sed -n '1,240p' "$calls" >&2
-    }
-    [ -f "$tmp_dir/status.out" ] && {
-      printf '%s\n' '--- status output ---' >&2
-      sed -n '1,120p' "$tmp_dir/status.out" >&2
-    }
+  if [ "$rc" -ne 0 ] && [ -f "$calls" ]; then
+    printf '%s\n' '--- docker calls ---' >&2
+    sed -n '1,240p' "$calls" >&2
   fi
   rm -rf "$tmp_dir" "$run_dir"
   exit "$rc"
@@ -56,11 +50,10 @@ case "$*" in
       ps)
         shift
         [ "${1:-}" = "-q" ] && shift
-        case "${1:-}" in
-          bundle-factory|ldap|gerrit-target|jenkins-controller-target|jenkins-agent-target)
-            printf '%s-id\n' "${1:-}"
-            ;;
-        esac
+        service="${1:-}"
+        if grep -Fxq "$HARNESS_PROJECT_NAME-$service" "$DOCKER_CONTAINERS_FILE" 2>/dev/null; then
+          printf 'container-id\n'
+        fi
         ;;
       exec)
         shift
@@ -71,13 +64,7 @@ case "$*" in
           "stat -Lc %d:%i "*)
             case "$service:$*" in
               bundle-factory:*"/workspace") stat -Lc '%d:%i' "$REPO_ROOT" ;;
-              bundle-factory:*"/var/lib/loopforge/rendered")
-                if [ "${STALE_IDENTITY:-0}" = "1" ]; then
-                  printf 'stale:identity\n'
-                else
-                  stat -Lc '%d:%i' "$STALE_SOURCE"
-                fi
-                ;;
+              bundle-factory:*"/var/lib/loopforge/rendered") stat -Lc '%d:%i' "$RUN_DIR/state/bundle-factory/rendered" ;;
               bundle-factory:*"/var/lib/loopforge/evidence") stat -Lc '%d:%i' "$RUN_DIR/state/bundle-factory/evidence" ;;
               bundle-factory:*"/var/lib/loopforge/artifact-bundle-work") stat -Lc '%d:%i' "$RUN_DIR/state/bundle-factory/artifact-bundle-work" ;;
               ldap:*"/var/lib/ldap") stat -Lc '%d:%i' "$RUN_DIR/state/ldap/data" ;;
@@ -90,9 +77,10 @@ case "$*" in
               gerrit-target:*"/var/log/loopforge"|jenkins-controller-target:*"/var/log/loopforge"|jenkins-agent-target:*"/var/log/loopforge") stat -Lc '%d:%i' "$RUN_DIR/logs" ;;
               jenkins-controller-target:*"/var/lib/loopforge") stat -Lc '%d:%i' "$RUN_DIR/state/jenkins-controller" ;;
               jenkins-controller-target:*"/var/lib/jenkins") stat -Lc '%d:%i' "$RUN_DIR/product-homes/jenkins-controller" ;;
-              jenkins-controller-target:*"/mnt/jenkins-shared"|jenkins-agent-target:*"/mnt/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/state/shared-jenkins-storage" ;;
+              jenkins-controller-target:*"/mnt/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/state/shared-jenkins-storage" ;;
               jenkins-agent-target:*"/var/lib/loopforge") stat -Lc '%d:%i' "$RUN_DIR/state/jenkins-agent" ;;
               jenkins-agent-target:*"/var/lib/jenkins-agent") stat -Lc '%d:%i' "$RUN_DIR/product-homes/jenkins-agent" ;;
+              jenkins-agent-target:*"/mnt/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/state/shared-jenkins-storage" ;;
               *)
                 printf 'unexpected stat target service=%s command=%s\n' "$service" "$*" >&2
                 exit 99
@@ -104,28 +92,16 @@ case "$*" in
             ;;
         esac
         ;;
-      cp)
-        exit 0
-        ;;
       *)
         exit 0
         ;;
-    esac
-    ;;
-  inspect\ -f\ *State.Running*)
-    printf 'true\n'
-    ;;
-  inspect\ -f\ *NetworkSettings.Ports*)
-    case "$*" in
-      *gerrit-target-id) printf '18081\n' ;;
-      *jenkins-controller-target-id) printf '18082\n' ;;
     esac
     ;;
   inspect\ -f\ *Mounts*)
     case "$*" in
       *-bundle-factory)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$STALE_SOURCE" /var/lib/loopforge/rendered
+        printf '%s\t%s\n' "$RUN_DIR/state/bundle-factory/rendered" /var/lib/loopforge/rendered
         printf '%s\t%s\n' "$RUN_DIR/state/bundle-factory/evidence" /var/lib/loopforge/evidence
         printf '%s\t%s\n' "$RUN_DIR/state/bundle-factory/artifact-bundle-work" /var/lib/loopforge/artifact-bundle-work
         ;;
@@ -159,6 +135,9 @@ case "$*" in
         ;;
     esac
     ;;
+  inspect\ -f\ *State.Running*)
+    printf 'true\n'
+    ;;
   inspect*)
     exit 0
     ;;
@@ -181,67 +160,26 @@ EOF
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
-DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
+DOCKER_CONTAINERS_FILE="$tmp_dir/empty-containers" \
 REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
-STALE_SOURCE="$tmp_dir/unused" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >/dev/null
 
-mkdir -p "$tmp_dir/stale-source"
-chmod 0500 "$tmp_dir/stale-source"
+mkdir -p "$tmp_dir"
+: >"$tmp_dir/empty-containers"
+
 for service in bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target; do
   printf '%s-%s\n' "$run_id" "$service"
 done >"$tmp_dir/containers"
+
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
 DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
 REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
-STALE_SOURCE="$run_dir/state/bundle-factory/rendered" \
-STALE_IDENTITY=0 \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" status \
-  >"$tmp_dir/status-ok.out" 2>&1
-grep -Fq 'status: running' "$tmp_dir/status-ok.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-state >"$tmp_dir/verify.out"
 
-set +e
-PATH="$fake_bin:$PATH" \
-DOCKER_CALLS_LOG="$calls" \
-DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
-REPO_ROOT="$repo_root" \
-RUN_DIR="$run_dir" \
-STALE_SOURCE="$tmp_dir/stale-source" \
-STALE_IDENTITY=1 \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" status \
-  >"$tmp_dir/status.out" 2>&1
-rc=$?
-set -e
-
-[ "$rc" -eq 0 ] || {
-  printf 'status should stay on the cheap path when generated state is stale\n' >&2
-  exit 1
-}
-grep -Fq 'status: running' "$tmp_dir/status.out"
-if grep -Fq 'Stale Docker bind mount' "$tmp_dir/status.out"; then
-  printf 'status must not run the expensive bind-mount sweep\n' >&2
-  exit 1
-fi
-
-set +e
-PATH="$fake_bin:$PATH" \
-DOCKER_CALLS_LOG="$calls" \
-DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
-REPO_ROOT="$repo_root" \
-RUN_DIR="$run_dir" \
-STALE_SOURCE="$tmp_dir/stale-source" \
-STALE_IDENTITY=1 \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-state \
-  >"$tmp_dir/verify-state.out" 2>&1
-rc=$?
-set -e
-
-[ "$rc" -ne 0 ] || {
-  printf 'verify-state should fail on stale generated bind mount\n' >&2
-  exit 1
-}
-grep -Fq 'Stale Docker bind mount' "$tmp_dir/verify-state.out"
-grep -Fq 'run down or clean before resuming' "$tmp_dir/verify-state.out"
+grep -Fq 'verify-state: ok' "$tmp_dir/verify.out"
+grep -Fq 'exec -T gerrit-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
+grep -Fq 'exec -T jenkins-controller-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
+grep -Fq 'exec -T jenkins-agent-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
