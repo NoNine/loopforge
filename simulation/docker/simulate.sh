@@ -24,7 +24,7 @@ Commands:
   stage-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   run-role-gate --role <gerrit|jenkins-controller|jenkins-agent>
   check
-  full-verify [--skip-check]
+  full-verify
   down
   clean
 
@@ -1057,7 +1057,7 @@ export_role_artifacts() {
   rm -rf "$tmp_root"
   [ "$rc" -eq 0 ] || return "$rc"
   chmod u+rw,go+r "$archive"
-  sha256sum "$archive" >"$checksum"
+  (cd "$(dirname "$archive")" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
   chmod u+rw,go+r "$checksum"
   tar -xOf "$archive" "$bundle/$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
   if ! validate_role_baseline_manifest "$role" "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp" "$log"; then
@@ -1627,6 +1627,39 @@ expect_manifest_value jenkins_plugin_manager_version "$plugin_manager_version"
     return 1
   fi
   printf 'baseline_ok role=%s manifest=%s location=target-container\n' "$role" "$manifest" >>"$log"
+}
+
+require_staged_artifacts_in_target() {
+  local role service log payload manifest checksums script
+  role="${1:?role required}"
+  service="${2:?service required}"
+  log="${3:?log required}"
+  payload="$(target_payload_dir_for_role "$role")"
+  manifest="$payload/manifest.txt"
+  checksums="$payload/checksums.sha256"
+  script='
+payload="$1"
+manifest="$2"
+checksums="$3"
+test -d "$payload" || {
+  printf "missing_staged_artifacts payload=%s\n" "$payload"
+  exit 1
+}
+test -f "$manifest" || {
+  printf "missing_staged_artifacts manifest=%s\n" "$manifest"
+  exit 1
+}
+test -f "$checksums" || {
+  printf "missing_staged_artifacts checksums=%s\n" "$checksums"
+  exit 1
+}
+cd "$payload"
+sha256sum -c checksums.sha256
+'
+  if ! compose exec -T "$service" sh -c "$script" sh "$payload" "$manifest" "$checksums" >>"$log" 2>&1; then
+    return 1
+  fi
+  printf 'staged_artifacts_ready role=%s service=%s payload=%s\n' "$role" "$service" "$payload" >>"$log"
 }
 
 write_evidence() {
@@ -2423,15 +2456,8 @@ ensure_gerrit_ready_for_jenkins_controller() {
     return 0
   fi
 
-  printf 'dependency_prepare role=gerrit reason=jenkins-controller-real-gerrit-ssh-validation\n' >>"$log"
-    cmd_prepare_artifacts gerrit >>"$log" 2>&1 &&
-    cmd_stage_artifacts gerrit >>"$log" 2>&1 &&
-    ensure_gerrit_ldap_bind_secret "$log" &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes install >>"$log" 2>&1 &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes configure >>"$log" 2>&1 &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes validate >>"$log" 2>&1 &&
-    compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes collect-evidence >>"$log" 2>&1 &&
-    normalize_gerrit_role_evidence_logs "$log"
+  printf 'dependency_missing role=gerrit required_phase=run-role-gate required_command="simulation/docker/simulate.sh run-role-gate --role gerrit"\n' >>"$log"
+  return 1
 }
 
 cmd_run_role_gate() {
@@ -2458,8 +2484,7 @@ cmd_run_role_gate() {
   case "$role" in
     gerrit)
       ensure_gerrit_ldap_bind_secret "$log"
-      if cmd_prepare_artifacts gerrit >>"$log" 2>&1 &&
-        cmd_stage_artifacts gerrit >>"$log" 2>&1 &&
+      if require_staged_artifacts_in_target gerrit "$service" "$log" &&
         reset_gerrit_site_state "$service" "$log" &&
         prepare_product_home_ownership gerrit "$service" "$log" &&
         compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
@@ -2473,8 +2498,7 @@ cmd_run_role_gate() {
       fi
       ;;
     jenkins-controller)
-      if cmd_prepare_artifacts jenkins-controller >>"$log" 2>&1 &&
-        cmd_stage_artifacts jenkins-controller >>"$log" 2>&1 &&
+      if require_staged_artifacts_in_target jenkins-controller "$service" "$log" &&
         prepare_product_home_ownership jenkins-controller "$service" "$log" &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
@@ -2489,8 +2513,7 @@ cmd_run_role_gate() {
       fi
       ;;
     jenkins-agent)
-      if cmd_prepare_artifacts jenkins-agent >>"$log" 2>&1 &&
-        cmd_stage_artifacts jenkins-agent >>"$log" 2>&1 &&
+      if require_staged_artifacts_in_target jenkins-agent "$service" "$log" &&
         prepare_product_home_ownership jenkins-agent "$service" "$log" &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1 &&
@@ -2528,7 +2551,10 @@ cmd_run_role_gate() {
     return 0
   fi
 
-  if grep -Eq "BLOCKED:" "$log"; then
+  if grep -Eq "missing_staged_artifacts|sha256sum:|FAILED open or read|WARNING: [0-9]+ listed file" "$log"; then
+    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Staged artifacts are missing or invalid; run stage-artifacts for this role before run-role-gate")"
+    printf 'ERROR: Staged artifacts for %s are missing or invalid; run stage-artifacts --role %s first\n' "$role" "$role" >&2
+  elif grep -Eq "BLOCKED:" "$log"; then
     evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Role helper reported a blocked runtime behavior requirement")"
     printf 'ERROR: Role helper for %s reported blocked runtime behavior\n' "$role" >&2
   elif grep -Eq "is not implemented in this repository step|is a placeholder" "$log"; then
@@ -2581,7 +2607,7 @@ EOF
 verify_check_pass_marker() {
   local marker fingerprint
   marker="$(check_pass_marker_path)"
-  [ -f "$marker" ] || die "Missing successful check marker; run check first or omit --skip-check"
+  [ -f "$marker" ] || die "Missing successful check marker; run check first"
   [ "$(marker_value "$marker" mode)" = "$HARNESS_MODE" ] ||
     die "Check marker mode does not match selected runtime config"
   [ "$(marker_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] ||
@@ -2638,27 +2664,11 @@ cmd_check() {
 }
 
 cmd_full_verify() {
-  local skip_check log rc evidence
-  skip_check="${1:-0}"
+  local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
   refresh_integration_args
-  if [ "$skip_check" -eq 1 ]; then
-    verify_check_pass_marker
-  else
-    cmd_check || rc=$?
-    rc="${rc:-0}"
-    if [ "$rc" -ne 0 ]; then
-      log="$(bounded_log_path full-verify-blocked)"
-      printf 'full_verify_blocked=check_failed_or_blocked\n' >"$log"
-      write_blocked_integration_evidence job-execution "$log" "Blocked: readiness check did not prove real cross-role integration, so job execution was not attempted"
-      write_blocked_integration_evidence verified-vote "$log" "Blocked: readiness check did not prove real cross-role integration, so Verified +1 was not attempted"
-      evidence="$(write_evidence full-verify integration blocked "simulate.sh full-verify" "$log" "Full verification blocked before end-to-end trigger execution")"
-      print_command_summary full-verify "" "blocked"
-      return "$rc"
-    fi
-    unset rc
-  fi
+  verify_check_pass_marker
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   log="$(bounded_log_path verify-trigger)"
@@ -2830,39 +2840,6 @@ parse_env_only_args() {
   HARNESS_ENV_FILE="$env_file"
 }
 
-parse_full_verify_args() {
-  local env_file skip_check
-  env_file="${HARNESS_ENV_FILE:-$docker_env_example}"
-  skip_check=0
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --env)
-        [ "$#" -ge 2 ] || die "--env requires a file"
-        env_file="$2"
-        shift 2
-        ;;
-      --env=*)
-        env_file="${1#--env=}"
-        [ -n "$env_file" ] || die "--env requires a file"
-        shift
-        ;;
-      --skip-check)
-        skip_check=1
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        die "Unknown option for full-verify: $1"
-        ;;
-    esac
-  done
-  HARNESS_ENV_FILE="$env_file"
-  PARSED_SKIP_CHECK="$skip_check"
-}
-
 main() {
   local command_name env_file
   env_file="$docker_env_example"
@@ -2932,8 +2909,8 @@ main() {
       ;;
     full-verify)
       shift
-      parse_full_verify_args "$@"
-      cmd_full_verify "$PARSED_SKIP_CHECK"
+      parse_env_only_args "$@"
+      cmd_full_verify
       ;;
     down)
       shift

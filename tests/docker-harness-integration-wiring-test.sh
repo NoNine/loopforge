@@ -44,6 +44,7 @@ for file in gerrit jenkins-controller jenkins-agent integration; do
   printf '%s\n' "SENTINEL=mutated-$file" >"$tmp_dir/$file.env"
   grep -Fq "SENTINEL=original-$file" "$runtime_dir/$file.env"
 done
+mkdir -p "$state_dir/jenkins-controller"
 chmod 0555 "$state_dir/jenkins-controller"
 
 common_env=(
@@ -80,45 +81,35 @@ chmod 0755 "$state_dir/jenkins-controller"
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full.out"
 
-grep -Fq -- '--yes validate-integration' "$integration_calls"
-grep -Fq -- '--yes verify-trigger' "$integration_calls"
-
-: >"$role_calls"
-: >"$integration_calls"
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify --skip-check >"$tmp_dir/full-skip.out"
-
 [ ! -s "$role_calls" ] || {
-  printf 'full-verify --skip-check unexpectedly ran role gates\n' >&2
+  printf 'full-verify unexpectedly ran role gates\n' >&2
   exit 1
 }
 if grep -Eq -- '--yes configure-gerrit-ssh|--yes configure-agent-ssh|--yes configure-trigger|--yes validate-integration' "$integration_calls"; then
-  printf 'full-verify --skip-check unexpectedly ran wrapper check commands\n' >&2
+  printf 'full-verify unexpectedly ran check-phase integration commands\n' >&2
   sed -n '1,120p' "$integration_calls" >&2
   exit 1
 fi
 grep -Fq -- '--yes verify-trigger' "$integration_calls"
 
-failing_role_calls="$tmp_dir/failing-role-calls.log"
-failing_integration_calls="$tmp_dir/failing-integration-calls.log"
+missing_marker_calls="$tmp_dir/missing-marker-integration-calls.log"
+rm -f "$state_dir/rendered/check-pass.env"
 set +e
 env \
-  HARNESS_TEST_STUB_ROLE_COMMANDS="$failing_role_calls" \
-  HARNESS_TEST_STUB_ROLE_FAIL="jenkins-controller" \
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper" \
-  HARNESS_TEST_INTEGRATION_CALLS="$failing_integration_calls" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full-failing.out" 2>&1
-failing_rc=$?
+  HARNESS_TEST_INTEGRATION_CALLS="$missing_marker_calls" \
+  HARNESS_ENV_FILE="$tmp_dir/harness.env" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full-missing-marker.out" 2>&1
+missing_marker_rc=$?
 set -e
-
-[ "$failing_rc" -ne 0 ] || {
-  printf 'Expected full-verify to fail when a role gate fails\n' >&2
+[ "$missing_marker_rc" -ne 0 ] || {
+  printf 'full-verify unexpectedly succeeded without a prior check marker\n' >&2
   exit 1
 }
-grep -Fxq 'run-role-gate jenkins-controller' "$failing_role_calls"
-[ ! -s "$failing_integration_calls" ] || {
-  printf 'full-verify called integration after role gate failure\n' >&2
-  sed -n '1,120p' "$failing_integration_calls" >&2
+grep -Fq 'Missing successful check marker; run check first' "$tmp_dir/full-missing-marker.out"
+[ ! -s "$missing_marker_calls" ] || {
+  printf 'full-verify called integration without a prior check marker\n' >&2
+  sed -n '1,120p' "$missing_marker_calls" >&2
   exit 1
 }
 

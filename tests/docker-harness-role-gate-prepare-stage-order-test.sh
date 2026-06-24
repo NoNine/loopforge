@@ -63,6 +63,9 @@ case "$*" in
         service="${1:-}"
         shift
         case "$*" in
+          *"sha256sum -c checksums.sha256"*)
+            exit 0
+            ;;
           *"/etc/os-release"*)
             printf '24.04 noble\n'
             ;;
@@ -158,7 +161,7 @@ env "${common_env[@]}" \
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-agent >/dev/null
 
-if grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
+if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
   printf 'role dispatch must pass bare role names to internal command functions\n' >&2
   sed -n '1,120p' "$tmp_dir/role-calls.log" >&2
   exit 1
@@ -204,12 +207,6 @@ if grep -Fq "$run_dir/product-homes" "$gerrit_host_evidence" "$controller_host_e
   exit 1
 fi
 
-gerrit_prepare_line="$(grep -n '^prepare-artifacts gerrit$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
-gerrit_stage_line="$(grep -n '^stage-artifacts gerrit$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
-controller_prepare_line="$(grep -n '^prepare-artifacts jenkins-controller$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
-controller_stage_line="$(grep -n '^stage-artifacts jenkins-controller$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
-agent_prepare_line="$(grep -n '^prepare-artifacts jenkins-agent$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
-agent_stage_line="$(grep -n '^stage-artifacts jenkins-agent$' "$tmp_dir/role-calls.log" | cut -d: -f1)"
 gerrit_chown_line="$(grep -n 'gerrit-target sh -c .*chown -R gerrit:gerrit /srv/gerrit' "$calls" | cut -d: -f1 | head -1)"
 controller_chown_line="$(grep -n 'jenkins-controller-target sh -c .*chown -R jenkins:jenkins /var/lib/jenkins' "$calls" | cut -d: -f1 | head -1)"
 agent_chown_line="$(grep -n 'jenkins-agent-target sh -c .*chown -R jenkins-agent:jenkins-agent /var/lib/jenkins-agent' "$calls" | cut -d: -f1 | head -1)"
@@ -220,12 +217,19 @@ gerrit_install_line="$(grep -n '/workspace/scripts/gerrit-setup.sh --env /var/li
 controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.sh --env /var/lib/loopforge/rendered/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /var/lib/loopforge/rendered/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 
-[ "$gerrit_prepare_line" -lt "$gerrit_install_line" ] || {
-  printf 'gerrit prepare did not run before install\n' >&2
+if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^prepare-artifacts |^stage-artifacts ' "$tmp_dir/role-calls.log"; then
+  printf 'role gates must not rerun prepare-artifacts or stage-artifacts\n' >&2
+  sed -n '1,120p' "$tmp_dir/role-calls.log" >&2
   exit 1
-}
-[ "$gerrit_stage_line" -lt "$gerrit_install_line" ] || {
-  printf 'gerrit stage did not run before install\n' >&2
+fi
+for role in gerrit jenkins-controller jenkins-agent; do
+  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/logs"/run-role-gate-"$role"-*.log || {
+    printf 'role gate did not verify staged artifacts for %s\n' "$role" >&2
+    exit 1
+  }
+done
+[ -n "$gerrit_install_line" ] || {
+  printf 'gerrit install did not run\n' >&2
   exit 1
 }
 [ -n "$gerrit_chown_line" ] && [ "$gerrit_chown_line" -lt "$gerrit_install_line" ] || {
@@ -236,12 +240,8 @@ agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /
   printf 'gerrit rendered env was not Docker-copied before install\n' >&2
   exit 1
 }
-[ "$controller_prepare_line" -lt "$controller_install_line" ] || {
-  printf 'jenkins-controller prepare did not run before install\n' >&2
-  exit 1
-}
-[ "$controller_stage_line" -lt "$controller_install_line" ] || {
-  printf 'jenkins-controller stage did not run before install\n' >&2
+[ -n "$controller_install_line" ] || {
+  printf 'jenkins-controller install did not run\n' >&2
   exit 1
 }
 [ -n "$controller_chown_line" ] && [ "$controller_chown_line" -lt "$controller_install_line" ] || {
@@ -252,12 +252,8 @@ agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /
   printf 'jenkins-controller rendered env was not Docker-copied before install\n' >&2
   exit 1
 }
-[ "$agent_prepare_line" -lt "$agent_install_line" ] || {
-  printf 'jenkins-agent prepare did not run before install\n' >&2
-  exit 1
-}
-[ "$agent_stage_line" -lt "$agent_install_line" ] || {
-  printf 'jenkins-agent stage did not run before install\n' >&2
+[ -n "$agent_install_line" ] || {
+  printf 'jenkins-agent install did not run\n' >&2
   exit 1
 }
 [ -n "$agent_chown_line" ] && [ "$agent_chown_line" -lt "$agent_install_line" ] || {

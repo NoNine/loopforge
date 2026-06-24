@@ -562,7 +562,7 @@ write_plugin_artifact() {
     require_command wget
     plugin_url="https://updates.jenkins.io/download/plugins/$name/$version/${name}.hpi"
     printf 'simulation-only public internet use: downloading Jenkins plugin artifact %s:%s\n' "$name" "$version" >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
-    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 -O "$dest_file" "$plugin_url"
+    wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=60 -O "$dest_file" "$plugin_url"
   else
     printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_SOURCE_DIR or JENKINS_DOWNLOAD_ARTIFACTS=1 for selected Jenkins plugin artifacts\n' >&2
     exit 2
@@ -844,7 +844,7 @@ prepare_jenkins_war() {
     require_command wget
     url="https://get.jenkins.io/war-stable/$JENKINS_VERSION/jenkins.war"
     printf 'simulation-only public internet use: downloading Jenkins controller WAR\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
-    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
+    wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
   else
     printf 'BLOCKED: prepare-artifacts requires JENKINS_WAR_SOURCE or JENKINS_DOWNLOAD_ARTIFACTS=1 in the bundle factory; target hosts never download Jenkins application artifacts as fallback\n' >&2
     exit 2
@@ -862,7 +862,7 @@ prepare_plugin_manager() {
     require_command wget
     url="https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/$JENKINS_PLUGIN_MANAGER_VERSION/jenkins-plugin-manager-$JENKINS_PLUGIN_MANAGER_VERSION.jar"
     printf 'simulation-only public internet use: downloading Jenkins Plugin Installation Manager artifact\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
-    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
+    wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
   else
     printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_MANAGER_SOURCE or JENKINS_DOWNLOAD_ARTIFACTS=1 in the bundle factory\n' >&2
     exit 2

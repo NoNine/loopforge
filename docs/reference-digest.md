@@ -214,7 +214,7 @@ Docker simulation should expose:
 | `simulation/docker/simulate.sh stage-artifacts` | Stage prepared bundle archives from host-owned handoff files to Gerrit, Jenkins controller, and Jenkins agent containers, then verify target-side manifests and checksums under the role-specific `/opt` bundle roots. |
 | `simulation/docker/simulate.sh up` | Start the five-environment simulation after artifacts/configs exist, using the bootstrap env file to locate the run-scoped runtime config. |
 | `simulation/docker/simulate.sh check` | Run all role gates, then call the shared integration helper for Jenkins-to-Gerrit SSH, event streaming, agent connection, scheduling, and integration validation. |
-| `simulation/docker/simulate.sh full-verify` | Run the full Docker gate by calling `check` first, then using the shared integration helper for disposable Gerrit change, triggered Jenkins build, and `Verified +1`. `--skip-check` requires a matching successful check marker for the same rendered run. |
+| `simulation/docker/simulate.sh full-verify` | Require a matching successful `check` marker for the same rendered run, then use the shared integration helper for disposable Gerrit change, triggered Jenkins build, and `Verified +1`; it must not run `check` implicitly. |
 | `simulation/docker/simulate.sh down` | Stop the simulation without deleting retained generated output. |
 | `simulation/docker/simulate.sh clean` | Manually remove mutable generated runtime data under the validated repo-local generated run root while preserving exported artifacts, evidence, and logs. |
 

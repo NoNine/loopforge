@@ -68,6 +68,52 @@ if grep -F -- '--home-dir /home/ci-operator' "$repo_root/simulation/docker/targe
   printf 'ci-operator account must not be a product runtime account\n' >&2
   exit 1
 fi
+grep -Fq -- 'http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$repo_root/simulation/docker/target/Dockerfile" || {
+  printf 'Docker target image must use the Tsinghua Ubuntu apt mirror\n' >&2
+  exit 1
+}
+grep -Fq -- '/etc/apt/sources.list.d/ubuntu.sources' "$repo_root/simulation/docker/target/Dockerfile" || {
+  printf 'Docker target image must rewrite Ubuntu 24.04 deb822 apt sources\n' >&2
+  exit 1
+}
+grep -Fq -- 'http://archive.ubuntu.com/ubuntu/' "$repo_root/simulation/docker/target/Dockerfile" || {
+  printf 'Docker target image must rewrite archive.ubuntu.com apt source URL\n' >&2
+  exit 1
+}
+grep -Fq -- 'http://security.ubuntu.com/ubuntu/' "$repo_root/simulation/docker/target/Dockerfile" || {
+  printf 'Docker target image must rewrite security.ubuntu.com apt source URL\n' >&2
+  exit 1
+}
+if grep -Fq -- 'wget -q --show-progress=off' "$repo_root/scripts/gerrit-setup.sh" ||
+  grep -Fq -- 'wget -q --show-progress=off' "$repo_root/scripts/jenkins-controller-setup.sh"; then
+  printf 'Docker helper downloads must use wget -nv instead of silent wget\n' >&2
+  exit 1
+fi
+grep -Fq -- 'wget -nv --show-progress=off' "$repo_root/scripts/gerrit-setup.sh" || {
+  printf 'Gerrit helper must use wget -nv for minimal download logs\n' >&2
+  exit 1
+}
+grep -Fq -- 'wget -nv --show-progress=off' "$repo_root/scripts/jenkins-controller-setup.sh" || {
+  printf 'Jenkins controller helper must use wget -nv for minimal download logs\n' >&2
+  exit 1
+}
+
+grep -Fxq -- 'version: "2"' "$repo_root/simulation/docker/compose.yaml" || {
+  printf 'Docker compose must declare legacy-compatible Compose file version 2\n' >&2
+  exit 1
+}
+grep -Fxq -- 'services:' "$repo_root/simulation/docker/compose.yaml" || {
+  printf 'Docker compose must keep top-level services for Compose v2 format\n' >&2
+  exit 1
+}
+grep -Fxq -- 'networks:' "$repo_root/simulation/docker/compose.yaml" || {
+  printf 'Docker compose must keep top-level networks for Compose v2 format\n' >&2
+  exit 1
+}
+if grep -Eq '^[[:space:]]+name: "\$\{HARNESS_PROJECT_NAME\}-network"$' "$repo_root/simulation/docker/compose.yaml"; then
+  printf 'Docker compose must not use custom network name unsupported by legacy docker-compose v1\n' >&2
+  exit 1
+fi
 
 grep -Fq -- '${HARNESS_PRODUCT_HOME_DIR}/gerrit:/srv/gerrit' "$repo_root/simulation/docker/compose.yaml" || {
   printf 'Docker compose must mount Gerrit product home from HARNESS_PRODUCT_HOME_DIR\n' >&2

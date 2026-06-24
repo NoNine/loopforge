@@ -780,7 +780,7 @@ write_plugin_artifact() {
     url="$(plugin_catalog_field "$plugin" url)"
     printf 'simulation-only public internet use: downloading Gerrit plugin artifact %s\n' "$plugin" >>"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log"
     rm -f "$jar"
-    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
+    wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
       -O "$jar" "$url" >>"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log" 2>&1
   else
     printf 'BLOCKED: prepare-artifacts requires GERRIT_PLUGIN_SOURCE_DIR or GERRIT_DOWNLOAD_ARTIFACTS=1 for selected Gerrit plugin jars\n' >&2
@@ -925,7 +925,7 @@ prepare_real_gerrit_war() {
     require_command wget
     printf 'simulation-only public internet use: downloading Gerrit application artifact in bundle factory\n' >"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log"
     rm -f "$war"
-    wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
+    wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
       -O "$war" \
       "https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war" \
       >>"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log" 2>&1

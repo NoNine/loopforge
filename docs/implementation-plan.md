@@ -265,6 +265,23 @@ Workflow contract:
 | Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/integration-setup-manual.md` for the cross-role command sequence and stop/review points. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
+Phase behavior code:
+
+- Each phase must check that its prerequisites are satisfied before doing
+  work.
+- If required inputs, artifacts, services, or prior checkpoints are missing,
+  the phase must fail clearly and stop.
+- Each phase owns only its own work. A phase must not rerun, replace, or
+  compensate for another phase.
+- Later phases must not silently trigger earlier phases. If an operator needs
+  an earlier phase again, they must invoke it directly and intentionally.
+- Repeated operator invocation is treated as an intentional rerun of that
+  phase, not as hidden retry logic for another phase.
+- Phase logs and evidence must stay bounded and identify the phase that
+  produced them.
+- Phase success means the phase completed its own job; it must not mean another
+  phase was replayed or repaired implicitly.
+
 Operator sequencing rules:
 
 - Run `prepare-artifacts` from the bundle factory environment for each role.
@@ -969,7 +986,7 @@ simulation/docker/simulate.sh [--env FILE] prepare-artifacts
 simulation/docker/simulate.sh [--env FILE] stage-artifacts
 simulation/docker/simulate.sh [--env FILE] up
 simulation/docker/simulate.sh [--env FILE] check
-simulation/docker/simulate.sh [--env FILE] full-verify [--skip-check]
+simulation/docker/simulate.sh [--env FILE] full-verify
 simulation/docker/simulate.sh [--env FILE] down
 simulation/docker/simulate.sh [--env FILE] clean
 ```
@@ -997,8 +1014,9 @@ Implementation notes:
   factory output to the Gerrit, Jenkins controller, and Jenkins agent
   containers, then verifies manifests and checksums on the target side before
   service mutation.
-- `simulate.sh check` is an independently repeatable readiness gate
-  before `simulate.sh full-verify`.
+- `simulate.sh check` is an independently repeatable readiness gate before
+  `simulate.sh full-verify`; `full-verify` must require the successful check
+  marker and must not run `check` implicitly.
 - `simulate.sh check` must invoke `scripts/integration-setup.sh
   validate-integration` for cross-role readiness once the real implementation
   exists, and must report blocked rather than success while the shared
