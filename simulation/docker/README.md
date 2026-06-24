@@ -12,6 +12,9 @@ simulation/docker/simulate.sh [--env FILE] <command>
 orchestration. Do not add standalone Docker phase scripts or a second Docker
 verifier CLI.
 
+Generated-state and stale-container behavior is defined in
+`docs/docker-simulation-state-lifecycle.md`.
+
 The shared Docker target image is a simulation superset. It combines
 role-runtime packages, helper-script packages, and Docker harness packages; it
 is not authority for native target-host baselines. See
@@ -29,7 +32,7 @@ is not authority for native target-host baselines. See
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/opt/gerrit-artifacts-bundle`, `/opt/jenkins-artifacts-bundle`, or `/opt/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
 | `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
-| `full-verify [--env FILE] [--skip-check]` | Runs `check`; when readiness passes, calls `scripts/integration-setup.sh verify-trigger`. `--skip-check` requires a matching successful check marker for the same run and still lets `verify-trigger` perform its own validation. Success prints a short `full-verify: integration ok` summary. |
+| `full-verify [--env FILE]` | Requires a matching successful check marker for the same run, then calls `scripts/integration-setup.sh verify-trigger`. It does not run `check` implicitly. Success prints a short `full-verify: integration ok` summary. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 | `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
 
@@ -159,20 +162,22 @@ repo-local generated run root. It removes only mutable generated runtime data:
 remove container-owned files, `clean` may use a one-shot cleanup container
 mounted only to the validated run root.
 
+See `docs/docker-simulation-state-lifecycle.md` for the detailed fresh-run,
+resume/rerun, stale-container, `down`, and `clean` state rules.
+
 Typical flows:
 
 ```bash
 simulation/docker/simulate.sh --env FILE render-config
 simulation/docker/simulate.sh --env FILE up
 simulation/docker/simulate.sh --env FILE check
-simulation/docker/simulate.sh --env FILE full-verify --skip-check
+simulation/docker/simulate.sh --env FILE full-verify
 simulation/docker/simulate.sh --env FILE down
 simulation/docker/simulate.sh --env FILE clean
 ```
 
-Use `check` for readiness only. Use `full-verify` directly for a
-self-contained readiness-plus-trigger proof. Use `full-verify --skip-check`
-only after `check` has already passed for the same rendered run.
+Use `check` for readiness only. Use `full-verify` only after `check` has
+already passed for the same rendered run.
 
 ## Integration Boundary
 

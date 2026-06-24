@@ -235,6 +235,8 @@ Docker simulation behavior notes:
 - Docker v1 generated output is fixed under
   `generated/simulation/docker/<run-id>/`; lifecycle and cleanup commands do
   not support arbitrary output roots.
+- Docker generated-state lifecycle, stale-container recovery, and fresh-run
+  rules are defined in `docs/docker-simulation-state-lifecycle.md`.
 - `clean` is separate from `down` because Docker bind mounts may leave
   container-owned host data, while evidence, logs, and exported artifacts must
   remain reviewable.
