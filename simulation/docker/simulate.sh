@@ -9,6 +9,7 @@ compose_file="$docker_dir/compose.yaml"
 docker_env_example="$docker_dir/examples/docker.env.example"
 integration_helper="${HARNESS_TEST_INTEGRATION_HELPER:-$repo_root/scripts/integration-setup.sh}"
 roles=(gerrit jenkins-controller jenkins-agent)
+services=(bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target)
 
 usage() {
   cat <<'USAGE'
@@ -124,6 +125,47 @@ apply_canonical_output_paths() {
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
 }
 
+container_name_for_service() {
+  local service
+  service="${1:?service required}"
+  printf '%s-%s\n' "$HARNESS_PROJECT_NAME" "$service"
+}
+
+selected_container_names() {
+  local service
+  for service in "${services[@]}"; do
+    container_name_for_service "$service"
+  done
+}
+
+docker_container_name_exists() {
+  local name
+  name="${1:?container name required}"
+  command -v docker >/dev/null 2>&1 || return 1
+  docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "$name"
+}
+
+selected_containers_exist() {
+  local name
+  command -v docker >/dev/null 2>&1 || return 1
+  while IFS= read -r name; do
+    docker_container_name_exists "$name" && return 0
+  done <<EOF
+$(selected_container_names)
+EOF
+  return 1
+}
+
+existing_selected_container_names() {
+  local name
+  command -v docker >/dev/null 2>&1 || return 0
+  while IFS= read -r name; do
+    docker_container_name_exists "$name" && printf '%s\n' "$name"
+  done <<EOF
+$(selected_container_names)
+EOF
+}
+
 reject_custom_output_paths() {
   local name value expected
   for name in \
@@ -220,6 +262,62 @@ verify_run_marker() {
   fingerprint="$(runtime_env_fingerprint)"
   [ "$(marker_value "$marker" runtime_env_fingerprint)" = "$fingerprint" ] ||
     die "Run marker runtime env fingerprint does not match selected runtime config"
+}
+
+require_generated_state_file() {
+  local label file
+  label="${1:?label required}"
+  file="${2:?file required}"
+  [ -f "$file" ] || die "Inconsistent Docker generated state: missing $label: $file"
+  [ -r "$file" ] || die "Inconsistent Docker generated state: unreadable $label: $file"
+}
+
+require_generated_state_dir() {
+  local label dir
+  label="${1:?label required}"
+  dir="${2:?dir required}"
+  [ -d "$dir" ] || die "Inconsistent Docker generated state: missing $label: $dir"
+  [ ! -L "$dir" ] || die "Inconsistent Docker generated state: $label must not be a symlink: $dir"
+}
+
+validate_core_generated_state() {
+  local role service
+  validate_canonical_run_root
+  require_generated_state_file "rendered harness env" "$HARNESS_RENDERED_ENV"
+  require_generated_state_file "runtime harness env" "$HARNESS_RUNTIME_ENV"
+  require_generated_state_file "artifact manifest contract" "$HARNESS_BASELINE_CONTRACT"
+  require_generated_state_dir "runtime input directory" "$HARNESS_RUNTIME_INPUT_DIR"
+  require_generated_state_file "runtime input harness env" "$HARNESS_RUNTIME_INPUT_DIR/harness.env"
+  require_generated_state_file "runtime input Gerrit env" "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+  require_generated_state_file "runtime input Jenkins controller env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
+  require_generated_state_file "runtime input Jenkins agent env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
+  require_generated_state_file "runtime input integration env" "$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+  require_generated_state_file "bundle factory Gerrit helper env" "$(host_gerrit_bundle_factory_env_file)"
+  require_generated_state_file "bundle factory Jenkins controller helper env" "$(host_jenkins_controller_bundle_factory_env_file)"
+  require_generated_state_file "bundle factory Jenkins agent helper env" "$(host_container_env_file_for_role jenkins-agent bundle-factory)"
+  for role in "${roles[@]}"; do
+    service="$(service_for_role "$role")"
+    require_generated_state_file "$role target helper env" "$(host_container_env_file_for_role "$role" "$service")"
+  done
+  require_generated_state_dir "state directory" "$HARNESS_STATE_DIR"
+  require_generated_state_dir "product home directory" "$HARNESS_PRODUCT_HOME_DIR"
+  require_generated_state_dir "staging directory" "$HARNESS_STAGING_DIR"
+  require_generated_state_dir "exported artifact directory" "$HARNESS_EXPORTED_ARTIFACT_DIR"
+  require_generated_state_dir "evidence directory" "$HARNESS_EVIDENCE_DIR"
+  require_generated_state_dir "log directory" "$HARNESS_LOG_DIR"
+  require_generated_state_dir "bundle factory rendered bind source" "$HARNESS_STATE_DIR/bundle-factory/rendered"
+  require_generated_state_dir "bundle factory evidence bind source" "$HARNESS_STATE_DIR/bundle-factory/evidence"
+  require_generated_state_dir "bundle factory artifact workspace bind source" "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work"
+  require_generated_state_dir "LDAP data bind source" "$HARNESS_STATE_DIR/ldap/data"
+  require_generated_state_dir "LDAP config bind source" "$HARNESS_STATE_DIR/ldap/config"
+  require_generated_state_dir "Gerrit helper state bind source" "$HARNESS_STATE_DIR/gerrit"
+  require_generated_state_dir "Jenkins controller helper state bind source" "$HARNESS_STATE_DIR/jenkins-controller"
+  require_generated_state_dir "Jenkins agent helper state bind source" "$HARNESS_STATE_DIR/jenkins-agent"
+  require_generated_state_dir "Gerrit product home bind source" "$HARNESS_PRODUCT_HOME_DIR/gerrit"
+  require_generated_state_dir "Jenkins controller product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller"
+  require_generated_state_dir "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
+  require_generated_state_dir "Gerrit validation secret bind source" "$HARNESS_STATE_DIR/gerrit-validation-secrets"
+  require_generated_state_dir "shared Jenkins storage bind source" "$HARNESS_STATE_DIR/shared-jenkins-storage"
 }
 
 timestamp_utc() {
@@ -420,13 +518,28 @@ load_rendered_config_if_present() {
 ensure_runtime_config() {
   if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] && load_rendered_config_if_present; then
     verify_run_marker
+    validate_core_generated_state
+    validate_selected_container_mounts
     return 0
   fi
   if load_rendered_config_if_present; then
     verify_run_marker
+    validate_core_generated_state
+    validate_selected_container_mounts
     return 0
   fi
+  if selected_containers_exist; then
+    die "Docker generated state is missing while selected containers exist; run down or clean before resuming"
+  fi
   die "Missing Docker harness runtime config: run render-config first"
+}
+
+runtime_config_valid() {
+  (
+    load_rendered_config_if_present &&
+    verify_run_marker >/dev/null 2>&1 &&
+    validate_core_generated_state >/dev/null 2>&1
+  ) >/dev/null 2>&1
 }
 
 bootstrap_harness_env() {
@@ -570,6 +683,134 @@ compose_v1_recreate_bug_detected() {
   grep -Eq "KeyError: 'ContainerConfig'|ERROR: .*'ContainerConfig'" "$log"
 }
 
+container_running_by_name() {
+  local name running
+  name="${1:?container name required}"
+  running="$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)"
+  [ "$running" = "true" ]
+}
+
+container_mount_source_for_destination() {
+  local name destination
+  name="${1:?container name required}"
+  destination="${2:?destination required}"
+  docker inspect -f '{{range .Mounts}}{{printf "%s\t%s\n" .Source .Destination}}{{end}}' "$name" 2>/dev/null |
+    awk -F '\t' -v destination="$destination" '$2 == destination { print $1; found = 1; exit } END { exit !found }'
+}
+
+require_mount_source_under_run_root() {
+  local service container destination expected source expected_real source_real
+  service="${1:?service required}"
+  destination="${2:?destination required}"
+  expected="${3:?expected source required}"
+  container="$(container_name_for_service "$service")"
+  docker_container_name_exists "$container" || return 0
+  source="$(container_mount_source_for_destination "$container" "$destination" || true)"
+  [ -n "$source" ] ||
+    die "Inconsistent Docker container state: $container is missing mount destination $destination; run down or clean before resuming"
+  [ -e "$source" ] ||
+    die "Stale Docker bind mount for $container:$destination: host source is missing ($source); run down or clean before resuming"
+  [ -e "$expected" ] ||
+    die "Inconsistent Docker generated state: expected bind source is missing: $expected"
+  source_real="$(realpath "$source")"
+  expected_real="$(realpath "$expected")"
+  [ "$source_real" = "$expected_real" ] ||
+    die "Stale Docker bind mount for $container:$destination: source $source is not selected run path $expected; run down or clean before resuming"
+  case "$source_real" in
+    "$HARNESS_GENERATED_RUN_DIR"|"$HARNESS_GENERATED_RUN_DIR"/*) ;;
+    *)
+      die "Stale Docker bind mount for $container:$destination: source is outside selected run root; run down or clean before resuming"
+      ;;
+  esac
+}
+
+require_mount_source_matches() {
+  local service container destination expected source expected_real source_real
+  service="${1:?service required}"
+  destination="${2:?destination required}"
+  expected="${3:?expected source required}"
+  container="$(container_name_for_service "$service")"
+  docker_container_name_exists "$container" || return 0
+  source="$(container_mount_source_for_destination "$container" "$destination" || true)"
+  [ -n "$source" ] ||
+    die "Inconsistent Docker container state: $container is missing mount destination $destination; run down or clean before resuming"
+  [ -e "$source" ] ||
+    die "Stale Docker bind mount for $container:$destination: host source is missing ($source); run down or clean before resuming"
+  [ -e "$expected" ] ||
+    die "Inconsistent Docker generated state: expected bind source is missing: $expected"
+  source_real="$(realpath "$source")"
+  expected_real="$(realpath "$expected")"
+  [ "$source_real" = "$expected_real" ] ||
+    die "Stale Docker bind mount for $container:$destination: source $source is not expected path $expected; run down or clean before resuming"
+}
+
+mount_identity() {
+  local path
+  path="${1:?path required}"
+  stat -Lc '%d:%i' "$path"
+}
+
+require_mount_identity_visible() {
+  local service container host_dir destination host_identity container_identity
+  service="${1:?service required}"
+  host_dir="${2:?host dir required}"
+  destination="${3:?destination required}"
+  container="$(container_name_for_service "$service")"
+  docker_container_name_exists "$container" || return 0
+  container_running_by_name "$container" || return 0
+  host_identity="$(mount_identity "$host_dir")"
+  container_identity="$(compose exec -T "$service" stat -Lc '%d:%i' "$destination" 2>/dev/null || true)"
+  if [ -z "$container_identity" ]; then
+    die "Stale Docker bind mount for $container:$destination: destination is not visible in the container; run down or clean before resuming"
+  fi
+  [ "$container_identity" = "$host_identity" ] ||
+    die "Stale Docker bind mount for $container:$destination: host and container mount identity differ; run down or clean before resuming"
+}
+
+validate_container_mount() {
+  local service host_dir destination scope
+  service="${1:?service required}"
+  host_dir="${2:?host dir required}"
+  destination="${3:?destination required}"
+  scope="${4:-generated}"
+  if [ "$scope" = "generated" ]; then
+    require_mount_source_under_run_root "$service" "$destination" "$host_dir"
+  else
+    require_mount_source_matches "$service" "$destination" "$host_dir"
+  fi
+  require_mount_identity_visible "$service" "$host_dir" "$destination"
+}
+
+validate_selected_container_mounts() {
+  selected_containers_exist || return 0
+  require_command docker
+  detect_compose
+  validate_container_mount bundle-factory "$repo_root" /workspace repo
+  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/rendered" /var/lib/loopforge/rendered
+  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/evidence" /var/lib/loopforge/evidence
+  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work" /var/lib/loopforge/artifact-bundle-work
+  validate_container_mount ldap "$HARNESS_STATE_DIR/ldap/data" /var/lib/ldap
+  validate_container_mount ldap "$HARNESS_STATE_DIR/ldap/config" /etc/ldap/slapd.d
+  validate_container_mount gerrit-target "$repo_root" /workspace repo
+  validate_container_mount gerrit-target "$HARNESS_STATE_DIR/gerrit" /var/lib/loopforge
+  validate_container_mount gerrit-target "$HARNESS_PRODUCT_HOME_DIR/gerrit" /srv/gerrit
+  validate_container_mount gerrit-target "$HARNESS_STATE_DIR/gerrit-validation-secrets" /var/lib/loopforge/validation-secrets
+  validate_container_mount gerrit-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
+  validate_container_mount gerrit-target "$HARNESS_LOG_DIR" /var/log/loopforge
+  validate_container_mount jenkins-controller-target "$repo_root" /workspace repo
+  validate_container_mount jenkins-controller-target "$HARNESS_STATE_DIR/jenkins-controller" /var/lib/loopforge
+  validate_container_mount jenkins-controller-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" /var/lib/jenkins
+  validate_container_mount jenkins-controller-target "$HARNESS_STATE_DIR/shared-jenkins-storage" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
+  validate_container_mount jenkins-controller-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
+  validate_container_mount jenkins-controller-target "$HARNESS_LOG_DIR" /var/log/loopforge
+  validate_container_mount jenkins-agent-target "$repo_root" /workspace repo
+  validate_container_mount jenkins-agent-target "$HARNESS_STATE_DIR/jenkins-agent" /var/lib/loopforge
+  validate_container_mount jenkins-agent-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" /var/lib/jenkins-agent
+  validate_container_mount jenkins-agent-target "$HARNESS_STATE_DIR/shared-jenkins-storage" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
+  validate_container_mount jenkins-agent-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
+  validate_container_mount jenkins-agent-target "$HARNESS_LOG_DIR" /var/log/loopforge
+}
+
 ensure_preflight_dirs() {
   validate_harness_inputs
   mkdir -p \
@@ -593,6 +834,11 @@ ensure_dirs() {
     "$HARNESS_STATE_DIR/bundle-factory/evidence" \
     "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work" \
     "$HARNESS_STATE_DIR/bundle-factory/validation-public" \
+    "$HARNESS_STATE_DIR/ldap/data" \
+    "$HARNESS_STATE_DIR/ldap/config" \
+    "$HARNESS_STATE_DIR/gerrit" \
+    "$HARNESS_STATE_DIR/jenkins-controller" \
+    "$HARNESS_STATE_DIR/jenkins-agent" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
     "$HARNESS_STATE_DIR/shared-jenkins-storage" \
     "$HARNESS_STATE_DIR/rendered" \
@@ -1926,19 +2172,6 @@ running_loopback_port_for_service() {
   printf '%s\n' "$port"
 }
 
-ensure_harness_up_for_role() {
-  local service
-  service="${1:?service required}"
-  if ! container_id_for_service "$service" >/dev/null 2>&1 ||
-    [ -z "$(container_id_for_service "$service")" ]; then
-    cmd_up >/dev/null
-    return 0
-  fi
-  if ! docker inspect -f '{{.State.Running}}' "$(container_id_for_service "$service")" 2>/dev/null | grep -qx true; then
-    cmd_up >/dev/null
-  fi
-}
-
 check_target_os_release() {
   local role service log os_release os_codename evidence
   role="${1:?role required}"
@@ -2008,6 +2241,9 @@ cmd_preflight() {
 cmd_render_config() {
   bootstrap_harness_env
   require_baseline_label
+  if selected_containers_exist; then
+    die "Selected Docker simulation containers already exist; run down or clean before starting a fresh render-config workflow"
+  fi
   write_rendered_env
   write_evidence render-config harness pass "simulate.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
   printf 'render-config: ok run-id=%s\n' "$HARNESS_RUN_ID"
@@ -2133,7 +2369,6 @@ cmd_prepare_artifacts() {
       require_readable_file "Rendered jenkins-agent env file; run render-config first" "$host_env_file"
       ;;
   esac
-  ensure_harness_up_for_role "$service"
   require_running_service "$service"
 
   # Guard the boundary-first model: artifact preparation runs only in the
@@ -2255,7 +2490,6 @@ cmd_stage_artifacts() {
   container_checksum="$incoming_dir/$checksum_name"
   log="$(bounded_log_path "stage-artifacts-$role")"
 
-  ensure_harness_up_for_role "$service"
   require_running_service "$service"
   [ -f "$archive" ] || die "Missing exported artifact archive for $role: $archive"
   [ -f "$checksum" ] || die "Missing exported artifact archive checksum for $role: $checksum"
@@ -2446,7 +2680,6 @@ ensure_gerrit_ready_for_jenkins_controller() {
   gerrit_helper="$(helper_for_role gerrit)"
   gerrit_service="$(service_for_role gerrit)"
 
-  ensure_harness_up_for_role "$gerrit_service"
   require_running_service "$gerrit_service"
   gerrit_env_file="$(stage_container_role_env gerrit "$gerrit_service" "$log")"
 
@@ -2467,7 +2700,6 @@ cmd_run_role_gate() {
   role="${1:?role required}"
   helper="$(helper_for_role "$role")"
   service="$(service_for_role "$role")"
-  ensure_harness_up_for_role "$service"
   require_running_service "$service"
   check_target_os_release "$role"
 
@@ -2693,15 +2925,33 @@ cmd_full_verify() {
 }
 
 cmd_down() {
-  local log rc evidence
+  local log rc evidence container
   bootstrap_harness_env
-  ensure_runtime_config
-  detect_compose
-  log="$(bounded_log_path down)"
-  if compose down >"$log" 2>&1; then
-    rc=0
+  require_command docker
+  if runtime_config_valid; then
+    detect_compose
+    log="$(bounded_log_path down)"
+    if compose down >"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
   else
-    rc=$?
+    ensure_preflight_dirs
+    log="$(bounded_log_path down)"
+    rc=0
+    while IFS= read -r container; do
+      [ -n "$container" ] || continue
+      if docker rm -f "$container" >>"$log" 2>&1; then
+        printf 'recovery_container_removed name=%s\n' "$container" >>"$log"
+      else
+        rc=$?
+      fi
+    done <<EOF
+$(existing_selected_container_names)
+EOF
+    docker network rm "${HARNESS_PROJECT_NAME}_harness" >>"$log" 2>&1 || true
+    printf 'recovery_mode=bootstrap-only reason=invalid-or-missing-runtime-config\n' >>"$log"
   fi
   if [ "$rc" -ne 0 ]; then
     evidence="$(write_evidence down harness fail "simulate.sh down" "$log" "Compose down failed")"
@@ -2737,22 +2987,48 @@ verify_preserved_clean_outputs() {
 }
 
 cmd_clean() {
-  local log rc evidence cleanup_fallback
+  local log rc evidence cleanup_fallback container
   bootstrap_harness_env
-  ensure_runtime_config
-  detect_compose
-  validate_canonical_run_root
-  log="$(bounded_log_path clean)"
-  cleanup_fallback=host
-  if compose down --remove-orphans >"$log" 2>&1; then
-    rc=0
+  require_command docker
+  if runtime_config_valid; then
+    detect_compose
+    validate_canonical_run_root
+    log="$(bounded_log_path clean)"
+    cleanup_fallback=host
+    if compose down --remove-orphans >"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
   else
-    rc=$?
+    ensure_preflight_dirs
+    log="$(bounded_log_path clean)"
+    cleanup_fallback=skipped-invalid-runtime-config
+    rc=0
+    while IFS= read -r container; do
+      [ -n "$container" ] || continue
+      if docker rm -f "$container" >>"$log" 2>&1; then
+        printf 'recovery_container_removed name=%s\n' "$container" >>"$log"
+      else
+        rc=$?
+      fi
+    done <<EOF
+$(existing_selected_container_names)
+EOF
+    docker network rm "${HARNESS_PROJECT_NAME}_harness" >>"$log" 2>&1 || true
+    printf 'recovery_mode=bootstrap-only reason=invalid-or-missing-runtime-config\n' >>"$log"
+    printf 'host_generated_cleanup=skipped reason=invalid-or-missing-runtime-config\n' >>"$log"
   fi
   if [ "$rc" -ne 0 ]; then
     evidence="$(write_evidence clean harness fail "simulate.sh clean" "$log" "Compose shutdown before cleanup failed")"
     print_command_failure clean "" failed "$log" "$evidence"
     return "$rc"
+  fi
+
+  if [ "$cleanup_fallback" = "skipped-invalid-runtime-config" ]; then
+    evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed selected containers with bootstrap recovery; host generated cleanup skipped because runtime config is invalid or missing")"
+    print_command_summary clean "" "removed containers cleanup=skipped reason=invalid-or-missing-runtime-config"
+    return 0
   fi
 
   if ! cleanup_mutable_paths_host >>"$log" 2>&1; then
