@@ -259,7 +259,7 @@ apply_env_defaults() {
   GERRIT_PLUGIN_LIST="${GERRIT_PLUGIN_LIST:-events-log,metrics-reporter-prometheus,healthcheck}"
   GERRIT_PLUGIN_SOURCE_DIR="${GERRIT_PLUGIN_SOURCE_DIR:-}"
   GERRIT_DOWNLOAD_ARTIFACTS="${GERRIT_DOWNLOAD_ARTIFACTS:-0}"
-  GERRIT_OS_DEPENDENCIES="${GERRIT_OS_DEPENDENCIES:-ca-certificates,curl,git,ldap-utils,openssh-client,openjdk-21-jre-headless,rsync,tar,unzip,wget}"
+  GERRIT_OS_DEPENDENCIES="${GERRIT_OS_DEPENDENCIES:-ca-certificates,curl,openssh-client,openjdk-21-jre-headless,rsync,tar}"
   GERRIT_VERIFICATION_MODE="${GERRIT_VERIFICATION_MODE:-docker-simulation}"
   GERRIT_EVIDENCE_DIR="${GERRIT_EVIDENCE_DIR:-/var/lib/loopforge/evidence}"
   GERRIT_LOG_DIR="${GERRIT_LOG_DIR:-/var/log/loopforge}"
@@ -655,7 +655,7 @@ validate_os_dependency_identifier() {
 
 validate_os_dependencies() {
   local expected sorted_actual sorted_expected
-  expected="ca-certificates,curl,git,ldap-utils,openssh-client,openjdk-21-jre-headless,rsync,tar,unzip,wget"
+  expected="ca-certificates,curl,openssh-client,openjdk-21-jre-headless,rsync,tar"
   for_each_csv_value "$GERRIT_OS_DEPENDENCIES" validate_os_dependency_identifier "GERRIT_OS_DEPENDENCIES"
   sorted_actual="$(printf '%s\n' "$GERRIT_OS_DEPENDENCIES" | tr ',' '\n' | sort | paste -sd, -)"
   sorted_expected="$(printf '%s\n' "$expected" | tr ',' '\n' | sort | paste -sd, -)"
@@ -669,14 +669,10 @@ check_os_dependency_command() {
   case "$package" in
     ca-certificates) command_name="update-ca-certificates" ;;
     curl) command_name="curl" ;;
-    git) command_name="git" ;;
-    ldap-utils) command_name="ldapsearch" ;;
     openssh-client) command_name="ssh" ;;
     openjdk-21-jre-headless) command_name="java" ;;
     rsync) command_name="rsync" ;;
     tar) command_name="tar" ;;
-    unzip) command_name="unzip" ;;
-    wget) command_name="wget" ;;
     *) return 0 ;;
   esac
   if ! command -v "$command_name" >/dev/null 2>&1; then

@@ -18,6 +18,20 @@ sensitivity, evidence behavior, and simulation backing for these paths.
 - Helper-owned generated execution state and logs use the directory model's
   helper-owned path contract.
 
+## Bundle-Factory Ubuntu Dependencies
+
+The bundle factory prepares role artifacts for Gerrit, Jenkins controller, and
+Jenkins agent. These packages support artifact download, checksum generation,
+archive creation, and Java-based plugin tooling. They are shared bundle-factory
+dependencies, not target-host service dependencies.
+
+| Class | Packages |
+| --- | --- |
+| Bundle-factory dependencies | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` |
+
+See `docs/package-requirements.md` for the layered package model that separates
+bundle-factory, target-host, helper-script, and simulation-only requirements.
+
 ## Release Archives
 
 - Gerrit release archive: `gerrit-artifacts-bundle.tar.gz`

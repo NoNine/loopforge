@@ -54,10 +54,8 @@ Consumed inputs:
 - `JENKINS_PLUGIN_LIST`, with accepted direct plugin pins as `name:version`
   entries. Do not add transitive dependencies to this env value only because
   they appear in Plugin Installation Manager resolver output.
-- `JENKINS_OS_DEPENDENCIES`, which defaults to controller target OS package
-  expectations from the approved Jenkins reference: `ca-certificates`, `curl`,
-  `fontconfig`, `git`, `net-tools`, `netcat-openbsd`, `openjdk-21-jre`,
-  `openssh-client`, `rsync`, `tar`, `unzip`, and `wget`.
+- `JENKINS_OS_DEPENDENCIES`, whose baseline and layered package rationale are
+  defined in `docs/package-requirements.md`.
 
 Deferred integration inputs:
 
@@ -100,7 +98,8 @@ Consumed inputs:
 - Gerrit and Jenkins agent endpoint values as inventory for deferred later
   shared-integration inventory values only; Step 8 preflight does not require
   Gerrit or agent SSH reachability.
-- Jenkins OS dependency expectations listed in Phase 1.
+- Jenkins OS dependency expectations defined in
+  `docs/package-requirements.md`.
 
 Produced outputs:
 

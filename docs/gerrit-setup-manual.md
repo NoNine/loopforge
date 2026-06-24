@@ -53,10 +53,8 @@ Consumed inputs:
   `GERRIT_PLUGIN_SOURCE_DIR`, and `GERRIT_DOWNLOAD_ARTIFACTS`. For v1,
   `GERRIT_DOWNLOAD_ARTIFACTS=1` is the preferred bundle-factory path.
   `GERRIT_PLUGIN_SOURCE_DIR` is only an optional reviewed local-jar override.
-- `GERRIT_OS_DEPENDENCIES`, which defaults to the Gerrit target OS package
-  expectations from the reviewed Gerrit reference: `ca-certificates`, `curl`,
-  `git`, `ldap-utils`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`,
-  `tar`, `unzip`, and `wget`.
+- `GERRIT_OS_DEPENDENCIES`, whose baseline and layered package rationale are
+  defined in `docs/package-requirements.md`.
 - Gerrit `3.13.6`, Java `21`, and Ubuntu `24.04`/`noble` are internal helper
   constants for v1, not operator env overrides.
 
@@ -88,9 +86,8 @@ Consumed inputs:
 - Reviewed Gerrit env file.
 - Target host baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21 expectation,
   approved internal Ubuntu/OS package repositories, and reachable LDAP.
-- Gerrit OS dependency expectations: CA trust store tooling, HTTP download
-  client, Git client, OpenSSH client, OpenJDK 21 headless runtime, rsync, tar,
-  unzip, and wget.
+- Gerrit OS dependency expectations defined in
+  `docs/package-requirements.md`.
 
 Produced outputs:
 

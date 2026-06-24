@@ -98,12 +98,13 @@ Ask an administrator to perform or delegate these build-server tasks:
 
 ## 2. Dependencies And Jenkins Agent Artifact Bundle
 
-### 2.1 OS Dependency Setup
+### 2.1 Ubuntu Dependency Setup
 
-OS dependency setup installs the minimal build base from the build server's
-approved apt repositories, creates the dedicated `jenkins-agent` account, and
-enables SSH. The build server package baseline is owned by this agent-host
-reference. It does not install Jenkins controller keys; controller credential
+The package rationale and layered classification are maintained in
+`docs/package-requirements.md`.
+
+OS dependency setup also creates the dedicated `jenkins-agent` account and
+enables SSH. It does not install Jenkins controller keys; controller credential
 selection, node registration, and scheduling proof are later integration work.
 
 Manual package baseline on the build server:
@@ -111,24 +112,21 @@ Manual package baseline on the build server:
 ```bash
 apt update
 apt install -y \
-  build-essential \
   ca-certificates \
   curl \
-  git \
-  openssh-client \
+  openjdk-21-jre-headless \
   openssh-server \
-  openjdk-21-jre \
   rsync \
-  sudo \
   tar \
-  unzip \
   wget
 java -version
 ```
 
 Set `JENKINS_BUILD_EXTRA_PACKAGES` for site-wide packages needed on every
-general build agent. Keep project-specific toolchains outside the default
-baseline unless every general build agent needs them.
+general build agent, such as `build-essential` when every agent needs a
+compiler toolchain. Keep project-specific toolchains outside the default
+baseline unless every general build agent needs them. Do not treat `sudo` as a
+role dependency; it is an operator privilege mechanism.
 
 v1 does not support installing OS dependencies from locally bundled Ubuntu
 packages. Use approved internal Ubuntu/OS package repositories for OS packages
@@ -230,7 +228,6 @@ Run on the agent host:
 
 ```bash
 java -version
-git --version
 getent passwd jenkins-agent
 systemctl is-active ssh || systemctl is-active sshd
 ```

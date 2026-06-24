@@ -64,8 +64,9 @@ flowchart LR
   check[check]
   verify[full-verify]
   down[down]
+  clean[clean]
 
-  preflight --> render --> up --> status --> prepare --> stage --> check --> verify --> down
+  preflight --> render --> up --> status --> prepare --> stage --> check --> verify --> down --> clean
 ```
 
 ## Start With Docker Simulation
@@ -82,7 +83,10 @@ simulation/docker/simulate.sh stage-artifacts
 simulation/docker/simulate.sh check
 simulation/docker/simulate.sh full-verify
 simulation/docker/simulate.sh down
+simulation/docker/simulate.sh clean
 ```
+
+Use `clean` when generated runtime state should be removed.
 
 To use a copied harness env file instead of the default example, pass
 `--env FILE` to each command. See `simulation/docker/README.md` for command
@@ -90,36 +94,54 @@ details, inputs, outputs, generated paths, and simulation accounts.
 
 ## Repository Map
 
-- `simulation/docker/` contains the Docker simulation harness, Compose file,
-  and Docker-specific operator docs.
-- `simulation/vm/` contains the planned VM simulation model and command
-  contract.
-- `docs/` contains the PRD, system model, account model, integration policy,
-  validation rules, and role setup manuals.
-- `examples/` contains reviewed env-file examples with placeholder values.
-- `scripts/` contains role-local helpers, shared integration setup, and
-  evidence collection.
-- `templates/` contains Gerrit, Jenkins controller, Jenkins agent, job, and
-  integration templates.
-- `logs/` is generated local runtime output and should contain bounded command
-  logs only.
+```text
+.
+├── AGENTS.md             # AI coding-agent instructions for this repository
+├── docs/                 # Product scope, system model, topic references, and manuals
+├── examples/             # Reviewed env-file examples with placeholder values
+├── scripts/              # Role helpers, integration setup, and evidence collection
+├── simulation/           # Shared simulation model and mode-specific harnesses
+│   ├── docker/           # Docker simulation CLI, Compose file, and operator docs
+│   └── vm/               # Planned VM simulation model and command contract
+├── templates/            # Gerrit, Jenkins, agent, job, and integration templates
+├── tests/                # Repository validation and contract tests
+├── generated/            # Generated simulation/runtime output; not committed
+└── logs/                 # Bounded local command logs; not committed
+```
 
 ## Documentation Guide
+
+Scope and model:
 
 - `docs/prd.md` defines product goals, non-goals, requirements, and acceptance
   criteria.
 - `docs/system-model.md` defines environments, actors, accounts, utilities,
   interfaces, lifecycle checkpoints, modes, and evidence relationships.
-- `simulation/README.md` defines the shared simulation topology, version
-  baseline, output conventions, and checkpoint contract.
-- `simulation/docker/README.md` documents the Docker simulation CLI command
-  surface.
+
+Topic references:
+
 - `docs/account-model.md` defines runtime, admin, integration, test, bind, and
   simulation accounts.
+- `docs/directory-model.md` defines product homes, helper-owned state,
+  artifact extraction paths, runtime scratch, and simulation backing.
+- `docs/package-requirements.md` defines layered Ubuntu package requirements
+  for product runtimes, helper scripts, bundle factory, and Docker simulation.
+- `docs/artifact-bundle-contract.md` defines application artifact archive
+  contents, checksums, source boundaries, and bundle-factory dependencies.
 - `docs/gerrit-trigger-integration.md` defines Gerrit Trigger, ACL, and
   `Verified` voting behavior.
 - `docs/validation-and-evidence.md` defines validation evidence and redaction
   rules.
+
+Simulation:
+
+- `simulation/README.md` defines the shared simulation topology, version
+  baseline, output conventions, and checkpoint contract.
+- `simulation/docker/README.md` documents the Docker simulation CLI command
+  surface.
+
+Operator manuals:
+
 - `docs/gerrit-setup-manual.md`,
   `docs/jenkins-controller-setup-manual.md`, and
   `docs/jenkins-agent-setup-manual.md` document role-local setup.

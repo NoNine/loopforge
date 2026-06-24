@@ -32,39 +32,6 @@ Directory entries use these properties:
 | Evidence and cleanup | What may be recorded and what cleanup may remove. |
 | Simulation backing | Docker or VM backing path notes when simulation realizes the path differently. |
 
-## Helper-Owned Paths
-
-Helper-owned paths are execution state, not Gerrit or Jenkins service homes.
-Role helpers and the shared integration helper may create and mutate these
-paths during reviewed lifecycle commands.
-
-| Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `/var/lib/loopforge/` | Bundle factory and targets | Role helpers and shared integration helper | Helper execution account; Docker bundle factory uses `ci-operator:ci-operator` for helper state | Private where secrets or rendered inputs are present | Rendered inputs, staging handoff, helper state, evidence inputs, integration status | Mixed; child paths can contain secrets or sensitive reviewed inputs | Evidence may reference child paths, but must not include secret values |
-| `/var/lib/loopforge/rendered/` | Bundle factory and targets | Docker simulation render flow and helpers | Helper execution account | Runtime input files are private, normally `0600` for env files | Reviewed and rendered runtime inputs | Sensitive because env files may include secret-bearing variables or paths | Evidence may record file names and redaction status |
-| `/var/lib/loopforge/artifact-bundle-work/<role>/` | Bundle factory | Role helper `prepare-artifacts` | Helper execution account | Writable by helper only | Prepared role artifacts, manifests, checksums before packaging | Non-secret artifact workspace; must not contain private keys, passwords, tokens, or LDAP bind secrets | Source-boundary and checksum evidence may reference this path |
-| `/var/lib/loopforge/staging/<role>/incoming/` | Targets | Docker/VM/target transfer surface and role helpers | Helper execution account | Writable only by reviewed staging flow | Incoming release archive and checksum pair | Non-secret handoff; must not become an OS dependency bundle | Missing or checksum-mismatched content blocks readiness |
-| `/var/lib/loopforge/evidence/` | Bundle factory and targets | Role helpers, integration helper, evidence collector | Helper execution account | Writable by helper; readable by approved evidence reviewers | JSON summaries, status records, bounded references | Must be redacted; may include public key fingerprints and paths | Retained for audit; simulation cleanup preserves generated evidence |
-| `/var/log/loopforge/` | Bundle factory and targets | Helpers and simulation harness | Helper execution account | Writable by helper; bounded reads only | Helper logs and command logs | Must not include private keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env values | Evidence may include bounded log references |
-
-Public internet fallback on target hosts is not a supported product behavior.
-When simulation records public fallback for Ubuntu or OS dependencies, the
-path, log, and evidence labels must say `simulation-only`.
-
-## Artifact Extraction Paths
-
-Artifact extraction paths are target-side staging roots. Role helpers consume
-the helper-visible payload directories after archive and checksum validation.
-
-| Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `/opt/gerrit-artifacts-bundle/` | Gerrit target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Gerrit bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
-| `/opt/gerrit-artifacts-bundle/gerrit/` | Gerrit target | Gerrit role helper | Root or delegated installer account before copy into `/srv/gerrit` | Readable by Gerrit helper | Gerrit WAR, plugins, templates, manifests, checksums | Must not include integration keys or secrets | Gerrit install consumes this path only |
-| `/opt/jenkins-artifacts-bundle/` | Jenkins controller target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Jenkins bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
-| `/opt/jenkins-artifacts-bundle/jenkins/` | Jenkins controller target | Jenkins controller role helper | Root or delegated installer account before copy into Jenkins home | Readable by Jenkins helper | Jenkins WAR, plugin manager, plugins, templates, manifests, checksums | Must not include Jenkins credentials or keys | Jenkins install consumes this path only |
-| `/opt/jenkins-agent-artifacts-bundle/` | Jenkins agent target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Jenkins agent bundle root | Non-secret bootstrap artifacts only | Checksum verification evidence must reference the staged payload |
-| `/opt/jenkins-agent-artifacts-bundle/jenkins-agent/` | Jenkins agent target | Jenkins agent role helper | Root or delegated installer account before copy into agent state | Readable by agent helper | Agent bootstrap files, templates, manifests, checksums | Must not include authorized keys or private keys | Agent install consumes this path only |
-
 ## Product Homes
 
 Product homes are service-owned runtime directories. They are separate from
@@ -98,6 +65,39 @@ helper-owned `/var/lib/loopforge/` state.
 | `/mnt/jenkins-shared` | Jenkins controller target and Jenkins agent target | Shared integration helper | Runtime owner for each host, group `JENKINS_SHARED_GROUP` | Setgid group-write storage, normally `2775` | Shared integration proof storage only | Review-sensitive; not a credential store | Evidence records group name, GID, path, and read/write proof |
 | `/run/sshd` and `/var/run/sshd` | Jenkins agent target | Jenkins agent role helper and SSH daemon | Root/system-owned runtime path | SSH daemon runtime prerequisite | SSH daemon runtime state | Low sensitivity | Recreated as needed; not audit evidence |
 | `/tmp` transient files | Targets | Role helpers and integration helper | Creating process | Temporary only | REST payloads, public-key handoff files, generated Groovy scripts, transfer scratch | Potentially sensitive while present | Must not bypass reviewed helper inputs; do not retain as evidence |
+
+## Helper-Owned Paths
+
+Helper-owned paths are execution state, not Gerrit or Jenkins service homes.
+Role helpers and the shared integration helper may create and mutate these
+paths during reviewed lifecycle commands.
+
+| Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/var/lib/loopforge/` | Bundle factory and targets | Role helpers and shared integration helper | Helper execution account; Docker bundle factory uses `ci-operator:ci-operator` for helper state | Private where secrets or rendered inputs are present | Rendered inputs, staging handoff, helper state, evidence inputs, integration status | Mixed; child paths can contain secrets or sensitive reviewed inputs | Evidence may reference child paths, but must not include secret values |
+| `/var/lib/loopforge/rendered/` | Bundle factory and targets | Docker simulation render flow and helpers | Helper execution account | Runtime input files are private, normally `0600` for env files | Reviewed and rendered runtime inputs | Sensitive because env files may include secret-bearing variables or paths | Evidence may record file names and redaction status |
+| `/var/lib/loopforge/artifact-bundle-work/<role>/` | Bundle factory | Role helper `prepare-artifacts` | Helper execution account | Writable by helper only | Prepared role artifacts, manifests, checksums before packaging | Non-secret artifact workspace; must not contain private keys, passwords, tokens, or LDAP bind secrets | Source-boundary and checksum evidence may reference this path |
+| `/var/lib/loopforge/staging/<role>/incoming/` | Targets | Docker/VM/target transfer surface and role helpers | Helper execution account | Writable only by reviewed staging flow | Incoming release archive and checksum pair | Non-secret handoff; must not become an OS dependency bundle | Missing or checksum-mismatched content blocks readiness |
+| `/var/lib/loopforge/evidence/` | Bundle factory and targets | Role helpers, integration helper, evidence collector | Helper execution account | Writable by helper; readable by approved evidence reviewers | JSON summaries, status records, bounded references | Must be redacted; may include public key fingerprints and paths | Retained for audit; simulation cleanup preserves generated evidence |
+| `/var/log/loopforge/` | Bundle factory and targets | Helpers and simulation harness | Helper execution account | Writable by helper; bounded reads only | Helper logs and command logs | Must not include private keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env values | Evidence may include bounded log references |
+
+Public internet fallback on target hosts is not a supported product behavior.
+When simulation records public fallback for Ubuntu or OS dependencies, the
+path, log, and evidence labels must say `simulation-only`.
+
+## Artifact Extraction Paths
+
+Artifact extraction paths are target-side staging roots. Role helpers consume
+the helper-visible payload directories after archive and checksum validation.
+
+| Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/opt/gerrit-artifacts-bundle/` | Gerrit target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Gerrit bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
+| `/opt/gerrit-artifacts-bundle/gerrit/` | Gerrit target | Gerrit role helper | Root or delegated installer account before copy into `/srv/gerrit` | Readable by Gerrit helper | Gerrit WAR, plugins, templates, manifests, checksums | Must not include integration keys or secrets | Gerrit install consumes this path only |
+| `/opt/jenkins-artifacts-bundle/` | Jenkins controller target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Jenkins bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
+| `/opt/jenkins-artifacts-bundle/jenkins/` | Jenkins controller target | Jenkins controller role helper | Root or delegated installer account before copy into Jenkins home | Readable by Jenkins helper | Jenkins WAR, plugin manager, plugins, templates, manifests, checksums | Must not include Jenkins credentials or keys | Jenkins install consumes this path only |
+| `/opt/jenkins-agent-artifacts-bundle/` | Jenkins agent target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Jenkins agent bundle root | Non-secret bootstrap artifacts only | Checksum verification evidence must reference the staged payload |
+| `/opt/jenkins-agent-artifacts-bundle/jenkins-agent/` | Jenkins agent target | Jenkins agent role helper | Root or delegated installer account before copy into agent state | Readable by agent helper | Agent bootstrap files, templates, manifests, checksums | Must not include authorized keys or private keys | Agent install consumes this path only |
 
 ## Docker Simulation Backing
 

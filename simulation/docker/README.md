@@ -12,6 +12,11 @@ simulation/docker/simulate.sh [--env FILE] <command>
 orchestration. Do not add standalone Docker phase scripts or a second Docker
 verifier CLI.
 
+The shared Docker target image is a simulation superset. It combines
+role-runtime packages, helper-script packages, and Docker harness packages; it
+is not authority for native target-host baselines. See
+`docs/package-requirements.md` for the package classification.
+
 ## Command Reference
 
 | Command | Purpose |

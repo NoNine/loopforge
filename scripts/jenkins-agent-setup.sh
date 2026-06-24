@@ -175,7 +175,7 @@ apply_env_defaults() {
   JENKINS_AGENT_EVIDENCE_DIR="${JENKINS_AGENT_EVIDENCE_DIR:-/var/lib/loopforge/evidence}"
   JENKINS_AGENT_LOG_DIR="${JENKINS_AGENT_LOG_DIR:-/var/log/loopforge}"
   JENKINS_AGENT_VERIFICATION_MODE="${JENKINS_AGENT_VERIFICATION_MODE:-docker-simulation}"
-  JENKINS_AGENT_OS_DEPENDENCIES="${JENKINS_AGENT_OS_DEPENDENCIES:-ca-certificates,curl,git,openssh-client,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget}"
+  JENKINS_AGENT_OS_DEPENDENCIES="${JENKINS_AGENT_OS_DEPENDENCIES:-ca-certificates,curl,git,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget}"
   JENKINS_AGENT_CONTROLLER_PLUGIN="${JENKINS_AGENT_CONTROLLER_PLUGIN:-ssh-slaves}"
   JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE="${JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE:-jenkins-controller-plugin-bundle}"
   JENKINS_AGENT_EXECUTOR_CONTEXT="${JENKINS_AGENT_EXECUTOR_CONTEXT:-controller-owned}"
@@ -467,7 +467,6 @@ check_os_dependency_command() {
     ca-certificates) command_name="update-ca-certificates" ;;
     curl) command_name="curl" ;;
     git) command_name="git" ;;
-    openssh-client) command_name="ssh" ;;
     openssh-server) command_name="sshd" ;;
     openjdk-21-jre|openjdk-21-jre-headless) command_name="java" ;;
     rsync) command_name="rsync" ;;
@@ -578,7 +577,6 @@ cmd_preflight() {
   require_command ssh-keygen
   require_command awk
   require_command sed
-  require_command ssh
   validate_agent_render_inputs
   validate_os_dependencies
   check_agent_runtime_account_readiness

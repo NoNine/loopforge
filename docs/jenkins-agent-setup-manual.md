@@ -45,10 +45,8 @@ Consumed inputs:
   filesystem path, Jenkins node name, Jenkins scheduling labels, staged
   artifact path, artifact output path, verification mode, evidence directory,
   and bounded log directory.
-- `JENKINS_AGENT_OS_DEPENDENCIES`, which defaults to the static agent target
-  OS package baseline from the approved agent reference adapted to v1:
-  `ca-certificates`, `curl`, `git`, `openssh-client`, `openssh-server`,
-  `openjdk-21-jre`, `rsync`, `tar`, `unzip`, and `wget`.
+- `JENKINS_AGENT_OS_DEPENDENCIES`, whose baseline and layered package rationale
+  are defined in `docs/package-requirements.md`.
 
 Produced outputs:
 

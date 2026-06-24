@@ -123,7 +123,10 @@ A home-directory Gerrit process can be useful for lab validation, but it is not 
 
 ## 2. Dependencies And Gerrit Artifact Bundle
 
-### 2.1 OS Dependency Installation
+### 2.1 Ubuntu Dependencies
+
+The package rationale and layered classification are maintained in
+`docs/package-requirements.md`.
 
 Run on the Gerrit host:
 
@@ -132,14 +135,10 @@ apt update
 apt install -y \
   ca-certificates \
   curl \
-  git \
-  ldap-utils \
   openssh-client \
   openjdk-21-jre-headless \
   rsync \
-  tar \
-  unzip \
-  wget
+  tar
 java -version
 ```
 

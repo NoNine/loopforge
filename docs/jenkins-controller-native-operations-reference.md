@@ -132,7 +132,10 @@ A home-directory Jenkins process can be useful for lab validation, but it is not
 
 ## 2. Dependencies And Jenkins Controller Artifact Bundle
 
-### 2.1 OS Dependency And Repository Setup
+### 2.1 Ubuntu Dependencies
+
+The package rationale and layered classification are maintained in
+`docs/package-requirements.md`.
 
 Run on the Jenkins host:
 
@@ -142,28 +145,16 @@ apt install -y \
   ca-certificates \
   curl \
   fontconfig \
-  git \
-  net-tools \
-  netcat-openbsd \
   openjdk-21-jre \
   openssh-client \
   rsync \
   tar \
-  unzip \
   wget
 java -version
 ```
 
-Configure the official Jenkins stable package repository:
-
-```bash
-install -d -m 0755 /etc/apt/keyrings
-wget -O /etc/apt/keyrings/jenkins-keyring.asc \
-  https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
-echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" \
-  > /etc/apt/sources.list.d/jenkins.list
-apt update
-```
+The `jenkins=2.555.3` service package is staged in the Jenkins artifact bundle
+and installed later from the reviewed `.deb`.
 
 ### 2.2 Jenkins Controller Artifact Bundle
 
@@ -448,12 +439,9 @@ recovery uses the approved internal Ubuntu/OS package repository path.
 
 ### 3.1 Install Jenkins
 
-```bash
-apt update
-apt install -y fontconfig openjdk-21-jre
-apt install -y jenkins=2.555.3
-apt-mark hold jenkins
-```
+Install Jenkins from the staged controller artifact bundle as shown in Section
+2.2, then hold the package. Do not configure a public Jenkins apt repository on
+the target host for v1.
 
 Verify:
 
