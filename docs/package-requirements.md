@@ -1,14 +1,23 @@
 # Package Requirements
 
-This document is the consolidated package-requirements reference for Ubuntu
-24.04. Package requirements are layered. A package can be required by the
-product runtime, by the Loopforge helper scripts, or only by Docker simulation.
+This document is the consolidated requirements reference for Ubuntu 24.04.
+It has two parts: host prerequisites by mode, and layered package
+requirements. A package can be required by the product runtime, by the
+Loopforge helper scripts, or only by Docker simulation.
 
 Native target hosts install OS packages from approved internal Ubuntu/OS
 repositories. Application artifacts are separate from OS packages and are
 staged through reviewed artifact bundles. v1 does not support offline Ubuntu
 dependency bundles. Public internet fallback for target-host OS package
 installation is simulation-only.
+
+## Host Prerequisites by Mode
+
+| Mode | Minimum host prerequisites | Notes |
+| --- | --- | --- |
+| `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
+| `vm-simulation` | Linux host with VM tooling available, Python 3.9+, SSH client access to the VM host, enough disk space for VM images, `generated/`, and `logs/` | Planned VM harness host prerequisites; keep VM-specific details in the VM simulation docs. |
+| `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
 
 ## Package Matrix
 

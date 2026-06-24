@@ -69,6 +69,18 @@ flowchart LR
   preflight --> render --> up --> status --> prepare --> stage --> check --> verify --> down --> clean
 ```
 
+## Host Requirements
+
+Run the local harness on a Linux host with:
+
+- Python 3.9+
+- Docker Engine
+- Docker Compose
+- Enough disk space for `generated/` and `logs/`
+
+See `docs/package-requirements.md` for mode-based host prerequisites and the
+package matrix.
+
 ## Start With Docker Simulation
 
 The Docker simulation CLI is the first executable entrypoint:
