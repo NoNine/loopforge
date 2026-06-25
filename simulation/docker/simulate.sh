@@ -1458,7 +1458,7 @@ source_env_file_for_role() {
 }
 
 render_container_role_env() {
-  local role service src host_env_file container_env_file
+  local role service src host_env_file container_env_file canonical_web_url
   role="${1:?role required}"
   service="${2:?service required}"
   src="$(source_env_file_for_role "$role")"
@@ -1472,6 +1472,8 @@ render_container_role_env() {
         -e 's|^GERRIT_EVIDENCE_DIR=.*|GERRIT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
         -e 's|^GERRIT_LOG_DIR=.*|GERRIT_LOG_DIR="/var/log/loopforge"|' \
         "$src" >"$host_env_file"
+      canonical_web_url="http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"
+      set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"
       ;;
     jenkins-controller)
       sed -e 's|^JENKINS_HOME=.*|JENKINS_HOME="/var/lib/jenkins"|' \
@@ -1998,9 +2000,9 @@ EOF
 }
 
 write_rendered_env() {
-  prepare_render_config
   require_command python3
   resolve_browser_ports
+  prepare_render_config
   cat >"$HARNESS_RENDERED_ENV" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")

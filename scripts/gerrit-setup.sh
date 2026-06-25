@@ -211,6 +211,7 @@ require_env_values() {
 GERRIT_HOST
 GERRIT_HTTP_PORT
 GERRIT_SSH_PORT
+GERRIT_CANONICAL_WEB_URL
 GERRIT_RUNTIME_ACCOUNT
 GERRIT_SITE_PATH
 GERRIT_STAGED_ARTIFACT_DIR
@@ -249,6 +250,7 @@ apply_env_defaults() {
   GERRIT_HOST="${GERRIT_HOST:-gerrit-target}"
   GERRIT_HTTP_PORT="${GERRIT_HTTP_PORT:-8080}"
   GERRIT_SSH_PORT="${GERRIT_SSH_PORT:-29418}"
+  GERRIT_CANONICAL_WEB_URL="${GERRIT_CANONICAL_WEB_URL:-http://$GERRIT_HOST:$GERRIT_HTTP_PORT/}"
   GERRIT_RUNTIME_ACCOUNT="${GERRIT_RUNTIME_ACCOUNT:-gerrit}"
   GERRIT_RUNTIME_GROUP="${GERRIT_RUNTIME_GROUP:-$GERRIT_RUNTIME_ACCOUNT}"
   GERRIT_JAVA_HOME="${GERRIT_JAVA_HOME:-/usr/lib/jvm/java-${GERRIT_JAVA_VERSION}-openjdk-amd64}"
@@ -380,7 +382,7 @@ render_template() {
   source="${1:?source required}"
   target="${2:?target required}"
   text="$(cat "$source")"
-  text="${text//\{\{GERRIT_CANONICAL_WEB_URL\}\}/http:\/\/$GERRIT_HOST:$GERRIT_HTTP_PORT\/}"
+  text="${text//\{\{GERRIT_CANONICAL_WEB_URL\}\}/$GERRIT_CANONICAL_WEB_URL}"
   text="${text//\{\{GERRIT_HTTP_LISTEN_URL\}\}/http:\/\/*:$(printf '%s' "$GERRIT_HTTP_PORT")\/}"
   text="${text//\{\{GERRIT_SSH_LISTEN_ADDRESS\}\}/\*:$(printf '%s' "$GERRIT_SSH_PORT")}"
   text="${text//\{\{GERRIT_JAVA_HOME\}\}/$GERRIT_JAVA_HOME}"

@@ -16,6 +16,7 @@ INTEGRATION_SENTINEL=original
 EOF
 cat >"$tmp_dir/gerrit.env" <<'EOF'
 GERRIT_DOWNLOAD_ARTIFACTS="0"
+GERRIT_HOST="gerrit-target"
 GERRIT_SENTINEL=original
 EOF
 cat >"$tmp_dir/jenkins-controller.env" <<'EOF'
@@ -81,6 +82,10 @@ if grep -Fq 'mutated-after-render' "$runtime_dir/gerrit.env"; then
   printf 'Runtime input copy changed after original operator env mutation\n' >&2
   exit 1
 fi
+
+gerrit_browser_port="$(sed -n 's/^HARNESS_GERRIT_HTTP_HOST_PORT=//p' "$state_dir/rendered/harness.env")"
+grep -Fq 'GERRIT_HOST="gerrit-target"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq "GERRIT_CANONICAL_WEB_URL=http://127.0.0.1:$gerrit_browser_port/" "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
 
 loaded_gerrit_env="$(
   # shellcheck disable=SC1090

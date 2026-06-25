@@ -55,6 +55,7 @@ Record these values before installation:
 | Hostname | `GERRIT_HOST` |
 | IP address | `GERRIT_IP` |
 | DNS name | `gerrit.example.internal` |
+| Browser URL | `GERRIT_CANONICAL_WEB_URL`, such as `https://gerrit.example.internal/` |
 | HTTP port | `8080` or chosen port |
 | SSH port | `29418` |
 | LDAP URL | `ldap://LDAP_HOST:389` or `ldaps://LDAP_HOST:636` |
@@ -364,7 +365,7 @@ Edit `/srv/gerrit/etc/gerrit.config`:
 ```ini
 [gerrit]
   basePath = git
-  canonicalWebUrl = http://GERRIT_HOST:8080/
+  canonicalWebUrl = GERRIT_CANONICAL_WEB_URL
   serverId = REPLACE_WITH_GENERATED_OR_STABLE_UUID
 
 [index]
@@ -395,7 +396,7 @@ Edit `/srv/gerrit/etc/gerrit.config`:
   directory = cache
 ```
 
-Set `canonicalWebUrl` to the URL users enter in their browser. In production
+Set `GERRIT_CANONICAL_WEB_URL` to the URL users enter in their browser. In production
 behind a reverse proxy or load balancer, this should normally be the external
 HTTPS URL, for example `https://gerrit.example.internal/`, even when Gerrit
 listens internally on plain HTTP.

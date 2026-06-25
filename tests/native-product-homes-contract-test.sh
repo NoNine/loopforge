@@ -29,6 +29,12 @@ reject_pattern() {
 require_pattern scripts/gerrit-setup.sh \
   'GERRIT_SITE_PATH="${GERRIT_SITE_PATH:-$GERRIT_NATIVE_SITE_PATH}"' \
   'Gerrit helper must default GERRIT_SITE_PATH to /srv/gerrit'
+require_pattern scripts/gerrit-setup.sh \
+  'GERRIT_CANONICAL_WEB_URL="${GERRIT_CANONICAL_WEB_URL:-http://$GERRIT_HOST:$GERRIT_HTTP_PORT/}"' \
+  'Gerrit helper must default canonical web URL separately from the internal Gerrit host'
+require_pattern scripts/gerrit-setup.sh \
+  'text="${text//\{\{GERRIT_CANONICAL_WEB_URL\}\}/$GERRIT_CANONICAL_WEB_URL}"' \
+  'Gerrit config rendering must use the reviewed canonical web URL'
 require_pattern scripts/jenkins-controller-setup.sh \
   'JENKINS_HOME="${JENKINS_HOME:-$JENKINS_NATIVE_HOME}"' \
   'Jenkins controller helper must default JENKINS_HOME to /var/lib/jenkins'
@@ -51,6 +57,9 @@ require_pattern simulation/docker/simulate.sh \
 require_pattern simulation/docker/simulate.sh \
   '/var/lib/jenkins-agent' \
   'Docker harness must recognize Jenkins agent native product-home evidence references'
+require_pattern simulation/docker/simulate.sh \
+  'set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"' \
+  'Docker render-config must set Gerrit canonical web URL to the browser-visible loopback URL'
 require_pattern scripts/gerrit-setup.sh \
   '"service_log_reference": $q_service_log' \
   'Gerrit evidence must record runtime service log as metadata'
