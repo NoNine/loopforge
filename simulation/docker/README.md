@@ -25,15 +25,17 @@ is not authority for native target-host baselines. See
 | Command | Purpose |
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
-| `render-config [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `render-config: ok run-id=...` summary. |
+| `init-run [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `init-run: ok run-id=...` summary. |
 | `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary. |
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/opt/gerrit-artifacts-bundle`, `/opt/jenkins-artifacts-bundle`, or `/opt/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
-| `run-role-gate [--env FILE] --role ROLE` | Runs one role-local readiness gate against its target container and records evidence. Success prints `run-role-gate[role]: ok`; failures include `log=` and `evidence=`. |
-| `check [--env FILE]` | Runs all role gates, then calls `scripts/integration-setup.sh` for Gerrit/Jenkins/agent integration readiness. Success prints a short `check: integration ok` summary. |
-| `full-verify [--env FILE]` | Requires a matching successful check marker for the same run, then calls `scripts/integration-setup.sh verify-trigger`. It does not run `check` implicitly. Success prints a short `full-verify: integration ok` summary. |
-| `verify-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
+| `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `validate-role [--env FILE] [--role ROLE]` | Runs one role-local validation phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server. Success prints a short `configure-integration: ok` summary. |
+| `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
+| `verify-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `verify-integration: ok` summary. |
+| `audit-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 | `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
 
@@ -54,10 +56,10 @@ HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
 HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 ```
 
-During `render-config`, the selected harness, role, and integration env files
+During `init-run`, the selected harness, role, and integration env files
 are copied to
 `generated/simulation/docker/<run-id>/state/rendered/runtime-inputs/` with
-mode `0600`. `render-config` also writes a run marker under
+mode `0600`. `init-run` also writes a run marker under
 `generated/simulation/docker/<run-id>/`. Later lifecycle and cleanup commands
 load the private runtime config and verify that marker before operating.
 
@@ -169,17 +171,22 @@ resume/rerun, stale-container, `down`, and `clean` state rules.
 Typical flows:
 
 ```bash
-simulation/docker/simulate.sh --env FILE render-config
+simulation/docker/simulate.sh --env FILE init-run
 simulation/docker/simulate.sh --env FILE up
-simulation/docker/simulate.sh --env FILE check
-simulation/docker/simulate.sh --env FILE full-verify
+simulation/docker/simulate.sh --env FILE configure-role
+simulation/docker/simulate.sh --env FILE validate-role
+simulation/docker/simulate.sh --env FILE configure-integration
+simulation/docker/simulate.sh --env FILE validate-integration
+simulation/docker/simulate.sh --env FILE verify-integration
 simulation/docker/simulate.sh --env FILE down
 simulation/docker/simulate.sh --env FILE clean
 ```
 
-Use `check` for readiness only. Use `full-verify` only after `check` has
-already passed for the same rendered run.
-Use `verify-state` when you need the slower bind-mount audit for an existing
+Use `configure-role` and `validate-role` for role-local work only. Use
+`validate-integration` for passive cross-role readiness and
+`verify-integration` only after `validate-integration` has already passed for
+the same initialized run.
+Use `audit-state` when you need the slower bind-mount audit for an existing
 run. Normal lifecycle phases keep the cheap runtime-config check only.
 
 ## Integration Boundary
@@ -188,9 +195,10 @@ Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,
 integration validation, trigger verification, and integration evidence use
 `scripts/integration-setup.sh`.
 
-`check` and `full-verify` must fail or report blocked rather than claim Docker
-readiness when real integration proof is unavailable. Forbidden synthetic
-success markers in role or integration logs are treated as failures.
+`validate-integration` and `verify-integration` must fail or report blocked
+rather than claim Docker readiness when real integration proof is unavailable.
+Forbidden synthetic success markers in role or integration logs are treated as
+failures.
 
 Public internet fallback on target hosts is simulation-only and applies only
 to Ubuntu/OS dependency installation. It is not a fallback for target-host

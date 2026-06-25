@@ -20,7 +20,7 @@ HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
 HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 EOF
-"$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >"$tmp_dir/render.out"
+"$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >"$tmp_dir/init-run.out"
 
 HARNESS_TEST_STUB_ROLE_COMMANDS="$calls" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts >"$tmp_dir/prepare.out"

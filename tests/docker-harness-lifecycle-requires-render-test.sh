@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir" "$repo_root/generated/simulation/docker"/requires-render-*-"$$" 2>/dev/null || true' EXIT
 
@@ -45,10 +45,10 @@ run_lifecycle_without_render() {
   set -e
 
   [ "$rc" -ne 0 ] || {
-    printf 'Expected %s to fail before render-config\n' "$*" >&2
+    printf 'Expected %s to fail before init-run\n' "$*" >&2
     exit 1
   }
-  grep -Fq 'run render-config first' "$output"
+  grep -Fq 'run init-run first' "$output"
 
   [ ! -e "$state/rendered/harness.env" ] || {
     printf '%s unexpectedly created rendered harness env\n' "$*" >&2
@@ -71,10 +71,12 @@ run_lifecycle_without_render() {
 run_lifecycle_without_render up up
 run_lifecycle_without_render prepare prepare-artifacts
 run_lifecycle_without_render stage stage-artifacts
-run_lifecycle_without_render gate run-role-gate --role gerrit
-run_lifecycle_without_render check check
-run_lifecycle_without_render full full-verify
-run_lifecycle_without_render verify verify-state
+run_lifecycle_without_render configure-role configure-role --role gerrit
+run_lifecycle_without_render validate-role validate-role --role gerrit
+run_lifecycle_without_render configure-integration configure-integration
+run_lifecycle_without_render validate-integration validate-integration
+run_lifecycle_without_render verify-integration verify-integration
+run_lifecycle_without_render verify audit-state
 
 run_recovery_without_render() {
   local label run_id state output

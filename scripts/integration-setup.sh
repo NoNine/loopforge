@@ -22,11 +22,9 @@ Usage:
     [--dry-run] [--yes] <command>
 
 Commands:
-  configure-gerrit-ssh
-  configure-agent-ssh
-  configure-trigger
+  configure-integration
   validate-integration
-  verify-trigger
+  verify-integration
   collect-evidence
 
 Options:
@@ -982,15 +980,12 @@ register_gerrit_public_key() {
   return 1
 }
 
-cmd_configure_gerrit_ssh() {
+configure_gerrit_ssh_impl() {
   local log private public fp acl_status account_status key_status
-  load_inputs
-  require_docker_mode
-  confirm_mutation configure-gerrit-ssh || return 0
   require_command docker
   require_command ssh-keygen
   ensure_dirs
-  log="$(bounded_log_path configure-gerrit-ssh)"
+  log="$(bounded_log_path configure-jenkins-gerrit-ssh)"
   ensure_container_integration_dirs
   private="$(ensure_controller_keypair jenkins-gerrit "$log")"
   public="$private.pub"
@@ -1009,18 +1004,15 @@ cmd_configure_gerrit_ssh() {
   acl_status="$(status_file gerrit-acl)"
   printf 'apply_mode=simulation-only-direct-rest acl_scope=docker-verification-project group=%s\n' "$JENKINS_GERRIT_INTEGRATION_GROUP" >"$acl_status"
   write_evidence jenkins-to-gerrit-ssh configured "Jenkins-owned key generated, public key registered through Gerrit REST, and Docker simulation integration ACLs applied through labeled direct Gerrit REST test automation" "$log" "public_key_fingerprint=$fp apply_mode=simulation-only-direct-rest" >/dev/null
-  printf 'status=pass command=configure-gerrit-ssh public_key_fingerprint=%s acl_apply=simulation-only-direct-rest log=%s\n' "$fp" "$log"
+  printf 'status=pass component=jenkins-gerrit-ssh public_key_fingerprint=%s acl_apply=simulation-only-direct-rest log=%s\n' "$fp" "$log"
 }
 
-cmd_configure_agent_ssh() {
+configure_agent_ssh_impl() {
   local log private public fp groovy known_hosts q_credential q_account q_key_file q_node q_remote_fs q_host q_labels
-  load_inputs
-  require_docker_mode
-  confirm_mutation configure-agent-ssh || return 0
   require_command docker
   require_command ssh-keygen
   ensure_dirs
-  log="$(bounded_log_path configure-agent-ssh)"
+  log="$(bounded_log_path configure-jenkins-agent-ssh)"
   ensure_container_integration_dirs
   private="$(ensure_controller_keypair jenkins-agent "$log")"
   public="$private.pub"
@@ -1098,18 +1090,15 @@ EOF
   rm -f "$groovy"
   printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s known_hosts_path=%s node=%s\n' "$fp" "$private" "$known_hosts" "$JENKINS_AGENT_NODE_NAME" >"$(status_file jenkins-agent-key)"
   write_evidence agent-connection configured "Agent public key authorized, Jenkins SSH credential and node configured through Jenkins runtime script API" "$log" "agent_public_key_fingerprint=$fp" >/dev/null
-  printf 'status=pass command=configure-agent-ssh public_key_fingerprint=%s node=%s labels=%s log=%s\n' "$fp" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$log"
+  printf 'status=pass component=jenkins-agent-ssh public_key_fingerprint=%s node=%s labels=%s log=%s\n' "$fp" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$log"
 }
 
-cmd_configure_trigger() {
-  local log groovy q_gerrit_trigger_server q_gerrit_host q_gerrit_user q_gerrit_url q_gerrit_key q_gerrit_http_user q_gerrit_http_password q_job q_label q_project
-  load_inputs
-  require_docker_mode
-  confirm_mutation configure-trigger || return 0
+configure_trigger_server_impl() {
+  local log groovy q_gerrit_trigger_server q_gerrit_host q_gerrit_user q_gerrit_url q_gerrit_key q_gerrit_http_user q_gerrit_http_password
   ensure_dirs
-  log="$(bounded_log_path configure-trigger)"
+  log="$(bounded_log_path configure-trigger-server)"
   ensure_container_integration_dirs
-  groovy="$(mktemp "${TMPDIR:-/tmp}/configure-trigger.XXXXXX.groovy")"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/configure-trigger-server.XXXXXX.groovy")"
   q_gerrit_trigger_server="$(groovy_quote "$GERRIT_TRIGGER_SERVER_NAME")"
   q_gerrit_host="$(groovy_quote "$GERRIT_HOST")"
   q_gerrit_user="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
@@ -1117,27 +1106,14 @@ cmd_configure_trigger() {
   q_gerrit_key="$(groovy_quote "$(jenkins_ops_keys_dir)/jenkins-gerrit")"
   q_gerrit_http_user="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
   q_gerrit_http_password="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_PASSWORD")"
-  q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
-  q_label="$(groovy_quote "$JENKINS_AGENT_SCHEDULING_LABEL")"
-  q_project="$(groovy_quote "$GERRIT_VERIFICATION_PROJECT")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
-import hudson.model.FreeStyleProject
-import hudson.model.ParametersDefinitionProperty
-import hudson.model.StringParameterDefinition
-import hudson.tasks.Shell
 import com.sonyericsson.hudson.plugins.gerrit.trigger.PluginImpl
 import com.sonyericsson.hudson.plugins.gerrit.trigger.GerritServer
 import com.sonyericsson.hudson.plugins.gerrit.trigger.config.Config
-import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.GerritTrigger
-import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.Branch
-import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.CompareType
-import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.GerritProject
-import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.events.PluginPatchsetCreatedEvent
 import com.sonymobile.tools.gerrit.gerritevents.dto.rest.Notify
 import java.io.File
 
-def j = Jenkins.instance
 def plugin = PluginImpl.instance
 if (plugin == null) { throw new RuntimeException('Gerrit Trigger plugin is not loaded') }
 def existingServer = plugin.getServer($q_gerrit_trigger_server)
@@ -1169,39 +1145,27 @@ server.setConfig(config)
 plugin.addServer(server)
 plugin.save()
 server.start()
-server.startConnection()
-
-def old = j.getItem($q_job)
-if (old != null) {
-  old.delete()
-}
-def job = j.createProject(FreeStyleProject, $q_job)
-job.assignedLabel = j.getLabel($q_label)
-job.addProperty(new ParametersDefinitionProperty(
-  new StringParameterDefinition('GERRIT_CHANGE_NUMBER', ''),
-  new StringParameterDefinition('GERRIT_PATCHSET_NUMBER', '1')))
-job.buildersList.add(new Shell('set -eu\\nprintf \"node=%s\\\\n\" \"\$(hostname)\" > agent-proof.txt\\nprintf \"change=%s patchset=%s event=%s\\\\n\" \"\${GERRIT_CHANGE_NUMBER:-}\" \"\${GERRIT_PATCHSET_NUMBER:-}\" \"\${GERRIT_EVENT_TYPE:-}\" >> agent-proof.txt\\ntest -n \"\${GERRIT_CHANGE_NUMBER:-}\"\\ntest -n \"\${GERRIT_PATCHSET_NUMBER:-}\"\\njava -version >/dev/null 2>&1\\n'))
-def branch = new Branch(CompareType.PLAIN, 'master')
-def project = new GerritProject(CompareType.PLAIN, $q_project, [branch], [], [], [], false)
-def trigger = new GerritTrigger([project])
-trigger.setServerName($q_gerrit_trigger_server)
-trigger.setTriggerOnEvents([new PluginPatchsetCreatedEvent()])
-trigger.setSilentMode(false)
-trigger.setSilentStartMode(false)
-trigger.setGerritBuildStartedVerifiedValue(0)
-trigger.setGerritBuildSuccessfulVerifiedValue(1)
-trigger.setGerritBuildFailedVerifiedValue(-1)
-trigger.setGerritBuildUnstableVerifiedValue(-1)
-job.addTrigger(trigger)
-job.save()
-trigger.start(job, true)
-println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=simulation-only-direct-rest')
+println('configured_gerrit_trigger_server=' + $q_gerrit_trigger_server + ' host=' + $q_gerrit_host)
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
-  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=simulation-only-direct-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger)"
-  write_evidence trigger configured "Jenkins Gerrit Trigger server and disposable verification job configured through the Jenkins runtime plugin API; Docker simulation posts review results through Gerrit REST" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=simulation-only-direct-rest" >/dev/null
-  printf 'status=pass command=configure-trigger job=%s scheduling_label=%s log=%s\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$log"
+  printf 'trigger_server=%s mode=real-gerrit-trigger-plugin\n' "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger-server)"
+  write_evidence trigger-server configured "Jenkins Gerrit Trigger server configured through the Jenkins runtime plugin API" "$log" "trigger_server=$GERRIT_TRIGGER_SERVER_NAME" >/dev/null
+  printf 'status=pass component=trigger-server log=%s\n' "$log"
+}
+
+cmd_configure_integration() {
+  local log
+  load_inputs
+  require_docker_mode
+  confirm_mutation configure-integration || return 0
+  log="$(bounded_log_path configure-integration)"
+  configure_gerrit_ssh_impl
+  configure_agent_ssh_impl
+  ensure_shared_integration_storage "$log"
+  configure_trigger_server_impl
+  printf 'status=pass command=configure-integration\n' >"$(status_file configure-integration)"
+  printf 'status=pass command=configure-integration log=%s\n' "$log"
 }
 
 ssh_from_controller_to_gerrit() {
@@ -1224,6 +1188,25 @@ if (comp == null) { throw new RuntimeException('agent computer missing') }
 comp.connect(false).get()
 if (!comp.isOnline()) { throw new RuntimeException('agent is not online') }
 println('agent_online=true node=$JENKINS_AGENT_NODE_NAME')
+EOF
+  jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
+}
+
+validate_agent_configured() {
+  local log groovy q_node q_label
+  log="${1:?log required}"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/validate-agent-configured.XXXXXX.groovy")"
+  q_node="$(groovy_quote "$JENKINS_AGENT_NODE_NAME")"
+  q_label="$(groovy_quote "$JENKINS_AGENT_SCHEDULING_LABEL")"
+  cat >"$groovy" <<EOF
+import jenkins.model.Jenkins
+def node = Jenkins.instance.getNode($q_node)
+assert node != null
+if (!node.labelString.split(/\s+/).contains($q_label)) {
+  throw new RuntimeException('agent node missing scheduling label ' + $q_label)
+}
+println('agent_configured=true node=$JENKINS_AGENT_NODE_NAME label=$JENKINS_AGENT_SCHEDULING_LABEL')
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
@@ -1255,6 +1238,64 @@ println('scheduling=pass build=' + build.number + ' node=' + build.builtOnStr + 
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
+}
+
+configure_verification_job() {
+  local log groovy q_gerrit_trigger_server q_job q_label q_project
+  log="${1:?log required}"
+  groovy="$(mktemp "${TMPDIR:-/tmp}/configure-verification-job.XXXXXX.groovy")"
+  q_gerrit_trigger_server="$(groovy_quote "$GERRIT_TRIGGER_SERVER_NAME")"
+  q_job="$(groovy_quote "$JENKINS_VERIFICATION_JOB")"
+  q_label="$(groovy_quote "$JENKINS_AGENT_SCHEDULING_LABEL")"
+  q_project="$(groovy_quote "$GERRIT_VERIFICATION_PROJECT")"
+  cat >"$groovy" <<EOF
+import jenkins.model.Jenkins
+import hudson.model.FreeStyleProject
+import hudson.model.ParametersDefinitionProperty
+import hudson.model.StringParameterDefinition
+import hudson.tasks.Shell
+import com.sonyericsson.hudson.plugins.gerrit.trigger.PluginImpl
+import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.GerritTrigger
+import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.Branch
+import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.CompareType
+import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.GerritProject
+import com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.events.PluginPatchsetCreatedEvent
+
+def j = Jenkins.instance
+def plugin = PluginImpl.instance
+if (plugin == null || plugin.getServer($q_gerrit_trigger_server) == null) {
+  throw new RuntimeException('Gerrit Trigger server is not configured: ' + $q_gerrit_trigger_server)
+}
+def old = j.getItem($q_job)
+if (old != null) {
+  old.delete()
+}
+def job = j.createProject(FreeStyleProject, $q_job)
+job.assignedLabel = j.getLabel($q_label)
+job.addProperty(new ParametersDefinitionProperty(
+  new StringParameterDefinition('GERRIT_CHANGE_NUMBER', ''),
+  new StringParameterDefinition('GERRIT_PATCHSET_NUMBER', '1')))
+job.buildersList.add(new Shell('set -eu\\nprintf \"node=%s\\\\n\" \"\$(hostname)\" > agent-proof.txt\\nprintf \"change=%s patchset=%s event=%s\\\\n\" \"\${GERRIT_CHANGE_NUMBER:-}\" \"\${GERRIT_PATCHSET_NUMBER:-}\" \"\${GERRIT_EVENT_TYPE:-}\" >> agent-proof.txt\\ntest -n \"\${GERRIT_CHANGE_NUMBER:-}\"\\ntest -n \"\${GERRIT_PATCHSET_NUMBER:-}\"\\njava -version >/dev/null 2>&1\\n'))
+def branch = new Branch(CompareType.PLAIN, 'master')
+def project = new GerritProject(CompareType.PLAIN, $q_project, [branch], [], [], [], false)
+def trigger = new GerritTrigger([project])
+trigger.setServerName($q_gerrit_trigger_server)
+trigger.setTriggerOnEvents([new PluginPatchsetCreatedEvent()])
+trigger.setSilentMode(false)
+trigger.setSilentStartMode(false)
+trigger.setGerritBuildStartedVerifiedValue(0)
+trigger.setGerritBuildSuccessfulVerifiedValue(1)
+trigger.setGerritBuildFailedVerifiedValue(-1)
+trigger.setGerritBuildUnstableVerifiedValue(-1)
+job.addTrigger(trigger)
+job.save()
+trigger.start(job, true)
+println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=simulation-only-direct-rest')
+EOF
+  jenkins_script "$groovy" "$log"
+  rm -f "$groovy"
+  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=simulation-only-direct-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file verification-job)"
+  write_evidence verification-job configured "Disposable Jenkins verification job configured for active integration proof" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=simulation-only-direct-rest" >/dev/null
 }
 
 prove_stream_events() {
@@ -1344,27 +1385,27 @@ validate_integration_impl() {
   ensure_dirs
   ensure_container_integration_dirs
   log="$(bounded_log_path validate-integration)"
-  [ -s "$(status_file jenkins-gerrit-key)" ] || die "Missing Jenkins-to-Gerrit key metadata; run configure-gerrit-ssh with --yes first"
-  [ -s "$(status_file gerrit-acl)" ] || die "Missing Gerrit integration ACL metadata; rerun configure-gerrit-ssh with --yes and inspect its bounded log"
-  [ -s "$(status_file jenkins-agent-key)" ] || die "Missing Jenkins-to-agent key metadata; run configure-agent-ssh with --yes first"
-  [ -s "$(status_file trigger)" ] || die "Missing trigger configuration; run configure-trigger with --yes first"
+  [ -s "$(status_file configure-integration)" ] || die "Missing integration configuration marker; run configure-integration with --yes first"
+  [ -s "$(status_file jenkins-gerrit-key)" ] || die "Missing Jenkins-to-Gerrit key metadata; run configure-integration with --yes first"
+  [ -s "$(status_file gerrit-acl)" ] || die "Missing Gerrit integration ACL metadata; rerun configure-integration with --yes and inspect its bounded log"
+  [ -s "$(status_file jenkins-agent-key)" ] || die "Missing Jenkins-to-agent key metadata; run configure-integration with --yes first"
+  [ -s "$(status_file trigger-server)" ] || die "Missing trigger server configuration; run configure-integration with --yes first"
   docker_exec_sh "$(jenkins_container)" "test -s '$(jenkins_ops_keys_dir)/jenkins-gerrit' && test -s '$(jenkins_ops_keys_dir)/jenkins-agent'" >/dev/null ||
-    die "Missing Jenkins-controller private keys; rerun configure-gerrit-ssh and configure-agent-ssh with --yes"
+    die "Missing Jenkins-controller private keys; rerun configure-integration with --yes"
   docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"test -r '$(jenkins_ops_keys_dir)/jenkins-gerrit' && test -r '$(jenkins_ops_keys_dir)/jenkins-agent'\"" >/dev/null ||
     die "Jenkins runtime account cannot read integration private keys"
-  ensure_shared_integration_storage "$log"
-  prove_shared_storage_rw "$log"
-  ssh_from_controller_to_gerrit "gerrit version" >>"$log" 2>&1
-  prove_stream_events "$log"
-  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh -i $(jenkins_ops_keys_dir)/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
-  validate_agent_online "$log"
-  schedule_smoke_build "$log"
-  write_evidence shared-storage pass "Controller runtime account wrote through the shared Jenkins storage path and agent runtime account read the proof through the same mounted path" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH writer=$JENKINS_RUNTIME_ACCOUNT reader=$JENKINS_AGENT_ACCOUNT" >/dev/null
-  write_evidence jenkins-to-gerrit-ssh pass "Real SSH command to Gerrit succeeded as Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
-  write_evidence stream-events pass "Gerrit stream-events SSH command accepted for Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
-  write_evidence agent-connection pass "Jenkins runtime OS user connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
-  evidence="$(write_evidence scheduling pass "Jenkins scheduled a real smoke build on the selected agent scheduling label" "$log" "job=$JENKINS_VERIFICATION_JOB node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL")"
-  printf 'status=pass command=validate-integration proof=real shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass scheduling=pass evidence=%s log=%s\n' "$evidence" "$log"
+  docker_exec_sh "$(jenkins_container)" "test -d '$JENKINS_SHARED_STORAGE_PATH' && test \"\$(stat -c '%G' '$JENKINS_SHARED_STORAGE_PATH')\" = '$JENKINS_SHARED_GROUP'" >/dev/null ||
+    die "Shared Jenkins storage is not configured; run configure-integration with --yes first"
+  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/accounts/self" >>"$log" 2>&1
+  gerrit_account_can_vote_verified "$(url_encode "$GERRIT_VERIFICATION_PROJECT")" >>"$log" 2>&1 ||
+    die "Verified label is not voteable by Jenkins integration account on $GERRIT_VERIFICATION_PROJECT"
+  validate_agent_configured "$log"
+  write_evidence shared-storage pass "Shared storage configuration exists for controller and agent runtime accounts" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH" >/dev/null
+  write_evidence jenkins-to-gerrit-ssh pass "Jenkins-to-Gerrit key material and Gerrit access configuration are present" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
+  write_evidence agent-connection pass "Jenkins agent node configuration is present" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
+  evidence="$(write_evidence scheduling pass "Jenkins scheduling label configuration is present" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL")"
+  printf 'status=pass command=validate-integration evidence=%s log=%s\n' "$evidence" "$log" >"$(status_file validate-integration)"
+  printf 'status=pass command=validate-integration proof=passive shared_storage=pass jenkins_to_gerrit_config=pass agent_connection_config=pass scheduling_config=pass evidence=%s log=%s\n' "$evidence" "$log"
 }
 
 cmd_validate_integration() {
@@ -1473,14 +1514,20 @@ EOF
     "$change" "$patchset" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
 }
 
-cmd_verify_trigger() {
+cmd_verify_integration() {
   local log change patchset change_id review_json vote_result evidence
   load_inputs
-  confirm_mutation verify-trigger || return 0
+  confirm_mutation verify-integration || return 0
   require_docker_mode
   ensure_dirs
-  log="$(bounded_log_path verify-trigger)"
-  validate_integration_impl >>"$log" 2>&1
+  log="$(bounded_log_path verify-integration)"
+  [ -s "$(status_file validate-integration)" ] || die "Missing successful validate-integration marker; run validate-integration with --yes first"
+  prove_shared_storage_rw "$log"
+  ssh_from_controller_to_gerrit "gerrit version" >>"$log" 2>&1
+  docker_exec_sh "$(jenkins_container)" "su -s /bin/sh '$JENKINS_RUNTIME_ACCOUNT' -c \"ssh -i $(jenkins_ops_keys_dir)/jenkins-agent -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$JENKINS_HOME/.ssh/known_hosts' -p '$JENKINS_AGENT_SSH_PORT' '$JENKINS_AGENT_ACCOUNT@$JENKINS_AGENT_HOST' 'printf agent-ssh-ok'\"" >>"$log" 2>&1
+  validate_agent_online "$log"
+  prove_stream_events "$log"
+  configure_verification_job "$log"
   read -r change patchset change_id <<EOF
 $(create_gerrit_change "$log")
 EOF
@@ -1501,9 +1548,13 @@ print(verified.get("approved", {}).get("_account_id", "missing"))
 PY
 )"
   [ "$vote_result" != "missing" ] || die "Verified +1 vote was not present on Gerrit change"
+  write_evidence shared-storage pass "Controller runtime account wrote through the shared Jenkins storage path and agent runtime account read the proof through the same mounted path" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH writer=$JENKINS_RUNTIME_ACCOUNT reader=$JENKINS_AGENT_ACCOUNT" >/dev/null
+  write_evidence jenkins-to-gerrit-ssh pass "Real SSH command to Gerrit succeeded as Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
+  write_evidence stream-events pass "Gerrit stream-events SSH command accepted for Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
+  write_evidence agent-connection pass "Jenkins runtime OS user connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
   write_evidence job-execution pass "Disposable Jenkins verification job executed successfully on the configured agent" "$log" "change=$change job=$JENKINS_VERIFICATION_JOB" >/dev/null
   evidence="$(write_evidence verified-vote pass "Gerrit review state contains a real Verified +1 posted by the Jenkins integration account through simulation-only direct Gerrit REST" "$log" "change=$change patchset=$patchset review_apply=simulation-only-direct-rest")"
-  printf 'status=pass command=verify-trigger proof=real change=%s patchset=%s job_execution=pass verified_vote=pass review_apply=simulation-only-direct-rest evidence=%s log=%s\n' "$change" "$patchset" "$evidence" "$log"
+  printf 'status=pass command=verify-integration proof=real change=%s patchset=%s shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass job_execution=pass verified_vote=pass review_apply=simulation-only-direct-rest evidence=%s log=%s\n' "$change" "$patchset" "$evidence" "$log"
 }
 
 cmd_collect_evidence() {
@@ -1569,7 +1620,7 @@ parse_args() {
         usage
         exit 0
         ;;
-      configure-gerrit-ssh|configure-agent-ssh|configure-trigger|validate-integration|verify-trigger|collect-evidence)
+      configure-integration|validate-integration|verify-integration|collect-evidence)
         command_name="$1"
         shift
         [ "$#" -eq 0 ] || die_usage "Unexpected arguments after command: $*"
@@ -1587,11 +1638,9 @@ parse_args() {
 main() {
   parse_args "$@"
   case "$command_name" in
-    configure-gerrit-ssh) cmd_configure_gerrit_ssh ;;
-    configure-agent-ssh) cmd_configure_agent_ssh ;;
-    configure-trigger) cmd_configure_trigger ;;
+    configure-integration) cmd_configure_integration ;;
     validate-integration) cmd_validate_integration ;;
-    verify-trigger) cmd_verify_trigger ;;
+    verify-integration) cmd_verify_integration ;;
     collect-evidence) cmd_collect_evidence ;;
     *) die_usage "Unknown command: $command_name" ;;
   esac

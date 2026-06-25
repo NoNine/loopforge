@@ -56,17 +56,20 @@ ownership are documented in `docs/system-model.md`.
 ```mermaid
 flowchart LR
   preflight[preflight]
-  render[render-config]
+  initRun[init-run]
   up[up]
   status[status]
   prepare[prepare-artifacts]
   stage[stage-artifacts]
-  check[check]
-  verify[full-verify]
+  configureRole[configure-role]
+  validateRole[validate-role]
+  configureIntegration[configure-integration]
+  validateIntegration[validate-integration]
+  verifyIntegration[verify-integration]
   down[down]
   clean[clean]
 
-  preflight --> render --> up --> status --> prepare --> stage --> check --> verify --> down --> clean
+  preflight --> initRun --> up --> status --> prepare --> stage --> configureRole --> validateRole --> configureIntegration --> validateIntegration --> verifyIntegration --> down --> clean
 ```
 
 ## Host Requirements
@@ -87,13 +90,16 @@ The Docker simulation CLI is the first executable entrypoint:
 
 ```bash
 simulation/docker/simulate.sh preflight
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh up
 simulation/docker/simulate.sh status
 simulation/docker/simulate.sh prepare-artifacts
 simulation/docker/simulate.sh stage-artifacts
-simulation/docker/simulate.sh check
-simulation/docker/simulate.sh full-verify
+simulation/docker/simulate.sh configure-role
+simulation/docker/simulate.sh validate-role
+simulation/docker/simulate.sh configure-integration
+simulation/docker/simulate.sh validate-integration
+simulation/docker/simulate.sh verify-integration
 simulation/docker/simulate.sh down
 simulation/docker/simulate.sh clean
 ```

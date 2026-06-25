@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
@@ -16,8 +16,8 @@ cleanup() {
       sed -n '1,200p' "$calls" >&2
     fi
     if [ -d "$run_dir/logs" ]; then
-      printf '%s\n' '--- run-role-gate logs ---' >&2
-      find "$run_dir/logs" -maxdepth 1 -type f -name 'run-role-gate-gerrit-*.log' -print -exec sed -n '1,120p' {} \; >&2
+      printf '%s\n' '--- configure-role logs ---' >&2
+      find "$run_dir/logs" -maxdepth 1 -type f -name 'configure-role-gerrit-*.log' -print -exec sed -n '1,120p' {} \; >&2
     fi
   fi
   rm -rf "$tmp_dir" "$run_dir"
@@ -137,27 +137,27 @@ EOF
 env \
   PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
-  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
 
 set +e
 env \
   PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   HARNESS_ENV_FILE="$tmp_dir/harness.env" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role gerrit \
-  >"$tmp_dir/run-role-gate.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role gerrit \
+  >"$tmp_dir/configure-role.out" 2>&1
 rc=$?
 set -e
 
 [ "$rc" -ne 0 ] || {
-  printf 'run-role-gate unexpectedly succeeded without staged artifacts\n' >&2
+  printf 'configure-role unexpectedly succeeded without staged artifacts\n' >&2
   exit 1
 }
-grep -Fq 'run-role-gate[gerrit]: failed' "$tmp_dir/run-role-gate.out"
-grep -Fq 'run stage-artifacts --role gerrit first' "$tmp_dir/run-role-gate.out"
-grep -Fq 'missing_staged_artifacts manifest=' "$run_dir/logs"/run-role-gate-gerrit-*.log
-grep -Fq 'Staged artifacts are missing or invalid' "$run_dir/evidence"/run-role-gate-gerrit-*.json
+grep -Fq 'configure-role[gerrit]: failed' "$tmp_dir/configure-role.out"
+grep -Fq 'run stage-artifacts --role gerrit first' "$tmp_dir/configure-role.out"
+grep -Fq 'missing_staged_artifacts manifest=' "$run_dir/logs"/configure-role-gerrit-*.log
+grep -Fq 'Staged artifacts are missing or invalid' "$run_dir/evidence"/configure-role-gerrit-*.json
 if grep -Eq '/workspace/scripts/gerrit-setup\.sh .* (--yes )?(install|configure|validate|collect-evidence)' "$calls"; then
-  printf 'run-role-gate must not call the role helper when staged artifacts are missing\n' >&2
+  printf 'configure-role must not call the role helper when staged artifacts are missing\n' >&2
   exit 1
 fi

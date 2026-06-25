@@ -59,7 +59,7 @@ require_pattern simulation/docker/simulate.sh \
   'Docker harness must recognize Jenkins agent native product-home evidence references'
 require_pattern simulation/docker/simulate.sh \
   'set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"' \
-  'Docker render-config must set Gerrit canonical web URL to the browser-visible loopback URL'
+  'Docker init-run must set Gerrit canonical web URL to the browser-visible loopback URL'
 require_pattern scripts/gerrit-setup.sh \
   '"service_log_reference": $q_service_log' \
   'Gerrit evidence must record runtime service log as metadata'

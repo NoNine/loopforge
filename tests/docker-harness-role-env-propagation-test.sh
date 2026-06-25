@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
@@ -112,7 +112,7 @@ EOF
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
-  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
 
 state_dir="$run_dir/state"
 runtime_dir="$state_dir/rendered/runtime-inputs"
@@ -156,7 +156,7 @@ for file in \
   "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 do
   [ -f "$file" ] || {
-    printf 'Expected render-config to create helper env file: %s\n' "$file" >&2
+    printf 'Expected init-run to create helper env file: %s\n' "$file" >&2
     exit 1
   }
   mode="$(stat -c '%a' "$file")"
@@ -176,9 +176,13 @@ set +e
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit >/dev/null 2>&1
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-controller >/dev/null 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role jenkins-controller >/dev/null 2>&1
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-agent >/dev/null 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role jenkins-agent >/dev/null 2>&1
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role jenkins-controller >/dev/null 2>&1
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role jenkins-agent >/dev/null 2>&1
 set -e
 
 grep -Fq -- 'exec -T -u root bundle-factory sh -c' "$calls"

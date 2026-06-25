@@ -193,6 +193,21 @@ Trigger setup, Jenkins agent registration from the controller side, scheduling
 proof, `Verified` voting, and integration evidence belong to
 `scripts/integration-setup.sh`.
 
+## Phase Behavior Rules
+
+Lifecycle phases are strict, single-purpose operations. Their contract is:
+
+- Each phase checks its prerequisites before doing work.
+- Missing inputs, artifacts, services, or checkpoints fail clearly and stop.
+- Each phase owns only its own work and does not rerun or repair another
+  phase.
+- Later phases do not silently trigger earlier phases.
+- Repeated operator invocation is treated as an intentional rerun of that
+  same phase.
+- Phase logs and evidence stay bounded and identify the producing phase.
+- Phase success means the phase completed its own job, not that another phase
+  was replayed or repaired implicitly.
+
 ## Standard Interfaces
 
 Logical environments communicate through declared interfaces. Utilities must

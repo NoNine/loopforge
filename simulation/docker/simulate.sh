@@ -18,25 +18,27 @@ Usage:
 
 Commands:
   preflight
-  render-config
+  init-run
   up
   status
   prepare-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   stage-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
-  run-role-gate --role <gerrit|jenkins-controller|jenkins-agent>
-  check
-  full-verify
-  verify-state
+  configure-role [--role <gerrit|jenkins-controller|jenkins-agent>]
+  validate-role [--role <gerrit|jenkins-controller|jenkins-agent>]
+  configure-integration
+  validate-integration
+  verify-integration
+  audit-state
   down
   clean
 
 Options:
-  --env FILE        Harness env file for bootstrap and render-config.
+  --env FILE        Harness env file for bootstrap and init-run.
   --role ROLE       Role for role-scoped commands.
   -h, --help        Show this help.
 
-The harness is the Docker simulation CLI. It owns role gates and cross-role
-integration orchestration. Public internet fallback on target hosts is
+The harness is the Docker simulation CLI. It owns strict role and cross-role
+integration phases. Public internet fallback on target hosts is
 simulation-only.
 USAGE
 }
@@ -530,7 +532,7 @@ ensure_runtime_config() {
   if selected_containers_exist; then
     die "Docker generated state is missing while selected containers exist; run down or clean before resuming"
   fi
-  die "Missing Docker harness runtime config: run render-config first"
+  die "Missing Docker harness runtime config: run init-run first"
 }
 
 runtime_config_valid() {
@@ -603,7 +605,7 @@ copy_runtime_env_inputs() {
   export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
 }
 
-validate_render_config_inputs() {
+validate_init_run_inputs() {
   require_readable_file "HARNESS_ENV_FILE" "$HARNESS_ENV_FILE"
   require_readable_file "HARNESS_GERRIT_ENV_FILE" "$HARNESS_GERRIT_ENV_FILE"
   require_readable_file "HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
@@ -851,9 +853,9 @@ ensure_dirs() {
   chmod 0700 "$HARNESS_STATE_DIR/gerrit-validation-secrets"
 }
 
-prepare_render_config() {
+prepare_init_run() {
   validate_harness_inputs
-  validate_render_config_inputs
+  validate_init_run_inputs
   copy_runtime_env_inputs
   load_harness_integration_env
   ensure_dirs
@@ -1098,7 +1100,8 @@ run_role_command_logged() {
   case "$command_name" in
     prepare-artifacts) output="$(cmd_prepare_artifacts "$role")" || rc=$? ;;
     stage-artifacts) output="$(cmd_stage_artifacts "$role")" || rc=$? ;;
-    run-role-gate) output="$(cmd_run_role_gate "$role")" || rc=$? ;;
+    configure-role) output="$(cmd_configure_role "$role")" || rc=$? ;;
+    validate-role) output="$(cmd_validate_role "$role")" || rc=$? ;;
     *) die "Unknown role command: $command_name" ;;
   esac
   rc="${rc:-0}"
@@ -1159,7 +1162,7 @@ manifest_reference_for_evidence() {
         prepare-artifacts)
           printf '%s/manifest.txt\n' "$(container_bundle_factory_work_dir_for_role "$role")"
           ;;
-        stage-artifacts|run-role-gate)
+        stage-artifacts|configure-role|validate-role)
           printf '%s/manifest.txt\n' "$(target_payload_dir_for_role "$role")"
           ;;
         *)
@@ -1189,7 +1192,7 @@ checksum_reference_for_evidence() {
             "$(target_bundle_dir_for_role "$role")" \
             "$(target_payload_dir_for_role "$role")"
           ;;
-        run-role-gate)
+        configure-role|validate-role)
           printf '%s/checksums/SHA256SUMS;%s/checksums.sha256\n' \
             "$(target_bundle_dir_for_role "$role")" \
             "$(target_payload_dir_for_role "$role")"
@@ -1546,7 +1549,7 @@ require_container_role_env() {
   role="${1:?role required}"
   service="${2:?service required}"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
-  require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
+  require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
   printf '%s\n' "$(container_env_file_for_role "$role" "$service")"
 }
 
@@ -1557,7 +1560,7 @@ stage_container_role_env() {
   log="${3:?log required}"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   container_env_file="$(container_env_file_for_role "$role" "$service")"
-  require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
+  require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
   stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" root root "$log"
 }
 
@@ -1567,7 +1570,7 @@ prepare_product_home_ownership() {
   service="${2:?service required}"
   log="${3:?log required}"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
-  require_readable_file "Rendered $role env file; run render-config first" "$host_env_file"
+  require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
   case "$role" in
     gerrit)
       path="/srv/gerrit"
@@ -1673,14 +1676,14 @@ stage_rendered_env_file() {
 
 require_gerrit_bundle_factory_env() {
   require_readable_file \
-    "Rendered Gerrit bundle factory env file; run render-config first" \
+    "Rendered Gerrit bundle factory env file; run init-run first" \
     "$(host_gerrit_bundle_factory_env_file)"
   gerrit_bundle_factory_env_file
 }
 
 require_jenkins_controller_bundle_factory_env() {
   require_readable_file \
-    "Rendered Jenkins controller bundle factory env file; run render-config first" \
+    "Rendered Jenkins controller bundle factory env file; run init-run first" \
     "$(host_jenkins_controller_bundle_factory_env_file)"
   jenkins_controller_bundle_factory_env_file
 }
@@ -2002,7 +2005,7 @@ EOF
 write_rendered_env() {
   require_command python3
   resolve_browser_ports
-  prepare_render_config
+  prepare_init_run
   cat >"$HARNESS_RENDERED_ENV" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
@@ -2184,18 +2187,18 @@ check_target_os_release() {
   log="$(bounded_log_path "os-release-$role")"
 
   if ! compose exec -T "$service" sh -c '. /etc/os-release && printf "%s %s\n" "$VERSION_ID" "$VERSION_CODENAME"' >"$log" 2>&1; then
-    evidence="$(write_evidence os-release "$role" fail "simulate.sh run-role-gate" "$log" "Could not read target OS release")"
+    evidence="$(write_evidence os-release "$role" fail "simulate.sh validate-role" "$log" "Could not read target OS release")"
     die "Failed to read OS release for $role; evidence=$evidence log=$log"
   fi
 
   os_release="$(awk '{print $1}' "$log")"
   os_codename="$(awk '{print $2}' "$log")"
   if [ "$os_release" != "$HARNESS_UBUNTU_BASELINE_RELEASE" ] || [ "$os_codename" != "$HARNESS_UBUNTU_BASELINE_CODENAME" ]; then
-    evidence="$(write_evidence os-release "$role" blocked "simulate.sh run-role-gate" "$log" "Target OS $os_release $os_codename does not match Version Baseline")"
+    evidence="$(write_evidence os-release "$role" blocked "simulate.sh validate-role" "$log" "Target OS $os_release $os_codename does not match Version Baseline")"
     die "Target OS drift for $role; expected $HARNESS_UBUNTU_BASELINE_RELEASE $HARNESS_UBUNTU_BASELINE_CODENAME, evidence=$evidence log=$log"
   fi
 
-  write_evidence os-release "$role" pass "simulate.sh run-role-gate" "$log" "Target OS release matches Version Baseline" >/dev/null
+  write_evidence os-release "$role" pass "simulate.sh validate-role" "$log" "Target OS release matches Version Baseline" >/dev/null
 }
 
 check_ubuntu_service_baseline() {
@@ -2243,15 +2246,15 @@ cmd_preflight() {
   print_command_summary preflight "" "ok mode=$HARNESS_MODE compose=$compose_kind"
 }
 
-cmd_render_config() {
+cmd_init_run() {
   bootstrap_harness_env
   require_baseline_label
   if selected_containers_exist; then
-    die "Selected Docker simulation containers already exist; run down or clean before starting a fresh render-config workflow"
+    die "Selected Docker simulation containers already exist; run down or clean before starting a fresh init-run workflow"
   fi
   write_rendered_env
-  write_evidence render-config harness pass "simulate.sh render-config" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
-  printf 'render-config: ok run-id=%s\n' "$HARNESS_RUN_ID"
+  write_evidence init-run harness pass "simulate.sh init-run" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
+  printf 'init-run: ok run-id=%s\n' "$HARNESS_RUN_ID"
 }
 
 cmd_up() {
@@ -2343,7 +2346,7 @@ role_helper_present_in_container() {
 }
 
 cmd_prepare_artifacts() {
-  local role helper service log rc evidence artifact_dir export_dir host_env_file role_env_file export_archive
+  local role helper service log rc evidence artifact_dir host_env_file role_env_file export_archive
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -2361,17 +2364,17 @@ cmd_prepare_artifacts() {
     gerrit)
       host_env_file="$(host_gerrit_bundle_factory_env_file)"
       role_env_file="$(gerrit_bundle_factory_env_file)"
-      require_readable_file "Rendered Gerrit bundle factory env file; run render-config first" "$host_env_file"
+      require_readable_file "Rendered Gerrit bundle factory env file; run init-run first" "$host_env_file"
       ;;
     jenkins-controller)
       host_env_file="$(host_jenkins_controller_bundle_factory_env_file)"
       role_env_file="$(jenkins_controller_bundle_factory_env_file)"
-      require_readable_file "Rendered Jenkins controller bundle factory env file; run render-config first" "$host_env_file"
+      require_readable_file "Rendered Jenkins controller bundle factory env file; run init-run first" "$host_env_file"
       ;;
     jenkins-agent)
       host_env_file="$(host_container_env_file_for_role jenkins-agent "$service")"
       role_env_file="$(container_env_file_for_role jenkins-agent "$service")"
-      require_readable_file "Rendered jenkins-agent env file; run render-config first" "$host_env_file"
+      require_readable_file "Rendered jenkins-agent env file; run init-run first" "$host_env_file"
       ;;
   esac
   require_running_service "$service"
@@ -2679,39 +2682,23 @@ normalize_jenkins_agent_role_evidence_logs() {
     "$HARNESS_STATE_DIR/jenkins-agent"
 }
 
-ensure_gerrit_ready_for_jenkins_controller() {
-  local log gerrit_helper gerrit_service gerrit_env_file
-  log="${1:?log required}"
-  gerrit_helper="$(helper_for_role gerrit)"
-  gerrit_service="$(service_for_role gerrit)"
-
-  require_running_service "$gerrit_service"
-  gerrit_env_file="$(stage_container_role_env gerrit "$gerrit_service" "$log")"
-
-  if compose exec -T "$gerrit_service" env "$(gerrit_target_secret_env)" "/workspace/$gerrit_helper" --env "$gerrit_env_file" --yes validate >>"$log" 2>&1; then
-    printf 'dependency_ready role=gerrit reason=real-gerrit-validation-already-passing\n' >>"$log"
-    normalize_gerrit_role_evidence_logs "$log"
-    return 0
-  fi
-
-  printf 'dependency_missing role=gerrit required_phase=run-role-gate required_command="simulation/docker/simulate.sh run-role-gate --role gerrit"\n' >>"$log"
-  return 1
-}
-
-cmd_run_role_gate() {
+cmd_configure_role() {
   local role helper service log rc evidence role_env_file
   bootstrap_harness_env
   ensure_runtime_config
-  role="${1:?role required}"
+  role="${1:-}"
+  if [ -z "$role" ]; then
+    run_all_roles configure-role
+    return "$?"
+  fi
   helper="$(helper_for_role "$role")"
   service="$(service_for_role "$role")"
   require_running_service "$service"
-  check_target_os_release "$role"
 
-  log="$(bounded_log_path "run-role-gate-$role")"
+  log="$(bounded_log_path "configure-role-$role")"
   : >"$log"
   if ! role_helper_present_in_container "$service" "$helper"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Missing executable role helper /workspace/$helper in target container")"
+    evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Missing executable role helper /workspace/$helper in target container")"
     printf 'ERROR: Missing role helper for %s in target container: /workspace/%s\n' "$role" "$helper" >>"$log"
     printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
     return 1
@@ -2725,10 +2712,7 @@ cmd_run_role_gate() {
         reset_gerrit_site_state "$service" "$log" &&
         prepare_product_home_ownership gerrit "$service" "$log" &&
         compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
-        normalize_gerrit_role_evidence_logs "$log"; then
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -2740,10 +2724,7 @@ cmd_run_role_gate() {
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
         compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
-        normalize_jenkins_controller_role_evidence_logs "$log"; then
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -2753,8 +2734,96 @@ cmd_run_role_gate() {
       if require_staged_artifacts_in_target jenkins-agent "$service" "$log" &&
         prepare_product_home_ownership jenkins-agent "$service" "$log" &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1; then
+        rc=0
+      else
+        rc=$?
+      fi
+      ;;
+    *)
+      die "Unknown role for configure-role: $role"
+      ;;
+  esac
+
+  if [ "$rc" -eq 0 ]; then
+    if ! validate_role_baseline_manifest_in_target "$role" "$service" "$log"; then
+      evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Staged artifact baseline metadata is missing or drifted; role configuration cannot be comparable")"
+      print_command_failure configure-role "$role" blocked "$log" "$evidence" >&2
+      return 1
+    fi
+
+    if ! assert_no_placeholder_success "$log"; then
+      evidence="$(write_evidence configure-role "$role" fail "simulate.sh configure-role" "$log" "Role configuration produced dummy, placeholder, operation-plan-only, planned-checks-only, or modeled success")"
+      print_command_failure configure-role "$role" failed "$log" "$evidence"
+      return 1
+    fi
+    evidence="$(write_evidence configure-role "$role" pass "simulate.sh configure-role" "$log" "Role helper completed role-local install/configuration without placeholder success markers")"
+    print_command_summary configure-role "$role" ok
+    return 0
+  fi
+
+  if grep -Eq "missing_staged_artifacts|sha256sum:|FAILED open or read|WARNING: [0-9]+ listed file" "$log"; then
+    evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Staged artifacts are missing or invalid; run stage-artifacts for this role before configure-role")"
+    printf 'ERROR: Staged artifacts for %s are missing or invalid; run stage-artifacts --role %s first\n' "$role" "$role" >&2
+  elif grep -Eq "BLOCKED:" "$log"; then
+    evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Role helper reported a blocked runtime configuration requirement")"
+    printf 'ERROR: Role helper for %s reported blocked runtime behavior\n' "$role" >&2
+  elif grep -Eq "is not implemented in this repository step|is a placeholder" "$log"; then
+    evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Role helper exists but role configuration is not implemented yet")"
+    printf 'ERROR: Role helper for %s exists but role configuration is not implemented yet\n' "$role" >&2
+  else
+    evidence="$(write_evidence configure-role "$role" fail "simulate.sh configure-role" "$log" "Role helper configuration failed")"
+  fi
+  print_command_failure configure-role "$role" failed "$log" "$evidence"
+  return "$rc"
+}
+
+cmd_validate_role() {
+  local role helper service log rc evidence role_env_file
+  bootstrap_harness_env
+  ensure_runtime_config
+  role="${1:-}"
+  if [ -z "$role" ]; then
+    run_all_roles validate-role
+    return "$?"
+  fi
+  helper="$(helper_for_role "$role")"
+  service="$(service_for_role "$role")"
+  require_running_service "$service"
+  check_target_os_release "$role"
+
+  log="$(bounded_log_path "validate-role-$role")"
+  : >"$log"
+  if ! role_helper_present_in_container "$service" "$helper"; then
+    evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Missing executable role helper /workspace/$helper in target container")"
+    printf 'ERROR: Missing role helper for %s in target container: /workspace/%s\n' "$role" "$helper" >>"$log"
+    printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
+    return 1
+  fi
+  role_env_file="$(stage_container_role_env "$role" "$service" "$log")"
+
+  case "$role" in
+    gerrit)
+      ensure_gerrit_ldap_bind_secret "$log"
+      if compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
+        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
+        normalize_gerrit_role_evidence_logs "$log"; then
+        rc=0
+      else
+        rc=$?
+      fi
+      ;;
+    jenkins-controller)
+      if compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+        normalize_jenkins_controller_role_evidence_logs "$log"; then
+        rc=0
+      else
+        rc=$?
+      fi
+      ;;
+    jenkins-agent)
+      if compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
         compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_agent_role_evidence_logs "$log"; then
         rc=0
@@ -2763,44 +2832,40 @@ cmd_run_role_gate() {
       fi
       ;;
     *)
-      if compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1; then
-        rc=0
-      else
-        rc=$?
-      fi
+      die "Unknown role for validate-role: $role"
       ;;
   esac
 
   if [ "$rc" -eq 0 ]; then
     if ! validate_role_baseline_manifest_in_target "$role" "$service" "$log"; then
-      evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Staged artifact baseline metadata is missing or drifted; role readiness cannot be comparable")"
-      print_command_failure run-role-gate "$role" blocked "$log" "$evidence" >&2
+      evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Staged artifact baseline metadata is missing or drifted; role readiness cannot be comparable")"
+      print_command_failure validate-role "$role" blocked "$log" "$evidence" >&2
       return 1
     fi
 
     if ! assert_no_placeholder_success "$log"; then
-      evidence="$(write_evidence run-role-gate "$role" fail "simulate.sh run-role-gate" "$log" "Role gate produced dummy, placeholder, operation-plan-only, planned-checks-only, or modeled success")"
-      print_command_failure run-role-gate "$role" failed "$log" "$evidence"
+      evidence="$(write_evidence validate-role "$role" fail "simulate.sh validate-role" "$log" "Role validation produced dummy, placeholder, operation-plan-only, planned-checks-only, or modeled success")"
+      print_command_failure validate-role "$role" failed "$log" "$evidence"
       return 1
     fi
-    evidence="$(write_evidence run-role-gate "$role" pass "simulate.sh run-role-gate" "$log" "Role helper validated required real behavior without placeholder success markers")"
-    print_command_summary run-role-gate "$role" ok
+    evidence="$(write_evidence validate-role "$role" pass "simulate.sh validate-role" "$log" "Role helper validated required real behavior without placeholder success markers")"
+    print_command_summary validate-role "$role" ok
     return 0
   fi
 
   if grep -Eq "missing_staged_artifacts|sha256sum:|FAILED open or read|WARNING: [0-9]+ listed file" "$log"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Staged artifacts are missing or invalid; run stage-artifacts for this role before run-role-gate")"
+    evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Staged artifacts are missing or invalid; run stage-artifacts and configure-role for this role before validate-role")"
     printf 'ERROR: Staged artifacts for %s are missing or invalid; run stage-artifacts --role %s first\n' "$role" "$role" >&2
   elif grep -Eq "BLOCKED:" "$log"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Role helper reported a blocked runtime behavior requirement")"
+    evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Role helper reported a blocked runtime behavior requirement")"
     printf 'ERROR: Role helper for %s reported blocked runtime behavior\n' "$role" >&2
   elif grep -Eq "is not implemented in this repository step|is a placeholder" "$log"; then
-    evidence="$(write_evidence run-role-gate "$role" blocked "simulate.sh run-role-gate" "$log" "Role helper exists but validate is not implemented yet")"
+    evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Role helper exists but validate is not implemented yet")"
     printf 'ERROR: Role helper for %s exists but validate is not implemented yet\n' "$role" >&2
   else
-    evidence="$(write_evidence run-role-gate "$role" fail "simulate.sh run-role-gate" "$log" "Role helper validate failed; readiness is not proven")"
+    evidence="$(write_evidence validate-role "$role" fail "simulate.sh validate-role" "$log" "Role helper validate failed; readiness is not proven")"
   fi
-  print_command_failure run-role-gate "$role" failed "$log" "$evidence"
+  print_command_failure validate-role "$role" failed "$log" "$evidence"
   return "$rc"
 }
 
@@ -2823,13 +2888,13 @@ write_blocked_integration_evidence() {
   write_evidence "$checkpoint" integration blocked "scripts/integration-setup.sh" "$log" "$reason" >/dev/null
 }
 
-check_pass_marker_path() {
-  printf '%s/rendered/check-pass.env\n' "$HARNESS_STATE_DIR"
+integration_validate_marker_path() {
+  printf '%s/rendered/integration-validate-pass.env\n' "$HARNESS_STATE_DIR"
 }
 
-write_check_pass_marker() {
+write_integration_validate_marker() {
   local marker fingerprint
-  marker="$(check_pass_marker_path)"
+  marker="$(integration_validate_marker_path)"
   fingerprint="$(runtime_env_fingerprint)"
   mkdir -p "$(dirname "$marker")"
   cat >"$marker" <<EOF
@@ -2841,101 +2906,112 @@ EOF
   chmod 0600 "$marker"
 }
 
-verify_check_pass_marker() {
+verify_integration_validate_marker() {
   local marker fingerprint
-  marker="$(check_pass_marker_path)"
-  [ -f "$marker" ] || die "Missing successful check marker; run check first"
+  marker="$(integration_validate_marker_path)"
+  [ -f "$marker" ] || die "Missing successful validate-integration marker; run validate-integration first"
   [ "$(marker_value "$marker" mode)" = "$HARNESS_MODE" ] ||
-    die "Check marker mode does not match selected runtime config"
+    die "Validate-integration marker mode does not match selected runtime config"
   [ "$(marker_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] ||
-    die "Check marker run ID does not match selected runtime config"
+    die "Validate-integration marker run ID does not match selected runtime config"
   [ "$(marker_value "$marker" project_name)" = "$HARNESS_PROJECT_NAME" ] ||
-    die "Check marker project name does not match selected runtime config"
+    die "Validate-integration marker project name does not match selected runtime config"
   fingerprint="$(runtime_env_fingerprint)"
   [ "$(marker_value "$marker" runtime_env_fingerprint)" = "$fingerprint" ] ||
-    die "Check marker runtime env fingerprint does not match selected runtime config"
+    die "Validate-integration marker runtime env fingerprint does not match selected runtime config"
 }
 
-cmd_check() {
-  local integration_log rc evidence
-  bootstrap_harness_env
-  ensure_runtime_config
-  refresh_integration_args
-  run_all_roles run-role-gate || rc=$?
-  rc="${rc:-0}"
-  if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence check roles fail "simulate.sh check" "not-applicable" "One or more role gates failed; cross-role integration was not attempted")"
-    print_command_summary check "" "role gates failed"
-    return "$rc"
-  fi
-  unset rc
-
-  [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
-  integration_log="$(bounded_log_path configure-and-validate-integration)"
-  {
-    "$integration_helper" "${integration_args[@]}" --yes configure-gerrit-ssh &&
-      "$integration_helper" "${integration_args[@]}" --yes configure-agent-ssh &&
-      "$integration_helper" "${integration_args[@]}" --yes configure-trigger &&
-      "$integration_helper" "${integration_args[@]}" --yes validate-integration
-  } >"$integration_log" 2>&1 || rc=$?
-  rc="${rc:-0}"
-  if [ "$rc" -eq 0 ]; then
-    if ! assert_no_forbidden_success_markers "$integration_log"; then
-      evidence="$(write_evidence check integration fail "simulate.sh check" "$integration_log" "Forbidden success marker found in integration validation log")"
-      print_command_failure check "" failed "$integration_log" "$evidence"
-      return 1
-    fi
-    evidence="$(write_evidence check integration pass "simulate.sh check" "$integration_log" "Shared integration helper proved Jenkins-to-Gerrit SSH, stream-events, Jenkins-to-agent SSH, node readiness, and agent scheduling")"
-    write_check_pass_marker
-    print_command_summary check "" "integration ok"
-    return 0
-  fi
-
-  write_blocked_integration_evidence jenkins-to-gerrit-ssh "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins-to-Gerrit SSH setup and validation"
-  write_blocked_integration_evidence stream-events "$integration_log" "Blocked: shared integration helper has not implemented real Gerrit stream-events validation"
-  write_blocked_integration_evidence agent-connection "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins-to-agent SSH connection validation"
-  write_blocked_integration_evidence scheduling "$integration_log" "Blocked: shared integration helper has not implemented real Jenkins agent scheduling validation"
-  evidence="$(write_evidence check integration blocked "simulate.sh check" "$integration_log" "Shared integration helper reported blocked cross-role validation; Docker simulation cannot claim readiness")"
-  print_command_summary check "" "blocked"
-  return "$rc"
-}
-
-cmd_full_verify() {
+cmd_configure_integration() {
   local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
   refresh_integration_args
-  verify_check_pass_marker
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
-  log="$(bounded_log_path verify-trigger)"
-  "$integration_helper" "${integration_args[@]}" --yes verify-trigger >"$log" 2>&1 || rc=$?
+  log="$(bounded_log_path configure-integration)"
+  "$integration_helper" "${integration_args[@]}" --yes configure-integration >"$log" 2>&1 || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then
-      evidence="$(write_evidence full-verify integration fail "simulate.sh full-verify" "$log" "Forbidden success marker found in trigger verification log")"
-      print_command_failure full-verify "" failed "$log" "$evidence"
+      evidence="$(write_evidence configure-integration integration fail "simulate.sh configure-integration" "$log" "Forbidden success marker found in integration configuration log")"
+      print_command_failure configure-integration "" failed "$log" "$evidence"
       return 1
     fi
-    evidence="$(write_evidence full-verify integration pass "simulate.sh full-verify" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
-    print_command_summary full-verify "" "integration ok"
+    evidence="$(write_evidence configure-integration integration pass "simulate.sh configure-integration" "$log" "Shared integration helper completed cross-role setup/configuration")"
+    print_command_summary configure-integration "" ok
+    return 0
+  fi
+
+  evidence="$(write_evidence configure-integration integration fail "simulate.sh configure-integration" "$log" "Shared integration helper failed cross-role setup/configuration")"
+  print_command_failure configure-integration "" failed "$log" "$evidence"
+  return "$rc"
+}
+
+cmd_validate_integration() {
+  local log rc evidence
+  bootstrap_harness_env
+  ensure_runtime_config
+  refresh_integration_args
+
+  [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
+  log="$(bounded_log_path validate-integration)"
+  "$integration_helper" "${integration_args[@]}" --yes validate-integration >"$log" 2>&1 || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -eq 0 ]; then
+    if ! assert_no_forbidden_success_markers "$log"; then
+      evidence="$(write_evidence validate-integration integration fail "simulate.sh validate-integration" "$log" "Forbidden success marker found in integration validation log")"
+      print_command_failure validate-integration "" failed "$log" "$evidence"
+      return 1
+    fi
+    evidence="$(write_evidence validate-integration integration pass "simulate.sh validate-integration" "$log" "Shared integration helper validated cross-role readiness without end-to-end proof")"
+    write_integration_validate_marker
+    print_command_summary validate-integration "" ok
+    return 0
+  fi
+
+  write_blocked_integration_evidence jenkins-to-gerrit-ssh "$log" "Blocked: shared integration helper has not implemented real Jenkins-to-Gerrit SSH validation"
+  write_blocked_integration_evidence agent-connection "$log" "Blocked: shared integration helper has not implemented real Jenkins-to-agent readiness validation"
+  evidence="$(write_evidence validate-integration integration blocked "simulate.sh validate-integration" "$log" "Shared integration helper reported blocked cross-role validation; Docker simulation cannot claim readiness")"
+  print_command_summary validate-integration "" blocked
+  return "$rc"
+}
+
+cmd_verify_integration() {
+  local log rc evidence
+  bootstrap_harness_env
+  ensure_runtime_config
+  refresh_integration_args
+  verify_integration_validate_marker
+
+  [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
+  log="$(bounded_log_path verify-integration)"
+  "$integration_helper" "${integration_args[@]}" --yes verify-integration >"$log" 2>&1 || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -eq 0 ]; then
+    if ! assert_no_forbidden_success_markers "$log"; then
+      evidence="$(write_evidence verify-integration integration fail "simulate.sh verify-integration" "$log" "Forbidden success marker found in integration verification log")"
+      print_command_failure verify-integration "" failed "$log" "$evidence"
+      return 1
+    fi
+    evidence="$(write_evidence verify-integration integration pass "simulate.sh verify-integration" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
+    print_command_summary verify-integration "" ok
     return 0
   fi
 
   write_blocked_integration_evidence job-execution "$log" "Blocked: shared integration helper has not implemented real disposable Jenkins job execution proof"
   write_blocked_integration_evidence verified-vote "$log" "Blocked: shared integration helper has not implemented real Gerrit Verified +1 vote proof"
-  evidence="$(write_evidence full-verify integration blocked "simulate.sh full-verify" "$log" "Shared integration helper reported blocked trigger verification; Docker simulation cannot claim end-to-end success")"
-  print_command_summary full-verify "" "blocked"
+  evidence="$(write_evidence verify-integration integration blocked "simulate.sh verify-integration" "$log" "Shared integration helper reported blocked verification; Docker simulation cannot claim end-to-end success")"
+  print_command_summary verify-integration "" blocked
   return "$rc"
 }
 
-cmd_verify_state() {
+cmd_audit_state() {
   bootstrap_harness_env
   ensure_runtime_config
   require_command docker
   detect_compose
   verify_selected_container_mounts
-  print_command_summary verify-state "" "ok"
+  print_command_summary audit-state "" "ok"
 }
 
 cmd_down() {
@@ -3162,10 +3238,10 @@ main() {
       parse_env_only_args "$@"
       cmd_preflight
       ;;
-    render-config)
+    init-run)
       shift
       parse_env_only_args "$@"
-      cmd_render_config
+      cmd_init_run
       ;;
     up)
       shift
@@ -3187,25 +3263,35 @@ main() {
       parse_env_and_role_args 0 "$@"
       cmd_stage_artifacts "$PARSED_ROLE"
       ;;
-    run-role-gate)
+    configure-role)
       shift
-      parse_env_and_role_args 1 "$@"
-      cmd_run_role_gate "$PARSED_ROLE"
+      parse_env_and_role_args 0 "$@"
+      cmd_configure_role "$PARSED_ROLE"
       ;;
-    check)
+    validate-role)
+      shift
+      parse_env_and_role_args 0 "$@"
+      cmd_validate_role "$PARSED_ROLE"
+      ;;
+    configure-integration)
       shift
       parse_env_only_args "$@"
-      cmd_check
+      cmd_configure_integration
       ;;
-    full-verify)
+    validate-integration)
       shift
       parse_env_only_args "$@"
-      cmd_full_verify
+      cmd_validate_integration
       ;;
-    verify-state)
+    verify-integration)
       shift
       parse_env_only_args "$@"
-      cmd_verify_state
+      cmd_verify_integration
+      ;;
+    audit-state)
+      shift
+      parse_env_only_args "$@"
+      cmd_audit_state
       ;;
     down)
       shift

@@ -2,7 +2,7 @@
 
 This document defines how Docker simulation commands treat generated state and
 existing Compose containers. It applies the general operator workflow rule from
-`docs/implementation-plan.md`: each phase checks its prerequisites, performs
+`docs/system-model.md`: each phase checks its prerequisites, performs
 only its own phase work, and fails clearly instead of rerunning other phases.
 
 Docker simulation state is run-scoped under:
@@ -26,20 +26,21 @@ project exists, whether it is running or stopped. The expected services are:
 - `jenkins-controller-target`
 - `jenkins-agent-target`
 
-Fresh workflow means starting a new Docker simulation run at `render-config`.
-`preflight` is recommended before `render-config`, but it is not required.
+Fresh workflow means starting a new Docker simulation run at `init-run`.
+`preflight` is recommended before `init-run`, but it is not required.
 `preflight` validates local tooling and static harness inputs; it does not
 replace rendered runtime config.
 
 Resume or rerun means invoking a lifecycle phase against an existing selected
-run, such as `up`, `status`, `prepare-artifacts`, `stage-artifacts`, `check`,
-or `full-verify`.
+run, such as `up`, `status`, `prepare-artifacts`, `stage-artifacts`,
+`configure-role`, `validate-role`, `configure-integration`,
+`validate-integration`, or `verify-integration`.
 
 ## Required Generated State
 
-`render-config` is the first phase that creates runtime configuration required
+`init-run` is the first phase that creates runtime configuration required
 by later lifecycle phases. Later phases must fail clearly with an instruction
-to run `render-config` first when selected runtime config is missing.
+to run `init-run` first when selected runtime config is missing.
 
 A selected generated run is consistent only when the core run state exists and
 matches the selected run:
@@ -70,11 +71,11 @@ The user must recover with `down` or `clean`.
 
 | Situation | Expected behavior |
 | --- | --- |
-| Fresh repo state: no selected containers and no generated run state | `render-config` may create the selected generated run state. `up` requires that rendered runtime config already exists. |
-| Selected containers exist and generated bind mounts match the selected run | Resume/rerun phases may continue after validating their own prerequisites. Use `verify-state` for the explicit bind-mount audit when needed. |
+| Fresh repo state: no selected containers and no generated run state | `init-run` may create the selected generated run state. `up` requires that rendered runtime config already exists. |
+| Selected containers exist and generated bind mounts match the selected run | Resume/rerun phases may continue after validating their own prerequisites. Use `audit-state` for the explicit bind-mount audit when needed. |
 | Selected containers exist but `generated/` was removed or recreated | Resume/rerun phases must fail clearly because existing containers are bound to missing or stale host paths. Use `down` or `clean` recovery before starting again. |
-| No selected containers exist but a previous generated folder remains | `render-config` may create or overwrite generated runtime config for the selected run. Later phases use the newly rendered state. |
-| Partial or inconsistent generated state exists | Lifecycle phases must fail clearly. If containers exist, use `down` or `clean` recovery. If no containers exist, rerun `render-config` to create a consistent run. |
+| No selected containers exist but a previous generated folder remains | `init-run` may create or overwrite generated runtime config for the selected run. Later phases use the newly rendered state. |
+| Partial or inconsistent generated state exists | Lifecycle phases must fail clearly. If containers exist, use `down` or `clean` recovery. If no containers exist, rerun `init-run` to create a consistent run. |
 
 ## Down And Clean Recovery
 
@@ -93,7 +94,7 @@ Example recovery after deleting bind mounts while containers still exist:
 ```bash
 rm -rf generated/
 simulation/docker/simulate.sh down
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh up
 ```
 
@@ -102,7 +103,7 @@ Equivalent recovery when housekeeping is desired:
 ```bash
 rm -rf generated/
 simulation/docker/simulate.sh clean
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh up
 ```
 
@@ -112,8 +113,9 @@ state and stop.
 
 ## Verify State
 
-`verify-state` is the explicit read-only command for the expensive container
+`audit-state` is the explicit read-only command for the expensive container
 and bind-mount sweep. It checks the live selected containers against the
 selected run root and is meant for operator inspection, not for the default
-path of `status`, `check`, `full-verify`, `prepare-artifacts`, or
+path of `status`, `configure-role`, `validate-role`, `configure-integration`,
+`validate-integration`, `verify-integration`, `prepare-artifacts`, or
 `stage-artifacts`.

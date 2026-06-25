@@ -185,7 +185,7 @@ DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
 REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
 STALE_SOURCE="$tmp_dir/unused" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 mkdir -p "$tmp_dir/stale-source"
 chmod 0500 "$tmp_dir/stale-source"
@@ -234,14 +234,14 @@ REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
 STALE_SOURCE="$tmp_dir/stale-source" \
 STALE_IDENTITY=1 \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-state \
-  >"$tmp_dir/verify-state.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" audit-state \
+  >"$tmp_dir/audit-state.out" 2>&1
 rc=$?
 set -e
 
 [ "$rc" -ne 0 ] || {
-  printf 'verify-state should fail on stale generated bind mount\n' >&2
+  printf 'audit-state should fail on stale generated bind mount\n' >&2
   exit 1
 }
-grep -Fq 'Stale Docker bind mount' "$tmp_dir/verify-state.out"
-grep -Fq 'run down or clean before resuming' "$tmp_dir/verify-state.out"
+grep -Fq 'Stale Docker bind mount' "$tmp_dir/audit-state.out"
+grep -Fq 'run down or clean before resuming' "$tmp_dir/audit-state.out"

@@ -99,39 +99,13 @@ common_args=(
 Review the Jenkins-to-Gerrit SSH plan without mutation:
 
 ```bash
-scripts/integration-setup.sh "${common_args[@]}" --dry-run configure-gerrit-ssh
+scripts/integration-setup.sh "${common_args[@]}" --dry-run configure-integration
 ```
 
 Apply Jenkins-to-Gerrit SSH setup after review:
 
 ```bash
-scripts/integration-setup.sh "${common_args[@]}" --yes configure-gerrit-ssh
-```
-
-Review the Jenkins-to-agent SSH and node plan without mutation:
-
-```bash
-scripts/integration-setup.sh "${common_args[@]}" --dry-run configure-agent-ssh
-```
-
-Apply Jenkins-to-agent SSH and node setup after review:
-
-```bash
-scripts/integration-setup.sh "${common_args[@]}" --yes configure-agent-ssh
-```
-
-Review Gerrit Trigger server, disposable job, and vote-posting configuration
-without mutation:
-
-```bash
-scripts/integration-setup.sh "${common_args[@]}" --dry-run configure-trigger
-```
-
-Apply Gerrit Trigger server, disposable job, and REST vote-posting
-configuration after review:
-
-```bash
-scripts/integration-setup.sh "${common_args[@]}" --yes configure-trigger
+scripts/integration-setup.sh "${common_args[@]}" --yes configure-integration
 ```
 
 Validate cross-role readiness:
@@ -140,10 +114,10 @@ Validate cross-role readiness:
 scripts/integration-setup.sh "${common_args[@]}" --yes validate-integration
 ```
 
-Run end-to-end trigger verification:
+Run end-to-end integration proof:
 
 ```bash
-scripts/integration-setup.sh "${common_args[@]}" --yes verify-trigger
+scripts/integration-setup.sh "${common_args[@]}" --yes verify-integration
 ```
 
 Collect sanitized integration evidence:
@@ -158,7 +132,7 @@ votes, or evidence that claims runtime success.
 
 ## Validation Contract
 
-`validate-integration` and `verify-trigger` must prove real cross-role behavior
+`validate-integration` and `verify-integration` must prove real cross-role behavior
 or fail closed with a clear classification. Passing integration evidence must
 cover:
 

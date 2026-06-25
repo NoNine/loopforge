@@ -370,9 +370,8 @@ Jenkins-to-Gerrit SSH proof, Gerrit event streaming, agent scheduling, or
 
 After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
 use `docs/integration-setup-manual.md` for the shared helper workflow. That
-manual is the command authority for `configure-gerrit-ssh`,
-`configure-agent-ssh`, `configure-trigger`, `validate-integration`,
-`verify-trigger`, and `collect-evidence`.
+manual is the command authority for `configure-integration`,
+`validate-integration`, `verify-integration`, and `collect-evidence`.
 
 Controller-only setup must not create or rotate Jenkins-to-Gerrit or
 Jenkins-to-agent keypairs, install public keys on Gerrit or the agent, register
@@ -430,7 +429,8 @@ scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> validate
 Harness gate:
 
 ```bash
-simulation/docker/simulate.sh run-role-gate --role jenkins-controller
+simulation/docker/simulate.sh configure-role --role jenkins-controller
+simulation/docker/simulate.sh validate-role --role jenkins-controller
 ```
 
 ## Phase 14: Evidence Collection

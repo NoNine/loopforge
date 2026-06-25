@@ -6,7 +6,7 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
-run_id="verify-state-$$"
+run_id="audit-state-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 cleanup() {
   rc=$?
@@ -163,7 +163,7 @@ DOCKER_CALLS_LOG="$calls" \
 DOCKER_CONTAINERS_FILE="$tmp_dir/empty-containers" \
 REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 mkdir -p "$tmp_dir"
 : >"$tmp_dir/empty-containers"
@@ -177,9 +177,9 @@ DOCKER_CALLS_LOG="$calls" \
 DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
 REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-state >"$tmp_dir/verify.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" audit-state >"$tmp_dir/audit.out"
 
-grep -Fq 'verify-state: ok' "$tmp_dir/verify.out"
+grep -Fq 'audit-state: ok' "$tmp_dir/audit.out"
 grep -Fq 'exec -T gerrit-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
 grep -Fq 'exec -T jenkins-controller-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
 grep -Fq 'exec -T jenkins-agent-target stat -Lc %d:%i /var/lib/loopforge' "$calls"

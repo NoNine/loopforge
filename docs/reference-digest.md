@@ -189,11 +189,9 @@ shared helper. It runs after the three role manuals are complete.
 
 | Command | Behavior intent |
 | --- | --- |
-| `configure-gerrit-ssh` | Create or rotate the Jenkins-to-Gerrit SSH keypair on the Jenkins controller, expose only the public key to Gerrit, register Gerrit integration access, create reviewed global `Verified` label configuration in `All-Projects`, create scoped read and `label-Verified -1..+1` grants, and record fingerprints. |
-| `configure-agent-ssh` | Create or rotate the Jenkins-to-agent SSH keypair on the Jenkins controller, expose only the public key to the agent, authorize agent access, and configure the Jenkins node credential. |
-| `configure-trigger` | Configure Jenkins Gerrit Trigger server for SSH authentication and `stream-events`, configure REST vote posting, and prepare disposable verification job inputs after Gerrit permissions and credentials exist. |
-| `validate-integration` | After `--yes`, validate Jenkins-to-Gerrit SSH, stream-events permission, global `Verified` label existence, scoped vote permission, Jenkins-to-agent SSH, node readiness, and agent scheduling without accepting modeled proof. `--dry-run` must not create Gerrit or Jenkins state. |
-| `verify-trigger` | After `--yes`, create disposable verification inputs, push a change, observe a triggered build, post `Verified +1` through the Gerrit REST review API, and verify Gerrit review state. `--dry-run` must not create Gerrit or Jenkins state. |
+| `configure-integration` | Configure durable cross-role integration state: Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit integration access, the global `Verified` label, scoped vote permissions, Jenkins credentials, Jenkins node config, shared storage, and the Gerrit Trigger server. |
+| `validate-integration` | After `--yes`, passively validate cross-role readiness and required configuration without creating disposable proof state. `--dry-run` must not create Gerrit or Jenkins state. |
+| `verify-integration` | After `--yes` and a successful validation marker, run active proof: shared storage, Gerrit SSH and stream-events, agent connection, disposable Jenkins job execution, REST `Verified +1`, and Gerrit review state. |
 | `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, REST vote results, Gerrit review state, bounded logs, and redaction status. |
 
 The helper may fail closed until Docker or VM integration exists. The reviewed
@@ -209,12 +207,15 @@ Docker simulation should expose:
 | Command | Behavior intent |
 | --- | --- |
 | `simulation/docker/simulate.sh preflight` | Check local Docker/Compose tooling, static harness files, script wiring, and baseline labels while bootstrapping from the harness env file. |
-| `simulation/docker/simulate.sh render-config` | Render simulation configs from the bootstrap env file and browser-visible URLs, copy selected inputs into run-scoped runtime inputs, and write the generated-run marker under `generated/simulation/docker/<run-id>/`. |
+| `simulation/docker/simulate.sh init-run` | Initialize simulation configs from the bootstrap env file and browser-visible URLs, copy selected inputs into run-scoped runtime inputs, and write the generated-run marker under `generated/simulation/docker/<run-id>/`. |
 | `simulation/docker/simulate.sh prepare-artifacts` | Run role helper `prepare-artifacts` commands in the bundle factory container, retain manifests/checksums/source labels, and export successful bundle archives plus checksums to host-owned `exported-artifacts/`. |
 | `simulation/docker/simulate.sh stage-artifacts` | Stage prepared bundle archives from host-owned handoff files to Gerrit, Jenkins controller, and Jenkins agent containers, then verify target-side manifests and checksums under the role-specific `/opt` bundle roots. |
 | `simulation/docker/simulate.sh up` | Start the five-environment simulation after artifacts/configs exist, using the bootstrap env file to locate the run-scoped runtime config. |
-| `simulation/docker/simulate.sh check` | Run all role gates, then call the shared integration helper for Jenkins-to-Gerrit SSH, event streaming, agent connection, scheduling, and integration validation. |
-| `simulation/docker/simulate.sh full-verify` | Require a matching successful `check` marker for the same rendered run, then use the shared integration helper for disposable Gerrit change, triggered Jenkins build, and `Verified +1`; it must not run `check` implicitly. |
+| `simulation/docker/simulate.sh configure-role` | Run role-local install and configuration for one or all roles without rerunning artifact phases. |
+| `simulation/docker/simulate.sh validate-role` | Run role-local validation and evidence collection for one or all roles without rerunning configuration. |
+| `simulation/docker/simulate.sh configure-integration` | Invoke the shared integration helper for durable cross-role configuration. |
+| `simulation/docker/simulate.sh validate-integration` | Invoke passive shared integration validation and write the validation marker. |
+| `simulation/docker/simulate.sh verify-integration` | Require the validation marker, then invoke active shared integration proof without rerunning validation. |
 | `simulation/docker/simulate.sh down` | Stop the simulation without deleting retained generated output. |
 | `simulation/docker/simulate.sh clean` | Manually remove mutable generated runtime data under the validated repo-local generated run root while preserving exported artifacts, evidence, and logs. |
 

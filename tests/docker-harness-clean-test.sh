@@ -35,7 +35,7 @@ EOF
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 mkdir -p \
   "$run_dir/state/runtime" \

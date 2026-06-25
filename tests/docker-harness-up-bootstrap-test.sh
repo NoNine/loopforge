@@ -38,7 +38,7 @@ EOF
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" \
-  --env "$tmp_dir/harness.env" render-config >/dev/null
+  --env "$tmp_dir/harness.env" init-run >/dev/null
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" \

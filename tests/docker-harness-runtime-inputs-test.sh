@@ -36,8 +36,8 @@ HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_INTEGRATION_ENV_FILE=$(printf '%q' "$tmp_dir/integration.env")
 EOF
 
-  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
-  >"$tmp_dir/render.out"
+  "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
+  >"$tmp_dir/init-run.out"
 
 runtime_dir="$state_dir/rendered/runtime-inputs"
 runtime_env="$state_dir/rendered/harness.runtime.env"

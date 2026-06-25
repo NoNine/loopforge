@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
@@ -152,14 +152,20 @@ common_env=(
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role gerrit >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role gerrit >/dev/null
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-controller >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" validate-role --role gerrit >/dev/null
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" run-role-gate --role jenkins-agent >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role jenkins-controller >/dev/null
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" validate-role --role jenkins-controller >/dev/null
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role jenkins-agent >/dev/null
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" validate-role --role jenkins-agent >/dev/null
 
 if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^.* --role$|^.* --role ' "$tmp_dir/role-calls.log"; then
   printf 'role dispatch must pass bare role names to internal command functions\n' >&2
@@ -218,13 +224,13 @@ controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.
 agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /var/lib/loopforge/rendered/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 
 if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^prepare-artifacts |^stage-artifacts ' "$tmp_dir/role-calls.log"; then
-  printf 'role gates must not rerun prepare-artifacts or stage-artifacts\n' >&2
+  printf 'role configuration must not rerun prepare-artifacts or stage-artifacts\n' >&2
   sed -n '1,120p' "$tmp_dir/role-calls.log" >&2
   exit 1
 fi
 for role in gerrit jenkins-controller jenkins-agent; do
-  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/logs"/run-role-gate-"$role"-*.log || {
-    printf 'role gate did not verify staged artifacts for %s\n' "$role" >&2
+  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/logs/configure-role-$role-"*.log || {
+    printf 'configure-role did not verify staged artifacts for %s\n' "$role" >&2
     exit 1
   }
 done
@@ -232,35 +238,35 @@ done
   printf 'gerrit install did not run\n' >&2
   exit 1
 }
-[ -n "$gerrit_chown_line" ] && [ "$gerrit_chown_line" -lt "$gerrit_install_line" ] || {
+if [ -z "$gerrit_chown_line" ] || [ "$gerrit_chown_line" -ge "$gerrit_install_line" ]; then
   printf 'gerrit product home ownership was not prepared before install\n' >&2
   exit 1
-}
-[ -n "$gerrit_env_copy_line" ] && [ "$gerrit_env_copy_line" -lt "$gerrit_install_line" ] || {
+fi
+if [ -z "$gerrit_env_copy_line" ] || [ "$gerrit_env_copy_line" -ge "$gerrit_install_line" ]; then
   printf 'gerrit rendered env was not Docker-copied before install\n' >&2
   exit 1
-}
+fi
 [ -n "$controller_install_line" ] || {
   printf 'jenkins-controller install did not run\n' >&2
   exit 1
 }
-[ -n "$controller_chown_line" ] && [ "$controller_chown_line" -lt "$controller_install_line" ] || {
+if [ -z "$controller_chown_line" ] || [ "$controller_chown_line" -ge "$controller_install_line" ]; then
   printf 'jenkins-controller product home ownership was not prepared before install\n' >&2
   exit 1
-}
-[ -n "$controller_env_copy_line" ] && [ "$controller_env_copy_line" -lt "$controller_install_line" ] || {
+fi
+if [ -z "$controller_env_copy_line" ] || [ "$controller_env_copy_line" -ge "$controller_install_line" ]; then
   printf 'jenkins-controller rendered env was not Docker-copied before install\n' >&2
   exit 1
-}
+fi
 [ -n "$agent_install_line" ] || {
   printf 'jenkins-agent install did not run\n' >&2
   exit 1
 }
-[ -n "$agent_chown_line" ] && [ "$agent_chown_line" -lt "$agent_install_line" ] || {
+if [ -z "$agent_chown_line" ] || [ "$agent_chown_line" -ge "$agent_install_line" ]; then
   printf 'jenkins-agent product home ownership was not prepared before install\n' >&2
   exit 1
-}
-[ -n "$agent_env_copy_line" ] && [ "$agent_env_copy_line" -lt "$agent_install_line" ] || {
+fi
+if [ -z "$agent_env_copy_line" ] || [ "$agent_env_copy_line" -ge "$agent_install_line" ]; then
   printf 'jenkins-agent rendered env was not Docker-copied before install\n' >&2
   exit 1
-}
+fi

@@ -39,11 +39,11 @@ grep -Fq "mode=docker-simulation" "$tmp_dir/preflight.out"
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" \
-  --env "$tmp_dir/harness.env" render-config >"$tmp_dir/render.out"
+  --env "$tmp_dir/harness.env" init-run >"$tmp_dir/init-run.out"
 
-grep -Fq "render-config: ok run-id=$run_id" "$tmp_dir/render.out"
-! grep -Fq "gerrit_url=" "$tmp_dir/render.out"
-! grep -Fq "jenkins_url=" "$tmp_dir/render.out"
+grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
+! grep -Fq "gerrit_url=" "$tmp_dir/init-run.out"
+! grep -Fq "jenkins_url=" "$tmp_dir/init-run.out"
 
 runtime_env="$state_dir/rendered/harness.runtime.env"
 grep -Fq "HARNESS_RUN_ID=$run_id" "$runtime_env"

@@ -10,13 +10,13 @@ run_root="$repo_root/generated/simulation/docker"
 trap 'rm -rf "$tmp_dir" "$run_root/$run_id" "$run_root/$run_id-explicit" "$run_root/$run_id-invalid" "$run_root/$run_id-busy"' EXIT
 state_dir="$run_root/$run_id/state"
 
-render() {
+init_run() {
   HARNESS_RUN_ID="$run_id" \
   HARNESS_PROJECT_NAME="port-test-$$" \
-    "$repo_root/simulation/docker/simulate.sh" render-config
+    "$repo_root/simulation/docker/simulate.sh" init-run
 }
 
-render >"$tmp_dir/render-1.out"
+init_run >"$tmp_dir/init-run-1.out"
 env_file="$state_dir/rendered/harness.env"
 
 gerrit_port="$(sed -n 's/^HARNESS_GERRIT_HTTP_HOST_PORT=//p' "$env_file")"
@@ -33,11 +33,11 @@ esac
   exit 1
 }
 
-grep -Fq "render-config: ok run-id=$run_id" "$tmp_dir/render-1.out"
-! grep -Fq "gerrit_url=" "$tmp_dir/render-1.out"
-! grep -Fq "jenkins_url=" "$tmp_dir/render-1.out"
+grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run-1.out"
+! grep -Fq "gerrit_url=" "$tmp_dir/init-run-1.out"
+! grep -Fq "jenkins_url=" "$tmp_dir/init-run-1.out"
 
-render >"$tmp_dir/render-2.out"
+init_run >"$tmp_dir/init-run-2.out"
 grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_port" "$env_file"
 grep -Fq "HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_port" "$env_file"
 
@@ -68,8 +68,8 @@ HARNESS_RUN_ID="$run_id-explicit" \
 HARNESS_PROJECT_NAME="port-test-explicit-$$" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$explicit_gerrit_port" \
 HARNESS_JENKINS_HTTP_HOST_PORT="$explicit_jenkins_port" \
-  "$repo_root/simulation/docker/simulate.sh" render-config >"$tmp_dir/explicit.out"
-grep -Fq "render-config: ok run-id=$run_id-explicit" "$tmp_dir/explicit.out"
+  "$repo_root/simulation/docker/simulate.sh" init-run >"$tmp_dir/explicit.out"
+grep -Fq "init-run: ok run-id=$run_id-explicit" "$tmp_dir/explicit.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/explicit.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/explicit.out"
 grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$explicit_gerrit_port" "$run_root/$run_id-explicit/state/rendered/harness.env"
@@ -79,7 +79,7 @@ set +e
 HARNESS_RUN_ID="$run_id-invalid" \
 HARNESS_PROJECT_NAME="port-test-invalid-$$" \
 HARNESS_GERRIT_HTTP_HOST_PORT=not-a-port \
-  "$repo_root/simulation/docker/simulate.sh" render-config >"$tmp_dir/invalid.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" init-run >"$tmp_dir/invalid.out" 2>&1
 invalid_rc=$?
 set -e
 [ "$invalid_rc" -ne 0 ] || {
@@ -122,7 +122,7 @@ set +e
 HARNESS_RUN_ID="$run_id-busy" \
 HARNESS_PROJECT_NAME="port-test-busy-$$" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$busy_port" \
-  "$repo_root/simulation/docker/simulate.sh" render-config >"$tmp_dir/busy.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" init-run >"$tmp_dir/busy.out" 2>&1
 busy_rc=$?
 set -e
 [ "$busy_rc" -ne 0 ] || {

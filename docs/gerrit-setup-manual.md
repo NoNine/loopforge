@@ -324,9 +324,8 @@ and integration evidence belong to `scripts/integration-setup.sh`.
 
 After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
 use `docs/integration-setup-manual.md` for the shared helper workflow. That
-manual is the command authority for `configure-gerrit-ssh`,
-`configure-agent-ssh`, `configure-trigger`, `validate-integration`,
-`verify-trigger`, and `collect-evidence`.
+manual is the command authority for `configure-integration`,
+`validate-integration`, `verify-integration`, and `collect-evidence`.
 
 Gerrit role-local setup must not mutate `All-Projects.git`, `All-Users.git`,
 Gerrit labels, Jenkins service groups, public keys, `stream-events` grants, or
@@ -384,7 +383,8 @@ scripts/gerrit-setup.sh --env <reviewed-gerrit.env> --yes validate
 Harness gate:
 
 ```bash
-simulation/docker/simulate.sh run-role-gate --role gerrit
+simulation/docker/simulate.sh configure-role --role gerrit
+simulation/docker/simulate.sh validate-role --role gerrit
 ```
 
 ## Phase 9: Evidence Collection

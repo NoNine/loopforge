@@ -64,13 +64,22 @@ rc=$?
 printf 'exit=%s log=%s\n' "$rc" "$log"
 ```
 
-For long-running commands, run them detached and record the PID:
+For long-running local commands, prefer foreground execution redirected to a
+timestamped log. In Codex, let the command-runner tool keep the command alive
+and poll it through its returned tool session handle while inspecting only
+bounded log output:
 
 ```bash
 log="logs/command-$(date +%Y%m%d%H%M%S).log"
-(command >"$log" 2>&1 & echo $! > "$log.pid")
-printf 'pid=%s log=%s\n' "$(cat "$log.pid")" "$log"
+command >"$log" 2>&1
+rc=$?
+printf 'exit=%s log=%s\n' "$rc" "$log"
 ```
+
+Avoid plain `(...) &`, `nohup`, or `disown` in command-runner tool calls. If
+true detachment is unavoidable, use `setsid`, write PID/status files, and poll
+those files. Do not use `wait "$pid"` from a later shell; Bash returns `127`
+because the PID is not that shell's child.
 
 Inspect only bounded output:
 
@@ -85,6 +94,11 @@ For long-running remote verification, poll sparsely after confirming the
 process is alive and logs are being written. Each poll should inspect only
 process state, exit code, log size, phase/error markers, and bounded failure
 snippets.
+
+For Docker simulation in this workspace, assume `docker-compose` v1 is
+available. Do not run separate Compose discovery probes before every Docker
+simulation; let `simulation/docker/simulate.sh` perform its own internal
+Compose selection unless a failure specifically points at Compose.
 
 ## Remote Access Safety
 

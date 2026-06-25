@@ -123,19 +123,19 @@ common_env=(
 printf '%s-bundle-factory\n' "$run_id" >"$tmp_dir/containers"
 set +e
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run \
   >"$tmp_dir/render-with-container.out" 2>&1
 rc=$?
 set -e
 [ "$rc" -ne 0 ] || {
-  printf 'render-config should fail when selected containers exist\n' >&2
+  printf 'init-run should fail when selected containers exist\n' >&2
   exit 1
 }
 grep -Fq 'Selected Docker simulation containers already exist' "$tmp_dir/render-with-container.out"
 
 rm -f "$tmp_dir/containers"
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 rm -rf "$run_dir"
 printf '%s-bundle-factory\n' "$run_id" >"$tmp_dir/containers"
@@ -158,7 +158,7 @@ grep -Fq "rm -f $run_id-bundle-factory" "$calls"
 
 rm -f "$tmp_dir/containers" "$calls"
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" render-config >/dev/null
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 printf '%s-gerrit-target\n' "$run_id" >"$tmp_dir/containers"
 set +e
 env "${common_env[@]}" \

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
@@ -98,12 +98,28 @@ cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
 cp "$repo_root/examples/jenkins-agent.env.example" "$tmp_dir/jenkins-agent.env"
+read -r gerrit_host_port jenkins_host_port <<EOF
+$(python3 - <<'PY'
+import socket
+
+ports = []
+for _ in range(2):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    ports.append(sock.getsockname()[1])
+    sock.close()
+print(*ports)
+PY
+)
+EOF
 cat >>"$tmp_dir/harness.env" <<EOF
 HARNESS_RUN_ID=$run_id
 HARNESS_PROJECT_NAME=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
+HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_host_port
+HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_host_port
 EOF
 
 common_env=(
@@ -112,7 +128,7 @@ common_env=(
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
+  "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
   >/dev/null
 
 snapshot="$tmp_dir/env-files.before"
@@ -124,9 +140,12 @@ for command in \
   "prepare-artifacts --role gerrit" \
   "prepare-artifacts --role jenkins-controller" \
   "prepare-artifacts --role jenkins-agent" \
-  "run-role-gate --role gerrit" \
-  "run-role-gate --role jenkins-controller" \
-  "run-role-gate --role jenkins-agent"
+  "configure-role --role gerrit" \
+  "configure-role --role jenkins-controller" \
+  "configure-role --role jenkins-agent" \
+  "validate-role --role gerrit" \
+  "validate-role --role jenkins-controller" \
+  "validate-role --role jenkins-agent"
 do
   set +e
   # shellcheck disable=SC2086

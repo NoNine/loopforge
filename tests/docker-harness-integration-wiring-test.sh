@@ -10,7 +10,6 @@ run_dir="$repo_root/generated/simulation/docker/$run_id"
 trap 'rm -rf "$tmp_dir" "$run_dir" 2>/dev/null || true' EXIT
 
 state_dir="$run_dir/state"
-role_calls="$tmp_dir/role-calls.log"
 integration_calls="$tmp_dir/integration-calls.log"
 integration_helper="$tmp_dir/integration-setup.sh"
 
@@ -37,8 +36,8 @@ printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
 SH
 chmod +x "$integration_helper"
 
-  "$repo_root/simulation/docker/simulate.sh" render-config --env "$tmp_dir/harness.env" \
-  >"$tmp_dir/render.out"
+"$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
+  >"$tmp_dir/init-run.out"
 
 runtime_dir="$state_dir/rendered/runtime-inputs"
 for file in gerrit jenkins-controller jenkins-agent integration; do
@@ -49,79 +48,112 @@ mkdir -p "$state_dir/jenkins-controller"
 chmod 0555 "$state_dir/jenkins-controller"
 
 common_env=(
-  HARNESS_TEST_STUB_ROLE_COMMANDS="$role_calls"
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper"
   HARNESS_TEST_INTEGRATION_CALLS="$integration_calls"
   HARNESS_ENV_FILE="$tmp_dir/harness.env"
 )
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" check >"$tmp_dir/check.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-integration \
+  >"$tmp_dir/configure-integration.out"
 
-grep -Fxq 'run-role-gate gerrit' "$role_calls"
-grep -Fxq 'run-role-gate jenkins-controller' "$role_calls"
-grep -Fxq 'run-role-gate jenkins-agent' "$role_calls"
-grep -Fq -- '--yes configure-gerrit-ssh' "$integration_calls"
-grep -Fq -- '--yes configure-agent-ssh' "$integration_calls"
-grep -Fq -- '--yes configure-trigger' "$integration_calls"
-grep -Fq -- '--yes validate-integration' "$integration_calls"
+grep -Fq -- '--yes configure-integration' "$integration_calls"
 grep -Fq -- "--gerrit-env $runtime_dir/gerrit.env" "$integration_calls"
 grep -Fq -- "--integration-env $runtime_dir/integration.env" "$integration_calls"
-grep -Fq -- 'listener_pid_file="/tmp/loopforge-stream-events-listener.pid"' "$repo_root/scripts/integration-setup.sh"
-grep -Fq -- 'container_listener_log="$(integration_container_log_dir)/$listener_name"' "$repo_root/scripts/integration-setup.sh"
-grep -Fq -- "gerrit stream-events >'\$container_listener_log' 2>&1 &" "$repo_root/scripts/integration-setup.sh"
-grep -Fq -- 'cleanup_stream_events_listener()' "$repo_root/scripts/integration-setup.sh"
-grep -Fq -- 'Gerrit REST could not create stream-events validation change' "$repo_root/scripts/integration-setup.sh"
-if grep -Fq -- 'docker exec "$(jenkins_container)" ssh' "$repo_root/scripts/integration-setup.sh"; then
-  printf 'stream-events validation must not background a host-side docker exec listener\n' >&2
-  exit 1
-fi
 if grep -Fq -- "$tmp_dir/gerrit.env" "$integration_calls"; then
   printf 'integration wiring used original Gerrit env path after render\n' >&2
   exit 1
 fi
 [ ! -e "$state_dir/jenkins-controller/integration" ] || {
-  printf 'check must not create integration state under Jenkins controller helper state\n' >&2
+  printf 'integration phases must not create integration state under Jenkins controller helper state\n' >&2
   exit 1
 }
 chmod 0755 "$state_dir/jenkins-controller"
 
-: >"$role_calls"
-: >"$integration_calls"
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" validate-integration \
+  >"$tmp_dir/validate-integration.out"
+grep -Fq -- '--yes validate-integration' "$integration_calls"
 
-[ ! -s "$role_calls" ] || {
-  printf 'full-verify unexpectedly ran role gates\n' >&2
-  exit 1
-}
-if grep -Eq -- '--yes configure-gerrit-ssh|--yes configure-agent-ssh|--yes configure-trigger|--yes validate-integration' "$integration_calls"; then
-  printf 'full-verify unexpectedly ran check-phase integration commands\n' >&2
-  sed -n '1,120p' "$integration_calls" >&2
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-integration \
+  >"$tmp_dir/verify-integration.out"
+grep -Fq -- '--yes verify-integration' "$integration_calls"
+
+grep -Fq -- 'listener_pid_file="/tmp/loopforge-stream-events-listener.pid"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'container_listener_log="$(integration_container_log_dir)/$listener_name"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- "gerrit stream-events >'\$container_listener_log' 2>&1 &" "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'cleanup_stream_events_listener()' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'Gerrit REST could not create stream-events validation change' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'server.start()' "$repo_root/scripts/integration-setup.sh"
+if grep -Fq -- 'server.startConnection()' "$repo_root/scripts/integration-setup.sh"; then
+  printf 'configure-integration must not call startConnection after server.start\n' >&2
   exit 1
 fi
-grep -Fq -- '--yes verify-trigger' "$integration_calls"
+if sed -n '/cmd_verify_integration()/,/^}/p' "$repo_root/scripts/integration-setup.sh" | grep -Fq -- 'validate_integration_impl'; then
+  printf 'verify-integration must require validate-integration state, not rerun it\n' >&2
+  exit 1
+fi
+if sed -n '/validate_integration_impl()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
+  grep -Eq -- 'prove_stream_events|schedule_smoke_build|prove_shared_storage_rw|create_gerrit_change|post_simulation_verified_vote|validate_agent_online|configure_verification_job'
+then
+  printf 'validate-integration must stay passive and must not run active proof\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'docker exec "$(jenkins_container)" ssh' "$repo_root/scripts/integration-setup.sh"; then
+  printf 'stream-events proof must not background a host-side docker exec listener\n' >&2
+  exit 1
+fi
 
 missing_marker_calls="$tmp_dir/missing-marker-integration-calls.log"
-rm -f "$state_dir/rendered/check-pass.env"
+rm -f "$state_dir/rendered/integration-validate-pass.env"
 set +e
 env \
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$missing_marker_calls" \
   HARNESS_ENV_FILE="$tmp_dir/harness.env" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" full-verify >"$tmp_dir/full-missing-marker.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-integration \
+  >"$tmp_dir/verify-missing-marker.out" 2>&1
 missing_marker_rc=$?
 set -e
 [ "$missing_marker_rc" -ne 0 ] || {
-  printf 'full-verify unexpectedly succeeded without a prior check marker\n' >&2
+  printf 'verify-integration unexpectedly succeeded without prior validate-integration\n' >&2
   exit 1
 }
-grep -Fq 'Missing successful check marker; run check first' "$tmp_dir/full-missing-marker.out"
+grep -Fq 'Missing successful validate-integration marker; run validate-integration first' "$tmp_dir/verify-missing-marker.out"
 [ ! -s "$missing_marker_calls" ] || {
-  printf 'full-verify called integration without a prior check marker\n' >&2
+  printf 'verify-integration called integration without a prior validate marker\n' >&2
   sed -n '1,120p' "$missing_marker_calls" >&2
   exit 1
 }
+
+for old_command in render-config verify-state check full-verify run-role-gate; do
+  set +e
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" "$old_command" \
+    >"$tmp_dir/old-$old_command.out" 2>&1
+  old_rc=$?
+  set -e
+  [ "$old_rc" -ne 0 ] || {
+    printf 'old Docker command unexpectedly succeeded: %s\n' "$old_command" >&2
+    exit 1
+  }
+done
+
+for old_command in configure-gerrit-ssh configure-agent-ssh configure-trigger verify-trigger; do
+  set +e
+  "$repo_root/scripts/integration-setup.sh" \
+    --gerrit-env "$runtime_dir/gerrit.env" \
+    --jenkins-controller-env "$runtime_dir/jenkins-controller.env" \
+    --jenkins-agent-env "$runtime_dir/jenkins-agent.env" \
+    --integration-env "$runtime_dir/integration.env" \
+    "$old_command" >"$tmp_dir/old-helper-$old_command.out" 2>&1
+  old_rc=$?
+  set -e
+  [ "$old_rc" -ne 0 ] || {
+    printf 'old integration helper command unexpectedly succeeded: %s\n' "$old_command" >&2
+    exit 1
+  }
+done
 
 failing_configure_calls="$tmp_dir/failing-configure-calls.log"
 failing_configure_helper="$tmp_dir/failing-configure-integration-setup.sh"
@@ -130,7 +162,7 @@ cat >"$failing_configure_helper" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
 case "$*" in
-  *' configure-gerrit-ssh') exit 42 ;;
+  *' configure-integration') exit 42 ;;
 esac
 SH
 chmod +x "$failing_configure_helper"
@@ -139,17 +171,13 @@ set +e
 env "${common_env[@]}" \
   HARNESS_TEST_INTEGRATION_HELPER="$failing_configure_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$failing_configure_calls" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" check >"$tmp_dir/check-failing-configure.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-integration \
+  >"$tmp_dir/configure-failure.out" 2>&1
 failing_configure_rc=$?
 set -e
 
 [ "$failing_configure_rc" -eq 42 ] || {
-  printf 'Expected check to return configure-gerrit-ssh failure rc 42, got %s\n' "$failing_configure_rc" >&2
+  printf 'Expected configure-integration failure rc 42, got %s\n' "$failing_configure_rc" >&2
   exit 1
 }
-grep -Fq -- '--yes configure-gerrit-ssh' "$failing_configure_calls"
-if grep -Eq -- '--yes configure-agent-ssh|--yes configure-trigger|--yes validate-integration' "$failing_configure_calls"; then
-  printf 'check continued integration commands after configure-gerrit-ssh failure\n' >&2
-  sed -n '1,120p' "$failing_configure_calls" >&2
-  exit 1
-fi
+grep -Fq -- '--yes configure-integration' "$failing_configure_calls"

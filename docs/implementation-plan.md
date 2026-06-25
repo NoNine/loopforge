@@ -265,22 +265,8 @@ Workflow contract:
 | Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/integration-setup-manual.md` for the cross-role command sequence and stop/review points. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
-Phase behavior code:
-
-- Each phase must check that its prerequisites are satisfied before doing
-  work.
-- If required inputs, artifacts, services, or prior checkpoints are missing,
-  the phase must fail clearly and stop.
-- Each phase owns only its own work. A phase must not rerun, replace, or
-  compensate for another phase.
-- Later phases must not silently trigger earlier phases. If an operator needs
-  an earlier phase again, they must invoke it directly and intentionally.
-- Repeated operator invocation is treated as an intentional rerun of that
-  phase, not as hidden retry logic for another phase.
-- Phase logs and evidence must stay bounded and identify the phase that
-  produced them.
-- Phase success means the phase completed its own job; it must not mean another
-  phase was replayed or repaired implicitly.
+See `docs/system-model.md` for the phase behavior contract and lifecycle
+boundary rules.
 
 Operator sequencing rules:
 
@@ -312,7 +298,7 @@ Operator sequencing rules:
   compatibility evidence.
 - The Jenkins agent helper must not register controller nodes.
 - Treat role-local `validate` as role-only readiness validation. Treat shared
-  `validate-integration` and `verify-trigger` as later cross-role acceptance
+  `validate-integration` and `verify-integration` as later cross-role acceptance
   for Gerrit SSH, event streaming, Jenkins agent scheduling, REST vote posting,
   and Gerrit review state.
 
@@ -348,7 +334,7 @@ rg -n "Operator Workflow Contract|Phase \\| Machine/environment \\| Helper comma
 rg -n "Artifact staging|Generated key transfer contract|Operator safety rules" docs/implementation-plan.md
 rg -n "private key|public key|fingerprint|redact|CHANGE_ME|staged artifact" docs/implementation-plan.md
 rg -n "^scripts/.+--env .+--yes" docs/implementation-plan.md
-rg -n "integration-setup.sh|configure-gerrit-ssh|configure-agent-ssh|configure-trigger|validate-integration|verify-trigger" docs/implementation-plan.md
+rg -n "integration-setup.sh|configure-integration|validate-integration|verify-integration" docs/implementation-plan.md
 rg -n "^[[:space:]]*(run|configure-controller-node)$" docs/implementation-plan.md
 ```
 
@@ -458,7 +444,7 @@ Expected command surface:
 
 ```text
 simulation/docker/simulate.sh preflight
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh up
 simulation/docker/simulate.sh status
 simulation/docker/simulate.sh prepare-artifacts --role gerrit
@@ -467,9 +453,12 @@ simulation/docker/simulate.sh prepare-artifacts --role jenkins-agent
 simulation/docker/simulate.sh stage-artifacts --role gerrit
 simulation/docker/simulate.sh stage-artifacts --role jenkins-controller
 simulation/docker/simulate.sh stage-artifacts --role jenkins-agent
-simulation/docker/simulate.sh run-role-gate --role gerrit
-simulation/docker/simulate.sh run-role-gate --role jenkins-controller
-simulation/docker/simulate.sh run-role-gate --role jenkins-agent
+simulation/docker/simulate.sh configure-role --role gerrit
+simulation/docker/simulate.sh validate-role --role gerrit
+simulation/docker/simulate.sh configure-role --role jenkins-controller
+simulation/docker/simulate.sh validate-role --role jenkins-controller
+simulation/docker/simulate.sh configure-role --role jenkins-agent
+simulation/docker/simulate.sh validate-role --role jenkins-agent
 simulation/docker/simulate.sh down
 ```
 
@@ -490,7 +479,8 @@ Implementation notes:
   target container and verifies target-side manifests and checksums before
   any install or configuration command can run. Terminal output should stay
   short and role-scoped.
-- `run-role-gate --role ...` runs the role helper readiness gate in the
+- `configure-role --role ...` runs role-local installation and configuration.
+  `validate-role --role ...` runs the role helper readiness validation in the
   corresponding target container. It must fail on dummy success,
   `planned-checks-only`, operation-plan-only success, or modeled proof for
   required runtime checks. Terminal output should stay short and role-scoped.
@@ -514,10 +504,11 @@ Verification:
 bash -n simulation/docker/simulate.sh
 simulation/docker/simulate.sh --help
 simulation/docker/simulate.sh preflight
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh up
 ! simulation/docker/simulate.sh prepare-artifacts --role unknown
-! simulation/docker/simulate.sh run-role-gate --role gerrit
+! simulation/docker/simulate.sh configure-role --role gerrit
+! simulation/docker/simulate.sh validate-role --role gerrit
 simulation/docker/simulate.sh down
 rg -n "dummy success|operation-plan-only|planned-checks-only|modeled" docs/implementation-plan.md
 rg -n "bundle-factory-helper|prepare-offline-deps|install-offline-deps" simulation/docker docs scripts templates examples
@@ -624,13 +615,14 @@ scripts/gerrit-setup.sh print-env-template
 scripts/gerrit-setup.sh --env examples/gerrit.env.example --dry-run preflight
 simulation/docker/simulate.sh prepare-artifacts --role gerrit
 simulation/docker/simulate.sh stage-artifacts --role gerrit
-simulation/docker/simulate.sh run-role-gate --role gerrit
+simulation/docker/simulate.sh configure-role --role gerrit
+simulation/docker/simulate.sh validate-role --role gerrit
 find generated/simulation/docker/<run-id>/evidence -type f -name '*gerrit*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/evidence -type f -name '*gerrit*')
 rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/exported-artifacts/gerrit/manifest.txt generated/simulation/docker/<run-id>/staging/gerrit/manifest.txt
 ! find generated/simulation/docker/<run-id>/exported-artifacts/gerrit generated/simulation/docker/<run-id>/staging/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "prepare-artifacts|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
-! scripts/gerrit-setup.sh --help | rg -n "configure-integration|verify-trigger|configure-agent"
+! scripts/gerrit-setup.sh --help | rg -n "configure-integration|verify-integration|configure-agent"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/gerrit-native-operations-reference.md
 ```
@@ -742,7 +734,7 @@ Implementation notes:
   generation, Jenkins build-agent registration, scheduling validation, Gerrit
   Trigger configuration, and end-to-end Gerrit Trigger verification are shared
   integration-helper outputs and must not be accepted as Step 8 outputs.
-- Gerrit Trigger configuration and shared `verify-trigger` behavior must
+- Gerrit Trigger configuration and shared `verify-integration` behavior must
   follow the Step 5 trigger integration contract when that later integration
   step is run.
 - `install`, `configure-service`, `install-plugins`, `configure-jcasc`, and
@@ -769,13 +761,14 @@ scripts/jenkins-controller-setup.sh print-env-template
 scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.example --dry-run preflight
 simulation/docker/simulate.sh prepare-artifacts --role jenkins-controller
 simulation/docker/simulate.sh stage-artifacts --role jenkins-controller
-simulation/docker/simulate.sh run-role-gate --role jenkins-controller
+simulation/docker/simulate.sh configure-role --role jenkins-controller
+simulation/docker/simulate.sh validate-role --role jenkins-controller
 find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-controller*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-controller*')
 rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller/manifest.txt generated/simulation/docker/<run-id>/staging/jenkins-controller/manifest.txt
 ! find generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller generated/simulation/docker/<run-id>/staging/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
-! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|verify-trigger"
+! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|verify-integration"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/jenkins-controller-native-operations-reference.md
 ```
@@ -897,7 +890,8 @@ scripts/jenkins-agent-setup.sh print-env-template
 scripts/jenkins-agent-setup.sh --env examples/jenkins-agent.env.example --dry-run preflight
 simulation/docker/simulate.sh prepare-artifacts --role jenkins-agent
 simulation/docker/simulate.sh stage-artifacts --role jenkins-agent
-simulation/docker/simulate.sh run-role-gate --role jenkins-agent
+simulation/docker/simulate.sh configure-role --role jenkins-agent
+simulation/docker/simulate.sh validate-role --role jenkins-agent
 find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-agent*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-agent*')
 rg -n "agent|SSH|label|executor|collect-evidence" docs/jenkins-agent-setup-manual.md scripts/jenkins-agent-setup.sh
@@ -980,14 +974,17 @@ Expected command surface:
 
 ```text
 simulation/docker/simulate.sh [--env FILE] preflight
-simulation/docker/simulate.sh [--env FILE] render-config
+simulation/docker/simulate.sh [--env FILE] init-run
 simulation/docker/simulate.sh [--env FILE] status
 simulation/docker/simulate.sh [--env FILE] prepare-artifacts
 simulation/docker/simulate.sh [--env FILE] stage-artifacts
 simulation/docker/simulate.sh [--env FILE] up
-simulation/docker/simulate.sh [--env FILE] check
-simulation/docker/simulate.sh [--env FILE] full-verify
-simulation/docker/simulate.sh [--env FILE] verify-state
+simulation/docker/simulate.sh [--env FILE] configure-role
+simulation/docker/simulate.sh [--env FILE] validate-role
+simulation/docker/simulate.sh [--env FILE] configure-integration
+simulation/docker/simulate.sh [--env FILE] validate-integration
+simulation/docker/simulate.sh [--env FILE] verify-integration
+simulation/docker/simulate.sh [--env FILE] audit-state
 simulation/docker/simulate.sh [--env FILE] down
 simulation/docker/simulate.sh [--env FILE] clean
 ```
@@ -1015,10 +1012,11 @@ Implementation notes:
   factory output to the Gerrit, Jenkins controller, and Jenkins agent
   containers, then verifies manifests and checksums on the target side before
   service mutation.
-- `simulate.sh check` is an independently repeatable readiness gate before
-  `simulate.sh full-verify`; `full-verify` must require the successful check
-  marker and must not run `check` implicitly.
-- `simulate.sh check` must invoke `scripts/integration-setup.sh
+- `simulate.sh validate-integration` is an independently repeatable passive
+  readiness phase before `simulate.sh verify-integration`; `verify-integration`
+  must require the successful validation marker and must not run
+  `validate-integration` implicitly.
+- `simulate.sh validate-integration` must invoke `scripts/integration-setup.sh
   validate-integration` for cross-role readiness once the real implementation
   exists, and must report blocked rather than success while the shared
   integration helper is scaffold-only.
@@ -1031,7 +1029,7 @@ Implementation notes:
   stream-events, modeled agent scheduling, modeled `Verified` voting, or a
   successful full verification summary without runtime proof from the real
   Gerrit, Jenkins controller, and Jenkins agent services.
-- `simulate.sh verify-state` is the explicit read-only command for the
+- `simulate.sh audit-state` is the explicit read-only command for the
   expensive container and bind-mount sweep. Normal lifecycle phases use the
   cheap runtime-config checks only and do not rerun other phases implicitly.
 - Docker logs must be written to bounded log files, not streamed verbosely into
@@ -1046,13 +1044,16 @@ Verification:
 bash -n simulation/docker/simulate.sh
 simulation/docker/simulate.sh --help
 simulation/docker/simulate.sh preflight
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh status
 simulation/docker/simulate.sh prepare-artifacts
 simulation/docker/simulate.sh stage-artifacts
 simulation/docker/simulate.sh up
-simulation/docker/simulate.sh check
-simulation/docker/simulate.sh full-verify
+simulation/docker/simulate.sh configure-role
+simulation/docker/simulate.sh validate-role
+simulation/docker/simulate.sh configure-integration
+simulation/docker/simulate.sh validate-integration
+simulation/docker/simulate.sh verify-integration
 ```
 
 Acceptance criteria:
@@ -1064,15 +1065,15 @@ Acceptance criteria:
 - Docker simulation uses the role helpers' functional install, configuration,
   validation, and role-local evidence commands, then uses
   `scripts/integration-setup.sh` for cross-role integration, agent scheduling,
-  trigger verification, and integration evidence instead of reimplementing or
+  integration verification, and integration evidence instead of reimplementing or
   modeling that behavior inside `simulate.sh`.
 - LDAP, local OS runtime account, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugin,
   Jenkins-to-Gerrit SSH, stream-events, and Jenkins agent readiness checks pass
   with separate evidence.
-- Full verification separately proves Gerrit event receipt, Jenkins job
+- `verify-integration` separately proves Gerrit event receipt, Jenkins job
   scheduling, agent execution, and Gerrit `Verified +1` vote posting.
 - Verification writes a summary that labels the mode as Docker simulation.
-- A successful full verification summary does not use modeled pass results for
+- A successful `verify-integration` summary does not use modeled pass results for
   required runtime outcomes and must include proof from the real Gerrit,
   Jenkins controller, and Jenkins agent services.
 
@@ -1219,14 +1220,17 @@ scripts/jenkins-agent-setup.sh --help
 scripts/integration-setup.sh --help
 scripts/collect-evidence.sh --help
 simulation/docker/simulate.sh preflight
-simulation/docker/simulate.sh render-config
+simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh prepare-artifacts
 simulation/docker/simulate.sh stage-artifacts
 simulation/docker/simulate.sh up
-simulation/docker/simulate.sh check
-simulation/docker/simulate.sh full-verify
+simulation/docker/simulate.sh configure-role
+simulation/docker/simulate.sh validate-role
+simulation/docker/simulate.sh configure-integration
+simulation/docker/simulate.sh validate-integration
+simulation/docker/simulate.sh verify-integration
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes validate-integration
-scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes verify-trigger
+scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes verify-integration
 scripts/collect-evidence.sh
 simulation/docker/simulate.sh down
 simulation/vm/vm-verify.sh --help

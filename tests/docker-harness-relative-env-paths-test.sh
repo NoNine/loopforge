@@ -21,12 +21,12 @@ custom_state_dir="$repo_root/generated/simulation/docker/custom-relative/state"
   cd /tmp
   HARNESS_RUN_ID="relative-default-$$" \
   HARNESS_PROJECT_NAME="relative-default-$$" \
-    "$script" render-config >"$tmp_dir/default-render.out"
+    "$script" init-run >"$tmp_dir/default-init-run.out"
 )
 
 for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
   [ -f "$default_state_dir/rendered/runtime-inputs/$file" ] || {
-    printf 'Expected default render runtime input copy from non-repo cwd: %s\n' "$file" >&2
+    printf 'Expected default init-run runtime input copy from non-repo cwd: %s\n' "$file" >&2
     exit 1
   }
 done
@@ -43,7 +43,7 @@ EOF
 
 (
   cd "$repo_root"
-    "$script" render-config --env "$tmp_dir/custom-relative.env" >"$tmp_dir/custom-render.out"
+    "$script" init-run --env "$tmp_dir/custom-relative.env" >"$tmp_dir/custom-init-run.out"
 )
 
 runtime_env="$custom_state_dir/rendered/harness.runtime.env"
