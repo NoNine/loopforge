@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 
 for path in \
   simulation/docker/compose.yaml \
@@ -47,7 +48,7 @@ grep -Fq -- '--gid ci-operator --home-dir /home/ci-operator --shell /bin/bash ci
   printf 'Docker target image must include a distinct ci-operator account\n' >&2
   exit 1
 }
-grep -Fq -- 'sudo \' "$repo_root/simulation/docker/target/Dockerfile" || {
+grep -Fq -- "sudo \\" "$repo_root/simulation/docker/target/Dockerfile" || {
   printf 'Docker target image must install sudo for the ci-operator account\n' >&2
   exit 1
 }
@@ -114,6 +115,17 @@ if grep -Eq '^[[:space:]]+name: "\$\{HARNESS_PROJECT_NAME\}-network"$' "$repo_ro
   printf 'Docker compose must not use custom network name unsupported by legacy docker-compose v1\n' >&2
   exit 1
 fi
+for service in bundle-factory gerrit-target jenkins-controller-target jenkins-agent-target; do
+  awk -v service="$service" '
+    $0 == "  " service ":" { in_service=1; next }
+    in_service && /^  [A-Za-z0-9_-]+:/ { exit !found }
+    in_service && $0 == "    init: true" { found=1 }
+    END { if (in_service) exit !found }
+  ' "$repo_root/simulation/docker/compose.yaml" || {
+    printf 'Docker compose service %s must enable init: true to reap helper child processes\n' "$service" >&2
+    exit 1
+  }
+done
 
 grep -Fq -- '${HARNESS_PRODUCT_HOME_DIR}/gerrit:/srv/gerrit' "$repo_root/simulation/docker/compose.yaml" || {
   printf 'Docker compose must mount Gerrit product home from HARNESS_PRODUCT_HOME_DIR\n' >&2

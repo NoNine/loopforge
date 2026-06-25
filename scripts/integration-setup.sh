@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2129,SC2015
 
 set -euo pipefail
-
-script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 
 gerrit_env_file=""
 jenkins_controller_env_file=""
@@ -413,6 +411,10 @@ integration_container_state_dir() {
 
 integration_log_dir() {
   printf '%s/integration\n' "$HARNESS_LOG_DIR"
+}
+
+integration_container_log_dir() {
+  printf '%s\n' /var/log/loopforge/integration
 }
 
 integration_evidence_dir() {
@@ -1256,14 +1258,17 @@ EOF
 }
 
 prove_stream_events() {
-  local log event_project event_json project_json container_json container_project_json listener_log listener_pid change_file
+  local log event_project event_json project_json container_json container_project_json listener_log listener_name container_listener_log change_file listener_pid_file
   log="${1:?log required}"
   event_project="${GERRIT_VERIFICATION_PROJECT}-stream-events"
   event_json="$(integration_host_state_dir)/status/stream-event-change.json"
   project_json="$(integration_host_state_dir)/status/stream-event-project.json"
   container_json="/tmp/stream-event-change.json"
   container_project_json="/tmp/stream-event-project.json"
-  listener_log="$(integration_log_dir)/stream-events-observe-$(timestamp_utc).log"
+  listener_name="stream-events-observe-$(timestamp_utc).log"
+  listener_log="$(integration_log_dir)/$listener_name"
+  container_listener_log="$(integration_container_log_dir)/$listener_name"
+  listener_pid_file="/tmp/loopforge-stream-events-listener.pid"
   change_file="$(integration_host_state_dir)/status/stream-event-create-result.json"
   cat >"$project_json" <<EOF
 {
@@ -1285,30 +1290,51 @@ EOF
     gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$event_project" >>"$log" 2>&1 ||
       die "Gerrit REST could not create or find stream-events project $event_project"
   fi
-  (
-    docker exec "$(jenkins_container)" ssh \
-      -i "$(jenkins_ops_keys_dir)/jenkins-gerrit" \
+
+  cleanup_stream_events_listener() {
+    docker_exec_sh "$(jenkins_container)" "
+      if [ -s '$listener_pid_file' ]; then
+        pid=\$(cat '$listener_pid_file')
+        case \"\$pid\" in
+          ''|*[!0-9]*) ;;
+          *)
+            kill \"\$pid\" >/dev/null 2>&1 || true
+            wait \"\$pid\" >/dev/null 2>&1 || true
+            ;;
+        esac
+        rm -f '$listener_pid_file'
+      fi
+    " >/dev/null 2>&1 || true
+  }
+
+  cleanup_stream_events_listener
+  docker_exec_sh "$(jenkins_container)" "
+    set -e
+    rm -f '$listener_pid_file'
+    ssh \
+      -i '$(jenkins_ops_keys_dir)/jenkins-gerrit' \
       -o BatchMode=yes \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
-      -p "$GERRIT_SSH_PORT" \
-      "$JENKINS_GERRIT_INTEGRATION_ACCOUNT@$GERRIT_HOST" \
-      gerrit stream-events >"$listener_log" 2>&1
-  ) &
-  listener_pid="$!"
+      -p '$GERRIT_SSH_PORT' \
+      '$JENKINS_GERRIT_INTEGRATION_ACCOUNT@$GERRIT_HOST' \
+      gerrit stream-events >'$container_listener_log' 2>&1 &
+    printf '%s\n' \"\$!\" >'$listener_pid_file'
+  " >>"$log" 2>&1
   sleep 2
-  gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" POST "/changes/" "$container_json" >"$change_file"
+  if ! gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" POST "/changes/" "$container_json" >"$change_file"; then
+    cleanup_stream_events_listener
+    die "Gerrit REST could not create stream-events validation change"
+  fi
   for _ in $(seq 1 20); do
     if grep -Eq '"type":"patchset-created"|"type": "patchset-created"' "$listener_log"; then
-      kill "$listener_pid" >/dev/null 2>&1 || true
-      wait "$listener_pid" >/dev/null 2>&1 || true
+      cleanup_stream_events_listener
       printf 'stream_events=pass log=%s\n' "$listener_log" >>"$log"
       return 0
     fi
     sleep 1
   done
-  kill "$listener_pid" >/dev/null 2>&1 || true
-  wait "$listener_pid" >/dev/null 2>&1 || true
+  cleanup_stream_events_listener
   tail -40 "$listener_log" >>"$log" 2>/dev/null || true
   die "Timed out waiting for real Gerrit stream-events patchset-created event"
 }

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016
 
 set -euo pipefail
 
-repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 run_id="integration-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
@@ -66,6 +67,15 @@ grep -Fq -- '--yes configure-trigger' "$integration_calls"
 grep -Fq -- '--yes validate-integration' "$integration_calls"
 grep -Fq -- "--gerrit-env $runtime_dir/gerrit.env" "$integration_calls"
 grep -Fq -- "--integration-env $runtime_dir/integration.env" "$integration_calls"
+grep -Fq -- 'listener_pid_file="/tmp/loopforge-stream-events-listener.pid"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'container_listener_log="$(integration_container_log_dir)/$listener_name"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- "gerrit stream-events >'\$container_listener_log' 2>&1 &" "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'cleanup_stream_events_listener()' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'Gerrit REST could not create stream-events validation change' "$repo_root/scripts/integration-setup.sh"
+if grep -Fq -- 'docker exec "$(jenkins_container)" ssh' "$repo_root/scripts/integration-setup.sh"; then
+  printf 'stream-events validation must not background a host-side docker exec listener\n' >&2
+  exit 1
+fi
 if grep -Fq -- "$tmp_dir/gerrit.env" "$integration_calls"; then
   printf 'integration wiring used original Gerrit env path after render\n' >&2
   exit 1

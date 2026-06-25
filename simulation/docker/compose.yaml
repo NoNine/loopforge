@@ -10,6 +10,7 @@ services:
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-bundle-factory"
     hostname: bundle-factory
+    init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
     environment:
       HARNESS_ENVIRONMENT: bundle-factory
@@ -58,6 +59,7 @@ services:
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-gerrit-target"
     hostname: gerrit-target
+    init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
     environment:
       HARNESS_ENVIRONMENT: gerrit-target
@@ -89,6 +91,7 @@ services:
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-controller-target"
     hostname: jenkins-controller-target
+    init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
     environment:
       HARNESS_ENVIRONMENT: jenkins-controller-target
@@ -119,6 +122,7 @@ services:
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-agent-target"
     hostname: jenkins-agent-target
+    init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
     environment:
       HARNESS_ENVIRONMENT: jenkins-agent-target
