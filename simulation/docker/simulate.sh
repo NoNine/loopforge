@@ -17,6 +17,9 @@ Usage:
   simulation/docker/simulate.sh <command> [options]
 
 Commands:
+  run
+
+Phases:
   preflight
   init-run
   up
@@ -27,7 +30,7 @@ Commands:
   validate-role [--role <gerrit|jenkins-controller|jenkins-agent>]
   configure-integration
   validate-integration
-  verify-integration
+  prove-integration
   audit-state
   down
   clean
@@ -541,6 +544,14 @@ runtime_config_valid() {
     verify_run_marker >/dev/null 2>&1 &&
     validate_core_generated_state >/dev/null 2>&1
   ) >/dev/null 2>&1
+}
+
+generated_runtime_state_present() {
+  [ -e "$HARNESS_RUN_MARKER" ] ||
+    [ -e "$HARNESS_RENDERED_ENV" ] ||
+    [ -e "$HARNESS_RUNTIME_ENV" ] ||
+    [ -e "$HARNESS_RUNTIME_INPUT_DIR" ] ||
+    [ -e "$HARNESS_STATE_DIR/rendered" ]
 }
 
 verify_selected_container_mounts() {
@@ -2226,6 +2237,50 @@ check_ubuntu_service_baseline() {
   write_evidence baseline "$label" pass "simulate.sh up" "$log" "Container OS release matches Version Baseline; resolved image id recorded" >/dev/null
 }
 
+workflow_step() {
+  local step
+  step="${1:?step required}"
+  shift
+  printf 'run: step=%s\n' "$step"
+  if [ -n "${HARNESS_TEST_WORKFLOW_CALLS:-}" ]; then
+    mkdir -p "$(dirname "$HARNESS_TEST_WORKFLOW_CALLS")"
+    printf '%s\n' "$step" >>"$HARNESS_TEST_WORKFLOW_CALLS"
+    return 0
+  fi
+  "$@"
+}
+
+workflow_downstream_steps() {
+  workflow_step up cmd_up
+  workflow_step status cmd_status
+  workflow_step prepare-artifacts cmd_prepare_artifacts ""
+  workflow_step stage-artifacts cmd_stage_artifacts ""
+  workflow_step configure-role cmd_configure_role ""
+  workflow_step validate-role cmd_validate_role ""
+  workflow_step configure-integration cmd_configure_integration
+  workflow_step validate-integration cmd_validate_integration
+  workflow_step prove-integration cmd_prove_integration
+}
+
+cmd_run() {
+  bootstrap_harness_env
+  if runtime_config_valid; then
+    printf 'run: mode=resume run-id=%s\n' "$HARNESS_RUN_ID"
+    workflow_downstream_steps
+    return
+  fi
+  if selected_containers_exist; then
+    die "Docker generated state is missing or invalid while selected containers exist; run down or clean before running workflow"
+  fi
+  if generated_runtime_state_present; then
+    die "Docker generated state is partial or inconsistent; rerun init-run before running workflow"
+  fi
+  printf 'run: mode=fresh run-id=%s\n' "$HARNESS_RUN_ID"
+  workflow_step preflight cmd_preflight
+  workflow_step init-run cmd_init_run
+  workflow_downstream_steps
+}
+
 cmd_preflight() {
   bootstrap_harness_env
   validate_harness_inputs
@@ -2906,7 +2961,7 @@ EOF
   chmod 0600 "$marker"
 }
 
-verify_integration_validate_marker() {
+prove_integration_validate_marker() {
   local marker fingerprint
   marker="$(integration_validate_marker_path)"
   [ -f "$marker" ] || die "Missing successful validate-integration marker; run validate-integration first"
@@ -2976,32 +3031,32 @@ cmd_validate_integration() {
   return "$rc"
 }
 
-cmd_verify_integration() {
+cmd_prove_integration() {
   local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
   refresh_integration_args
-  verify_integration_validate_marker
+  prove_integration_validate_marker
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
-  log="$(bounded_log_path verify-integration)"
-  "$integration_helper" "${integration_args[@]}" --yes verify-integration >"$log" 2>&1 || rc=$?
+  log="$(bounded_log_path prove-integration)"
+  "$integration_helper" "${integration_args[@]}" --yes prove-integration >"$log" 2>&1 || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then
-      evidence="$(write_evidence verify-integration integration fail "simulate.sh verify-integration" "$log" "Forbidden success marker found in integration verification log")"
-      print_command_failure verify-integration "" failed "$log" "$evidence"
+      evidence="$(write_evidence prove-integration integration fail "simulate.sh prove-integration" "$log" "Forbidden success marker found in integration proof log")"
+      print_command_failure prove-integration "" failed "$log" "$evidence"
       return 1
     fi
-    evidence="$(write_evidence verify-integration integration pass "simulate.sh verify-integration" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
-    print_command_summary verify-integration "" ok
+    evidence="$(write_evidence prove-integration integration pass "simulate.sh prove-integration" "$log" "Shared integration helper proved disposable change, Gerrit event receipt, Jenkins job scheduling, agent execution, and Verified +1")"
+    print_command_summary prove-integration "" ok
     return 0
   fi
 
   write_blocked_integration_evidence job-execution "$log" "Blocked: shared integration helper has not implemented real disposable Jenkins job execution proof"
   write_blocked_integration_evidence verified-vote "$log" "Blocked: shared integration helper has not implemented real Gerrit Verified +1 vote proof"
-  evidence="$(write_evidence verify-integration integration blocked "simulate.sh verify-integration" "$log" "Shared integration helper reported blocked verification; Docker simulation cannot claim end-to-end success")"
-  print_command_summary verify-integration "" blocked
+  evidence="$(write_evidence prove-integration integration blocked "simulate.sh prove-integration" "$log" "Shared integration helper reported blocked proof; Docker simulation cannot claim end-to-end success")"
+  print_command_summary prove-integration "" blocked
   return "$rc"
 }
 
@@ -3233,6 +3288,11 @@ main() {
   HARNESS_ENV_FILE="$env_file"
   command_name="${1:-}"
   case "$command_name" in
+    run)
+      shift
+      parse_env_only_args "$@"
+      cmd_run
+      ;;
     preflight)
       shift
       parse_env_only_args "$@"
@@ -3283,10 +3343,10 @@ main() {
       parse_env_only_args "$@"
       cmd_validate_integration
       ;;
-    verify-integration)
+    prove-integration)
       shift
       parse_env_only_args "$@"
-      cmd_verify_integration
+      cmd_prove_integration
       ;;
     audit-state)
       shift

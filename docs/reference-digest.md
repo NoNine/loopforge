@@ -191,7 +191,7 @@ shared helper. It runs after the three role manuals are complete.
 | --- | --- |
 | `configure-integration` | Configure durable cross-role integration state: Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit integration access, the global `Verified` label, scoped vote permissions, Jenkins credentials, Jenkins node config, shared storage, and the Gerrit Trigger server. |
 | `validate-integration` | After `--yes`, passively validate cross-role readiness and required configuration without creating disposable proof state. `--dry-run` must not create Gerrit or Jenkins state. |
-| `verify-integration` | After `--yes` and a successful validation marker, run active proof: shared storage, Gerrit SSH and stream-events, agent connection, disposable Jenkins job execution, REST `Verified +1`, and Gerrit review state. |
+| `prove-integration` | After `--yes` and a successful validation marker, run active proof: shared storage, Gerrit SSH and stream-events, agent connection, disposable Jenkins job execution, REST `Verified +1`, and Gerrit review state. |
 | `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, REST vote results, Gerrit review state, bounded logs, and redaction status. |
 
 The helper may fail closed until Docker or VM integration exists. The reviewed
@@ -215,7 +215,7 @@ Docker simulation should expose:
 | `simulation/docker/simulate.sh validate-role` | Run role-local validation and evidence collection for one or all roles without rerunning configuration. |
 | `simulation/docker/simulate.sh configure-integration` | Invoke the shared integration helper for durable cross-role configuration. |
 | `simulation/docker/simulate.sh validate-integration` | Invoke passive shared integration validation and write the validation marker. |
-| `simulation/docker/simulate.sh verify-integration` | Require the validation marker, then invoke active shared integration proof without rerunning validation. |
+| `simulation/docker/simulate.sh prove-integration` | Require the validation marker, then invoke active shared integration proof without rerunning validation. |
 | `simulation/docker/simulate.sh down` | Stop the simulation without deleting retained generated output. |
 | `simulation/docker/simulate.sh clean` | Manually remove mutable generated runtime data under the validated repo-local generated run root while preserving exported artifacts, evidence, and logs. |
 

@@ -240,6 +240,10 @@ interpretation of the proof.
 The setup system moves through checkpoints. Each checkpoint has an owner, a
 mutation boundary, and evidence obligations.
 
+The simulation docs provide layer-specific realizations of this lifecycle
+model. They may split, collapse, or add simulation-only command phases, but
+they must preserve the checkpoint semantics defined here.
+
 | Checkpoint | Owner | Boundary |
 | --- | --- | --- |
 | Input review | Human operator or machine runner | Prepare reviewed env files and remove placeholders. No target mutation. |

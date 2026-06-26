@@ -55,21 +55,23 @@ ownership are documented in `docs/system-model.md`.
 
 ```mermaid
 flowchart LR
-  preflight[preflight]
-  initRun[init-run]
-  up[up]
-  status[status]
-  prepare[prepare-artifacts]
-  stage[stage-artifacts]
-  configureRole[configure-role]
-  validateRole[validate-role]
-  configureIntegration[configure-integration]
-  validateIntegration[validate-integration]
-  verifyIntegration[verify-integration]
+  subgraph run[run]
+    preflight[preflight]
+    initRun[init-run]
+    up[up]
+    status[status]
+    prepare[prepare-artifacts]
+    stage[stage-artifacts]
+    configureRole[configure-role]
+    validateRole[validate-role]
+    configureIntegration[configure-integration]
+    validateIntegration[validate-integration]
+    proveIntegration[prove-integration]
+  end
   down[down]
   clean[clean]
 
-  preflight --> initRun --> up --> status --> prepare --> stage --> configureRole --> validateRole --> configureIntegration --> validateIntegration --> verifyIntegration --> down --> clean
+  preflight --> initRun --> up --> status --> prepare --> stage --> configureRole --> validateRole --> configureIntegration --> validateIntegration --> proveIntegration --> down --> clean
 ```
 
 ## Host Requirements
@@ -89,26 +91,26 @@ package matrix.
 The Docker simulation CLI is the first executable entrypoint:
 
 ```bash
-simulation/docker/simulate.sh preflight
-simulation/docker/simulate.sh init-run
-simulation/docker/simulate.sh up
-simulation/docker/simulate.sh status
-simulation/docker/simulate.sh prepare-artifacts
-simulation/docker/simulate.sh stage-artifacts
-simulation/docker/simulate.sh configure-role
-simulation/docker/simulate.sh validate-role
-simulation/docker/simulate.sh configure-integration
-simulation/docker/simulate.sh validate-integration
-simulation/docker/simulate.sh verify-integration
+simulation/docker/simulate.sh run
+```
+
+`run` is the normal operator workflow. It reports `fresh` or `resume` and
+then drives the expanded phase sequence through `prove-integration`.
+
+After inspection, stop containers or remove generated runtime state:
+
+```bash
 simulation/docker/simulate.sh down
 simulation/docker/simulate.sh clean
 ```
 
+`down` stops harness containers while preserving generated state for review.
 Use `clean` when generated runtime state should be removed.
 
 To use a copied harness env file instead of the default example, pass
 `--env FILE` to each command. See `simulation/docker/README.md` for command
-details, inputs, outputs, generated paths, and simulation accounts.
+details, phase commands, inputs, outputs, generated paths, and simulation
+accounts.
 
 ## Repository Map
 

@@ -22,6 +22,14 @@ is not authority for native target-host baselines. See
 
 ## Command Reference
 
+Composite command:
+
+| Command | Purpose |
+| --- | --- |
+| `run [--env FILE]` | Runs the normal Docker simulation workflow. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, or `audit-state`. |
+
+Phase and lifecycle commands:
+
 | Command | Purpose |
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
@@ -34,7 +42,7 @@ is not authority for native target-host baselines. See
 | `validate-role [--env FILE] [--role ROLE]` | Runs one role-local validation phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
 | `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server. Success prints a short `configure-integration: ok` summary. |
 | `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
-| `verify-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `verify-integration: ok` summary. |
+| `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
 | `audit-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 | `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
@@ -177,14 +185,14 @@ simulation/docker/simulate.sh --env FILE configure-role
 simulation/docker/simulate.sh --env FILE validate-role
 simulation/docker/simulate.sh --env FILE configure-integration
 simulation/docker/simulate.sh --env FILE validate-integration
-simulation/docker/simulate.sh --env FILE verify-integration
+simulation/docker/simulate.sh --env FILE prove-integration
 simulation/docker/simulate.sh --env FILE down
 simulation/docker/simulate.sh --env FILE clean
 ```
 
 Use `configure-role` and `validate-role` for role-local work only. Use
 `validate-integration` for passive cross-role readiness and
-`verify-integration` only after `validate-integration` has already passed for
+`prove-integration` only after `validate-integration` has already passed for
 the same initialized run.
 Use `audit-state` when you need the slower bind-mount audit for an existing
 run. Normal lifecycle phases keep the cheap runtime-config check only.
@@ -195,7 +203,7 @@ Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,
 integration validation, trigger verification, and integration evidence use
 `scripts/integration-setup.sh`.
 
-`validate-integration` and `verify-integration` must fail or report blocked
+`validate-integration` and `prove-integration` must fail or report blocked
 rather than claim Docker readiness when real integration proof is unavailable.
 Forbidden synthetic success markers in role or integration logs are treated as
 failures.

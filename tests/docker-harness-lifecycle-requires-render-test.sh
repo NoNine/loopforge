@@ -75,7 +75,7 @@ run_lifecycle_without_render configure-role configure-role --role gerrit
 run_lifecycle_without_render validate-role validate-role --role gerrit
 run_lifecycle_without_render configure-integration configure-integration
 run_lifecycle_without_render validate-integration validate-integration
-run_lifecycle_without_render verify-integration verify-integration
+run_lifecycle_without_render prove-integration prove-integration
 run_lifecycle_without_render verify audit-state
 
 run_recovery_without_render() {

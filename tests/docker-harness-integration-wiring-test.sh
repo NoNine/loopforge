@@ -76,9 +76,9 @@ env "${common_env[@]}" \
 grep -Fq -- '--yes validate-integration' "$integration_calls"
 
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-integration \
-  >"$tmp_dir/verify-integration.out"
-grep -Fq -- '--yes verify-integration' "$integration_calls"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prove-integration \
+  >"$tmp_dir/prove-integration.out"
+grep -Fq -- '--yes prove-integration' "$integration_calls"
 
 grep -Fq -- 'listener_pid_file="/tmp/loopforge-stream-events-listener.pid"' "$repo_root/scripts/integration-setup.sh"
 grep -Fq -- 'container_listener_log="$(integration_container_log_dir)/$listener_name"' "$repo_root/scripts/integration-setup.sh"
@@ -90,8 +90,8 @@ if grep -Fq -- 'server.startConnection()' "$repo_root/scripts/integration-setup.
   printf 'configure-integration must not call startConnection after server.start\n' >&2
   exit 1
 fi
-if sed -n '/cmd_verify_integration()/,/^}/p' "$repo_root/scripts/integration-setup.sh" | grep -Fq -- 'validate_integration_impl'; then
-  printf 'verify-integration must require validate-integration state, not rerun it\n' >&2
+if sed -n '/cmd_prove_integration()/,/^}/p' "$repo_root/scripts/integration-setup.sh" | grep -Fq -- 'validate_integration_impl'; then
+  printf 'prove-integration must require validate-integration state, not rerun it\n' >&2
   exit 1
 fi
 if sed -n '/validate_integration_impl()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
@@ -112,22 +112,22 @@ env \
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$missing_marker_calls" \
   HARNESS_ENV_FILE="$tmp_dir/harness.env" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" verify-integration \
-  >"$tmp_dir/verify-missing-marker.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prove-integration \
+  >"$tmp_dir/prove-missing-marker.out" 2>&1
 missing_marker_rc=$?
 set -e
 [ "$missing_marker_rc" -ne 0 ] || {
-  printf 'verify-integration unexpectedly succeeded without prior validate-integration\n' >&2
+  printf 'prove-integration unexpectedly succeeded without prior validate-integration\n' >&2
   exit 1
 }
-grep -Fq 'Missing successful validate-integration marker; run validate-integration first' "$tmp_dir/verify-missing-marker.out"
+grep -Fq 'Missing successful validate-integration marker; run validate-integration first' "$tmp_dir/prove-missing-marker.out"
 [ ! -s "$missing_marker_calls" ] || {
-  printf 'verify-integration called integration without a prior validate marker\n' >&2
+  printf 'prove-integration called integration without a prior validate marker\n' >&2
   sed -n '1,120p' "$missing_marker_calls" >&2
   exit 1
 }
 
-for old_command in render-config verify-state check full-verify run-role-gate; do
+for old_command in render-config verify-state verify-integration check full-verify run-role-gate; do
   set +e
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" "$old_command" \
     >"$tmp_dir/old-$old_command.out" 2>&1
@@ -139,7 +139,7 @@ for old_command in render-config verify-state check full-verify run-role-gate; d
   }
 done
 
-for old_command in configure-gerrit-ssh configure-agent-ssh configure-trigger verify-trigger; do
+for old_command in configure-gerrit-ssh configure-agent-ssh configure-trigger verify-trigger verify-integration; do
   set +e
   "$repo_root/scripts/integration-setup.sh" \
     --gerrit-env "$runtime_dir/gerrit.env" \

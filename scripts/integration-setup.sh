@@ -24,7 +24,7 @@ Usage:
 Commands:
   configure-integration
   validate-integration
-  verify-integration
+  prove-integration
   collect-evidence
 
 Options:
@@ -1514,13 +1514,13 @@ EOF
     "$change" "$patchset" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
 }
 
-cmd_verify_integration() {
+cmd_prove_integration() {
   local log change patchset change_id review_json vote_result evidence
   load_inputs
-  confirm_mutation verify-integration || return 0
+  confirm_mutation prove-integration || return 0
   require_docker_mode
   ensure_dirs
-  log="$(bounded_log_path verify-integration)"
+  log="$(bounded_log_path prove-integration)"
   [ -s "$(status_file validate-integration)" ] || die "Missing successful validate-integration marker; run validate-integration with --yes first"
   prove_shared_storage_rw "$log"
   ssh_from_controller_to_gerrit "gerrit version" >>"$log" 2>&1
@@ -1554,7 +1554,7 @@ PY
   write_evidence agent-connection pass "Jenkins runtime OS user connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
   write_evidence job-execution pass "Disposable Jenkins verification job executed successfully on the configured agent" "$log" "change=$change job=$JENKINS_VERIFICATION_JOB" >/dev/null
   evidence="$(write_evidence verified-vote pass "Gerrit review state contains a real Verified +1 posted by the Jenkins integration account through simulation-only direct Gerrit REST" "$log" "change=$change patchset=$patchset review_apply=simulation-only-direct-rest")"
-  printf 'status=pass command=verify-integration proof=real change=%s patchset=%s shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass job_execution=pass verified_vote=pass review_apply=simulation-only-direct-rest evidence=%s log=%s\n' "$change" "$patchset" "$evidence" "$log"
+  printf 'status=pass command=prove-integration proof=real change=%s patchset=%s shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass job_execution=pass verified_vote=pass review_apply=simulation-only-direct-rest evidence=%s log=%s\n' "$change" "$patchset" "$evidence" "$log"
 }
 
 cmd_collect_evidence() {
@@ -1620,7 +1620,7 @@ parse_args() {
         usage
         exit 0
         ;;
-      configure-integration|validate-integration|verify-integration|collect-evidence)
+      configure-integration|validate-integration|prove-integration|collect-evidence)
         command_name="$1"
         shift
         [ "$#" -eq 0 ] || die_usage "Unexpected arguments after command: $*"
@@ -1640,7 +1640,7 @@ main() {
   case "$command_name" in
     configure-integration) cmd_configure_integration ;;
     validate-integration) cmd_validate_integration ;;
-    verify-integration) cmd_verify_integration ;;
+    prove-integration) cmd_prove_integration ;;
     collect-evidence) cmd_collect_evidence ;;
     *) die_usage "Unknown command: $command_name" ;;
   esac

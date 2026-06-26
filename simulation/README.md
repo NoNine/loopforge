@@ -3,7 +3,7 @@
 This directory defines the shared simulation model for the v1 Gerrit/Jenkins
 setup package. Layer-specific command ownership lives in the Docker and VM
 README files; this file owns the common topology, baseline, source boundaries,
-output conventions, and checkpoint meanings.
+output conventions, and the simulation realization of lifecycle checkpoints.
 
 The model has two layers:
 
@@ -94,8 +94,10 @@ logs.
 
 ## Checkpoint Contract
 
-Each simulation layer maps these checkpoints to its own commands. The
-checkpoint meaning stays the same across layers.
+This table operationalizes the lifecycle checkpoints defined in
+`docs/system-model.md`. Some rows correspond directly to those checkpoints,
+while others are simulation-layer additions or collapsed/split realizations
+for Docker and VM execution.
 
 | Checkpoint | Purpose | What it does | Output/evidence | Pass or block condition |
 | --- | --- | --- | --- | --- |

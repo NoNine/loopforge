@@ -325,7 +325,7 @@ and integration evidence belong to `scripts/integration-setup.sh`.
 After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
 use `docs/integration-setup-manual.md` for the shared helper workflow. That
 manual is the command authority for `configure-integration`,
-`validate-integration`, `verify-integration`, and `collect-evidence`.
+`validate-integration`, `prove-integration`, and `collect-evidence`.
 
 Gerrit role-local setup must not mutate `All-Projects.git`, `All-Users.git`,
 Gerrit labels, Jenkins service groups, public keys, `stream-events` grants, or

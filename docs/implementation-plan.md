@@ -298,7 +298,7 @@ Operator sequencing rules:
   compatibility evidence.
 - The Jenkins agent helper must not register controller nodes.
 - Treat role-local `validate` as role-only readiness validation. Treat shared
-  `validate-integration` and `verify-integration` as later cross-role acceptance
+  `validate-integration` and `prove-integration` as later cross-role acceptance
   for Gerrit SSH, event streaming, Jenkins agent scheduling, REST vote posting,
   and Gerrit review state.
 
@@ -334,7 +334,7 @@ rg -n "Operator Workflow Contract|Phase \\| Machine/environment \\| Helper comma
 rg -n "Artifact staging|Generated key transfer contract|Operator safety rules" docs/implementation-plan.md
 rg -n "private key|public key|fingerprint|redact|CHANGE_ME|staged artifact" docs/implementation-plan.md
 rg -n "^scripts/.+--env .+--yes" docs/implementation-plan.md
-rg -n "integration-setup.sh|configure-integration|validate-integration|verify-integration" docs/implementation-plan.md
+rg -n "integration-setup.sh|configure-integration|validate-integration|prove-integration" docs/implementation-plan.md
 rg -n "^[[:space:]]*(run|configure-controller-node)$" docs/implementation-plan.md
 ```
 
@@ -622,7 +622,7 @@ find generated/simulation/docker/<run-id>/evidence -type f -name '*gerrit*' -pri
 rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/exported-artifacts/gerrit/manifest.txt generated/simulation/docker/<run-id>/staging/gerrit/manifest.txt
 ! find generated/simulation/docker/<run-id>/exported-artifacts/gerrit generated/simulation/docker/<run-id>/staging/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "prepare-artifacts|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
-! scripts/gerrit-setup.sh --help | rg -n "configure-integration|verify-integration|configure-agent"
+! scripts/gerrit-setup.sh --help | rg -n "configure-integration|prove-integration|configure-agent"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/gerrit-native-operations-reference.md
 ```
@@ -734,7 +734,7 @@ Implementation notes:
   generation, Jenkins build-agent registration, scheduling validation, Gerrit
   Trigger configuration, and end-to-end Gerrit Trigger verification are shared
   integration-helper outputs and must not be accepted as Step 8 outputs.
-- Gerrit Trigger configuration and shared `verify-integration` behavior must
+- Gerrit Trigger configuration and shared `prove-integration` behavior must
   follow the Step 5 trigger integration contract when that later integration
   step is run.
 - `install`, `configure-service`, `install-plugins`, `configure-jcasc`, and
@@ -768,7 +768,7 @@ find generated/simulation/docker/<run-id>/evidence -type f -name '*jenkins-contr
 rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller/manifest.txt generated/simulation/docker/<run-id>/staging/jenkins-controller/manifest.txt
 ! find generated/simulation/docker/<run-id>/exported-artifacts/jenkins-controller generated/simulation/docker/<run-id>/staging/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
-! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|verify-integration"
+! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|prove-integration"
 rg -n "offline-deps|offline Ubuntu dependency|strict air-gapped" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ! rg -n "helper|scripts/|print-env-template|prepare-artifacts|install-offline|--env|--yes" docs/jenkins-controller-native-operations-reference.md
 ```
@@ -983,7 +983,7 @@ simulation/docker/simulate.sh [--env FILE] configure-role
 simulation/docker/simulate.sh [--env FILE] validate-role
 simulation/docker/simulate.sh [--env FILE] configure-integration
 simulation/docker/simulate.sh [--env FILE] validate-integration
-simulation/docker/simulate.sh [--env FILE] verify-integration
+simulation/docker/simulate.sh [--env FILE] prove-integration
 simulation/docker/simulate.sh [--env FILE] audit-state
 simulation/docker/simulate.sh [--env FILE] down
 simulation/docker/simulate.sh [--env FILE] clean
@@ -1013,7 +1013,7 @@ Implementation notes:
   containers, then verifies manifests and checksums on the target side before
   service mutation.
 - `simulate.sh validate-integration` is an independently repeatable passive
-  readiness phase before `simulate.sh verify-integration`; `verify-integration`
+  readiness phase before `simulate.sh prove-integration`; `prove-integration`
   must require the successful validation marker and must not run
   `validate-integration` implicitly.
 - `simulate.sh validate-integration` must invoke `scripts/integration-setup.sh
@@ -1053,7 +1053,7 @@ simulation/docker/simulate.sh configure-role
 simulation/docker/simulate.sh validate-role
 simulation/docker/simulate.sh configure-integration
 simulation/docker/simulate.sh validate-integration
-simulation/docker/simulate.sh verify-integration
+simulation/docker/simulate.sh prove-integration
 ```
 
 Acceptance criteria:
@@ -1070,10 +1070,10 @@ Acceptance criteria:
 - LDAP, local OS runtime account, Gerrit HTTP/SSH, Jenkins HTTP/LDAP/JCasC/plugin,
   Jenkins-to-Gerrit SSH, stream-events, and Jenkins agent readiness checks pass
   with separate evidence.
-- `verify-integration` separately proves Gerrit event receipt, Jenkins job
+- `prove-integration` separately proves Gerrit event receipt, Jenkins job
   scheduling, agent execution, and Gerrit `Verified +1` vote posting.
 - Verification writes a summary that labels the mode as Docker simulation.
-- A successful `verify-integration` summary does not use modeled pass results for
+- A successful `prove-integration` summary does not use modeled pass results for
   required runtime outcomes and must include proof from the real Gerrit,
   Jenkins controller, and Jenkins agent services.
 
@@ -1228,9 +1228,9 @@ simulation/docker/simulate.sh configure-role
 simulation/docker/simulate.sh validate-role
 simulation/docker/simulate.sh configure-integration
 simulation/docker/simulate.sh validate-integration
-simulation/docker/simulate.sh verify-integration
+simulation/docker/simulate.sh prove-integration
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes validate-integration
-scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes verify-integration
+scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes prove-integration
 scripts/collect-evidence.sh
 simulation/docker/simulate.sh down
 simulation/vm/vm-verify.sh --help

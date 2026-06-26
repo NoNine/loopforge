@@ -371,7 +371,7 @@ Jenkins-to-Gerrit SSH proof, Gerrit event streaming, agent scheduling, or
 After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
 use `docs/integration-setup-manual.md` for the shared helper workflow. That
 manual is the command authority for `configure-integration`,
-`validate-integration`, `verify-integration`, and `collect-evidence`.
+`validate-integration`, `prove-integration`, and `collect-evidence`.
 
 Controller-only setup must not create or rotate Jenkins-to-Gerrit or
 Jenkins-to-agent keypairs, install public keys on Gerrit or the agent, register

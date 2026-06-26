@@ -117,7 +117,7 @@ scripts/integration-setup.sh "${common_args[@]}" --yes validate-integration
 Run end-to-end integration proof:
 
 ```bash
-scripts/integration-setup.sh "${common_args[@]}" --yes verify-integration
+scripts/integration-setup.sh "${common_args[@]}" --yes prove-integration
 ```
 
 Collect sanitized integration evidence:
@@ -132,7 +132,7 @@ votes, or evidence that claims runtime success.
 
 ## Validation Contract
 
-`validate-integration` and `verify-integration` must prove real cross-role behavior
+`validate-integration` and `prove-integration` must prove real cross-role behavior
 or fail closed with a clear classification. Passing integration evidence must
 cover:
 

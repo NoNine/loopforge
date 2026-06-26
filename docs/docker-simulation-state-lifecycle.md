@@ -34,7 +34,7 @@ replace rendered runtime config.
 Resume or rerun means invoking a lifecycle phase against an existing selected
 run, such as `up`, `status`, `prepare-artifacts`, `stage-artifacts`,
 `configure-role`, `validate-role`, `configure-integration`,
-`validate-integration`, or `verify-integration`.
+`validate-integration`, or `prove-integration`.
 
 ## Required Generated State
 
@@ -117,5 +117,5 @@ state and stop.
 and bind-mount sweep. It checks the live selected containers against the
 selected run root and is meant for operator inspection, not for the default
 path of `status`, `configure-role`, `validate-role`, `configure-integration`,
-`validate-integration`, `verify-integration`, `prepare-artifacts`, or
+`validate-integration`, `prove-integration`, `prepare-artifacts`, or
 `stage-artifacts`.
