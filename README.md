@@ -97,6 +97,17 @@ simulation/docker/simulate.sh run
 `run` is the normal operator workflow. It reports `fresh` or `resume` and
 then drives the expanded phase sequence through `prove-integration`.
 
+After `up`, open host-to-target OS SSH sessions for inspection:
+
+```bash
+simulation/docker/simulate.sh ssh --role gerrit
+simulation/docker/simulate.sh ssh --role jenkins-controller
+simulation/docker/simulate.sh ssh --role jenkins-agent
+```
+
+These sessions use the rendered target SSH inventory and the simulation
+`ci-operator` OS account, not Docker exec or Gerrit service SSH.
+
 After inspection, stop containers or remove generated runtime state:
 
 ```bash

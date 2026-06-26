@@ -27,6 +27,7 @@ Composite command:
 | Command | Purpose |
 | --- | --- |
 | `run [--env FILE]` | Runs the normal Docker simulation workflow. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, or `audit-state`. |
+| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as `ci-operator`, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
 
@@ -98,6 +99,21 @@ running simulation. The status command prints the run ID, Compose project,
 live browser URLs, and seeded Docker simulation login accounts. It is
 read-only and fails when the selected run's containers are not running, so it
 does not rely on stale port data from rendered config files.
+
+Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
+environment through SSH from the host. The command uses the rendered
+`INTEGRATION_*_TARGET_SSH_*` values and the run-scoped target SSH key and
+known-hosts file:
+
+```bash
+simulation/docker/simulate.sh ssh --role gerrit
+simulation/docker/simulate.sh ssh --role jenkins-controller
+simulation/docker/simulate.sh ssh --role jenkins-agent
+```
+
+This command intentionally uses the target OS control-plane SSH interface. It
+does not use Docker exec and it is separate from Gerrit's service SSH on port
+`29418`.
 
 ## Output Locations
 

@@ -18,12 +18,14 @@ Usage:
 
 Commands:
   run
+  ssh --role <gerrit|jenkins-controller|jenkins-agent>
 
 Phases:
   preflight
   init-run
   up
   status
+  ssh --role <gerrit|jenkins-controller|jenkins-agent>
   prepare-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   stage-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
   configure-role [--role <gerrit|jenkins-controller|jenkins-agent>]
@@ -2530,6 +2532,59 @@ cmd_status() {
   printf '  %-18s  %-14s  %-20s  %-40s\n' '------------------' '--------------' '--------------------' '----------------------------------------'
 }
 
+target_ssh_env_prefix() {
+  case "${1:-}" in
+    gerrit) printf '%s\n' INTEGRATION_GERRIT_TARGET ;;
+    jenkins-controller) printf '%s\n' INTEGRATION_JENKINS_CONTROLLER_TARGET ;;
+    jenkins-agent) printf '%s\n' INTEGRATION_JENKINS_AGENT_TARGET ;;
+    *) die "Unknown role '${1:-}'; expected gerrit, jenkins-controller, or jenkins-agent" ;;
+  esac
+}
+
+target_ssh_inventory_value() {
+  local role suffix prefix value
+  role="${1:?role required}"
+  suffix="${2:?suffix required}"
+  prefix="$(target_ssh_env_prefix "$role")"
+  eval "value=\${${prefix}_SSH_${suffix}:-}"
+  printf '%s\n' "$value"
+}
+
+cmd_ssh() {
+  local role host port user identity_file known_hosts_file
+  role="${1:?role required}"
+  bootstrap_harness_env
+  ensure_runtime_config
+  require_command ssh
+  require_running_service "$(service_for_role "$role")"
+  require_readable_file "Runtime integration env file" "$HARNESS_INTEGRATION_ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  . "$HARNESS_INTEGRATION_ENV_FILE"
+  set +a
+
+  host="$(target_ssh_inventory_value "$role" HOST)"
+  port="$(target_ssh_inventory_value "$role" PORT)"
+  user="$(target_ssh_inventory_value "$role" USER)"
+  identity_file="$(target_ssh_inventory_value "$role" IDENTITY_FILE)"
+  known_hosts_file="$(target_ssh_inventory_value "$role" KNOWN_HOSTS_FILE)"
+
+  [ -n "$host" ] || die "Missing target SSH host for role: $role"
+  [ -n "$port" ] || die "Missing target SSH port for role: $role"
+  [ -n "$user" ] || die "Missing target SSH user for role: $role"
+  require_readable_file "Target SSH identity file for $role" "$identity_file"
+  require_readable_file "Target SSH known_hosts file for $role" "$known_hosts_file"
+
+  exec ssh -t \
+    -p "$port" \
+    -i "$identity_file" \
+    -o BatchMode=yes \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile="$known_hosts_file" \
+    "$user@$host"
+}
+
 role_helper_present_in_container() {
   local service helper
   service="${1:?service required}"
@@ -3449,6 +3504,11 @@ main() {
       shift
       parse_env_only_args "$@"
       cmd_status
+      ;;
+    ssh)
+      shift
+      parse_env_and_role_args 1 "$@"
+      cmd_ssh "$PARSED_ROLE"
       ;;
     prepare-artifacts)
       shift
