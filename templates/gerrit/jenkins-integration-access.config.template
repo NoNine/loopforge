@@ -5,7 +5,8 @@
 # - Keep the Jenkins Gerrit integration actor separate from human admins.
 #
 # Replace placeholders before use:
-# - {{GERRIT_VERIFICATION_REF_PATTERN}}: ref pattern under test, such as refs/*.
+# - {{GERRIT_VERIFICATION_REF_PATTERN}}: ref pattern under test, such as
+#   refs/heads/*.
 # - {{JENKINS_GERRIT_INTEGRATION_GROUP}}: Gerrit group for automation.
 # - {{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}: optional service account name.
 #

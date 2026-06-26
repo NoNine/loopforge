@@ -98,7 +98,7 @@ LDAP_GROUP_BASE="ou=groups,dc=example,dc=test"
 GERRIT_ADMIN_ACCOUNT="gerrit-admin"
 GERRIT_ADMIN_GROUP="gerrit-admins"
 GERRIT_VERIFICATION_PROJECT="verification-disposable-gerrit"
-GERRIT_VERIFICATION_REF_PATTERN="refs/*"
+GERRIT_VERIFICATION_REF_PATTERN="refs/heads/*"
 GERRIT_VERIFICATION_MODE="docker-simulation"
 GERRIT_EVIDENCE_DIR="/unused/evidence"
 EOF

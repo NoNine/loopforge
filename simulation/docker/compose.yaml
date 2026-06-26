@@ -73,12 +73,14 @@ services:
       - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/gerrit:/var/lib/loopforge"
       - "${HARNESS_PRODUCT_HOME_DIR}/gerrit:/srv/gerrit"
+      - "${HARNESS_TARGET_SSH_DIR}:/var/lib/loopforge/target-ssh:ro"
       - "${HARNESS_STATE_DIR}/gerrit-validation-secrets:/var/lib/loopforge/validation-secrets"
       - "${HARNESS_EVIDENCE_DIR}:/var/lib/loopforge/evidence"
       - "${HARNESS_LOG_DIR}:/var/log/loopforge"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     ports:
       - "127.0.0.1:${HARNESS_GERRIT_HTTP_HOST_PORT}:8080"
+      - "127.0.0.1:${HARNESS_GERRIT_TARGET_SSH_HOST_PORT}:22"
     networks:
       - harness
 
@@ -104,12 +106,14 @@ services:
       - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-controller:/var/lib/loopforge"
       - "${HARNESS_PRODUCT_HOME_DIR}/jenkins-controller:/var/lib/jenkins"
+      - "${HARNESS_TARGET_SSH_DIR}:/var/lib/loopforge/target-ssh:ro"
       - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_EVIDENCE_DIR}:/var/lib/loopforge/evidence"
       - "${HARNESS_LOG_DIR}:/var/log/loopforge"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     ports:
       - "127.0.0.1:${HARNESS_JENKINS_HTTP_HOST_PORT}:8080"
+      - "127.0.0.1:${HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT}:22"
     networks:
       - harness
 
@@ -135,10 +139,13 @@ services:
       - "../../:/workspace:ro"
       - "${HARNESS_STATE_DIR}/jenkins-agent:/var/lib/loopforge"
       - "${HARNESS_PRODUCT_HOME_DIR}/jenkins-agent:/var/lib/jenkins-agent"
+      - "${HARNESS_TARGET_SSH_DIR}:/var/lib/loopforge/target-ssh:ro"
       - "${HARNESS_STATE_DIR}/shared-jenkins-storage:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
       - "${HARNESS_EVIDENCE_DIR}:/var/lib/loopforge/evidence"
       - "${HARNESS_LOG_DIR}:/var/log/loopforge"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
+    ports:
+      - "127.0.0.1:${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT}:22"
     networks:
       - harness
 

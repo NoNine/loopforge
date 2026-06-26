@@ -125,10 +125,15 @@ apply_canonical_output_paths() {
   HARNESS_RUNTIME_INPUT_DIR="$HARNESS_STATE_DIR/rendered/runtime-inputs"
   HARNESS_BASELINE_CONTRACT="$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt"
   HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env"
+  HARNESS_TARGET_SSH_DIR="$HARNESS_STATE_DIR/target-ssh"
+  HARNESS_TARGET_SSH_IDENTITY_FILE="$HARNESS_TARGET_SSH_DIR/ci-operator"
+  HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$HARNESS_TARGET_SSH_DIR/known_hosts"
   export HARNESS_GENERATED_RUN_DIR HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
   export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
   export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
+  export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
+  export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
 }
 
 container_name_for_service() {
@@ -324,6 +329,8 @@ validate_core_generated_state() {
   require_generated_state_dir "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
   require_generated_state_dir "Gerrit validation secret bind source" "$HARNESS_STATE_DIR/gerrit-validation-secrets"
   require_generated_state_dir "shared Jenkins storage bind source" "$HARNESS_STATE_DIR/shared-jenkins-storage"
+  require_generated_state_dir "target SSH state" "$HARNESS_TARGET_SSH_DIR"
+  require_generated_state_file "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
 }
 
 timestamp_utc() {
@@ -370,6 +377,12 @@ HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET="${HARNESS_GERRIT_HTTP_HOST_PORT+x}"
 HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET="${HARNESS_JENKINS_HTTP_HOST_PORT+x}"
 HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE="${HARNESS_GERRIT_HTTP_HOST_PORT-}"
 HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKINS_HTTP_HOST_PORT-}"
+HARNESS_GERRIT_TARGET_SSH_HOST_PORT_OPERATOR_SET="${HARNESS_GERRIT_TARGET_SSH_HOST_PORT+x}"
+HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_SET="${HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT+x}"
+HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_SET="${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT+x}"
+HARNESS_GERRIT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE="${HARNESS_GERRIT_TARGET_SSH_HOST_PORT-}"
+HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT-}"
+HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT-}"
 
 HARNESS_MODE="${HARNESS_MODE:-docker-simulation}"
 HARNESS_RUN_ID="${HARNESS_RUN_ID:-manual}"
@@ -408,6 +421,9 @@ HARNESS_RENDERED_ENV="${HARNESS_RENDERED_ENV:-$HARNESS_STATE_DIR/rendered/harnes
 HARNESS_RUNTIME_ENV="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
 HARNESS_RUNTIME_INPUT_DIR="${HARNESS_RUNTIME_INPUT_DIR:-$HARNESS_STATE_DIR/rendered/runtime-inputs}"
 HARNESS_BASELINE_CONTRACT="${HARNESS_BASELINE_CONTRACT:-$HARNESS_STATE_DIR/rendered/artifact-manifest-contract.txt}"
+HARNESS_TARGET_SSH_DIR="${HARNESS_TARGET_SSH_DIR:-$HARNESS_STATE_DIR/target-ssh}"
+HARNESS_TARGET_SSH_IDENTITY_FILE="${HARNESS_TARGET_SSH_IDENTITY_FILE:-$HARNESS_TARGET_SSH_DIR/ci-operator}"
+HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="${HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE:-$HARNESS_TARGET_SSH_DIR/known_hosts}"
 
 export HARNESS_MODE HARNESS_RUN_ID HARNESS_PROJECT_NAME
 export HARNESS_UBUNTU_IMAGE HARNESS_LDAP_IMAGE
@@ -420,6 +436,8 @@ export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HA
 export HARNESS_JENKINS_SHARED_STORAGE_PATH HARNESS_ENV_FILE
 export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
 export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
+export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
+export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
 
 compose_kind=""
 compose_cmd=()
@@ -490,6 +508,15 @@ load_env_file() {
   if [ -n "$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET" ]; then
     HARNESS_JENKINS_HTTP_HOST_PORT="$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE"
   fi
+  if [ -n "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_GERRIT_TARGET_SSH_HOST_PORT="$HARNESS_GERRIT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT="$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT="$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE"
+  fi
   HARNESS_ENV_FILE="$file"
   reject_custom_output_paths
   apply_canonical_output_paths
@@ -504,6 +531,15 @@ reapply_operator_overrides() {
   fi
   if [ -n "$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_SET" ]; then
     HARNESS_JENKINS_HTTP_HOST_PORT="$HARNESS_JENKINS_HTTP_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_GERRIT_TARGET_SSH_HOST_PORT="$HARNESS_GERRIT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT="$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_VALUE"
+  fi
+  if [ -n "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_SET" ]; then
+    HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT="$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE"
   fi
 }
 
@@ -573,6 +609,23 @@ load_harness_integration_env() {
   export HARNESS_JENKINS_SHARED_STORAGE_PATH
 }
 
+ensure_target_ssh_keypair() {
+  require_command ssh-keygen
+  mkdir -p "$HARNESS_TARGET_SSH_DIR"
+  chmod 0700 "$HARNESS_TARGET_SSH_DIR"
+  if [ ! -s "$HARNESS_TARGET_SSH_IDENTITY_FILE" ]; then
+    ssh-keygen -q -t ed25519 -N '' -C "loopforge-$HARNESS_RUN_ID-target-ssh" \
+      -f "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  fi
+  chmod 0600 "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  ssh-keygen -y -f "$HARNESS_TARGET_SSH_IDENTITY_FILE" >"$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
+  chmod 0644 "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
+  if [ ! -e "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" ]; then
+    : >"$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+    chmod 0600 "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  fi
+}
+
 set_env_file_value() {
   local file name value tmp
   file="${1:?env file required}"
@@ -611,6 +664,27 @@ copy_runtime_env_inputs() {
   set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
   set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_JENKINS_AGENT_ENV_FILE"
   set_env_file_value "$HARNESS_ENV_FILE" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_INTEGRATION_ENV_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_STATE_DIR/integration"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_LOG_DIR/integration"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_EVIDENCE_DIR/integration"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_HOST "127.0.0.1"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_PORT "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_USER "ci-operator"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST "127.0.0.1"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_PORT "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_USER "ci-operator"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST "127.0.0.1"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_PORT "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_USER "ci-operator"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_ACL_MODE "apply-direct"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY "1"
   export HARNESS_ENV_FILE HARNESS_RUNTIME_INPUT_DIR
   export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
   export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
@@ -810,18 +884,21 @@ validate_selected_container_mounts() {
   validate_container_mount gerrit-target "$repo_root" /workspace repo
   validate_container_mount gerrit-target "$HARNESS_STATE_DIR/gerrit" /var/lib/loopforge
   validate_container_mount gerrit-target "$HARNESS_PRODUCT_HOME_DIR/gerrit" /srv/gerrit
+  validate_container_mount gerrit-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount gerrit-target "$HARNESS_STATE_DIR/gerrit-validation-secrets" /var/lib/loopforge/validation-secrets
   validate_container_mount gerrit-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
   validate_container_mount gerrit-target "$HARNESS_LOG_DIR" /var/log/loopforge
   validate_container_mount jenkins-controller-target "$repo_root" /workspace repo
   validate_container_mount jenkins-controller-target "$HARNESS_STATE_DIR/jenkins-controller" /var/lib/loopforge
   validate_container_mount jenkins-controller-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" /var/lib/jenkins
+  validate_container_mount jenkins-controller-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount jenkins-controller-target "$HARNESS_STATE_DIR/shared-jenkins-storage" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
   validate_container_mount jenkins-controller-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
   validate_container_mount jenkins-controller-target "$HARNESS_LOG_DIR" /var/log/loopforge
   validate_container_mount jenkins-agent-target "$repo_root" /workspace repo
   validate_container_mount jenkins-agent-target "$HARNESS_STATE_DIR/jenkins-agent" /var/lib/loopforge
   validate_container_mount jenkins-agent-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" /var/lib/jenkins-agent
+  validate_container_mount jenkins-agent-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount jenkins-agent-target "$HARNESS_STATE_DIR/shared-jenkins-storage" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
   validate_container_mount jenkins-agent-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
   validate_container_mount jenkins-agent-target "$HARNESS_LOG_DIR" /var/log/loopforge
@@ -857,6 +934,7 @@ ensure_dirs() {
     "$HARNESS_STATE_DIR/jenkins-agent" \
     "$HARNESS_STATE_DIR/gerrit-validation-secrets" \
     "$HARNESS_STATE_DIR/shared-jenkins-storage" \
+    "$HARNESS_TARGET_SSH_DIR" \
     "$HARNESS_STATE_DIR/rendered" \
     "$HARNESS_STAGING_DIR/gerrit" \
     "$HARNESS_STAGING_DIR/jenkins-controller" \
@@ -867,6 +945,8 @@ ensure_dirs() {
 prepare_init_run() {
   validate_harness_inputs
   validate_init_run_inputs
+  resolve_browser_ports
+  ensure_target_ssh_keypair
   copy_runtime_env_inputs
   load_harness_integration_env
   ensure_dirs
@@ -903,11 +983,14 @@ loopback_port_owned_by_harness() {
   printf '%s\n' "$published" | grep -Fxq "$port"
 }
 
-service_for_browser_port_name() {
+service_for_loopback_port_name() {
   case "$1" in
     HARNESS_GERRIT_HTTP_HOST_PORT) printf '%s\n' gerrit-target ;;
     HARNESS_JENKINS_HTTP_HOST_PORT) printf '%s\n' jenkins-controller-target ;;
-    *) die "Unknown browser port name: $1" ;;
+    HARNESS_GERRIT_TARGET_SSH_HOST_PORT) printf '%s\n' gerrit-target ;;
+    HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT) printf '%s\n' jenkins-controller-target ;;
+    HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT) printf '%s\n' jenkins-agent-target ;;
+    *) die "Unknown loopback port name: $1" ;;
   esac
 }
 
@@ -938,7 +1021,7 @@ require_loopback_port_available_or_owned() {
   local name port service
   name="${1:?name required}"
   port="${2:?port required}"
-  service="$(service_for_browser_port_name "$name")"
+  service="$(service_for_loopback_port_name "$name")"
   validate_tcp_port_value "$name" "$port"
   if can_bind_loopback_port "$port" 2>/dev/null; then
     return 0
@@ -994,17 +1077,44 @@ resolve_browser_port() {
 }
 
 resolve_browser_ports() {
-  local gerrit_requested jenkins_requested
+  local gerrit_requested jenkins_requested gerrit_ssh_requested jenkins_controller_ssh_requested jenkins_agent_ssh_requested
   gerrit_requested="${HARNESS_GERRIT_HTTP_HOST_PORT:-}"
   jenkins_requested="${HARNESS_JENKINS_HTTP_HOST_PORT:-}"
+  gerrit_ssh_requested="${HARNESS_GERRIT_TARGET_SSH_HOST_PORT:-}"
+  jenkins_controller_ssh_requested="${HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT:-}"
+  jenkins_agent_ssh_requested="${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT:-}"
 
   HARNESS_GERRIT_HTTP_HOST_PORT="$(resolve_browser_port HARNESS_GERRIT_HTTP_HOST_PORT "$gerrit_requested" "")"
   HARNESS_JENKINS_HTTP_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_HTTP_HOST_PORT "$jenkins_requested" "$HARNESS_GERRIT_HTTP_HOST_PORT")"
+  HARNESS_GERRIT_TARGET_SSH_HOST_PORT="$(resolve_browser_port HARNESS_GERRIT_TARGET_SSH_HOST_PORT "$gerrit_ssh_requested" "$HARNESS_JENKINS_HTTP_HOST_PORT")"
+  HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT "$jenkins_controller_ssh_requested" "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT")"
+  HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT "$jenkins_agent_ssh_requested" "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT")"
 
   [ "$HARNESS_GERRIT_HTTP_HOST_PORT" != "$HARNESS_JENKINS_HTTP_HOST_PORT" ] ||
     die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_JENKINS_HTTP_HOST_PORT must be different"
+  [ "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT" != "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_GERRIT_TARGET_SSH_HOST_PORT and HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT" != "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_GERRIT_TARGET_SSH_HOST_PORT and HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT" != "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT and HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_GERRIT_HTTP_HOST_PORT" != "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_GERRIT_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_GERRIT_HTTP_HOST_PORT" != "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_GERRIT_HTTP_HOST_PORT" != "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_JENKINS_HTTP_HOST_PORT" != "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_JENKINS_HTTP_HOST_PORT and HARNESS_GERRIT_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_JENKINS_HTTP_HOST_PORT" != "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_JENKINS_HTTP_HOST_PORT and HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT must be different"
+  [ "$HARNESS_JENKINS_HTTP_HOST_PORT" != "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT" ] ||
+    die "HARNESS_JENKINS_HTTP_HOST_PORT and HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT must be different"
 
   export HARNESS_GERRIT_HTTP_HOST_PORT HARNESS_JENKINS_HTTP_HOST_PORT
+  export HARNESS_GERRIT_TARGET_SSH_HOST_PORT
+  export HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT
+  export HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT
 }
 
 service_for_role() {
@@ -1607,6 +1717,20 @@ prepare_product_home_ownership() {
     "$role" "$service" "$path" "$account" "$group" >>"$log"
 }
 
+refresh_target_ssh_known_hosts() {
+  local log tmp
+  log="${1:?log required}"
+  mkdir -p "$HARNESS_TARGET_SSH_DIR"
+  tmp="$(mktemp "$HARNESS_TARGET_SSH_DIR/known_hosts.XXXXXX")"
+  chmod 0600 "$tmp"
+  ssh-keyscan -T 5 -p "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT" 127.0.0.1 >>"$tmp" 2>>"$log"
+  ssh-keyscan -T 5 -p "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT" 127.0.0.1 >>"$tmp" 2>>"$log"
+  ssh-keyscan -T 5 -p "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT" 127.0.0.1 >>"$tmp" 2>>"$log"
+  mv -- "$tmp" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  chmod 0600 "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  printf 'target_ssh_known_hosts=ready file=%s scope=docker-simulation\n' "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" >>"$log"
+}
+
 prepare_bundle_factory_workspace_ownership() {
   local role log state_root log_root input_root work_root workspace
   role="${1:?role required}"
@@ -2015,7 +2139,6 @@ EOF
 
 write_rendered_env() {
   require_command python3
-  resolve_browser_ports
   prepare_init_run
   cat >"$HARNESS_RENDERED_ENV" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
@@ -2052,6 +2175,12 @@ HARNESS_JENKINS_AGENT_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
 HARNESS_JENKINS_SHARED_STORAGE_PATH=$(shell_quote "$HARNESS_JENKINS_SHARED_STORAGE_PATH")
 HARNESS_GERRIT_HTTP_HOST_PORT=$(shell_quote "$HARNESS_GERRIT_HTTP_HOST_PORT")
 HARNESS_JENKINS_HTTP_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_HTTP_HOST_PORT")
+HARNESS_GERRIT_TARGET_SSH_HOST_PORT=$(shell_quote "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT")
+HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT")
+HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT")
+HARNESS_TARGET_SSH_DIR=$(shell_quote "$HARNESS_TARGET_SSH_DIR")
+HARNESS_TARGET_SSH_IDENTITY_FILE=$(shell_quote "$HARNESS_TARGET_SSH_IDENTITY_FILE")
+HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE=$(shell_quote "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE")
 HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/")
 HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
 public_internet_fallback=simulation-only
@@ -2102,6 +2231,12 @@ HARNESS_JENKINS_AGENT_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
 HARNESS_JENKINS_SHARED_STORAGE_PATH=$(shell_quote "$HARNESS_JENKINS_SHARED_STORAGE_PATH")
 HARNESS_GERRIT_HTTP_HOST_PORT=$(shell_quote "$HARNESS_GERRIT_HTTP_HOST_PORT")
 HARNESS_JENKINS_HTTP_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_HTTP_HOST_PORT")
+HARNESS_GERRIT_TARGET_SSH_HOST_PORT=$(shell_quote "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT")
+HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT")
+HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT=$(shell_quote "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT")
+HARNESS_TARGET_SSH_DIR=$(shell_quote "$HARNESS_TARGET_SSH_DIR")
+HARNESS_TARGET_SSH_IDENTITY_FILE=$(shell_quote "$HARNESS_TARGET_SSH_IDENTITY_FILE")
+HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE=$(shell_quote "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE")
 HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/")
 HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
 HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
@@ -2181,13 +2316,14 @@ require_running_service() {
   [ "$running" = "true" ] || die "Harness service '$service' is not running; run up first"
 }
 
-running_loopback_port_for_service() {
-  local service container_id port
+running_loopback_port_for_service_port() {
+  local service container_port container_id port
   service="${1:?service required}"
+  container_port="${2:?container port required}"
   container_id="$(container_id_for_service "$service")"
   [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
-  port="$(docker inspect -f '{{range $p, $bindings := .NetworkSettings.Ports}}{{range $bindings}}{{if eq .HostIp "127.0.0.1"}}{{.HostPort}}{{"\n"}}{{end}}{{end}}{{end}}' "$container_id" 2>/dev/null | sed -n '1p')"
-  [ -n "$port" ] || die "Harness service '$service' has no published loopback port"
+  port="$(docker inspect -f "{{with index .NetworkSettings.Ports \"$container_port\"}}{{range .}}{{if eq .HostIp \"127.0.0.1\"}}{{.HostPort}}{{\"\\n\"}}{{end}}{{end}}{{end}}" "$container_id" 2>/dev/null | sed -n '1p')"
+  [ -n "$port" ] || die "Harness service '$service' has no published loopback port for $container_port"
   printf '%s\n' "$port"
 }
 
@@ -2287,6 +2423,8 @@ cmd_preflight() {
   require_command sha256sum
   require_command tar
   require_command awk
+  require_command ssh-keygen
+  require_command ssh-keyscan
   detect_compose
   require_baseline_label
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
@@ -2318,6 +2456,7 @@ cmd_up() {
   require_command sha256sum
   require_command tar
   require_command awk
+  require_command ssh-keyscan
   detect_compose
   require_baseline_label
   [ -f "$compose_file" ] || die "Missing Compose file: $compose_file"
@@ -2354,6 +2493,7 @@ cmd_up() {
   prepare_product_home_ownership gerrit gerrit-target "$log"
   prepare_product_home_ownership jenkins-controller jenkins-controller-target "$log"
   prepare_product_home_ownership jenkins-agent jenkins-agent-target "$log"
+  refresh_target_ssh_known_hosts "$log"
   require_running_service ldap
   evidence="$(write_evidence up harness pass "simulate.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
@@ -2370,8 +2510,8 @@ cmd_status() {
   require_running_service gerrit-target
   require_running_service jenkins-controller-target
   require_running_service jenkins-agent-target
-  gerrit_port="$(running_loopback_port_for_service gerrit-target)"
-  jenkins_port="$(running_loopback_port_for_service jenkins-controller-target)"
+  gerrit_port="$(running_loopback_port_for_service_port gerrit-target 8080/tcp)"
+  jenkins_port="$(running_loopback_port_for_service_port jenkins-controller-target 8080/tcp)"
 
   printf 'status: running\n\n'
   printf 'Run\n'

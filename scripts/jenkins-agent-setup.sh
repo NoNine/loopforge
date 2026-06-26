@@ -689,71 +689,13 @@ runtime_account_home() {
   getent passwd "$JENKINS_AGENT_ACCOUNT" | awk -F: '{print $6}'
 }
 
-sshd_pid_matches_config() {
-  local pid expected_config cmdline
-  pid="${1:?pid required}"
-  expected_config="${2:?config required}"
-  case "$pid" in
-    ""|*[!0-9]*)
-      return 1
-      ;;
-  esac
-  [ -r "/proc/$pid/cmdline" ] || return 1
-  cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline")"
-  case "$cmdline" in
-    *sshd*" -f $expected_config"*|*sshd*" -f"*" $expected_config"*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-process_is_zombie() {
-  local pid state
-  pid="${1:?pid required}"
-  [ -r "/proc/$pid/stat" ] || return 1
-  state="$(awk '{print $3}' "/proc/$pid/stat")"
-  [ "$state" = "Z" ]
-}
-
-stop_helper_owned_sshd() {
-  local pidfile expected_config pid attempt
-  pidfile="${1:?pidfile required}"
-  expected_config="${2:?config required}"
-  [ -f "$pidfile" ] || return 0
-  pid="$(cat "$pidfile")"
-  if ! kill -0 "$pid" 2>/dev/null; then
-    rm -f "$pidfile"
-    return 0
-  fi
-  if process_is_zombie "$pid"; then
-    rm -f "$pidfile"
-    return 0
-  fi
-  if ! sshd_pid_matches_config "$pid" "$expected_config"; then
-    die "Refusing to stop non-helper-owned sshd pid $pid from $pidfile"
-  fi
-  kill "$pid" 2>/dev/null || true
-  for attempt in 1 2 3 4 5; do
-    if ! kill -0 "$pid" 2>/dev/null || process_is_zombie "$pid"; then
-      rm -f "$pidfile"
-      return 0
-    fi
-    sleep 1
-  done
-  die "Helper-owned sshd pid $pid did not stop"
-}
-
-start_sshd_service() {
-  local pidfile log_file sshd_config sshd_bin pid
-  pidfile="$JENKINS_AGENT_STATE_DIR/run/sshd.pid"
+validate_os_sshd_service() {
+  local pidfile log_file sshd_config sshd_bin
+  pidfile="$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid"
   log_file="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
   sshd_config="$JENKINS_AGENT_STATE_DIR/etc/sshd_config"
   sshd_bin="$(command -v sshd)"
   mkdir -p "$JENKINS_AGENT_STATE_DIR/run" "$JENKINS_AGENT_STATE_DIR/logs" /run/sshd /var/run/sshd
-  stop_helper_owned_sshd "$pidfile" "$sshd_config"
   : >"$log_file"
   ssh-keygen -A >>"$log_file" 2>&1
   cat >"$sshd_config" <<EOF
@@ -773,22 +715,17 @@ Subsystem sftp internal-sftp
 EOF
   {
     printf 'timestamp=%s\n' "$(iso_timestamp_utc)"
-    printf 'service=sshd\n'
+    printf 'service=os-sshd\n'
     printf 'mode=%s\n' "$JENKINS_AGENT_VERIFICATION_MODE"
     printf 'account=%s\n' "$JENKINS_AGENT_ACCOUNT"
     printf 'node_name=%s\n' "$JENKINS_AGENT_NODE_NAME"
     printf 'labels=%s\n' "$JENKINS_AGENT_LABELS"
     printf 'remote_fs=%s\n' "$JENKINS_AGENT_REMOTE_FS"
     printf 'sshd_config=%s\n' "$sshd_config"
+    printf 'ownership=target-os-control-plane\n'
   } >>"$log_file"
   "$sshd_bin" -t -f "$sshd_config" >>"$log_file" 2>&1 || die "sshd configuration validation failed; log=$log_file"
-  "$sshd_bin" -D -e -f "$sshd_config" >>"$log_file" 2>&1 &
-  pid="$!"
-  printf '%s\n' "$pid" >"$pidfile"
-  sleep 1
-  if ! kill -0 "$pid" 2>/dev/null; then
-    die "Jenkins agent sshd failed to start; log=$log_file"
-  fi
+  pgrep -x sshd | sed -n '1p' >"$pidfile" || die "Target OS sshd is not running on $JENKINS_AGENT_HOST:$JENKINS_AGENT_SSH_PORT"
 }
 
 cmd_configure_runtime() {
@@ -814,8 +751,9 @@ cmd_configure_runtime() {
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
   write_text_file "$JENKINS_AGENT_STATE_DIR/state/runtime.status" \
     "account=$JENKINS_AGENT_ACCOUNT group=$JENKINS_AGENT_GROUP home=$account_home remote_fs=$JENKINS_AGENT_REMOTE_FS node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS ssh_port=$JENKINS_AGENT_SSH_PORT executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT"
-  start_sshd_service
-  printf 'status=pass command=configure-runtime account=%s remote_fs=%s SSH_port=%s ssh_daemon=started\n' \
+  validate_os_sshd_service
+  check_ssh_reachability >/dev/null
+  printf 'status=pass command=configure-runtime account=%s remote_fs=%s SSH_port=%s ssh_daemon=target-os-existing\n' \
     "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_SSH_PORT"
 }
 
@@ -849,9 +787,9 @@ check_runtime_readiness() {
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest" ] || die "Agent package intent manifest is missing"
   check_runtime_account
   check_remote_fs_ownership
-  [ -f "$JENKINS_AGENT_STATE_DIR/run/sshd.pid" ] || die "Jenkins agent sshd pid is missing"
-  kill -0 "$(cat "$JENKINS_AGENT_STATE_DIR/run/sshd.pid")" 2>/dev/null ||
-    die "Jenkins agent sshd process is not running"
+  [ -f "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" ] || die "Target OS sshd pid marker is missing"
+  kill -0 "$(cat "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid")" 2>/dev/null ||
+    die "Target OS sshd process is not running"
   check_ssh_reachability >/dev/null
 }
 

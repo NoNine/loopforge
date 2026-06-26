@@ -55,7 +55,7 @@ document owns the layered rationale.
 | --- | --- |
 | Gerrit native target baseline | `docs/gerrit-native-operations-reference.md` keeps the role-local install command; `scripts/gerrit-setup.sh` validates the static `GERRIT_OS_DEPENDENCIES` baseline. |
 | Jenkins controller native target baseline | `docs/jenkins-controller-native-operations-reference.md` keeps the role-local install command; `scripts/jenkins-controller-setup.sh` validates `JENKINS_OS_DEPENDENCIES`. |
-| Jenkins agent native target baseline | `docs/jenkins-agent-native-operations-reference.md` keeps the role-local install command; `scripts/jenkins-agent-setup.sh` validates `JENKINS_AGENT_OS_DEPENDENCIES` and starts helper-owned `sshd`. |
+| Jenkins agent native target baseline | `docs/jenkins-agent-native-operations-reference.md` keeps the role-local install command; `scripts/jenkins-agent-setup.sh` validates `JENKINS_AGENT_OS_DEPENDENCIES` and validates the target OS `sshd` endpoint used by Jenkins. |
 | Bundle-factory baseline | `docs/artifact-bundle-contract.md` records the shared package list used to prepare role artifact bundles. |
 | Docker shared target image | `simulation/docker/target/Dockerfile` installs the shared superset used by Gerrit, Jenkins controller, and Jenkins agent target containers. |
 | Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
