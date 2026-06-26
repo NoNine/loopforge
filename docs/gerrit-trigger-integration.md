@@ -8,8 +8,8 @@ Jenkins and Gerrit. It is based on the behavior digest in
 The contract covers the integration account, SSH key custody, the reviewed
 Gerrit ACL workflow, the `Verified` label, Gerrit Trigger controller settings,
 default REST vote posting, disposable verification artifacts, failure
-classification, and the Docker simulation acceptance contract. It is a policy
-and validation contract, not the command manual. Operators should use
+classification, and the simulation acceptance contract. It is a policy and
+validation contract, not the command manual. Operators should use
 `docs/integration-setup-manual.md` for the shared helper command workflow.
 
 ## Required State
@@ -51,10 +51,10 @@ controller-write/agent-read proof.
 4. The operator chooses an explicit Gerrit project and ref scope for Jenkins
    read access and `label-Verified -1..+1` grants.
 5. Gerrit grants `stream-events` as a global capability to the Jenkins Gerrit
-   integration actor or group. `target-deployment` setup uses reviewed Gerrit
-   configuration changes created through the REST API and must not auto-submit
-   them; Docker and VM simulation may use labeled direct Gerrit REST test
-   automation.
+   integration actor or group. `target-deployment` setup creates reviewed
+   Gerrit configuration changes through the REST API and waits for external
+   approval/submission. Docker and VM simulation create the same review
+   changes and auto-submit them under simulation policy by default.
 6. Jenkins stores the controller-held private key as a credential. The
    credential ID may be recorded in evidence only when it does not encode a
    username, hostname, secret value, or other sensitive material.
@@ -95,32 +95,34 @@ using these templates in later helper steps.
 
 REST API is the selected Gerrit configuration and review interface for the
 package. `target-deployment` label and ACL setup must create reviewable Gerrit
-config changes through REST and must not auto-submit them. Direct editing of
-`All-Projects.git` is not the automation path, even though
-`refs/meta/config/project.config` remains Gerrit's underlying storage model.
-Dashboard or remote-management integrations should use REST for the same
-reason.
+config changes through REST and must not auto-submit them by default. Docker
+and VM simulation should create the same reviewable config changes and
+auto-submit them under simulation policy. Direct editing of `All-Projects.git`
+is not the automation path, even though `refs/meta/config/project.config`
+remains Gerrit's underlying storage model. Dashboard or remote-management
+integrations should use REST for the same reason.
 
 Apply modes:
 
 - `--dry-run` reads reviewed inputs and renders a bounded planned ACL summary
   without mutation.
-- `--create-review` is the target-deployment path. It creates a Gerrit config
-  review through REST when real implementation is available, and it never
-  auto-submits.
-- `--apply-direct` is allowed only for explicitly labeled
-  `simulation-only`, `docker-simulation`, or `vm-simulation` lab
-  modes and requires `--yes`. It must fail closed in `target-deployment` mode
-  even when credentials would permit direct mutation.
+- `create-review` is the `target-deployment` default. It creates Gerrit config
+  reviews through REST, records change IDs and URLs, and waits for external
+  approval/submission before validation can pass.
+- `create-review-and-submit` is the Docker and VM simulation default. It
+  creates the same Gerrit config reviews through REST, auto-submits them under
+  simulation policy, and validates the effective label/access state.
+- `apply-direct` is allowed only for explicitly labeled
+  `simulation-only`, `docker-simulation`, or `vm-simulation` lab modes and
+  requires explicit opt-in plus `--yes`. It must fail closed in
+  `target-deployment` mode even when credentials would permit direct mutation.
 
-Docker and VM simulation may use direct Gerrit REST calls for test automation,
-including label, access, disposable project, and disposable verification setup,
-when the run is explicitly labeled as simulation-only. Direct REST simulation
-automation must be recorded in logs and evidence as simulation behavior and
-must not be presented as target-deployment reviewed ACL proof. This simulation
-allowance does not permit direct `All-Projects.git` editing, direct site-Git
-mutation, direct `refs/meta/config` Git editing, or `gerrit set-account`
-fallbacks.
+Direct Gerrit REST label/access mutation is a simulation-only emergency or lab
+fallback. It must be recorded in logs and evidence as
+`simulation-only direct Gerrit REST apply` and must not be presented as
+`target-deployment` reviewed ACL proof. This simulation allowance does not
+permit direct `All-Projects.git` editing, direct site-Git mutation, direct
+`refs/meta/config` Git editing, or `gerrit set-account` fallbacks.
 
 Jenkins Gerrit Trigger uses SSH for authentication and `stream-events`. The
 default vote posting path is the Gerrit REST review API. Legacy SSH review
@@ -166,11 +168,12 @@ server version or REST behavior is unsupported, the helper must fail closed
 before any configuration mutation.
 
 Evidence planning for ACL configuration records the `All-Projects` label
-configuration review, the project/ref vote scope, apply mode, Gerrit version,
-Gerrit review change and revision when one exists, Jenkins integration actor or
-group, validation results, bounded log references, and redaction status.
-Planned or blocked records must use `not-created` for review identifiers rather
-than implying a review was opened.
+configuration review, the project/ref vote scope, ACL mode, Gerrit version,
+Gerrit review change and revision when one exists, submit actor when
+applicable, Jenkins integration actor or group, validation results, service
+API origin, bounded log references, and redaction status. Planned or blocked
+records must use `not-created` for review identifiers rather than implying a
+review was opened.
 
 Shared storage evidence records the shared group name, GID, storage path, the
 controller runtime account as writer, the agent runtime account as reader, and

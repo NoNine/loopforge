@@ -195,10 +195,13 @@ shared helper. It runs after the three role manuals are complete.
 | `collect-evidence` | Emit sanitized integration evidence with fingerprints, credential IDs, accounts, endpoints, REST vote results, Gerrit review state, bounded logs, and redaction status. |
 
 The helper may fail closed until Docker or VM integration exists. The reviewed
-Gerrit ACL REST workflow is part of the shared integration manual. Role
-helpers must not expose cross-role commands. Legacy SSH review commands or
-flags are exception-only and require operator justification plus compatibility
-evidence.
+Gerrit ACL REST workflow is part of the shared integration manual. The shared
+integration helper should use SSH as the common target OS/control-plane
+interface for Docker simulation, VM simulation, and target deployment; Docker
+APIs belong to Docker simulation lifecycle tooling, not to the helper's target
+communication surface. Role helpers must not expose cross-role commands.
+Legacy SSH review commands or flags are exception-only and require operator
+justification plus compatibility evidence.
 
 ### Docker Simulation Helpers
 
@@ -213,7 +216,7 @@ Docker simulation should expose:
 | `simulation/docker/simulate.sh up` | Start the five-environment simulation after artifacts/configs exist, using the bootstrap env file to locate the run-scoped runtime config. |
 | `simulation/docker/simulate.sh configure-role` | Run role-local install and configuration for one or all roles without rerunning artifact phases. |
 | `simulation/docker/simulate.sh validate-role` | Run role-local validation and evidence collection for one or all roles without rerunning configuration. |
-| `simulation/docker/simulate.sh configure-integration` | Invoke the shared integration helper for durable cross-role configuration. |
+| `simulation/docker/simulate.sh configure-integration` | Expose Docker targets through the standard SSH/service interfaces, then invoke the shared integration helper for durable cross-role configuration. |
 | `simulation/docker/simulate.sh validate-integration` | Invoke passive shared integration validation and write the validation marker. |
 | `simulation/docker/simulate.sh prove-integration` | Require the validation marker, then invoke active shared integration proof without rerunning validation. |
 | `simulation/docker/simulate.sh down` | Stop the simulation without deleting retained generated output. |

@@ -6,9 +6,17 @@ This manual is the operator guide for `scripts/integration-setup.sh`. Use it
 after the Gerrit, Jenkins controller, and Jenkins agent role setup manuals have
 completed and each role has passing role-local readiness evidence.
 
-The current helper implementation is Docker simulation-only. `target-deployment`
-behavior described in this manual is the target contract until non-simulation
-shared integration support exists.
+The Standard Interfaces contract in `docs/system-model.md` is authoritative
+for this helper. `scripts/integration-setup.sh` must use SSH as the common
+OS/control-plane interface for Gerrit, Jenkins controller, and Jenkins agent
+targets across Docker simulation, VM simulation, and `target-deployment`.
+Docker APIs are simulation lifecycle internals and are not the shared
+integration communication surface.
+
+Current implementation caveat: the script still executes only the Docker
+simulation path until the SSH target-interface refactor is implemented. That
+temporary implementation must fail closed outside `docker-simulation` and must
+not be presented as `target-deployment` support.
 
 The shared integration helper owns cross-role work only: Jenkins-to-Gerrit SSH,
 Jenkins-to-agent SSH, Gerrit Trigger configuration, Jenkins node readiness,
@@ -16,12 +24,12 @@ trigger verification, `Verified` voting, and integration evidence. It does not
 replace the role setup manuals and it does not provide native OS operation
 instructions.
 
-`target-deployment` workflow defaults to a global `Verified` CI label in reviewed
-`All-Projects` configuration. Jenkins read access and `label-Verified -1..+1`
-grants stay scoped to the reviewed project and ref pattern. The `stream-events`
-permission remains a global capability grant. Jenkins Gerrit Trigger uses SSH
-for authentication and event streaming, while the Gerrit REST review API is the
-default path for posting `Verified` votes.
+`target-deployment` workflow defaults to a global `Verified` CI label in
+reviewed `All-Projects` configuration. Jenkins read access and
+`label-Verified -1..+1` grants stay scoped to the reviewed project and ref
+pattern. The `stream-events` permission remains a global capability grant.
+Jenkins Gerrit Trigger uses SSH for authentication and event streaming, while
+the Gerrit REST review API is the default path for posting `Verified` votes.
 
 Helper-generated shared state and helper logs on target environments live
 under `/var/lib/loopforge/` and `/var/log/loopforge/`.
@@ -46,6 +54,8 @@ Before running the shared helper:
 - Env files have no placeholder values and have been reviewed for role/account
   separation, endpoints, ref patterns, labels, credential IDs, evidence paths,
   and verification mode labels.
+- The shared integration env defines OS SSH access for the Gerrit target,
+  Jenkins controller target, and Jenkins agent target.
 - Operators have confirmed that any public internet fallback on target hosts is
   simulation-only and will be labeled that way in docs, logs, and evidence.
 
@@ -68,6 +78,8 @@ Required operator inputs include:
 - Jenkins agent node name, scheduling label, executor policy, and remote
   filesystem values.
 - Disposable verification project, branch, job, and run ID values.
+- Target OS SSH inventory for Gerrit, Jenkins controller, and Jenkins agent:
+  host, port, user, identity file, and known-hosts file.
 
 Custody and redaction rules:
 
@@ -82,6 +94,76 @@ Custody and redaction rules:
   or full secret-bearing env values.
 - Verbose Gerrit, Jenkins, Docker, SSH, package-manager, VM, or verification
   logs must be written to bounded log files and referenced, not streamed.
+
+## Standard Interfaces
+
+The helper separates target OS access from service endpoints.
+
+OS/control-plane access:
+
+- Gerrit target OS access uses the Gerrit target SSH inventory.
+- Jenkins controller target OS access uses the Jenkins controller target SSH
+  inventory.
+- Jenkins agent target OS access uses the Jenkins agent target SSH inventory.
+- SSH-based file transfer, such as `scp` or `rsync`, is the standard path for
+  public-key handoff, bounded payload upload, bounded log retrieval, and
+  helper-generated state retrieval.
+
+Service endpoints:
+
+- Gerrit HTTP REST comes from the reviewed Gerrit role env and is used for
+  account/key registration, config-review workflow, review posting, and state
+  checks.
+- Gerrit SSH comes from the reviewed Gerrit role env and is used for
+  Jenkins-to-Gerrit authentication and `stream-events` proof.
+- Jenkins HTTP/API/script access comes from the reviewed Jenkins controller
+  role env and is used for credentials, nodes, trigger server, jobs, builds,
+  and readiness operations.
+- Jenkins controller-to-agent SSH comes from the reviewed Jenkins agent role
+  env and is the runtime build-agent connection, not the operator
+  control-plane SSH channel.
+
+The implementation should expose neutral primitives equivalent to:
+
+```text
+target_exec <gerrit|jenkins-controller|jenkins-agent> <command>
+target_copy_to <gerrit|jenkins-controller|jenkins-agent> <local> <remote>
+target_copy_from <gerrit|jenkins-controller|jenkins-agent> <remote> <local>
+target_run_as <gerrit|jenkins-controller|jenkins-agent> <account> <command>
+```
+
+Those primitives must use SSH plus `scp` or `rsync`. The integration helper
+must not call Docker APIs, derive container names, or require
+`HARNESS_PROJECT_NAME`. Docker simulation may use Docker APIs only to create,
+start, stop, inspect, and wire the simulation; it must expose logical targets
+through the same SSH and service interfaces used by VM simulation and
+`target-deployment`.
+
+Service API calls may originate from the control node or from a target over
+SSH when network reachability requires it. Evidence must record the selected
+origin when that origin affects interpretation of the proof.
+
+## Gerrit ACL Modes
+
+The shared helper supports these ACL workflow modes:
+
+| Mode | Default environment | Behavior |
+| --- | --- | --- |
+| `create-review` | `target-deployment` | Create reviewable Gerrit config changes through REST, record change IDs and URLs, and stop until an external approved submit makes the label/access effective. |
+| `create-review-and-submit` | `docker-simulation`, `vm-simulation` | Create the same Gerrit config review changes, auto-submit them under simulation policy, and then validate effective label/access state. |
+| `apply-direct` | Explicit simulation-only fallback | Directly apply Gerrit REST label/access changes only when explicitly opted in and labeled `simulation-only direct Gerrit REST apply`. |
+
+`target-deployment` validation must fail closed until the created review has
+been submitted and Gerrit reports the global `Verified` label,
+`stream-events`, and scoped `label-Verified -1..+1` permissions as effective.
+
+`create-review-and-submit` is not a `target-deployment` default. It may be
+introduced for `target-deployment` only by a future documented automation
+policy with explicit approval and evidence requirements.
+
+`apply-direct` must fail closed outside simulation modes. It is retained only
+as an emergency or lab fallback and must not be the normal Docker or VM
+simulation path.
 
 ## Helper Command Workflow
 

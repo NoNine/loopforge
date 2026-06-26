@@ -36,9 +36,15 @@ Options:
   --yes                            Confirm reviewed cross-role mutation.
   -h, --help                       Show this help.
 
-Docker Step 11 mode uses real Gerrit, Jenkins controller, and Jenkins agent
-services from the shared Docker harness. Evidence is sanitized and private
-keys, passwords, tokens, and LDAP bind secrets are not printed.
+Standard Interfaces contract: target OS control-plane access is SSH for
+Docker simulation, VM simulation, and target deployment. Service APIs remain
+Gerrit REST, Gerrit SSH, Jenkins HTTP/API, LDAP, and Jenkins controller-to-agent
+SSH.
+
+Current implementation note: this script still executes only the Docker
+simulation path and fails closed outside HARNESS_MODE=docker-simulation until
+the SSH target-interface refactor is implemented. Evidence is sanitized and
+private keys, passwords, tokens, and LDAP bind secrets are not printed.
 USAGE
 }
 
@@ -380,7 +386,7 @@ confirm_mutation() {
     printf 'dry_run=1 command=%s mutation=skipped\n' "$name"
     return 1
   fi
-  [ "$assume_yes" -eq 1 ] || die "$name mutates Docker integration state; rerun with --yes after review"
+  [ "$assume_yes" -eq 1 ] || die "$name mutates integration state; rerun with --yes after review"
 }
 
 gerrit_container() {

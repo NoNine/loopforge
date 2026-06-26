@@ -42,8 +42,13 @@ Every evidence record must include:
 - Jenkins agent scheduling and execution results where applicable.
 - Gerrit Trigger event, build, and `Verified` vote results where applicable.
 - Gerrit ACL reviewed-workflow planning or blocked results where applicable.
-- Target project, inherited scope, apply mode, Gerrit version, review change
+- Target project, inherited scope, ACL mode, Gerrit version, review change
   identifier, and actor/group references where applicable.
+- Target SSH aliases or reviewed host identifiers where applicable.
+- Service API origin, such as control node, Gerrit target, or Jenkins
+  controller target, where applicable.
+- ACL mode, Gerrit config-review change IDs, config-review URLs, and submit
+  actor where applicable.
 - Bounded log references.
 - Redaction status.
 
@@ -57,9 +62,10 @@ may record public key fingerprints, Jenkins credential IDs, account names,
 service endpoints, helper-owned `/var/lib/loopforge/` and
 `/var/log/loopforge/` references, the shared integration group name and GID,
 shared storage path, bounded read/write proof, bounded log paths,
-trigger/build/change identifiers, and redaction status. They must not record
-private keys, tokens, passwords, LDAP bind secrets, or full secret-bearing
-env values.
+target SSH aliases, service API origins, ACL mode, Gerrit config-review change
+IDs and URLs, submit actor when applicable, trigger/build/change identifiers,
+and redaction status. They must not record private keys, tokens, passwords,
+LDAP bind secrets, or full secret-bearing env values.
 
 The global collector accepts legacy Step 7-9 records that do not yet carry
 explicit `package_version` or `helper_command_version` fields. It enriches
@@ -138,10 +144,14 @@ ACL planning records must include:
 
 - `target_project`
 - `inherited_scope`
-- `apply_mode`
+- `acl_mode`
 - `gerrit_version`
 - `review_change_id` or `not-created`
+- `review_url` or `not-created`
+- `submit_actor` or `not-applicable`
 - `integration_actor_or_group`
+- `service_api_origin`
+- target SSH alias or reviewed host identifier for each target involved
 - validation result summaries
 
 Blocked or dry-run records must not claim mutation success, auto-submit, or a
