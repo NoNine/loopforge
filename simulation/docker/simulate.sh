@@ -2241,7 +2241,7 @@ workflow_step() {
   local step
   step="${1:?step required}"
   shift
-  printf 'run: step=%s\n' "$step"
+  printf '==> %s\n' "$step"
   if [ -n "${HARNESS_TEST_WORKFLOW_CALLS:-}" ]; then
     mkdir -p "$(dirname "$HARNESS_TEST_WORKFLOW_CALLS")"
     printf '%s\n' "$step" >>"$HARNESS_TEST_WORKFLOW_CALLS"
@@ -2271,9 +2271,6 @@ cmd_run() {
   fi
   if selected_containers_exist; then
     die "Docker generated state is missing or invalid while selected containers exist; run down or clean before running workflow"
-  fi
-  if generated_runtime_state_present; then
-    die "Docker generated state is partial or inconsistent; rerun init-run before running workflow"
   fi
   printf 'run: mode=fresh run-id=%s\n' "$HARNESS_RUN_ID"
   workflow_step preflight cmd_preflight

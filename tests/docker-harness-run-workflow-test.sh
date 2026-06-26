@@ -21,18 +21,30 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
+harness_env="$tmp_dir/harness.env"
+sed \
+  -e '/^HARNESS_GERRIT_HTTP_HOST_PORT=/d' \
+  -e '/^HARNESS_JENKINS_HTTP_HOST_PORT=/d' \
+  "$repo_root/simulation/docker/examples/docker.env.example" >"$harness_env"
+
 run_id="run-workflow-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 fresh_calls="$tmp_dir/fresh-calls.log"
+fresh_workflow_calls="$tmp_dir/fresh-workflow-calls.log"
 resume_calls="$tmp_dir/resume-calls.log"
-blocked_output="$tmp_dir/blocked.out"
+resume_workflow_calls="$tmp_dir/resume-workflow-calls.log"
+partial_calls="$tmp_dir/partial-calls.log"
+partial_workflow_calls="$tmp_dir/partial-workflow-calls.log"
+post_clean_calls="$tmp_dir/post-clean-calls.log"
+post_clean_workflow_calls="$tmp_dir/post-clean-workflow-calls.log"
 
 mkdir -p "$run_dir"
 
 set +e
 PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$fresh_calls" \
+  HARNESS_TEST_WORKFLOW_CALLS="$fresh_workflow_calls" \
   HARNESS_RUN_ID="$run_id" HARNESS_PROJECT_NAME="$run_id" \
-  "$repo_root/simulation/docker/simulate.sh" run >"$tmp_dir/fresh.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$harness_env" run >"$tmp_dir/fresh.out" 2>&1
 fresh_rc=$?
 set -e
 [ "$fresh_rc" -eq 0 ] || {
@@ -41,45 +53,18 @@ set -e
   exit 1
 }
 grep -Fq 'run: mode=fresh run-id='"$run_id" "$tmp_dir/fresh.out"
+grep -Fq 'preflight' "$fresh_workflow_calls"
+grep -Fq 'init-run' "$fresh_workflow_calls"
 
-mkdir -p "$run_dir/state/rendered/runtime-inputs"
-cat >"$run_dir/state/rendered/harness.env" <<EOF
-HARNESS_MODE=docker-simulation
-HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
-HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
-HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
-HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
-HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
-EOF
-cat >"$run_dir/state/rendered/harness.runtime.env" <<EOF
-HARNESS_MODE=docker-simulation
-HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
-HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
-HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
-HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
-HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
-EOF
-cat >"$run_dir/state/rendered/artifact-manifest-contract.txt" <<'EOF'
-contract=original
-EOF
-for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-  printf 'sentinel=%s\n' "$file" >"$run_dir/state/rendered/runtime-inputs/$file"
-done
-cat >"$run_dir/.loopforge-docker-run.env" <<EOF
-mode=docker-simulation
-run_id=$run_id
-project_name=$run_id
-repo_root=$repo_root
-generated_run_dir=$run_dir
-runtime_env_fingerprint=$(sha256sum "$run_dir/state/rendered/harness.runtime.env" | awk '{print $1}')
-EOF
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$resume_calls" \
+  HARNESS_RUN_ID="$run_id" HARNESS_PROJECT_NAME="$run_id" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$harness_env" init-run >/dev/null
 
 set +e
 PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$resume_calls" \
+  HARNESS_TEST_WORKFLOW_CALLS="$resume_workflow_calls" \
   HARNESS_RUN_ID="$run_id" HARNESS_PROJECT_NAME="$run_id" \
-  "$repo_root/simulation/docker/simulate.sh" run >"$tmp_dir/resume.out" 2>&1
+  "$repo_root/simulation/docker/simulate.sh" --env "$harness_env" run >"$tmp_dir/resume.out" 2>&1
 resume_rc=$?
 set -e
 [ "$resume_rc" -eq 0 ] || {
@@ -88,23 +73,60 @@ set -e
   exit 1
 }
 grep -Fq 'run: mode=resume run-id='"$run_id" "$tmp_dir/resume.out"
+grep -Fq '==> up' "$tmp_dir/resume.out"
+if grep -Eq '^==> (preflight|init-run)$' "$tmp_dir/resume.out"; then
+  printf 'resume workflow should not rerun preflight or init-run\n' >&2
+  exit 1
+fi
 
-blocked_run_id="run-workflow-blocked-$$"
-blocked_dir="$repo_root/generated/simulation/docker/$blocked_run_id"
-mkdir -p "$blocked_dir/state/rendered"
-cat >"$blocked_dir/state/rendered/harness.env" <<EOF
+partial_run_id="run-workflow-partial-$$"
+partial_dir="$repo_root/generated/simulation/docker/$partial_run_id"
+mkdir -p "$partial_dir/state/rendered"
+cat >"$partial_dir/state/rendered/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
-HARNESS_RUN_ID=$blocked_run_id
-HARNESS_PROJECT_NAME=$blocked_run_id
+HARNESS_RUN_ID=$partial_run_id
+HARNESS_PROJECT_NAME=$partial_run_id
 EOF
 
 set +e
-PATH="$fake_bin:$PATH" HARNESS_RUN_ID="$blocked_run_id" HARNESS_PROJECT_NAME="$blocked_run_id" \
-  "$repo_root/simulation/docker/simulate.sh" run >"$blocked_output" 2>&1
-blocked_rc=$?
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$partial_calls" \
+  HARNESS_TEST_WORKFLOW_CALLS="$partial_workflow_calls" \
+  HARNESS_RUN_ID="$partial_run_id" HARNESS_PROJECT_NAME="$partial_run_id" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$harness_env" run >"$tmp_dir/partial.out" 2>&1
+partial_rc=$?
 set -e
-[ "$blocked_rc" -ne 0 ] || {
-  printf 'blocked workflow unexpectedly succeeded\n' >&2
+[ "$partial_rc" -eq 0 ] || {
+  printf 'partial-state fresh workflow failed\n' >&2
+  sed -n '1,160p' "$tmp_dir/partial.out" >&2
   exit 1
 }
-grep -Eq 'partial or inconsistent|run down or clean' "$blocked_output"
+grep -Fq 'run: mode=fresh run-id='"$partial_run_id" "$tmp_dir/partial.out"
+grep -Fq '==> preflight' "$tmp_dir/partial.out"
+grep -Fq '==> init-run' "$tmp_dir/partial.out"
+grep -Fq 'preflight' "$partial_workflow_calls"
+grep -Fq 'init-run' "$partial_workflow_calls"
+
+post_clean_run_id="run-workflow-post-clean-$$"
+post_clean_dir="$repo_root/generated/simulation/docker/$post_clean_run_id"
+mkdir -p \
+  "$post_clean_dir/exported-artifacts" \
+  "$post_clean_dir/evidence" \
+  "$post_clean_dir/logs"
+
+set +e
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$post_clean_calls" \
+  HARNESS_TEST_WORKFLOW_CALLS="$post_clean_workflow_calls" \
+  HARNESS_RUN_ID="$post_clean_run_id" HARNESS_PROJECT_NAME="$post_clean_run_id" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$harness_env" run >"$tmp_dir/post-clean.out" 2>&1
+post_clean_rc=$?
+set -e
+[ "$post_clean_rc" -eq 0 ] || {
+  printf 'post-clean fresh workflow failed\n' >&2
+  sed -n '1,160p' "$tmp_dir/post-clean.out" >&2
+  exit 1
+}
+grep -Fq 'run: mode=fresh run-id='"$post_clean_run_id" "$tmp_dir/post-clean.out"
+grep -Fq '==> preflight' "$tmp_dir/post-clean.out"
+grep -Fq '==> init-run' "$tmp_dir/post-clean.out"
+grep -Fq 'preflight' "$post_clean_workflow_calls"
+grep -Fq 'init-run' "$post_clean_workflow_calls"
