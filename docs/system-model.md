@@ -143,7 +143,7 @@ taxonomy and places each account in the end-to-end system.
 | Jenkins Gerrit integration account | Jenkins controller runtime and Gerrit service | Gerrit service account used by Jenkins for Gerrit SSH authentication, `stream-events`, and `Verified` voting. |
 | Test user account | Verification utility | LDAP-backed human-style account used to prove login/change workflow and disposable Gerrit change behavior. |
 | LDAP bind account | Gerrit and Jenkins services | Read-only LDAP service account used for directory search. |
-| `ci-operator` account | Simulation machine runner and simulation harness | Simulation-only local OS account for orchestration, SSH access, helper commands, privileged simulation operations, and evidence collection. |
+| Operator account | Human operator, machine runner, and simulation harness | Configurable local OS account for orchestration, SSH access, helper commands, privileged operations, and evidence collection. Default example is `ci-operator`. |
 
 Credential custody rules from `docs/account-model.md` apply throughout the
 system:

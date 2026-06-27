@@ -1262,6 +1262,26 @@ shell_quote() {
   printf '%q' "$value"
 }
 
+owned_directory_command() {
+  local owner group mode path recursive
+  owner="${1:?owner required}"
+  group="${2:?group required}"
+  mode="${3:?mode required}"
+  path="${4:?path required}"
+  recursive="${5:-0}"
+
+  printf 'install -d -m %s -o %s -g %s %s' \
+    "$(shell_quote "$mode")" \
+    "$(shell_quote "$owner")" \
+    "$(shell_quote "$group")" \
+    "$(shell_quote "$path")"
+  if [ "$recursive" = "1" ]; then
+    printf ' && chown -R %s %s' \
+      "$(shell_quote "$owner:$group")" \
+      "$(shell_quote "$path")"
+  fi
+}
+
 target_container_for_evidence() {
   local role
   role="${1:?role required}"
@@ -1684,11 +1704,11 @@ stage_container_role_env() {
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   container_env_file="$(container_env_file_for_role "$role" "$service")"
   require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
-  stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" root root "$log"
+  stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator "$log"
 }
 
 prepare_product_home_ownership() {
-  local role service host_env_file path account group log
+  local role service host_env_file path account group log command
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
@@ -1714,7 +1734,8 @@ prepare_product_home_ownership() {
       die "Unknown role '$role'; expected gerrit, jenkins-controller, or jenkins-agent"
       ;;
   esac
-  compose exec -T "$service" sh -c "mkdir -p $(shell_quote "$path") && chown -R $(shell_quote "$account:$group") $(shell_quote "$path")" >>"$log" 2>&1
+  command="$(owned_directory_command "$account" "$group" 0755 "$path" 1)"
+  compose exec -T "$service" sh -c "$command" >>"$log" 2>&1
   printf 'product_home_ownership_prepared role=%s service=%s path=%s owner=%s group=%s\n' \
     "$role" "$service" "$path" "$account" "$group" >>"$log"
 }
@@ -1734,7 +1755,7 @@ refresh_target_ssh_known_hosts() {
 }
 
 prepare_bundle_factory_workspace_ownership() {
-  local role log state_root log_root input_root work_root workspace
+  local role log state_root log_root input_root work_root workspace script
   role="${1:?role required}"
   log="${2:?log required}"
   state_root="/var/lib/loopforge"
@@ -1742,13 +1763,43 @@ prepare_bundle_factory_workspace_ownership() {
   input_root="/var/lib/loopforge/rendered"
   work_root="/var/lib/loopforge/artifact-bundle-work"
   workspace="$(container_bundle_factory_work_dir_for_role "$role")"
-  if ! compose exec -T -u root bundle-factory sh -c \
-    "mkdir -p $(shell_quote "$state_root") $(shell_quote "$log_root") $(shell_quote "$input_root") $(shell_quote "$workspace") && chown -R ci-operator:ci-operator $(shell_quote "$state_root") $(shell_quote "$log_root") $(shell_quote "$input_root") $(shell_quote "$work_root")" \
-    >>"$log" 2>&1; then
+  script="$(owned_directory_command ci-operator ci-operator 0755 "$state_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0755 "$log_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$input_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0700 "$work_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0755 "$workspace" 1)"
+  if ! compose exec -T -u root bundle-factory sh -c "$script" >>"$log" 2>&1; then
     return 1
   fi
   printf 'bundle_factory_workspace_ownership_prepared role=%s service=bundle-factory state=%s logs=%s inputs=%s artifacts=%s owner=ci-operator group=ci-operator\n' \
     "$role" "$state_root" "$log_root" "$input_root" "$work_root" >>"$log"
+}
+
+prepare_target_helper_owned_paths() {
+  local role service log state_root rendered_root incoming_dir script
+  role="${1:?role required}"
+  service="${2:?service required}"
+  log="${3:?log required}"
+  state_root="/var/lib/loopforge"
+  rendered_root="/var/lib/loopforge/rendered"
+  incoming_dir="/var/lib/loopforge/staging/$role/incoming"
+
+  script="$(owned_directory_command ci-operator ci-operator 0700 "$state_root" 0)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$rendered_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$incoming_dir" 1)"
+  if ! compose exec -T -u root "$service" sh -c "$script" >>"$log" 2>&1; then
+    return 1
+  fi
+  printf 'helper_owned_paths_prepared role=%s service=%s state=%s rendered=%s staging=%s owner=ci-operator group=ci-operator retained_evidence_logs=host-owned-sideband\n' \
+    "$role" "$service" "$state_root" "$rendered_root" "$incoming_dir" >>"$log"
+}
+
+prepare_all_target_helper_owned_paths() {
+  local log
+  log="${1:?log required}"
+  prepare_target_helper_owned_paths gerrit gerrit-target "$log"
+  prepare_target_helper_owned_paths jenkins-controller jenkins-controller-target "$log"
+  prepare_target_helper_owned_paths jenkins-agent jenkins-agent-target "$log"
 }
 
 copy_bundle_factory_artifacts_to_host() {
@@ -1776,7 +1827,7 @@ copy_bundle_factory_artifacts_to_host() {
 }
 
 docker_cp_file_to_service() {
-  local host_file service container_path owner group mode log container_id tmp_path dest_dir
+  local host_file service container_path owner group mode log container_id tmp_path dest_dir command
   host_file="${1:?host file required}"
   service="${2:?service required}"
   container_path="${3:?container path required}"
@@ -1792,9 +1843,9 @@ docker_cp_file_to_service() {
   if ! docker cp "$host_file" "$container_id:$tmp_path" >>"$log" 2>&1; then
     return 1
   fi
-  compose exec -T -u root "$service" sh -c \
-    "install -d -m 0750 -o $(shell_quote "$owner") -g $(shell_quote "$group") $(shell_quote "$dest_dir") && mv $(shell_quote "$tmp_path") $(shell_quote "$container_path") && chown $(shell_quote "$owner:$group") $(shell_quote "$container_path") && chmod $(shell_quote "$mode") $(shell_quote "$container_path")" \
-    >>"$log" 2>&1
+  command="$(owned_directory_command "$owner" "$group" 0750 "$dest_dir" 0)"
+  command="$command && mv $(shell_quote "$tmp_path") $(shell_quote "$container_path") && chown $(shell_quote "$owner:$group") $(shell_quote "$container_path") && chmod $(shell_quote "$mode") $(shell_quote "$container_path")"
+  compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1
   printf 'transfer_mode=docker-cp-waiver source=%s service=%s destination=%s owner=%s group=%s mode=%s scope=docker-simulation-only\n' \
     "$host_file" "$service" "$container_path" "$owner" "$group" "$mode" >>"$log"
 }
@@ -2492,10 +2543,15 @@ cmd_up() {
   check_ubuntu_service_baseline gerrit-target gerrit
   check_ubuntu_service_baseline jenkins-controller-target jenkins-controller
   check_ubuntu_service_baseline jenkins-agent-target jenkins-agent
-  prepare_product_home_ownership gerrit gerrit-target "$log"
-  prepare_product_home_ownership jenkins-controller jenkins-controller-target "$log"
-  prepare_product_home_ownership jenkins-agent jenkins-agent-target "$log"
-  refresh_target_ssh_known_hosts "$log"
+  if ! prepare_all_target_helper_owned_paths "$log" ||
+    ! prepare_product_home_ownership gerrit gerrit-target "$log" ||
+    ! prepare_product_home_ownership jenkins-controller jenkins-controller-target "$log" ||
+    ! prepare_product_home_ownership jenkins-agent jenkins-agent-target "$log" ||
+    ! refresh_target_ssh_known_hosts "$log"; then
+    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start ownership preparation failed")"
+    print_command_failure up "" failed "$log" "$evidence"
+    return 1
+  fi
   require_running_service ldap
   evidence="$(write_evidence up harness pass "simulate.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
@@ -2756,12 +2812,12 @@ cmd_stage_artifacts() {
     return 1
   fi
 
-  if ! docker_cp_file_to_service "$archive" "$service" "$container_archive" root root 0644 "$log"; then
+  if ! docker_cp_file_to_service "$archive" "$service" "$container_archive" ci-operator ci-operator 0644 "$log"; then
     evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact archive failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
-  if ! docker_cp_file_to_service "$checksum" "$service" "$container_checksum" root root 0644 "$log"; then
+  if ! docker_cp_file_to_service "$checksum" "$service" "$container_checksum" ci-operator ci-operator 0644 "$log"; then
     evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact checksum failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1

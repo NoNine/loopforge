@@ -27,7 +27,7 @@ Composite command:
 | Command | Purpose |
 | --- | --- |
 | `run [--env FILE]` | Runs the normal Docker simulation workflow. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, or `audit-state`. |
-| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as `ci-operator`, not Gerrit service SSH. |
+| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
 
@@ -87,12 +87,15 @@ The Docker target image includes product runtime accounts with native homes:
 `jenkins-agent` owns `/var/lib/jenkins-agent`. These are separate from
 application admin, integration, LDAP bind, and test accounts.
 
-The Docker target image also includes a local `ci-operator` OS account with
+The Docker target image also includes the default example target-local
+`ci-operator` account. This target-local `ci-operator` OS account has
 passwordless sudo for simulation orchestration and privileged helper
-operations. The `ci-operator` account does not own `/srv/gerrit`,
+operations. The operator account does not own `/srv/gerrit`,
 `/var/lib/jenkins`, or `/var/lib/jenkins-agent` and is not a Gerrit, Jenkins
 controller, or Jenkins agent runtime account. Root remains available for
-privileged container operations where the harness needs it.
+privileged container operations where the harness needs it. The local host
+account that invokes `simulate.sh` may have any site-local name; it is not
+renamed, mapped, or required to be `ci-operator`.
 
 Use `simulate.sh status --env FILE` after `up` to inspect the selected
 running simulation. The status command prints the run ID, Compose project,
@@ -101,7 +104,8 @@ read-only and fails when the selected run's containers are not running, so it
 does not rely on stale port data from rendered config files.
 
 Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
-environment through SSH from the host. The command uses the rendered
+environment as the target-local `ci-operator` through SSH from the host. The
+command uses the rendered
 `INTEGRATION_*_TARGET_SSH_*` values and the run-scoped target SSH key and
 known-hosts file:
 

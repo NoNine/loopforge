@@ -184,7 +184,8 @@ apply_defaults() {
   JENKINS_SHARED_GROUP="${JENKINS_SHARED_GROUP:-}"
   JENKINS_SHARED_GROUP_GID="${JENKINS_SHARED_GROUP_GID:-}"
   JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
-  JENKINS_OPERATOR_ACCOUNT="${JENKINS_OPERATOR_ACCOUNT:-ci-operator}"
+  LOOPFORGE_OPERATOR_ACCOUNT="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
+  LOOPFORGE_OPERATOR_GROUP="${LOOPFORGE_OPERATOR_GROUP:-$LOOPFORGE_OPERATOR_ACCOUNT}"
   GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-docker-gerrit}"
   JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-docker-gerrit-verification}"
   if [ -z "$INTEGRATION_GERRIT_ACL_MODE" ]; then
@@ -454,7 +455,8 @@ validate_inputs() {
   validate_simple_token JENKINS_AGENT_SCHEDULING_LABEL "$JENKINS_AGENT_SCHEDULING_LABEL"
   validate_simple_token JENKINS_AGENT_CREDENTIAL_ID "$JENKINS_AGENT_CREDENTIAL_ID"
   validate_group_name JENKINS_SHARED_GROUP "$JENKINS_SHARED_GROUP"
-  validate_account_name JENKINS_OPERATOR_ACCOUNT "$JENKINS_OPERATOR_ACCOUNT"
+  validate_account_name LOOPFORGE_OPERATOR_ACCOUNT "$LOOPFORGE_OPERATOR_ACCOUNT"
+  validate_group_name LOOPFORGE_OPERATOR_GROUP "$LOOPFORGE_OPERATOR_GROUP"
   case "$JENKINS_SHARED_GROUP_GID" in
     ""|*[!0-9]*)
       die "JENKINS_SHARED_GROUP_GID must be numeric"
@@ -949,7 +951,7 @@ ensure_gerrit_verification_project() {
   "create_empty_commit": true
 }
 EOF
-  target_write_file gerrit "$project_json" "$target_json" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$project_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if ! gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$project" >>"$log" 2>&1; then
     gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" PUT "/projects/$project" "$target_json" >>"$log" 2>&1
     printf 'verification_project=created project=%s\n' "$GERRIT_VERIFICATION_PROJECT" >>"$log"
@@ -982,7 +984,7 @@ ensure_verified_label_and_access() {
   }
 }
 EOF
-  target_write_file gerrit "$label_json" /tmp/verified-label.json "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$label_json" /tmp/verified-label.json "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     PUT "/projects/$all_projects_id/labels/Verified" "/tmp/verified-label.json" >>"$log" 2>&1
   printf 'verified_label_apply=simulation-only-direct-rest project=All-Projects endpoint=projects.labels\n' >>"$log"
@@ -1016,7 +1018,7 @@ EOF
   }
 }
 EOF
-  target_write_file gerrit "$global_access_json" /tmp/integration-global-access.json "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$global_access_json" /tmp/integration-global-access.json "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     POST "/projects/$all_projects_id/access" "/tmp/integration-global-access.json" >>"$log" 2>&1
   printf 'access_apply=simulation-only-direct-rest project=All-Projects endpoint=projects.access capability=streamEvents\n' >>"$log"
@@ -1059,7 +1061,7 @@ EOF
   }
 }
 EOF
-  target_write_file gerrit "$project_access_json" /tmp/integration-project-access.json "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$project_access_json" /tmp/integration-project-access.json "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     POST "/projects/$project_id/access" "/tmp/integration-project-access.json" >>"$log" 2>&1
   printf 'access_apply=simulation-only-direct-rest project=%s ref_pattern=%s endpoint=projects.access permissions=read,label-Verified\n' "$GERRIT_VERIFICATION_PROJECT" "$GERRIT_VERIFICATION_REF_PATTERN" >>"$log"
@@ -1104,7 +1106,7 @@ submit_review_change_number() {
   "wait_for_merge": true
 }
 EOF
-  target_write_file gerrit "$submit_json" "$target_json" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$submit_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" POST "/changes/$change/submit" "$target_json" >>"$log" 2>&1
   printf 'submitted_reviewed_config_change=%s\n' "$change" >>"$log"
 }
@@ -1195,7 +1197,7 @@ copy_controller_public_key_to_target() {
   target_path="${3:?target path required}"
   log="${4:?log required}"
   target_read_text jenkins-controller "$public_path" >"$(integration_host_state_dir)/status/$(basename "$target_path").tmp"
-  target_write_file "$target_role" "$(integration_host_state_dir)/status/$(basename "$target_path").tmp" "$target_path" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0644 "$log"
+  target_write_file "$target_role" "$(integration_host_state_dir)/status/$(basename "$target_path").tmp" "$target_path" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0644 "$log"
   rm -f "$(integration_host_state_dir)/status/$(basename "$target_path").tmp"
 }
 
@@ -1572,8 +1574,8 @@ EOF
   "subject": "Docker Step 11 stream-events validation"
 }
 EOF
-  target_write_file gerrit "$project_json" "$target_project_json" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
-  target_write_file gerrit "$event_json" "$target_json" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$project_json" "$target_project_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
+  target_write_file gerrit "$event_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if ! gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" PUT "/projects/$event_project" "$target_project_json" >>"$log" 2>&1; then
     gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$event_project" >>"$log" 2>&1 ||
       die "Gerrit REST could not create or find stream-events project $event_project"
@@ -1688,8 +1690,8 @@ EOF
   "subject": "Docker Step 11 verification change"
 }
 EOF
-  target_write_file gerrit "$(integration_host_state_dir)/status/create-project.json" "$project_file" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
-  target_write_file gerrit "$(integration_host_state_dir)/status/create-change.json" "$json_file" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$(integration_host_state_dir)/status/create-project.json" "$project_file" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
+  target_write_file gerrit "$(integration_host_state_dir)/status/create-change.json" "$json_file" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if ! gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" PUT "/projects/$GERRIT_VERIFICATION_PROJECT" "$project_file" >>"$log" 2>&1; then
     gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$GERRIT_VERIFICATION_PROJECT" >>"$log" 2>&1 ||
       die "Gerrit REST could not create or find disposable project $GERRIT_VERIFICATION_PROJECT"
@@ -1760,7 +1762,7 @@ post_simulation_verified_vote() {
   "tag": "autogenerated:simulation-direct-rest"
 }
 EOF
-  target_write_file gerrit "$review_post_json" "$target_json" "$JENKINS_OPERATOR_ACCOUNT" "$JENKINS_OPERATOR_ACCOUNT" 0600 "$log"
+  target_write_file gerrit "$review_post_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" \
     POST "/changes/$change/revisions/$patchset/review" "$target_json" >>"$log" 2>&1
   printf 'review_apply=simulation-only-direct-rest change=%s patchset=%s label=Verified value=+1 account=%s\n' \

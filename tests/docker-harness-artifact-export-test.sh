@@ -183,6 +183,9 @@ grep -Fq 'Docker cp simulation-only waiver' "$stage_evidence"
 grep -Fq -- 'cp ' "$calls"
 grep -Fq -- 'gerrit-artifacts-bundle.tar.gz container-id:/tmp/loopforge-docker-cp-' "$calls"
 grep -Fq -- 'gerrit-artifacts-bundle.tar.gz.sha256 container-id:/tmp/loopforge-docker-cp-' "$calls"
+grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging/gerrit/incoming' "$calls"
+grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz' "$calls"
+grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
 grep -Fq -- 'tar -xzf "$archive_name" -C /opt' "$calls"
 
 [ ! -d "$run_dir/staging/gerrit/gerrit-artifacts-bundle" ] || {

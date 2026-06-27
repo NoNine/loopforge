@@ -40,23 +40,51 @@ reject_doc_text docs/account-model.md \
   'Account model must not claim product runtime account names are fixed literals'
 
 require_doc_text docs/account-model.md \
-  '`ci-operator` local OS account has passwordless sudo' \
-  'Account model must document ci-operator passwordless sudo'
+  'The operator account is configurable through `LOOPFORGE_OPERATOR_ACCOUNT`.' \
+  'Account model must document configurable operator account'
 require_doc_text docs/account-model.md \
-  'Gerrit or Jenkins runtime account, application admin account, integration' \
-  'Account model must keep ci-operator separate from product accounts'
+  'The default example account and' \
+  'Account model must document ci-operator as the default example'
+require_doc_text docs/account-model.md \
+  'group are `ci-operator:ci-operator` for all modes.' \
+  'Account model must document ci-operator as the default example'
+require_doc_text docs/account-model.md \
+  'In Docker simulation, the target-local `ci-operator` OS account has' \
+  'Account model must document Docker ci-operator passwordless sudo'
+require_doc_text docs/account-model.md \
+  'not mean the local host account running `simulate.sh` is named' \
+  'Account model must distinguish target ci-operator from host account'
+require_doc_text docs/account-model.md \
+  'not mapped to the local host username, UID, or GID.' \
+  'Account model must forbid mapping target ci-operator to host identity'
+require_doc_text docs/account-model.md \
+  'The operator account is not a Gerrit or Jenkins runtime account' \
+  'Account model must keep the operator account separate from product accounts'
 require_doc_text simulation/docker/README.md \
-  'local `ci-operator` OS account with' \
+  'This target-local `ci-operator` OS account has' \
   'Docker README must document ci-operator passwordless sudo'
+require_doc_text simulation/docker/README.md \
+  'The local host account that invokes `simulate.sh` may have any site-local name' \
+  'Docker README must not imply host account is ci-operator'
+require_doc_text simulation/docker/README.md \
+  'environment as the target-local `ci-operator` through SSH from the host.' \
+  'Docker README must document target-local SSH operator login'
 require_doc_text simulation/docker/README.md \
   'passwordless sudo for simulation orchestration and privileged helper' \
   'Docker README must document ci-operator passwordless sudo'
 require_doc_text simulation/docker/README.md \
-  'The `ci-operator` account does not own `/srv/gerrit`,' \
-  'Docker README must document ci-operator is not a product runtime owner'
+  'The operator account does not own `/srv/gerrit`,' \
+  'Docker README must document operator account is not a product runtime owner'
 require_doc_text simulation/docker/README.md \
   'controller, or Jenkins agent runtime account.' \
-  'Docker README must document ci-operator is not a product runtime owner'
+  'Docker README must document operator account is not a product runtime owner'
+require_doc_text docs/directory-model.md \
+  'Host-side generated backing paths use the local host account that runs the simulation' \
+  'Directory model must separate host generated ownership from target operator ownership'
+
+reject_doc_text simulation/docker/README.md \
+  'This local `ci-operator` OS account has' \
+  'Docker README must not call target ci-operator the local host account'
 
 require_doc_text docs/jenkins-agent-native-operations-reference.md \
   'The Jenkins agent role helper requires this account and group to already exist' \

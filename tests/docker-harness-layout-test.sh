@@ -131,6 +131,10 @@ grep -Fq -- '${HARNESS_PRODUCT_HOME_DIR}/gerrit:/srv/gerrit' "$repo_root/simulat
   printf 'Docker compose must mount Gerrit product home from HARNESS_PRODUCT_HOME_DIR\n' >&2
   exit 1
 }
+if grep -Eq 'HARNESS_OPERATOR_(UID|GID)' "$repo_root/simulation/docker/compose.yaml" "$repo_root/simulation/docker/target/Dockerfile" "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker simulation must not map target ci-operator to the host operator UID/GID\n' >&2
+  exit 1
+fi
 grep -Fq -- '${HARNESS_PRODUCT_HOME_DIR}/jenkins-controller:/var/lib/jenkins' "$repo_root/simulation/docker/compose.yaml" || {
   printf 'Docker compose must mount Jenkins product home from HARNESS_PRODUCT_HOME_DIR\n' >&2
   exit 1
@@ -214,8 +218,36 @@ grep -Fq -- 'prepare_bundle_factory_workspace_ownership' "$repo_root/simulation/
   printf 'Docker harness must prepare bundle-factory workspace ownership\n' >&2
   exit 1
 }
+grep -Fq -- 'prepare_target_helper_owned_paths' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must prepare target helper-owned path ownership\n' >&2
+  exit 1
+}
+grep -Fq -- 'if ! prepare_all_target_helper_owned_paths "$log" ||' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness up must prepare target helper-owned paths\n' >&2
+  exit 1
+}
+grep -Fq -- 'retained_evidence_logs=host-owned-sideband' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must keep retained evidence/log bind roots host-owned sideband\n' >&2
+  exit 1
+}
+if grep -Eq 'owned_directory_command ci-operator ci-operator [0-9]+ "\\$(evidence_root|log_root)"' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker harness must not chown retained evidence/log bind roots to target ci-operator\n' >&2
+  exit 1
+fi
 grep -Fq -- 'if ! prepare_bundle_factory_workspace_ownership "$role" "$log"; then' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Docker harness must fail closed when bundle-factory workspace prep fails\n' >&2
+  exit 1
+}
+if grep -Fq -- 'owned_directory_command()' "$repo_root/scripts/common.sh"; then
+  printf 'scripts/common.sh must not contain Docker harness-only ownership helpers\n' >&2
+  exit 1
+fi
+grep -Fq -- 'owned_directory_command()' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must own its local directory ownership command construction\n' >&2
+  exit 1
+}
+grep -Fq -- 'owned_directory_command "$account" "$group"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness product home preparation must use local ownership helper\n' >&2
   exit 1
 }
 grep -Fq -- 'bundle_factory_artifact_export' "$repo_root/simulation/docker/simulate.sh" || {
@@ -234,7 +266,15 @@ grep -Fq -- 'transfer_mode=docker-cp-waiver' "$repo_root/simulation/docker/simul
   printf 'Docker harness must label Docker cp transfers as simulation-only waivers\n' >&2
   exit 1
 }
-grep -Fq -- 'chown -R $(shell_quote "$account:$group") $(shell_quote "$path")' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness product home preparation must chown configured account/group\n' >&2
+grep -Fq -- 'stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator "$log"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness target env staging must use ci-operator ownership\n' >&2
+  exit 1
+}
+grep -Fq -- 'docker_cp_file_to_service "$archive" "$service" "$container_archive" ci-operator ci-operator 0644 "$log"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness artifact archive staging must use ci-operator ownership\n' >&2
+  exit 1
+}
+grep -Fq -- 'docker_cp_file_to_service "$checksum" "$service" "$container_checksum" ci-operator ci-operator 0644 "$log"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness artifact checksum staging must use ci-operator ownership\n' >&2
   exit 1
 }

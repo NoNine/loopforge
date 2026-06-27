@@ -97,8 +97,8 @@ reject_pattern scripts/jenkins-agent-setup.sh \
   'q_log="$(json_quote "$bounded_log;$service_log")"' \
   'Jenkins agent service log must not be a bounded log reference'
 require_pattern scripts/integration-setup.sh \
-  "printf '%s/integration\n' \"\$HARNESS_STATE_DIR\"" \
-  'Integration durable host state must live under operator-owned integration state'
+  'INTEGRATION_STATE_DIR="${INTEGRATION_STATE_DIR:-${HARNESS_STATE_DIR:+$HARNESS_STATE_DIR/integration}}"' \
+  'Integration durable host state must default under operator-owned integration state'
 reject_pattern scripts/integration-setup.sh \
   "printf '%s/jenkins-controller/integration\n' \"\$HARNESS_STATE_DIR\"" \
   'Integration host state must not live under Jenkins controller helper state'
@@ -109,20 +109,41 @@ require_pattern scripts/integration-setup.sh \
   "printf '%s/integration-ops\n' \"\$JENKINS_HOME\"" \
   'Jenkins operation custody must live under Jenkins home'
 require_pattern scripts/integration-setup.sh \
-  'JENKINS_OPERATOR_ACCOUNT="${JENKINS_OPERATOR_ACCOUNT:-ci-operator}"' \
-  'Integration helper must default the Jenkins operator account'
+  'LOOPFORGE_OPERATOR_ACCOUNT="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
+  'Integration helper must default the shared operator account'
 require_pattern examples/integration.env.example \
-  'JENKINS_OPERATOR_ACCOUNT="ci-operator"' \
+  'LOOPFORGE_OPERATOR_ACCOUNT="ci-operator"' \
   'Integration example env must document the operator account'
+require_pattern examples/integration.env.example \
+  'LOOPFORGE_OPERATOR_GROUP="ci-operator"' \
+  'Integration example env must document the operator group'
+require_pattern examples/gerrit.env.example \
+  'LOOPFORGE_OPERATOR_ACCOUNT="ci-operator"' \
+  'Gerrit example env must document the shared operator account'
+require_pattern examples/jenkins-controller.env.example \
+  'LOOPFORGE_OPERATOR_ACCOUNT="ci-operator"' \
+  'Jenkins controller example env must document the shared operator account'
+require_pattern examples/jenkins-agent.env.example \
+  'LOOPFORGE_OPERATOR_ACCOUNT="ci-operator"' \
+  'Jenkins agent example env must document the shared operator account'
+require_pattern scripts/integration-setup.sh \
+  'target_write_file gerrit "$project_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"' \
+  'Integration helper must write target payloads through the shared operator account and group'
+reject_pattern scripts/integration-setup.sh \
+  'JENKINS_OPERATOR_ACCOUNT' \
+  'Integration helper must not expose a Jenkins-specific operator account'
+reject_pattern examples/integration.env.example \
+  'JENKINS_OPERATOR_ACCOUNT=' \
+  'Integration example env must not expose a Jenkins-specific operator account'
 reject_pattern examples/integration.env.example \
   'JENKINS_OPERATOR_GROUP=' \
   'Integration example env must not define an operator group'
 require_pattern scripts/integration-setup.sh \
-  'docker exec -i -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -s <<EOF >/dev/null' \
-  'Jenkins integration operation dirs must pass setup script through operator stdin'
+  'target_exec() {' \
+  'Integration helper must use target OS SSH execution as its control-plane interface'
 require_pattern scripts/integration-setup.sh \
-  'docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc' \
-  'Jenkins-owned operation files must be prepared through the configured operator identity'
+  'target_run_as() {' \
+  'Integration helper must run target commands through the configured runtime identity'
 require_pattern scripts/integration-setup.sh \
   "sudo install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP'" \
   'Jenkins integration operation dirs must be Jenkins-owned private directories'
@@ -130,22 +151,22 @@ require_pattern scripts/integration-setup.sh \
   'sudo -u '\''$JENKINS_RUNTIME_ACCOUNT'\'' test -w '\''$(jenkins_ops_keys_dir)'\''' \
   'Integration setup must fail fast when Jenkins runtime cannot write operation keys'
 require_pattern scripts/integration-setup.sh \
-  'container_script="$(jenkins_ops_payloads_dir)/$script_name"' \
+  'target_script="$(jenkins_ops_payloads_dir)/$script_name"' \
   'Jenkins Groovy payloads must live under Jenkins operation custody'
 require_pattern scripts/integration-setup.sh \
-  'docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" mktemp "/tmp/$script_name.XXXXXX.tmp"' \
-  'Jenkins Groovy payloads must stage through transient container /tmp'
+  'target_exec jenkins-controller "mktemp $(shell_quote "/tmp/$script_name.XXXXXX.tmp")"' \
+  'Jenkins Groovy payloads must stage through transient target /tmp'
 require_pattern scripts/integration-setup.sh \
-  'docker exec -i -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sh -lc "cat >'\''$container_tmp_script'\''" <"$script_file"' \
-  'Jenkins Groovy payloads must stream into container /tmp as the operator'
+  'target_copy_to jenkins-controller "$script_file" "$target_tmp_script"' \
+  'Jenkins Groovy payloads must transfer through the target SSH file interface'
 require_pattern scripts/integration-setup.sh \
   'sudo install -m 600 -o '\''$JENKINS_RUNTIME_ACCOUNT'\'' -g '\''$JENKINS_RUNTIME_GROUP'\''' \
   'Jenkins Groovy payloads must be installed as Jenkins-owned files'
 require_pattern scripts/integration-setup.sh \
-  'sudo install -m 600 -o '\''$JENKINS_RUNTIME_ACCOUNT'\'' -g '\''$JENKINS_RUNTIME_GROUP'\'' '\''$container_tmp_script'\'' '\''$container_script'\''' \
+  'sudo install -m 600 -o '\''$JENKINS_RUNTIME_ACCOUNT'\'' -g '\''$JENKINS_RUNTIME_GROUP'\'' '\''$target_tmp_script'\'' '\''$target_script'\''' \
   'Jenkins Groovy payloads must install from transient /tmp to Jenkins custody'
 require_pattern scripts/integration-setup.sh \
-  'trap '\''rm -f '\''\'\'''\''$container_tmp_script'\''\'\'''\'''\'' EXIT' \
+  'trap '\''rm -f '\''\'\'''\''$target_tmp_script'\''\'\'''\'''\'' EXIT' \
   'Jenkins Groovy payload staging must be removed after install'
 reject_pattern scripts/integration-setup.sh \
   'tmp_script="$(mktemp "${TMPDIR:-/tmp}/$(basename "$script_file").XXXXXX.tmp")"' \
@@ -154,19 +175,19 @@ require_pattern scripts/integration-setup.sh \
   '"refs/meta/config": {' \
   'Verification project access must grant read on refs/meta/config through All-Projects'
 require_pattern scripts/integration-setup.sh \
-  'if ! sudo -u '\''$JENKINS_RUNTIME_ACCOUNT'\'' sh -c '\''test -s '\''\'\'''\''$container_private'\''\'\'''\'''\''; then' \
+  'if ! sudo -u '\''$JENKINS_RUNTIME_ACCOUNT'\'' sh -c '\''test -s '\''\'\'''\''$target_private'\''\'\'''\'''\''; then' \
   'Existing Jenkins integration private keys must be probed as the runtime account before generation'
 require_pattern scripts/integration-setup.sh \
   "Jenkins runtime account cannot read integration private keys" \
   'Integration validation must fail clearly when Jenkins cannot read private keys'
 require_pattern scripts/integration-setup.sh \
-  'ensure_container_integration_dirs' \
-  'Integration setup must keep the Jenkins ops tree creation path available'
+  'ensure_target_integration_dirs' \
+  'Integration setup must keep the SSH target ops tree creation path available'
 validate_impl_start_line="$(
   grep -n '^validate_integration_impl() {' "$repo_root/scripts/integration-setup.sh" | cut -d: -f1 | head -1
 )"
 validate_impl_ensure_line="$(
-  awk -v start="$validate_impl_start_line" 'NR > start && /ensure_container_integration_dirs/ { print NR; exit }' \
+  awk -v start="$validate_impl_start_line" 'NR > start && /ensure_target_integration_dirs/ { print NR; exit }' \
     "$repo_root/scripts/integration-setup.sh"
 )"
 validate_impl_status_line="$(
@@ -186,14 +207,14 @@ validate_impl_status_line="$(
   exit 1
 }
 require_pattern scripts/integration-setup.sh \
-  'docker exec -u "$JENKINS_OPERATOR_ACCOUNT" "$(jenkins_container)" sudo cat "$public_path" |' \
-  'Operator account must be used only as privileged simulation operator'
+  'target_read_text jenkins-controller "$public_path"' \
+  'Public-key handoff must read controller public keys through target SSH'
 require_pattern scripts/integration-setup.sh \
-  "copy_controller_public_key_to_container \"\$public_path\" \"\$(gerrit_container)\" /tmp/jenkins-gerrit.pub" \
-  'Gerrit public-key handoff must use the clear target-local /tmp name'
+  'target_write_file "$target_role"' \
+  'Public-key handoff must write public keys through target SSH'
 require_pattern scripts/integration-setup.sh \
-  "copy_controller_public_key_to_container \"\$public\" \"\$(agent_container)\" /tmp/jenkins-agent.pub" \
-  'Agent public-key handoff must use the clear target-local /tmp name'
+  'copy_controller_public_key_to_target' \
+  'Agent and Gerrit public-key handoff must use the shared target SSH copy helper'
 reject_pattern scripts/integration-setup.sh \
   "install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP' /harness/state/integration" \
   'Integration setup must not transfer harness integration directory ownership to Jenkins'
@@ -210,20 +231,29 @@ reject_pattern scripts/integration-setup.sh \
   'test -d /harness/state/integration/keys && test -r /harness/state/integration/keys && test -w /harness/state/integration/keys' \
   'Integration setup must not validate Jenkins writes to harness-owned keys'
 reject_pattern scripts/integration-setup.sh \
-  'docker_exec_sh "$(gerrit_container)" "install -d -m 700 /harness/state/integration' \
-  'Integration setup must not create unused Gerrit role-local integration state'
+  'docker exec' \
+  'Integration setup must not call docker exec outside Docker simulation'
 reject_pattern scripts/integration-setup.sh \
-  'docker_exec_sh "$(agent_container)" "install -d -m 700 /harness/state/integration' \
-  'Integration setup must not create unused Jenkins-agent role-local integration state'
+  'docker cp' \
+  'Integration setup must not call docker cp outside Docker simulation'
+reject_pattern scripts/integration-setup.sh \
+  'jenkins_container' \
+  'Integration setup must not derive Jenkins container names'
+reject_pattern scripts/integration-setup.sh \
+  'gerrit_container' \
+  'Integration setup must not derive Gerrit container names'
+reject_pattern scripts/integration-setup.sh \
+  'agent_container' \
+  'Integration setup must not derive Jenkins agent container names'
+reject_pattern scripts/integration-setup.sh \
+  'copy_controller_public_key_to_container' \
+  'Integration setup must not use container-specific public-key copy helpers'
 reject_pattern scripts/integration-setup.sh \
   'prepare_generated_file' \
   'Integration setup must not repair stale generated harness scripts before writing them'
 reject_pattern scripts/integration-setup.sh \
   'container_script="/tmp/step11-' \
   'Integration setup must not hand generated Jenkins Groovy scripts through /tmp'
-reject_pattern scripts/integration-setup.sh \
-  'docker cp "$script_file" "$(jenkins_container):$container_script"' \
-  'Integration setup must not copy generated Jenkins Groovy scripts to bypass harness state access'
 reject_pattern scripts/integration-setup.sh \
   '/tmp/step11-' \
   'Integration setup must not use step11-prefixed transient payload filenames'

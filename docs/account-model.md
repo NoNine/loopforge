@@ -1,7 +1,7 @@
 # Account Model
 
-This v1 model keeps runtime, human admin, integration, test, bind, and
-simulation environment accounts separate. Use account names that match the
+This v1 model keeps runtime, operator, human admin, integration, test, bind,
+and simulation environment accounts separate. Use account names that match the
 local naming standard for the deployment; the examples here describe roles,
 not required literal names.
 
@@ -22,17 +22,24 @@ roles in this package are accounts.
 | Test user account | LDAP-backed human-style test account | Verifies login and change workflow. |
 | LDAP bind account | LDAP service account | Lets Gerrit and Jenkins search the directory read-only. |
 
-## Simulation Environment Account
+## Operator Account
 
 | Account | Source | Purpose |
 | --- | --- | --- |
-| `ci-operator` account | Local OS account on simulation machines | Runs orchestration, SSH access, helper commands, privileged simulation operations, and evidence collection. |
+| Operator account | Local OS account on operator, bundle-factory, and target environments | Runs orchestration, SSH access, helper commands, privileged operations, and evidence collection. |
 
-The `ci-operator` account is part of the simulation environment. It is not a
-Gerrit or Jenkins runtime account, application admin account, integration
-account, LDAP bind account, or test user account. The Docker simulation
-`ci-operator` local OS account has passwordless sudo for simulation
-orchestration and privileged helper operations.
+The operator account is configurable through `LOOPFORGE_OPERATOR_ACCOUNT`.
+The operator group is configurable through `LOOPFORGE_OPERATOR_GROUP`, which
+defaults to the selected operator account. The default example account and
+group are `ci-operator:ci-operator` for all modes.
+
+The operator account is not a Gerrit or Jenkins runtime account, application
+admin account, integration account, LDAP bind account, or test user account.
+In Docker simulation, the target-local `ci-operator` OS account has
+passwordless sudo for simulation orchestration and privileged helper
+operations. Logging into a Docker target environment as `ci-operator` does
+not mean the local host account running `simulate.sh` is named
+`ci-operator`.
 
 ## Separation Rules
 
@@ -79,12 +86,13 @@ human admin, test, runtime, and integration accounts because its only purpose
 is directory lookup, and it must not grant application administration,
 runtime ownership, or Gerrit voting rights.
 
-The `ci-operator` account runs orchestration, SSH access, helper commands, and
-evidence collection in simulation. In Docker simulation it has passwordless
-sudo for orchestration and privileged helper operations. Keeping it separate
-makes simulation control-plane access distinct from product accounts and
-prevents evidence collection access from being treated as Gerrit or Jenkins
-authority.
+The operator account runs orchestration, SSH access, helper commands, and
+evidence collection in all modes. In Docker simulation, the default example
+target-local `ci-operator` account has passwordless sudo for orchestration
+and privileged helper operations. The Docker target `ci-operator` identity is
+not mapped to the local host username, UID, or GID. Keeping it separate makes
+operator control-plane access distinct from product accounts and prevents
+evidence collection access from being treated as Gerrit or Jenkins authority.
 
 ## Credential Custody
 

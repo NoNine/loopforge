@@ -54,6 +54,9 @@ Before running the shared helper:
 - Env files have no placeholder values and have been reviewed for role/account
   separation, endpoints, ref patterns, labels, credential IDs, evidence paths,
   and verification mode labels.
+- The reviewed env files set `LOOPFORGE_OPERATOR_ACCOUNT` and
+  `LOOPFORGE_OPERATOR_GROUP` when the deployment uses an operator account or
+  group other than the default example `ci-operator:ci-operator`.
 - The shared integration env defines OS SSH access for the Gerrit target,
   Jenkins controller target, and Jenkins agent target.
 - Operators have confirmed that any public internet fallback on target hosts is

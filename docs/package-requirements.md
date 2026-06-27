@@ -24,8 +24,8 @@ installation is simulation-only.
 | Context | Product/runtime packages | Helper-script packages | Simulation-only packages | Notes |
 | --- | --- | --- | --- | --- |
 | Gerrit target | `openjdk-21-jre-headless` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar` | Shared Docker image also carries `git`, `ldap-utils`, `procps`, `unzip`, and `wget` for helper/runtime proof paths | Native Gerrit service needs Java. Docker validation also proves LDAP and Gerrit runtime behavior. |
-| Jenkins controller target | `fontconfig`, `openjdk-21-jre` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through `ci-operator` for Docker integration orchestration | Jenkins `.deb` is staged as an application artifact, not installed from an apt repository setup path. |
-| Jenkins agent target | `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through `ci-operator` for Docker integration orchestration | Agent runtime exposes inbound SSH for Jenkins controller access. Workload-specific build tools are out of scope. |
+| Jenkins controller target | `fontconfig`, `openjdk-21-jre` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins `.deb` is staged as an application artifact, not installed from an apt repository setup path. |
+| Jenkins agent target | `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access. Workload-specific build tools are out of scope. |
 | Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
 | Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
 
@@ -58,7 +58,7 @@ document owns the layered rationale.
 | Jenkins agent native target baseline | `docs/jenkins-agent-native-operations-reference.md` keeps the role-local install command; `scripts/jenkins-agent-setup.sh` validates `JENKINS_AGENT_OS_DEPENDENCIES` and validates the target OS `sshd` endpoint used by Jenkins. |
 | Bundle-factory baseline | `docs/artifact-bundle-contract.md` records the shared package list used to prepare role artifact bundles. |
 | Docker shared target image | `simulation/docker/target/Dockerfile` installs the shared superset used by Gerrit, Jenkins controller, and Jenkins agent target containers. |
-| Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
+| Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
 | Docker `procps` layer | `simulation/docker/simulate.sh` and Gerrit helper runtime checks use `ps` to inspect service processes inside slim containers. |
 | Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
 | Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
@@ -75,6 +75,7 @@ document owns the layered rationale.
 - Do not add workload-specific build tools, such as compilers, to the default
   Jenkins agent baseline unless every general agent requires them.
 - Do not treat `sudo` as a native role dependency. It is an operator privilege
-  mechanism, and in Docker it supports `ci-operator` orchestration.
+  mechanism, and in Docker it supports the default example `ci-operator`
+  orchestration account.
 - Do not treat bundle-factory packages as target-host service dependencies.
 - Do not use artifact bundles as offline Ubuntu package bundles.

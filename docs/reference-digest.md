@@ -73,7 +73,7 @@ LDAP-backed identity integration.
 | Jenkins Gerrit integration account | Gerrit service-style account | Lets Jenkins authenticate to Gerrit, stream events, and vote `Verified`. |
 | Test user account | LDAP-backed human-style test account | Verifies login and disposable change workflow. |
 | LDAP bind account | LDAP service account | Lets Gerrit and Jenkins search configured user and group bases read-only. |
-| `ci-operator` account | Simulation OS account | Runs orchestration, SSH access, helper commands, and evidence collection in simulation. |
+| Operator account | Local OS account | Runs orchestration, SSH access, helper commands, and evidence collection. Default example is `ci-operator`. |
 
 Credential custody rules:
 
