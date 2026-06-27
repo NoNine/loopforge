@@ -101,9 +101,9 @@ SH
 chmod +x "$fake_bin/docker"
 
 mkdir -p \
-  "$run_dir/state/rendered" \
-  "$run_dir/evidence" \
-  "$run_dir/logs"
+  "$run_dir/host/rendered" \
+  "$run_dir/target/evidence" \
+  "$run_dir/target/logs"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
@@ -131,16 +131,16 @@ HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_host_port
 HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_host_port
 EOF
-printf 'gerrit log\n' >"$run_dir/logs/gerrit.log"
-printf 'controller log\n' >"$run_dir/logs/controller.log"
-printf 'agent log\n' >"$run_dir/logs/agent.log"
-cat >"$run_dir/evidence/gerrit-readiness-test.json" <<'EOF'
+printf 'gerrit log\n' >"$run_dir/target/logs/gerrit.log"
+printf 'controller log\n' >"$run_dir/target/logs/controller.log"
+printf 'agent log\n' >"$run_dir/target/logs/agent.log"
+cat >"$run_dir/target/evidence/gerrit-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/var/log/loopforge/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}
 EOF
-cat >"$run_dir/evidence/jenkins-controller-readiness-test.json" <<'EOF'
-{"bounded_log_references":"/var/log/loopforge/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/state/runtime.status"}
+cat >"$run_dir/target/evidence/jenkins-controller-readiness-test.json" <<'EOF'
+{"bounded_log_references":"/var/log/loopforge/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/target/helper-state/runtime.status"}
 EOF
-cat >"$run_dir/evidence/jenkins-agent-readiness-test.json" <<'EOF'
+cat >"$run_dir/target/evidence/jenkins-agent-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/var/log/loopforge/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}
 EOF
 
@@ -173,9 +173,9 @@ if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^.* --role$|^.* --role ' "$tmp_
   exit 1
 fi
 
-gerrit_host_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
-controller_host_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
-agent_host_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
+gerrit_host_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
+controller_host_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
+agent_host_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
 [ -n "$gerrit_host_evidence" ] || {
   printf 'gerrit normalized host evidence was not written\n' >&2
   exit 1
@@ -196,11 +196,11 @@ grep -Fq '"service_log_reference": "/var/lib/jenkins/logs/jenkins-controller.log
   printf 'jenkins-controller service log metadata reference was not preserved\n' >&2
   exit 1
 }
-grep -Fq '"runtime_status_reference": "/var/lib/jenkins/state/runtime.status"' "$controller_host_evidence" || {
+grep -Fq '"runtime_status_reference": "/var/lib/jenkins/target/helper-state/runtime.status"' "$controller_host_evidence" || {
   printf 'jenkins-controller runtime status metadata reference was not preserved\n' >&2
   exit 1
 }
-if grep -Fq 'product-home/jenkins-controller/state/runtime.status' "$controller_host_evidence"; then
+if grep -Fq 'product-home/jenkins-controller/target/helper-state/runtime.status' "$controller_host_evidence"; then
   printf 'jenkins-controller runtime status must not be normalized as a bounded log snapshot\n' >&2
   exit 1
 fi
@@ -208,7 +208,7 @@ grep -Fq '"service_log_reference": "/var/lib/jenkins-agent/logs/agent-service.lo
   printf 'jenkins-agent service log metadata reference was not preserved\n' >&2
   exit 1
 }
-if grep -Fq "$run_dir/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
+if grep -Fq "$run_dir/target/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
   printf 'product-home paths must not be normalized into bounded log references\n' >&2
   exit 1
 fi
@@ -229,7 +229,7 @@ if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^prepare-artifacts |^stage-arti
   exit 1
 fi
 for role in gerrit jenkins-controller jenkins-agent; do
-  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/logs/configure-role-$role-"*.log || {
+  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/target/logs/configure-role-$role-"*.log || {
     printf 'configure-role did not verify staged artifacts for %s\n' "$role" >&2
     exit 1
   }

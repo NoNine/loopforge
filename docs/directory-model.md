@@ -107,40 +107,45 @@ Docker simulation realizes canonical paths under one generated run root:
 generated/simulation/docker/<run-id>/
 ```
 
-| Docker run path | Canonical or container-visible path | Purpose |
-| --- | --- | --- |
-| `state/` | Harness-owned sideband state | Container state, rendered inputs, LDAP data, helper backing directories |
-| `state/rendered/runtime-inputs/` | Operator-facing rendered input copies | Private runtime input files, normally written with mode `0600` |
-| `state/bundle-factory/rendered/` | `/var/lib/loopforge/rendered` in bundle factory | Bundle-factory rendered inputs |
-| `state/bundle-factory/evidence/` | `/var/lib/loopforge/evidence` in bundle factory | Bundle-factory evidence |
-| `state/bundle-factory/artifact-bundle-work/` | `/var/lib/loopforge/artifact-bundle-work` in bundle factory | Bundle-factory workspaces |
-| `state/gerrit/` | `/var/lib/loopforge` in Gerrit target | Gerrit helper state |
-| `state/jenkins-controller/` | `/var/lib/loopforge` in Jenkins controller target | Jenkins controller helper state |
-| `state/jenkins-agent/` | `/var/lib/loopforge` in Jenkins agent target | Jenkins agent helper state |
-| `state/gerrit-validation-secrets/` | `/var/lib/loopforge/validation-secrets` in Gerrit target | Docker simulation-only validation secrets; host directory is `0700` |
-| `state/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | Shared Jenkins controller/agent integration storage |
-| `state/ldap/data/` | `/var/lib/ldap` in LDAP container | Simulation-owned LDAP data |
-| `state/ldap/config/` | `/etc/ldap/slapd.d` in LDAP container | Simulation-owned LDAP configuration |
-| `product-homes/gerrit/` | `/srv/gerrit` in Gerrit target | Docker-backed Gerrit product home |
-| `product-homes/jenkins-controller/` | `/var/lib/jenkins` in Jenkins controller target | Docker-backed Jenkins controller home |
-| `product-homes/jenkins-agent/` | `/var/lib/jenkins-agent` in Jenkins agent target | Docker-backed Jenkins agent home |
-| `staging/<role>/` | Host-side transfer scratch | Docker simulation staging scratch, not a product API |
-| `exported-artifacts/` | Operator-facing artifact export | Exported archive handoff files and checksums |
-| `evidence/` | `/var/lib/loopforge/evidence` in target containers | Retained Docker simulation evidence |
-| `logs/` | `/var/log/loopforge` in target containers | Retained bounded Docker simulation logs |
+| Docker run path | Canonical or container-visible path | Content dominance | Purpose |
+| --- | --- | --- | --- |
+| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env and manifest contract |
+| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, normally written with mode `0600` |
+| `host/bundle-factory/rendered/` | `/var/lib/loopforge/rendered` in bundle factory | Host-dominated | Bundle-factory rendered inputs |
+| `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
+| `host/target-ssh/` | `/var/lib/loopforge/target-ssh` in target containers | Host-dominated | Host-generated target SSH identity, public key, and known hosts |
+| `host/validation-secrets/gerrit/` | `/var/lib/loopforge/validation-secrets` in Gerrit target | Host-dominated | Docker simulation-only validation secrets; host directory is `0700` |
+| `target/helper-state/bundle-factory/evidence/` | `/var/lib/loopforge/evidence` in bundle factory | Target-dominated | Bundle-factory evidence |
+| `target/helper-state/bundle-factory/artifact-bundle-work/` | `/var/lib/loopforge/artifact-bundle-work` in bundle factory | Target-dominated | Bundle-factory workspaces |
+| `target/helper-state/gerrit/` | `/var/lib/loopforge` in Gerrit target | Target-dominated | Gerrit helper state |
+| `target/helper-state/jenkins-controller/` | `/var/lib/loopforge` in Jenkins controller target | Target-dominated | Jenkins controller helper state |
+| `target/helper-state/jenkins-agent/` | `/var/lib/loopforge` in Jenkins agent target | Target-dominated | Jenkins agent helper state |
+| `target/helper-state/integration/` | Shared integration helper state | Target-dominated | Cross-role integration status and helper state |
+| `target/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | Target-dominated | Shared Jenkins controller/agent integration storage |
+| `target/ldap/data/` | `/var/lib/ldap` in LDAP container | Target-dominated | Simulation-owned LDAP data |
+| `target/ldap/config/` | `/etc/ldap/slapd.d` in LDAP container | Target-dominated | Simulation-owned LDAP configuration |
+| `target/product-homes/gerrit/` | `/srv/gerrit` in Gerrit target | Target-dominated | Docker-backed Gerrit product home |
+| `target/product-homes/jenkins-controller/` | `/var/lib/jenkins` in Jenkins controller target | Target-dominated | Docker-backed Jenkins controller home |
+| `target/product-homes/jenkins-agent/` | `/var/lib/jenkins-agent` in Jenkins agent target | Target-dominated | Docker-backed Jenkins agent home |
+| `target/artifacts/staging/<role>/` | Host-to-target transfer scratch | Target-dominated | Docker simulation staging scratch, not a product API |
+| `target/artifacts/exported/` | Operator-facing artifact export | Target-dominated | Exported archive handoff files and checksums |
+| `target/evidence/` | `/var/lib/loopforge/evidence` in target containers | Target-dominated | Retained Docker simulation evidence |
+| `target/logs/` | `/var/log/loopforge` in target containers | Target-dominated | Retained bounded Docker simulation logs |
 
 Docker simulation host directories exist for operator review, debugging,
 evidence collection, and cleanup. They are not target payload transfer
 mechanisms unless a simulation doc explicitly labels the mechanism as a
 simulation-only waiver, such as Docker `cp` during artifact staging.
 Container-visible helper-owned paths use the target or bundle-factory
-operator account, default example `ci-operator:ci-operator`. Host-side
-generated backing paths use the local host account that runs the simulation
-harness; this host account is not required to be named `ci-operator`.
+operator account, default example `ci-operator:ci-operator`. Content
+dominance describes who contributes the durable meaningful content, not
+POSIX ownership or initial directory creation. Host-side generated backing
+paths use the local host account that runs the simulation harness; this host
+account is not required to be named `ci-operator`.
 
-Docker `clean` removes mutable generated runtime data under `state/`,
-`product-homes/`, and `staging/` for the selected run root. It preserves
-`exported-artifacts/`, `evidence/`, and `logs/`.
+Docker `clean` removes mutable generated runtime data under `host/` and
+`target/` for the selected run root. It preserves
+`target/artifacts/exported/`, `target/evidence/`, and `target/logs/`.
 
 Evidence produced from Docker or VM simulation must be labeled as simulation
 evidence and must not imply `target-deployment` acceptance.

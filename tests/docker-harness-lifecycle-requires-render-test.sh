@@ -25,11 +25,12 @@ SH
 chmod +x "$fake_bin/docker"
 
 run_lifecycle_without_render() {
-  local label run_id state output rc
+  local label run_id host state output rc
   label="${1:?label required}"
   shift
   run_id="requires-render-$label-$$"
-  state="$repo_root/generated/simulation/docker/$run_id/state"
+  host="$repo_root/generated/simulation/docker/$run_id/host"
+  state="$repo_root/generated/simulation/docker/$run_id/target/helper-state"
   output="$tmp_dir/$label.out"
   rm -f "$docker_calls" "$role_calls"
 
@@ -50,15 +51,15 @@ run_lifecycle_without_render() {
   }
   grep -Fq 'run init-run first' "$output"
 
-  [ ! -e "$state/rendered/harness.env" ] || {
+  [ ! -e "$host/rendered/harness.env" ] || {
     printf '%s unexpectedly created rendered harness env\n' "$*" >&2
     exit 1
   }
-  [ ! -e "$state/rendered/harness.runtime.env" ] || {
+  [ ! -e "$host/rendered/harness.runtime.env" ] || {
     printf '%s unexpectedly created runtime harness env\n' "$*" >&2
     exit 1
   }
-  [ ! -d "$state/rendered/runtime-inputs" ] || {
+  [ ! -d "$host/runtime-inputs" ] || {
     printf '%s unexpectedly created runtime input copies\n' "$*" >&2
     exit 1
   }
@@ -79,11 +80,12 @@ run_lifecycle_without_render prove-integration prove-integration
 run_lifecycle_without_render verify audit-state
 
 run_recovery_without_render() {
-  local label run_id state output
+  local label run_id host state output
   label="${1:?label required}"
   shift
   run_id="requires-render-$label-$$"
-  state="$repo_root/generated/simulation/docker/$run_id/state"
+  host="$repo_root/generated/simulation/docker/$run_id/host"
+  state="$repo_root/generated/simulation/docker/$run_id/target/helper-state"
   output="$tmp_dir/$label.out"
   rm -f "$docker_calls" "$role_calls"
 
@@ -94,15 +96,15 @@ run_recovery_without_render() {
     "$repo_root/simulation/docker/simulate.sh" "$@" \
     >"$output" 2>&1
 
-  [ ! -e "$state/rendered/harness.env" ] || {
+  [ ! -e "$host/rendered/harness.env" ] || {
     printf '%s unexpectedly created rendered harness env\n' "$*" >&2
     exit 1
   }
-  [ ! -e "$state/rendered/harness.runtime.env" ] || {
+  [ ! -e "$host/rendered/harness.runtime.env" ] || {
     printf '%s unexpectedly created runtime harness env\n' "$*" >&2
     exit 1
   }
-  [ ! -d "$state/rendered/runtime-inputs" ] || {
+  [ ! -d "$host/runtime-inputs" ] || {
     printf '%s unexpectedly created runtime input copies\n' "$*" >&2
     exit 1
   }

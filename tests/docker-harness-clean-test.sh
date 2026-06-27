@@ -38,40 +38,40 @@ DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 mkdir -p \
-  "$run_dir/state/runtime" \
-  "$run_dir/product-homes/gerrit" \
-  "$run_dir/staging/gerrit" \
-  "$run_dir/exported-artifacts/gerrit" \
-  "$run_dir/evidence" \
-  "$run_dir/logs"
-printf 'state\n' >"$run_dir/state/runtime/file"
-printf 'product\n' >"$run_dir/product-homes/gerrit/file"
-printf 'stage\n' >"$run_dir/staging/gerrit/file"
-printf 'artifact\n' >"$run_dir/exported-artifacts/gerrit/file"
-printf 'evidence\n' >"$run_dir/evidence/file"
-printf 'log\n' >"$run_dir/logs/file"
+  "$run_dir/target/helper-state/runtime" \
+  "$run_dir/target/product-homes/gerrit" \
+  "$run_dir/target/artifacts/staging/gerrit" \
+  "$run_dir/target/artifacts/exported/gerrit" \
+  "$run_dir/target/evidence" \
+  "$run_dir/target/logs"
+printf 'state\n' >"$run_dir/target/helper-state/runtime/file"
+printf 'product\n' >"$run_dir/target/product-homes/gerrit/file"
+printf 'stage\n' >"$run_dir/target/artifacts/staging/gerrit/file"
+printf 'artifact\n' >"$run_dir/target/artifacts/exported/gerrit/file"
+printf 'evidence\n' >"$run_dir/target/evidence/file"
+printf 'log\n' >"$run_dir/target/logs/file"
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" clean >"$tmp_dir/clean.out"
 
-grep -Fq 'clean: removed runtime data preserved exported-artifacts evidence logs cleanup=host' "$tmp_dir/clean.out"
+grep -Fq 'clean: removed runtime data preserved target/artifacts/exported evidence logs cleanup=host' "$tmp_dir/clean.out"
 grep -Fq 'down --remove-orphans' "$calls"
-[ ! -e "$run_dir/state" ] || {
+[ ! -e "$run_dir/target/helper-state" ] || {
   printf 'clean should remove state\n' >&2
   exit 1
 }
-[ ! -e "$run_dir/product-homes" ] || {
+[ ! -e "$run_dir/target/product-homes" ] || {
   printf 'clean should remove product homes\n' >&2
   exit 1
 }
-[ ! -e "$run_dir/staging" ] || {
+[ ! -e "$run_dir/target/artifacts/staging" ] || {
   printf 'clean should remove staging\n' >&2
   exit 1
 }
-grep -Fq 'artifact' "$run_dir/exported-artifacts/gerrit/file"
-grep -Fq 'evidence' "$run_dir/evidence/file"
-[ -d "$run_dir/logs" ] || {
+grep -Fq 'artifact' "$run_dir/target/artifacts/exported/gerrit/file"
+grep -Fq 'evidence' "$run_dir/target/evidence/file"
+[ -d "$run_dir/target/logs" ] || {
   printf 'clean should preserve logs directory\n' >&2
   exit 1
 }

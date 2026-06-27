@@ -8,7 +8,7 @@ run_id="dispatch-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
 
-state_dir="$run_dir/state"
+state_dir="$run_dir/target/helper-state"
 calls="$tmp_dir/calls.log"
 
 cat >"$tmp_dir/harness.env" <<EOF

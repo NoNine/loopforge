@@ -47,13 +47,13 @@ matches the selected run:
 
 - The canonical run root exists under `generated/simulation/docker/<run-id>/`.
 - The generated run marker exists.
-- `state/rendered/harness.env` exists.
-- `state/rendered/harness.runtime.env` exists.
+- `host/rendered/harness.env` exists.
+- `host/rendered/harness.runtime.env` exists.
 - The runtime env fingerprint matches the generated run marker.
-- `state/rendered/runtime-inputs/` exists.
+- `host/runtime-inputs/` exists.
 - Runtime input copies exist for the harness, Gerrit, Jenkins controller,
   Jenkins agent, and integration env files.
-- Helper env files under `state/rendered/runtime-inputs/helper-envs/` exist
+- Helper env files under `host/runtime-inputs/helper-envs/` exist
   for phases that need them.
 - Expected generated bind source directories exist before container lifecycle
   phases use them.

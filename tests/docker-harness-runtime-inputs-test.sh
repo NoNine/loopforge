@@ -8,7 +8,8 @@ run_id="runtime-inputs-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
 
-state_dir="$run_dir/state"
+host_dir="$run_dir/host"
+state_dir="$run_dir/target/helper-state"
 
 cat >"$tmp_dir/integration.env" <<'EOF'
 JENKINS_SHARED_STORAGE_PATH=/mnt/harness-shared
@@ -39,9 +40,9 @@ EOF
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
   >"$tmp_dir/init-run.out"
 
-runtime_dir="$state_dir/rendered/runtime-inputs"
-runtime_env="$state_dir/rendered/harness.runtime.env"
-product_home_dir="$run_dir/product-homes"
+runtime_dir="$host_dir/runtime-inputs"
+runtime_env="$host_dir/rendered/harness.runtime.env"
+product_home_dir="$run_dir/target/product-homes"
 
 for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
   [ -f "$runtime_dir/$file" ] || {
@@ -83,7 +84,7 @@ if grep -Fq 'mutated-after-render' "$runtime_dir/gerrit.env"; then
   exit 1
 fi
 
-gerrit_browser_port="$(sed -n 's/^HARNESS_GERRIT_HTTP_HOST_PORT=//p' "$state_dir/rendered/harness.env")"
+gerrit_browser_port="$(sed -n 's/^HARNESS_GERRIT_HTTP_HOST_PORT=//p' "$host_dir/rendered/harness.env")"
 grep -Fq 'GERRIT_HOST="gerrit-target"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
 grep -Fq "GERRIT_CANONICAL_WEB_URL=http://127.0.0.1:$gerrit_browser_port/" "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
 

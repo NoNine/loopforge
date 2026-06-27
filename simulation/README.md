@@ -73,12 +73,12 @@ Docker uses these subpath patterns:
 
 | Output kind | Run-scoped pattern |
 | --- | --- |
-| State | `generated/simulation/docker/<run-id>/state/` |
-| Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
-| Staged artifacts | `generated/simulation/docker/<run-id>/staging/<role>/` |
-| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<bundle>.tar.gz` |
-| Evidence | `generated/simulation/docker/<run-id>/evidence/` |
-| Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
+| State | `generated/simulation/docker/<run-id>/target/helper-state/` |
+| Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
+| Staged artifacts | `generated/simulation/docker/<run-id>/target/artifacts/staging/<role>/` |
+| Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
+| Evidence | `generated/simulation/docker/<run-id>/target/evidence/` |
+| Bounded logs | `generated/simulation/docker/<run-id>/target/logs/` |
 
 `<run-id>` is a unique run identifier, such as a UTC timestamp plus a short
 label. `<environment>` is one of `bundle-factory`, `ldap`, `gerrit`,

@@ -14,8 +14,8 @@ cleanup() {
 trap cleanup EXIT
 
 script="$repo_root/simulation/docker/simulate.sh"
-default_state_dir="$repo_root/generated/simulation/docker/relative-default-$$/state"
-custom_state_dir="$repo_root/generated/simulation/docker/custom-relative/state"
+default_host_dir="$repo_root/generated/simulation/docker/relative-default-$$/host"
+custom_host_dir="$repo_root/generated/simulation/docker/custom-relative/host"
 
 (
   cd /tmp
@@ -25,7 +25,7 @@ custom_state_dir="$repo_root/generated/simulation/docker/custom-relative/state"
 )
 
 for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-  [ -f "$default_state_dir/rendered/runtime-inputs/$file" ] || {
+  [ -f "$default_host_dir/runtime-inputs/$file" ] || {
     printf 'Expected default init-run runtime input copy from non-repo cwd: %s\n' "$file" >&2
     exit 1
   }
@@ -46,8 +46,8 @@ EOF
     "$script" init-run --env "$tmp_dir/custom-relative.env" >"$tmp_dir/custom-init-run.out"
 )
 
-runtime_env="$custom_state_dir/rendered/harness.runtime.env"
-runtime_dir="$custom_state_dir/rendered/runtime-inputs"
+runtime_env="$custom_host_dir/rendered/harness.runtime.env"
+runtime_dir="$custom_host_dir/runtime-inputs"
 grep -Fq "HARNESS_GERRIT_ENV_FILE=$runtime_dir/gerrit.env" "$runtime_env"
 for file in gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
   [ -f "$runtime_dir/$file" ] || {

@@ -67,7 +67,7 @@ HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 
 During `init-run`, the selected harness, role, and integration env files
 are copied to
-`generated/simulation/docker/<run-id>/state/rendered/runtime-inputs/` with
+`generated/simulation/docker/<run-id>/host/runtime-inputs/` with
 mode `0600`. `init-run` also writes a run marker under
 `generated/simulation/docker/<run-id>/`. Later lifecycle and cleanup commands
 load the private runtime config and verify that marker before operating.
@@ -130,12 +130,13 @@ generated/simulation/docker/<run-id>/
 
 | Output kind | Docker run-scoped pattern |
 | --- | --- |
-| Harness/container state | `generated/simulation/docker/<run-id>/state/` |
-| Product runtime homes | `generated/simulation/docker/<run-id>/product-homes/` |
-| Transfer scratch | `generated/simulation/docker/<run-id>/staging/` |
-| Exported artifacts | `generated/simulation/docker/<run-id>/exported-artifacts/<bundle>.tar.gz` |
-| Evidence | `generated/simulation/docker/<run-id>/evidence/` |
-| Bounded logs | `generated/simulation/docker/<run-id>/logs/` |
+| Host-contributed inputs | `generated/simulation/docker/<run-id>/host/` |
+| Target helper state | `generated/simulation/docker/<run-id>/target/helper-state/` |
+| Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
+| Transfer scratch | `generated/simulation/docker/<run-id>/target/artifacts/staging/` |
+| Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
+| Evidence | `generated/simulation/docker/<run-id>/target/evidence/` |
+| Bounded logs | `generated/simulation/docker/<run-id>/target/logs/` |
 
 Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
@@ -144,16 +145,19 @@ layout.
 `prepare-artifacts` first writes role artifacts inside the container-owned
 bundle-factory workspace, then copies successful outputs back to the host
 collector and exports archive handoff files to
-`exported-artifacts/<bundle>.tar.gz` plus `.sha256`. `stage-artifacts`
-consumes those archives through an explicit Docker simulation-only `docker cp`
-waiver, then extracts and verifies them inside the target container under the
-role-specific `/opt` bundle roots before helper validation. Docker target
-containers do not bind-mount host staging directories onto `/opt`.
+`target/artifacts/exported/<bundle>.tar.gz` plus `.sha256`.
+`stage-artifacts` consumes those archives through an explicit Docker
+simulation-only `docker cp` waiver, then extracts and verifies them inside the
+target container under the role-specific `/opt` bundle roots before helper
+validation. Docker target containers do not bind-mount host staging
+directories onto `/opt`.
 
 Bundle-factory and target helper state are helper-visible at
 `/var/lib/loopforge`, and helper logs are helper-visible at
 `/var/log/loopforge`. Bundle-factory `/var/lib/loopforge` debug subdirectories
-are host-backed under `state/bundle-factory/`, not `product-homes/`.
+are host-backed under `host/bundle-factory/` for rendered inputs and
+`target/helper-state/bundle-factory/` for bundle-factory-produced outputs,
+not `target/product-homes/`.
 Successful artifacts still leave that environment through the explicit export
 step. Rendered helper env files are operator-reviewed runtime inputs first,
 then copied into helper paths before helper execution. The host-side generated
@@ -188,10 +192,12 @@ bind-mounted directories, so `clean` is the explicit housekeeping command.
 
 `clean` verifies the selected run marker and operates only under the canonical
 repo-local generated run root. It removes only mutable generated runtime data:
-`state/`, `product-homes/`, and `staging/`. It preserves
-`exported-artifacts/`, `evidence/`, and `logs/`. If the host user cannot
-remove container-owned files, `clean` may use a one-shot cleanup container
-mounted only to the validated run root.
+host rendered inputs and target SSH material, `target/helper-state/`,
+`target/product-homes/`, `target/artifacts/staging/`, `target/ldap/`, and
+`target/shared-jenkins-storage/`. It preserves
+`target/artifacts/exported/`, `target/evidence/`, and `target/logs/`. If the
+host user cannot remove container-owned files, `clean` may use a one-shot
+cleanup container mounted only to the validated run root.
 
 See `docs/docker-simulation-state-lifecycle.md` for the detailed fresh-run,
 resume/rerun, stale-container, `down`, and `clean` state rules.

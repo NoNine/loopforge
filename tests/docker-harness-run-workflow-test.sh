@@ -81,8 +81,8 @@ fi
 
 partial_run_id="run-workflow-partial-$$"
 partial_dir="$repo_root/generated/simulation/docker/$partial_run_id"
-mkdir -p "$partial_dir/state/rendered"
-cat >"$partial_dir/state/rendered/harness.env" <<EOF
+mkdir -p "$partial_dir/host/rendered"
+cat >"$partial_dir/host/rendered/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$partial_run_id
 HARNESS_PROJECT_NAME=$partial_run_id
@@ -109,7 +109,7 @@ grep -Fq 'init-run' "$partial_workflow_calls"
 post_clean_run_id="run-workflow-post-clean-$$"
 post_clean_dir="$repo_root/generated/simulation/docker/$post_clean_run_id"
 mkdir -p \
-  "$post_clean_dir/exported-artifacts" \
+  "$post_clean_dir/target/artifacts/exported" \
   "$post_clean_dir/evidence" \
   "$post_clean_dir/logs"
 

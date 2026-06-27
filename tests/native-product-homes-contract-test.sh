@@ -43,8 +43,11 @@ require_pattern scripts/integration-setup.sh \
   'Integration helper must default JENKINS_HOME to /var/lib/jenkins'
 
 require_pattern simulation/docker/simulate.sh \
-  'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_GENERATED_RUN_DIR/product-homes}"' \
+  'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_TARGET_DIR/product-homes}"' \
   'Docker harness must default product-home backing outside HARNESS_STATE_DIR'
+require_pattern simulation/docker/simulate.sh \
+  'HARNESS_TARGET_DIR="${HARNESS_TARGET_DIR:-$HARNESS_GENERATED_RUN_DIR/target}"' \
+  'Docker harness must group target-dominated generated output under target/'
 require_pattern simulation/docker/simulate.sh \
   'export HARNESS_PRODUCT_HOME_DIR' \
   'Docker harness must export HARNESS_PRODUCT_HOME_DIR for Compose'
@@ -216,7 +219,7 @@ require_pattern scripts/integration-setup.sh \
   'copy_controller_public_key_to_target' \
   'Agent and Gerrit public-key handoff must use the shared target SSH copy helper'
 reject_pattern scripts/integration-setup.sh \
-  "install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP' /harness/state/integration" \
+  "install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP' /harness/target/helper-state/integration" \
   'Integration setup must not transfer harness integration directory ownership to Jenkins'
 reject_pattern scripts/integration-setup.sh \
   'mkdir -p "$(integration_host_state_dir)/keys"' \
@@ -228,7 +231,7 @@ reject_pattern scripts/integration-setup.sh \
   'chmod 0770 "$(integration_host_state_dir)" "$(integration_host_state_dir)/keys"' \
   'Host integration dirs must not be made group-writable for Jenkins operations'
 reject_pattern scripts/integration-setup.sh \
-  'test -d /harness/state/integration/keys && test -r /harness/state/integration/keys && test -w /harness/state/integration/keys' \
+  'test -d /harness/target/helper-state/integration/keys && test -r /harness/target/helper-state/integration/keys && test -w /harness/target/helper-state/integration/keys' \
   'Integration setup must not validate Jenkins writes to harness-owned keys'
 reject_pattern scripts/integration-setup.sh \
   'docker exec' \
@@ -271,13 +274,13 @@ reject_pattern scripts/integration-setup.sh \
   'Jenkins shared storage must not hold harness integration status'
 
 reject_pattern scripts/gerrit-setup.sh \
-  'GERRIT_SITE_PATH="/harness/state/site"' \
+  'GERRIT_SITE_PATH="/harness/target/helper-state/site"' \
   'Gerrit Docker override must not force product site under /harness/state'
 reject_pattern scripts/jenkins-controller-setup.sh \
-  'JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"' \
+  'JENKINS_HOME="${JENKINS_HOME:-/harness/target/helper-state/jenkins-home}"' \
   'Jenkins helper must not default product home under /harness/state'
 reject_pattern scripts/integration-setup.sh \
-  'JENKINS_HOME="${JENKINS_HOME:-/harness/state/jenkins-home}"' \
+  'JENKINS_HOME="${JENKINS_HOME:-/harness/target/helper-state/jenkins-home}"' \
   'Integration helper must not default Jenkins home under /harness/state'
 reject_pattern simulation/docker/compose.yaml \
   '${HARNESS_STATE_DIR}/gerrit/site:/srv/gerrit' \
@@ -354,8 +357,8 @@ reject_pattern scripts/jenkins-agent-setup.sh \
   'groupadd "$JENKINS_AGENT_GROUP"' \
   'Agent helper must not create the product runtime group'
 reject_pattern scripts/jenkins-agent-setup.sh \
-  '/harness/state/agent/workspace' \
-  'Agent helper must not accept /harness/state/agent/workspace as product remote FS'
+  '/harness/target/helper-state/agent/workspace' \
+  'Agent helper must not accept /harness/target/helper-state/agent/workspace as product remote FS'
 require_pattern scripts/jenkins-agent-setup.sh \
   'JENKINS_AGENT_REMOTE_FS must be $JENKINS_AGENT_NATIVE_REMOTE_FS, got $value' \
   'Agent helper error must describe the native remote FS boundary'

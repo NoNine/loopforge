@@ -84,9 +84,9 @@ case "$*" in
     case "$*" in
       *-gerrit-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/state/gerrit" /var/lib/loopforge
-        printf '%s\t%s\n' "$RUN_DIR/product-homes/gerrit" /srv/gerrit
-        printf '%s\t%s\n' "$RUN_DIR/state/gerrit-validation-secrets" /var/lib/loopforge/validation-secrets
+        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/gerrit" /var/lib/loopforge
+        printf '%s\t%s\n' "$RUN_DIR/target/product-homes/gerrit" /srv/gerrit
+        printf '%s\t%s\n' "$RUN_DIR/host/validation-secrets/gerrit" /var/lib/loopforge/validation-secrets
         printf '%s\t%s\n' "$RUN_DIR/evidence" /var/lib/loopforge/evidence
         printf '%s\t%s\n' "$RUN_DIR/logs" /var/log/loopforge
         ;;

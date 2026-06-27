@@ -20,7 +20,7 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-state_dir="$run_dir/state"
+state_dir="$run_dir/target/helper-state"
 
 PATH="$fake_bin:$PATH" \
 HARNESS_RUN_ID="$run_id" \

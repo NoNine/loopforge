@@ -9,7 +9,8 @@ run_id="integration-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 trap 'rm -rf "$tmp_dir" "$run_dir" 2>/dev/null || true' EXIT
 
-state_dir="$run_dir/state"
+host_dir="$run_dir/host"
+state_dir="$run_dir/target/helper-state"
 integration_calls="$tmp_dir/integration-calls.log"
 integration_helper="$tmp_dir/integration-setup.sh"
 
@@ -39,7 +40,7 @@ chmod +x "$integration_helper"
 "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
   >"$tmp_dir/init-run.out"
 
-runtime_dir="$state_dir/rendered/runtime-inputs"
+runtime_dir="$host_dir/runtime-inputs"
 for file in gerrit jenkins-controller jenkins-agent integration; do
   printf '%s\n' "SENTINEL=mutated-$file" >"$tmp_dir/$file.env"
   grep -Fq "SENTINEL=original-$file" "$runtime_dir/$file.env"

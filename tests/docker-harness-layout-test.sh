@@ -183,8 +183,8 @@ if grep -Eq '\$\{HARNESS_STAGING_DIR\}/[^:]*:/opt/' "$repo_root/simulation/docke
   printf 'Target artifact bundles must not be host bind-mounted under /opt\n' >&2
   exit 1
 fi
-grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/rendered:/var/lib/loopforge/rendered' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Bundle-factory rendered inputs must be host-backed under state for debugging\n' >&2
+grep -Fq -- '${HARNESS_BUNDLE_FACTORY_RENDERED_DIR}:/var/lib/loopforge/rendered' "$repo_root/simulation/docker/compose.yaml" || {
+  printf 'Bundle-factory rendered inputs must be host-backed under host/ for debugging\n' >&2
   exit 1
 }
 grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/evidence:/var/lib/loopforge/evidence' "$repo_root/simulation/docker/compose.yaml" || {
@@ -196,13 +196,15 @@ grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/artifact-bundle-work:/var/lib/l
   exit 1
 }
 if grep -Eq '\$\{HARNESS_PRODUCT_HOME_DIR\}/bundle-factory[^:]*:/var/lib/loopforge' "$repo_root/simulation/docker/compose.yaml"; then
-  printf 'Bundle-factory helper state must not be backed by product-homes\n' >&2
+  printf 'Bundle-factory helper state must not be backed by target/product-homes\n' >&2
   exit 1
 fi
 for path in \
-  '$HARNESS_STATE_DIR/bundle-factory/rendered' \
+  '$HARNESS_BUNDLE_FACTORY_RENDERED_DIR' \
   '$HARNESS_STATE_DIR/bundle-factory/evidence' \
-  '$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work'
+  '$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work' \
+  '$HARNESS_HOST_DIR' \
+  '$HARNESS_TARGET_DIR'
 do
   grep -Fq -- "$path" "$repo_root/simulation/docker/simulate.sh" || {
     printf 'Docker harness must create bundle-factory debug backing directory %s\n' "$path" >&2

@@ -114,9 +114,10 @@ PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
 
-state_dir="$run_dir/state"
-runtime_dir="$state_dir/rendered/runtime-inputs"
-product_home_dir="$run_dir/product-homes"
+host_dir="$run_dir/host"
+state_dir="$run_dir/target/helper-state"
+runtime_dir="$host_dir/runtime-inputs"
+product_home_dir="$run_dir/target/product-homes"
 [ -d "$product_home_dir/gerrit" ] || {
   printf 'Expected Gerrit product home backing dir outside harness state: %s\n' "$product_home_dir/gerrit" >&2
   exit 1

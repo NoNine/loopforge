@@ -132,7 +132,7 @@ env "${common_env[@]}" \
   >/dev/null
 
 snapshot="$tmp_dir/env-files.before"
-find "$run_dir/state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
+find "$run_dir/target/helper-state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
   sort -z |
   xargs -0 sha256sum >"$snapshot"
 
@@ -160,7 +160,7 @@ do
 done
 
 after="$tmp_dir/env-files.after"
-find "$run_dir/state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
+find "$run_dir/target/helper-state" -type f \( -name '*.env' -o -path '*/runtime-inputs/*' \) -print0 |
   sort -z |
   xargs -0 sha256sum >"$after"
 

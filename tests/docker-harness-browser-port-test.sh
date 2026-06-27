@@ -72,8 +72,8 @@ HARNESS_JENKINS_HTTP_HOST_PORT="$explicit_jenkins_port" \
 grep -Fq "init-run: ok run-id=$run_id-explicit" "$tmp_dir/explicit.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/explicit.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/explicit.out"
-grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$explicit_gerrit_port" "$run_root/$run_id-explicit/state/rendered/harness.env"
-grep -Fq "HARNESS_JENKINS_HTTP_HOST_PORT=$explicit_jenkins_port" "$run_root/$run_id-explicit/state/rendered/harness.env"
+grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$explicit_gerrit_port" "$run_root/$run_id-explicit/host/rendered/harness.env"
+grep -Fq "HARNESS_JENKINS_HTTP_HOST_PORT=$explicit_jenkins_port" "$run_root/$run_id-explicit/host/rendered/harness.env"
 
 set +e
 HARNESS_RUN_ID="$run_id-invalid" \

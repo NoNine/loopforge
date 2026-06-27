@@ -15,9 +15,9 @@ cleanup() {
       printf '%s\n' '--- docker calls ---' >&2
       sed -n '1,200p' "$calls" >&2
     fi
-    if [ -d "$run_dir/logs" ]; then
+    if [ -d "$run_dir/target/logs" ]; then
       printf '%s\n' '--- configure-role logs ---' >&2
-      find "$run_dir/logs" -maxdepth 1 -type f -name 'configure-role-gerrit-*.log' -print -exec sed -n '1,120p' {} \; >&2
+      find "$run_dir/target/logs" -maxdepth 1 -type f -name 'configure-role-gerrit-*.log' -print -exec sed -n '1,120p' {} \; >&2
     fi
   fi
   rm -rf "$tmp_dir" "$run_dir"
@@ -105,7 +105,7 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-mkdir -p "$run_dir/state/rendered" "$run_dir/logs" "$run_dir/evidence"
+mkdir -p "$run_dir/host/rendered" "$run_dir/target/logs" "$run_dir/target/evidence"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
@@ -155,8 +155,8 @@ set -e
 }
 grep -Fq 'configure-role[gerrit]: failed' "$tmp_dir/configure-role.out"
 grep -Fq 'run stage-artifacts --role gerrit first' "$tmp_dir/configure-role.out"
-grep -Fq 'missing_staged_artifacts manifest=' "$run_dir/logs"/configure-role-gerrit-*.log
-grep -Fq 'Staged artifacts are missing or invalid' "$run_dir/evidence"/configure-role-gerrit-*.json
+grep -Fq 'missing_staged_artifacts manifest=' "$run_dir/target/logs"/configure-role-gerrit-*.log
+grep -Fq 'Staged artifacts are missing or invalid' "$run_dir/target/evidence"/configure-role-gerrit-*.json
 if grep -Eq '/workspace/scripts/gerrit-setup\.sh .* (--yes )?(install|configure|validate|collect-evidence)' "$calls"; then
   printf 'configure-role must not call the role helper when staged artifacts are missing\n' >&2
   exit 1

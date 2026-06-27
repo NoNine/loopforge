@@ -128,8 +128,8 @@ DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit >"$tmp_dir/prepare.out"
 
-export_archive="$run_dir/exported-artifacts/gerrit-artifacts-bundle.tar.gz"
-prepare_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'prepare-artifacts-gerrit-*.json' -print | sort | tail -1)"
+export_archive="$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz"
+prepare_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'prepare-artifacts-gerrit-*.json' -print | sort | tail -1)"
 grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
 [ -f "$export_archive" ] || {
   printf 'Expected exported Gerrit archive\n' >&2
@@ -146,20 +146,20 @@ grep -Fq -- '/var/log/loopforge' "$calls"
 grep -Fq -- '/var/lib/loopforge/rendered' "$calls"
 grep -Fq -- '/var/lib/loopforge/artifact-bundle-work' "$calls"
 grep -Fq -- 'cp container-id:/var/lib/loopforge/artifact-bundle-work/gerrit' "$calls"
-[ -d "$run_dir/state/bundle-factory/artifact-bundle-work" ] || {
+[ -d "$run_dir/target/helper-state/bundle-factory/artifact-bundle-work" ] || {
   printf 'bundle-factory artifact workspace debug backing must be created in host state\n' >&2
   exit 1
 }
-[ -d "$run_dir/state/bundle-factory/rendered" ] || {
+[ -d "$run_dir/host/bundle-factory/rendered" ] || {
   printf 'bundle-factory rendered input debug backing must be created in host state\n' >&2
   exit 1
 }
-[ -d "$run_dir/state/bundle-factory/evidence" ] || {
+[ -d "$run_dir/target/helper-state/bundle-factory/evidence" ] || {
   printf 'bundle-factory evidence debug backing must be created in host state\n' >&2
   exit 1
 }
-[ ! -e "$run_dir/product-homes/bundle-factory" ] || {
-  printf 'bundle-factory runtime state must not be created under product-homes\n' >&2
+[ ! -e "$run_dir/target/product-homes/bundle-factory" ] || {
+  printf 'bundle-factory runtime state must not be created under target/product-homes\n' >&2
   exit 1
 }
 tar -tzf "$export_archive" | grep -Fq 'gerrit-artifacts-bundle/gerrit/manifest.txt'
@@ -170,13 +170,13 @@ DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stage-artifacts --role gerrit >"$tmp_dir/stage.out"
 
-stage_evidence="$(find "$run_dir/evidence" -maxdepth 1 -type f -name 'stage-artifacts-gerrit-*.json' -print | sort | tail -1)"
+stage_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'stage-artifacts-gerrit-*.json' -print | sort | tail -1)"
 [ -n "$stage_evidence" ] || {
   printf 'Expected stage-artifacts evidence\n' >&2
   exit 1
 }
 grep -Fq '"artifact_manifest_references": "/opt/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$stage_evidence"
-grep -Fq "$run_dir/exported-artifacts/gerrit-artifacts-bundle.tar.gz.sha256" "$stage_evidence"
+grep -Fq "$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz.sha256" "$stage_evidence"
 grep -Fq '/opt/gerrit-artifacts-bundle/checksums/SHA256SUMS' "$stage_evidence"
 grep -Fq '/opt/gerrit-artifacts-bundle/gerrit/checksums.sha256' "$stage_evidence"
 grep -Fq 'Docker cp simulation-only waiver' "$stage_evidence"
@@ -188,7 +188,7 @@ grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/inc
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
 grep -Fq -- 'tar -xzf "$archive_name" -C /opt' "$calls"
 
-[ ! -d "$run_dir/staging/gerrit/gerrit-artifacts-bundle" ] || {
+[ ! -d "$run_dir/target/artifacts/staging/gerrit/gerrit-artifacts-bundle" ] || {
   printf 'stage-artifacts must not extract target bundles on the host\n' >&2
   exit 1
 }
