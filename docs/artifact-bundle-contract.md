@@ -9,12 +9,12 @@ sensitivity, evidence behavior, and simulation backing for these paths.
 
 ## Workspaces
 
-- Bundle-factory workspaces live under helper-owned state, currently
-  `/var/lib/loopforge/artifact-bundle-work/<role>`.
-- Bundle-factory workspaces produce the role's release-unit contents before
-  packaging.
-- Target transfer inboxes live under helper-owned target state, currently
-  `/var/lib/loopforge/staging/<role>/incoming`.
+- Bundle-factory workspaces live under the Loopforge helper state root,
+  currently `/var/lib/loopforge/preparing/<bundle>/<payload>`.
+- Bundle-factory workspaces produce the role's release-unit contents and
+  archive pair.
+- Target artifact staging lives under helper-owned target state, currently
+  `/var/lib/loopforge/staging`.
 - Helper-owned generated execution state and logs use the directory model's
   helper-owned path contract.
 
@@ -38,6 +38,9 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 - Jenkins controller release archive: `jenkins-artifacts-bundle.tar.gz`
 - Jenkins agent release archive: `jenkins-agent-artifacts-bundle.tar.gz`
 - Each archive must have a sibling `.sha256` file.
+- The archive pair and bundle tree live together in the preparing root, for
+  example
+  `/var/lib/loopforge/preparing/{gerrit-artifacts-bundle.tar.gz,gerrit-artifacts-bundle.tar.gz.sha256,gerrit-artifacts-bundle}`.
 - Each archive must contain a top-level directory matching the bundle name.
 - Each bundle must contain `checksums/SHA256SUMS` and a role payload directory.
 - The archive pair is the handoff artifact; extracted trees are disposable
@@ -45,24 +48,31 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 
 ## Target Extraction
 
-- Gerrit extracted bundle root: `/opt/gerrit-artifacts-bundle`
-- Jenkins controller extracted bundle root: `/opt/jenkins-artifacts-bundle`
-- Jenkins agent extracted bundle root: `/opt/jenkins-agent-artifacts-bundle`
+- Gerrit extracted bundle root:
+  `/var/lib/loopforge/staging/gerrit-artifacts-bundle`
+- Jenkins controller extracted bundle root:
+  `/var/lib/loopforge/staging/jenkins-artifacts-bundle`
+- Jenkins agent extracted bundle root:
+  `/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle`
 - Helper-visible payload directories:
-  - `/opt/gerrit-artifacts-bundle/gerrit`
-  - `/opt/jenkins-artifacts-bundle/jenkins`
-  - `/opt/jenkins-agent-artifacts-bundle/jenkins-agent`
+  - `/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit`
+  - `/var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins`
+  - `/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle/jenkins-agent`
 
 ## Helper Contract
 
-- `prepare-artifacts` writes bundle contents in the bundle-factory workspace.
+- `prepare-artifacts` creates `/var/lib/loopforge/preparing` when practical,
+  cleans and recreates its own role bundle tree below that root, and writes
+  the release archive pair in the bundle-factory workspace.
+- Role helpers own practical child directory creation. The environment or
+  simulation harness only provides prerequisites the helper cannot reasonably
+  provide itself, such as Docker bind-mount backing paths.
 - `stage-artifacts` verifies the archive checksum, extracts to the target
   extraction root, and verifies the bundle checksum files before service
   mutation.
-- Target extraction may require delegated privilege from the operator account
-  for placement under `/opt`, but the extracted bundle tree must be handed to
-  the operator account and made readable/traversable before role helpers
-  consume it.
+- Target extraction uses helper-owned staging under `/var/lib/loopforge`; the
+  extracted bundle tree must be owned by the operator account and made
+  readable/traversable before role helpers consume it.
 - Role helpers consume the extracted payload directory only.
 - Helper-owned generated state, runtime inputs, staging handoff, evidence
   inputs, and bounded logs follow `docs/directory-model.md`.

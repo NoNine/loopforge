@@ -377,7 +377,7 @@ validate_core_generated_state() {
   require_generated_state_dir "log directory" "$HARNESS_LOG_DIR"
   require_generated_state_dir "bundle factory rendered bind source" "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR"
   require_generated_state_dir "bundle factory evidence bind source" "$HARNESS_STATE_DIR/bundle-factory/evidence"
-  require_generated_state_dir "bundle factory artifact workspace bind source" "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work"
+  require_generated_state_dir "bundle factory preparing bind source" "$HARNESS_STATE_DIR/bundle-factory/preparing"
   require_generated_state_dir "LDAP data bind source" "$HARNESS_LDAP_DATA_DIR"
   require_generated_state_dir "LDAP config bind source" "$HARNESS_LDAP_CONFIG_DIR"
   require_generated_state_dir "Gerrit helper state bind source" "$HARNESS_STATE_DIR/gerrit"
@@ -1025,7 +1025,7 @@ validate_selected_container_mounts() {
   validate_container_mount bundle-factory "$repo_root" /workspace repo
   validate_container_mount bundle-factory "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR" /var/lib/loopforge/rendered
   validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/evidence" /var/lib/loopforge/evidence
-  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work" /var/lib/loopforge/artifact-bundle-work
+  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/preparing" /var/lib/loopforge/preparing
   validate_container_mount ldap "$HARNESS_LDAP_DATA_DIR" /var/lib/ldap
   validate_container_mount ldap "$HARNESS_LDAP_CONFIG_DIR" /etc/ldap/slapd.d
   validate_container_mount gerrit-target "$repo_root" /workspace repo
@@ -1078,7 +1078,7 @@ ensure_dirs() {
     "$HARNESS_EXPORTED_ARTIFACT_DIR" \
     "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR" \
     "$HARNESS_STATE_DIR/bundle-factory/evidence" \
-    "$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work" \
+    "$HARNESS_STATE_DIR/bundle-factory/preparing" \
     "$HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR" \
     "$HARNESS_LDAP_DATA_DIR" \
     "$HARNESS_LDAP_CONFIG_DIR" \
@@ -1518,7 +1518,9 @@ checksum_reference_for_evidence() {
     gerrit|jenkins-controller|jenkins-agent)
       case "$checkpoint" in
         prepare-artifacts)
-          printf '%s/checksums.sha256\n' "$(container_bundle_factory_work_dir_for_role "$role")"
+          printf '%s;%s\n' \
+            "$(container_prepared_artifact_checksum_for_role "$role")" \
+            "$(container_bundle_factory_work_dir_for_role "$role")/checksums.sha256"
           ;;
         stage-artifacts)
           printf '%s;%s/checksums/SHA256SUMS;%s/checksums.sha256\n' \
@@ -1565,15 +1567,31 @@ bundle_payload_dir_for_role() {
 }
 
 container_bundle_factory_work_dir_for_role() {
-  local role
+  local role bundle payload
   role="${1:?role required}"
-  printf '/var/lib/loopforge/artifact-bundle-work/%s\n' "$role"
+  bundle="$(bundle_name_for_role "$role")"
+  payload="$(bundle_payload_dir_for_role "$role")"
+  printf '/var/lib/loopforge/preparing/%s/%s\n' "$bundle" "$payload"
 }
 
-host_bundle_factory_work_dir_for_role() {
+container_bundle_factory_root_for_role() {
+  local role bundle
+  role="${1:?role required}"
+  bundle="$(bundle_name_for_role "$role")"
+  printf '/var/lib/loopforge/preparing/%s\n' "$bundle"
+}
+
+container_prepared_artifact_archive_for_role() {
+  local role bundle
+  role="${1:?role required}"
+  bundle="$(bundle_name_for_role "$role")"
+  printf '/var/lib/loopforge/preparing/%s.tar.gz\n' "$bundle"
+}
+
+container_prepared_artifact_checksum_for_role() {
   local role
   role="${1:?role required}"
-  printf '%s/.bundle-factory-copy/%s\n' "$HARNESS_EXPORTED_ARTIFACT_DIR" "$role"
+  printf '%s.sha256\n' "$(container_prepared_artifact_archive_for_role "$role")"
 }
 
 exported_artifact_archive_for_role() {
@@ -1607,7 +1625,7 @@ target_bundle_dir_for_role() {
   local role bundle
   role="${1:?role required}"
   bundle="$(bundle_name_for_role "$role")"
-  printf '/opt/%s\n' "$bundle"
+  printf '/var/lib/loopforge/staging/%s\n' "$bundle"
 }
 
 target_payload_dir_for_role() {
@@ -1615,42 +1633,6 @@ target_payload_dir_for_role() {
   role="${1:?role required}"
   payload="$(bundle_payload_dir_for_role "$role")"
   printf '%s/%s\n' "$(target_bundle_dir_for_role "$role")" "$payload"
-}
-
-export_role_artifacts() {
-  local role src archive checksum log rc bundle payload tmp_root tmp_bundle tmp_payload
-  role="${1:?role required}"
-  src="${2:?source required}"
-  log="${3:?log required}"
-  bundle="$(bundle_name_for_role "$role")"
-  payload="$(bundle_payload_dir_for_role "$role")"
-  archive="$(exported_artifact_archive_for_role "$role")"
-  checksum="$(exported_artifact_checksum_for_role "$role")"
-  rm -f "$archive" "$checksum"
-  mkdir -p "$HARNESS_EXPORTED_ARTIFACT_DIR"
-  tmp_root="$(mktemp -d)"
-  tmp_bundle="$tmp_root/$bundle"
-  tmp_payload="$tmp_bundle/$payload"
-  mkdir -p "$tmp_payload"
-  cp -R "$src/." "$tmp_payload/"
-  mkdir -p "$tmp_bundle/checksums"
-  (cd "$tmp_bundle" && find . -type f ! -path './checksums/SHA256SUMS' -print0 | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS)
-  if tar -C "$tmp_root" -czf "$archive" "$bundle" >>"$log" 2>&1; then
-    rc=0
-  else
-    rc=$?
-  fi
-  rm -rf "$tmp_root"
-  [ "$rc" -eq 0 ] || return "$rc"
-  chmod u+rw,go+r "$archive"
-  (cd "$(dirname "$archive")" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
-  chmod u+rw,go+r "$checksum"
-  tar -xOf "$archive" "$bundle/$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
-  if ! validate_role_baseline_manifest "$role" "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp" "$log"; then
-    rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
-    return 1
-  fi
-  rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
 }
 
 ensure_gerrit_validation_key() {
@@ -1833,7 +1815,7 @@ render_container_role_env() {
     jenkins-agent)
       if [ "$service" = "bundle-factory" ]; then
         sed \
-          -e 's|^JENKINS_AGENT_ARTIFACT_OUTPUT_DIR=.*|JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-agent"|' \
+          -e 's|^JENKINS_AGENT_ARTIFACT_OUTPUT_DIR=.*|JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"|' \
           "$src" >"$host_env_file"
       else
         sed -e 's|^JENKINS_AGENT_REMOTE_FS=.*|JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"|' \
@@ -1859,8 +1841,8 @@ render_gerrit_bundle_factory_env() {
   mkdir -p "$(dirname "$host_env_file")"
   sed \
     -e 's|^GERRIT_DOWNLOAD_ARTIFACTS=.*|GERRIT_DOWNLOAD_ARTIFACTS="1"|' \
-    -e 's|^GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR=.*|GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"|' \
-    -e 's|^GERRIT_ARTIFACT_OUTPUT_DIR=.*|GERRIT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"|' \
+    -e 's|^GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR=.*|GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"|' \
+    -e 's|^GERRIT_ARTIFACT_OUTPUT_DIR=.*|GERRIT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"|' \
     "$src" >"$host_env_file"
   chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
@@ -1875,7 +1857,7 @@ render_jenkins_controller_bundle_factory_env() {
   mkdir -p "$(dirname "$host_env_file")"
   sed \
     -e 's|^JENKINS_DOWNLOAD_ARTIFACTS=.*|JENKINS_DOWNLOAD_ARTIFACTS="1"|' \
-    -e 's|^JENKINS_ARTIFACT_OUTPUT_DIR=.*|JENKINS_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-controller"|' \
+    -e 's|^JENKINS_ARTIFACT_OUTPUT_DIR=.*|JENKINS_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/jenkins-artifacts-bundle/jenkins"|' \
     "$src" >"$host_env_file"
   chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
@@ -1958,49 +1940,41 @@ refresh_target_ssh_known_hosts() {
 }
 
 prepare_bundle_factory_workspace_ownership() {
-  local role log state_root log_root input_root work_root workspace script
+  local role log work_root script
   role="${1:?role required}"
   log="${2:?log required}"
-  state_root="/var/lib/loopforge"
-  log_root="/var/log/loopforge"
-  input_root="/var/lib/loopforge/rendered"
-  work_root="/var/lib/loopforge/artifact-bundle-work"
-  workspace="$(container_bundle_factory_work_dir_for_role "$role")"
-  script="$(owned_directory_command ci-operator ci-operator 0755 "$state_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0755 "$log_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$input_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0700 "$work_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0755 "$workspace" 1)"
+  work_root="/var/lib/loopforge/preparing"
+  script="$(owned_directory_command ci-operator ci-operator 0700 "$work_root" 1)"
   if ! compose exec -T -u root bundle-factory sh -c "$script" >>"$log" 2>&1; then
     return 1
   fi
-  printf 'bundle_factory_workspace_ownership_prepared role=%s service=bundle-factory state=%s logs=%s inputs=%s artifacts=%s owner=ci-operator group=ci-operator\n' \
-    "$role" "$state_root" "$log_root" "$input_root" "$work_root" >>"$log"
+  printf 'bundle_factory_bind_mount_prepared role=%s service=bundle-factory preparing=%s owner=ci-operator group=ci-operator scope=docker-simulation-bind-mount\n' \
+    "$role" "$work_root" >>"$log"
 }
 
 prepare_target_helper_owned_paths() {
-  local role service log state_root rendered_root secret_input_root incoming_dir evidence_root log_root script
+  local role service log state_root rendered_root secret_input_root staging_root evidence_root log_root script
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
   state_root="/var/lib/loopforge"
   rendered_root="/var/lib/loopforge/rendered"
   secret_input_root="/var/lib/loopforge/secret-inputs"
-  incoming_dir="/var/lib/loopforge/staging/$role/incoming"
+  staging_root="/var/lib/loopforge/staging"
   evidence_root="/var/lib/loopforge/evidence"
   log_root="/var/log/loopforge"
 
   script="$(owned_directory_command ci-operator ci-operator 0700 "$state_root" 0)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$rendered_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0700 "$secret_input_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$incoming_dir" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$staging_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$log_root" 1)"
   if ! compose exec -T -u root "$service" sh -c "$script" >>"$log" 2>&1; then
     return 1
   fi
   printf 'helper_owned_paths_prepared role=%s service=%s state=%s rendered=%s secret_inputs=%s staging=%s evidence=%s logs=%s owner=ci-operator group=ci-operator recursive_contract=target-helper-owned\n' \
-    "$role" "$service" "$state_root" "$rendered_root" "$secret_input_root" "$incoming_dir" "$evidence_root" "$log_root" >>"$log"
+    "$role" "$service" "$state_root" "$rendered_root" "$secret_input_root" "$staging_root" "$evidence_root" "$log_root" >>"$log"
 }
 
 prepare_all_target_helper_owned_paths() {
@@ -2012,27 +1986,46 @@ prepare_all_target_helper_owned_paths() {
 }
 
 copy_bundle_factory_artifacts_to_host() {
-  local role service log container_dir host_dir container_id
+  local role service log container_dir container_root container_archive container_checksum container_id
+  local archive checksum bundle payload
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
   container_dir="$(container_bundle_factory_work_dir_for_role "$role")"
-  host_dir="$(host_bundle_factory_work_dir_for_role "$role")"
+  container_root="$(container_bundle_factory_root_for_role "$role")"
+  container_archive="$(container_prepared_artifact_archive_for_role "$role")"
+  container_checksum="$(container_prepared_artifact_checksum_for_role "$role")"
+  archive="$(exported_artifact_archive_for_role "$role")"
+  checksum="$(exported_artifact_checksum_for_role "$role")"
+  bundle="$(bundle_name_for_role "$role")"
+  payload="$(bundle_payload_dir_for_role "$role")"
   if ! compose exec -T "$service" sh -c \
-    "test -f $(shell_quote "$container_dir/manifest.txt") && test -f $(shell_quote "$container_dir/checksums.sha256") && cd $(shell_quote "$container_dir") && sha256sum -c checksums.sha256" \
+    "test -f $(shell_quote "$container_dir/manifest.txt") && test -f $(shell_quote "$container_dir/checksums.sha256") && cd $(shell_quote "$container_dir") && sha256sum -c checksums.sha256 && test -f $(shell_quote "$container_root/checksums/SHA256SUMS") && cd $(shell_quote "$container_root") && sha256sum -c checksums/SHA256SUMS && cd /var/lib/loopforge/preparing && sha256sum -c $(shell_quote "$(basename "$container_checksum")")" \
     >>"$log" 2>&1; then
     return 1
   fi
   container_id="$(container_id_for_service "$service")"
   [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
-  rm -rf "$host_dir"
-  mkdir -p "$(dirname "$host_dir")"
-  if ! docker cp "$container_id:$container_dir" "$host_dir" >>"$log" 2>&1; then
+  rm -f "$archive" "$checksum"
+  mkdir -p "$HARNESS_EXPORTED_ARTIFACT_DIR"
+  if ! docker cp "$container_id:$container_archive" "$archive" >>"$log" 2>&1; then
     return 1
   fi
+  if ! docker cp "$container_id:$container_checksum" "$checksum" >>"$log" 2>&1; then
+    return 1
+  fi
+  if ! (cd "$HARNESS_EXPORTED_ARTIFACT_DIR" && sha256sum -c "$(basename "$checksum")") >>"$log" 2>&1; then
+    return 1
+  fi
+  tar -xOf "$archive" "$bundle/$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
+  if ! validate_role_baseline_manifest "$role" "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp" "$log"; then
+    rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
+    return 1
+  fi
+  rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
   printf 'bundle_factory_artifact_export role=%s service=%s source=%s destination=%s transfer_mode=docker-cp-collector scope=docker-simulation-only\n' \
-    "$role" "$service" "$container_dir" "$host_dir" >>"$log"
-  printf '%s\n' "$host_dir"
+    "$role" "$service" "$container_archive" "$archive" >>"$log"
+  printf '%s\n' "$container_dir"
 }
 
 docker_cp_file_to_service() {
@@ -3008,33 +3001,15 @@ cmd_prepare_artifacts() {
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
     return 1
   fi
-  if [ ! -f "$artifact_dir/manifest.txt" ] || [ ! -f "$artifact_dir/checksums.sha256" ]; then
-    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper did not produce manifest.txt and checksums.sha256")"
-    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
-    return 1
-  fi
-
-  if ! validate_role_baseline_manifest "$role" "$artifact_dir/manifest.txt" "$log"; then
-    evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Artifact manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
-    printf 'ERROR: Artifact baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
-    print_command_failure prepare-artifacts "$role" blocked "$log" "$evidence" >&2
-    return 1
-  fi
-
-  if ! export_role_artifacts "$role" "$artifact_dir" "$log"; then
-    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role artifacts were produced but export to operator-owned generated output failed")"
-    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
-    return 1
-  fi
   export_archive="$(exported_artifact_archive_for_role "$role")"
 
-  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role artifacts produced in bundle factory and exported for operator handoff: source=$artifact_dir export=$export_archive")"
+  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role archive pair produced in bundle factory and exported for operator handoff: source=$artifact_dir export=$export_archive")"
   print_command_summary prepare-artifacts "$role" "ok artifact-export=$(basename "$export_archive")"
 }
 
 cmd_stage_artifacts() {
   local role service archive checksum target_bundle_dir target_payload_dir log evidence
-  local incoming_dir archive_name checksum_name container_archive container_checksum extract_script
+  local staging_root archive_name checksum_name container_archive container_checksum extract_script
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -3051,11 +3026,11 @@ cmd_stage_artifacts() {
   checksum="$(exported_artifact_checksum_for_role "$role")"
   target_bundle_dir="$(target_bundle_dir_for_role "$role")"
   target_payload_dir="$(target_payload_dir_for_role "$role")"
-  incoming_dir="/var/lib/loopforge/staging/$role/incoming"
+  staging_root="/var/lib/loopforge/staging"
   archive_name="$(basename "$archive")"
   checksum_name="$(basename "$checksum")"
-  container_archive="$incoming_dir/$archive_name"
-  container_checksum="$incoming_dir/$checksum_name"
+  container_archive="$staging_root/$archive_name"
+  container_checksum="$staging_root/$checksum_name"
   log="$(bounded_log_path "stage-artifacts-$role")"
 
   require_running_service "$service"
@@ -3081,15 +3056,15 @@ cmd_stage_artifacts() {
   fi
 
   extract_script='
-incoming_dir="$1"
+staging_root="$1"
 checksum_name="$2"
 archive_name="$3"
 target_bundle_dir="$4"
 target_payload_dir="$5"
-cd "$incoming_dir"
+cd "$staging_root"
 sha256sum -c "$checksum_name"
 rm -rf "$target_bundle_dir"
-tar -xzf "$archive_name" -C /opt
+tar -xzf "$archive_name" -C "$staging_root"
 test -d "$target_bundle_dir"
 test -f "$target_payload_dir/manifest.txt"
 test -f "$target_payload_dir/checksums.sha256"
@@ -3102,7 +3077,7 @@ find "$target_bundle_dir" -type d -exec chmod 0755 {} +
 find "$target_bundle_dir" -type f -exec chmod 0644 {} +
 '
   if ! compose exec -T -u root "$service" sh -c "$extract_script" sh \
-    "$incoming_dir" \
+    "$staging_root" \
     "$checksum_name" \
     "$archive_name" \
     "$target_bundle_dir" \

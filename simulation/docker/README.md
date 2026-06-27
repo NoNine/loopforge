@@ -38,7 +38,7 @@ Phase and lifecycle commands:
 | `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary. |
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
-| `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/opt/gerrit-artifacts-bundle`, `/opt/jenkins-artifacts-bundle`, or `/opt/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
+| `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/var/lib/loopforge/staging/gerrit-artifacts-bundle`, `/var/lib/loopforge/staging/jenkins-artifacts-bundle`, or `/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
 | `validate-role [--env FILE] [--role ROLE]` | Runs one role-local validation phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
 | `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server. Success prints a short `configure-integration: ok` summary. |
@@ -151,15 +151,14 @@ Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
 layout.
 
-`prepare-artifacts` first writes role artifacts inside the container-owned
-bundle-factory workspace, then copies successful outputs back to the host
-collector and exports archive handoff files to
+`prepare-artifacts` writes role artifacts and packs the archive pair inside the
+bundle-factory preparing root, then the harness collector exports those files to
 `target/artifacts/exported/<bundle>.tar.gz` plus `.sha256`.
 `stage-artifacts` consumes those archives through an explicit Docker
 simulation-only `docker cp` waiver, then extracts and verifies them inside the
-target container under the role-specific `/opt` bundle roots before helper
-validation. Docker target containers do not bind-mount host staging
-directories onto `/opt`.
+target container under `/var/lib/loopforge/staging` before helper validation.
+Docker target containers do not bind-mount host staging directories onto the
+helper-visible bundle paths.
 
 Bundle-factory and target helper state are helper-visible at
 `/var/lib/loopforge`, and helper logs are helper-visible at

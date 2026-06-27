@@ -20,8 +20,9 @@ supported_jenkins_plugin_manager_version="2.15.0"
 supported_jenkins_ubuntu_release="24.04"
 supported_jenkins_ubuntu_codename="noble"
 readonly JENKINS_NATIVE_HOME="/var/lib/jenkins"
-readonly JENKINS_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-controller"
-readonly JENKINS_STAGED_BUNDLE_PAYLOAD_DIR="/opt/jenkins-artifacts-bundle/jenkins"
+readonly JENKINS_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/jenkins-artifacts-bundle/jenkins"
+readonly JENKINS_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins"
+readonly JENKINS_ARTIFACT_BUNDLE_NAME="jenkins-artifacts-bundle"
 
 usage() {
   cat <<'USAGE'
@@ -1197,6 +1198,44 @@ plugin_manager=jenkins-plugin-manager-2.15.0.jar
 EOF
 }
 
+package_artifact_bundle() {
+  local payload_dir bundle_dir preparing_dir archive checksum
+  payload_dir="$JENKINS_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  [ "$(basename "$bundle_dir")" = "$JENKINS_ARTIFACT_BUNDLE_NAME" ] ||
+    die "JENKINS_ARTIFACT_OUTPUT_DIR must end with $JENKINS_ARTIFACT_BUNDLE_NAME/jenkins"
+  archive="$preparing_dir/$JENKINS_ARTIFACT_BUNDLE_NAME.tar.gz"
+  checksum="$archive.sha256"
+  rm -f "$archive" "$checksum"
+  rm -rf "$bundle_dir/checksums"
+  mkdir -p "$bundle_dir/checksums"
+  (
+    cd "$bundle_dir"
+    find . -type f ! -path './checksums/SHA256SUMS' -print0 |
+      sort -z |
+      xargs -0 sha256sum >checksums/SHA256SUMS
+  )
+  tar -C "$preparing_dir" -czf "$archive" "$JENKINS_ARTIFACT_BUNDLE_NAME"
+  (cd "$preparing_dir" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
+  chmod u+rw,go+r "$archive" "$checksum"
+}
+
+prepare_artifact_bundle_workspace() {
+  local payload_dir bundle_dir preparing_dir
+  payload_dir="$JENKINS_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  [ "$payload_dir" = "$JENKINS_BUNDLE_FACTORY_WORK_DIR" ] ||
+    die "JENKINS_ARTIFACT_OUTPUT_DIR must be $JENKINS_BUNDLE_FACTORY_WORK_DIR"
+  mkdir -p "$preparing_dir" ||
+    die "Cannot create Loopforge bundle preparing root as helper account: $preparing_dir"
+  [ -w "$preparing_dir" ] ||
+    die "Loopforge bundle preparing root is not writable by helper account: $preparing_dir"
+  rm -rf "$bundle_dir"
+  mkdir -p "$payload_dir/plugins" "$payload_dir/templates"
+}
+
 cmd_prepare_artifacts() {
   load_env normal
   apply_env_defaults
@@ -1205,8 +1244,7 @@ cmd_prepare_artifacts() {
   validate_accepted_direct_plugins
   enforce_version_baseline
   validate_artifact_output_dir
-  rm -rf "$JENKINS_ARTIFACT_OUTPUT_DIR"
-  mkdir -p "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates"
+  prepare_artifact_bundle_workspace
   : >"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
   prepare_jenkins_war
   prepare_plugin_manager
@@ -1222,10 +1260,13 @@ cmd_prepare_artifacts() {
       sort -z |
       xargs -0 sha256sum >checksums.sha256
   )
-  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s plugins=accepted-direct-pins lock=%s review=%s\n' \
+  package_artifact_bundle
+  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s archive=%s archive_checksum=%s plugins=accepted-direct-pins lock=%s review=%s\n' \
     "$JENKINS_ARTIFACT_OUTPUT_DIR" \
     "$JENKINS_ARTIFACT_OUTPUT_DIR/manifest.txt" \
     "$JENKINS_ARTIFACT_OUTPUT_DIR/checksums.sha256" \
+    "$(dirname "$(dirname "$JENKINS_ARTIFACT_OUTPUT_DIR")")/$JENKINS_ARTIFACT_BUNDLE_NAME.tar.gz" \
+    "$(dirname "$(dirname "$JENKINS_ARTIFACT_OUTPUT_DIR")")/$JENKINS_ARTIFACT_BUNDLE_NAME.tar.gz.sha256" \
     "$JENKINS_ARTIFACT_OUTPUT_DIR/plugins.lock.txt" \
     "$JENKINS_ARTIFACT_OUTPUT_DIR/plugin-review-report.txt"
 }

@@ -79,7 +79,7 @@ case "$*" in
                 fi
                 ;;
               bundle-factory:*"/var/lib/loopforge/evidence") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/bundle-factory/evidence" ;;
-              bundle-factory:*"/var/lib/loopforge/artifact-bundle-work") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/bundle-factory/artifact-bundle-work" ;;
+              bundle-factory:*"/var/lib/loopforge/preparing") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/bundle-factory/preparing" ;;
               ldap:*"/var/lib/ldap") stat -Lc '%d:%i' "$RUN_DIR/target/ldap/data" ;;
               ldap:*"/etc/ldap/slapd.d") stat -Lc '%d:%i' "$RUN_DIR/target/ldap/config" ;;
               gerrit-target:*"/workspace"|jenkins-controller-target:*"/workspace"|jenkins-agent-target:*"/workspace") stat -Lc '%d:%i' "$REPO_ROOT" ;;
@@ -131,7 +131,7 @@ case "$*" in
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
         printf '%s\t%s\n' "$STALE_SOURCE" /var/lib/loopforge/rendered
         printf '%s\t%s\n' "$RUN_DIR/target/helper-state/bundle-factory/evidence" /var/lib/loopforge/evidence
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/bundle-factory/artifact-bundle-work" /var/lib/loopforge/artifact-bundle-work
+        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/bundle-factory/preparing" /var/lib/loopforge/preparing
         ;;
       *-ldap)
         printf '%s\t%s\n' "$RUN_DIR/target/ldap/data" /var/lib/ldap

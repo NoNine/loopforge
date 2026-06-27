@@ -20,8 +20,9 @@ readonly GERRIT_INTERNAL_UBUNTU_RELEASE="24.04"
 readonly GERRIT_INTERNAL_UBUNTU_CODENAME="noble"
 readonly GERRIT_INTERNAL_API_LINE="3.13"
 readonly GERRIT_NATIVE_SITE_PATH="/srv/gerrit"
-readonly GERRIT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/artifact-bundle-work/gerrit"
-readonly GERRIT_STAGED_BUNDLE_PAYLOAD_DIR="/opt/gerrit-artifacts-bundle/gerrit"
+readonly GERRIT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"
+readonly GERRIT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit"
+readonly GERRIT_ARTIFACT_BUNDLE_NAME="gerrit-artifacts-bundle"
 
 usage() {
   cat <<'USAGE'
@@ -938,6 +939,44 @@ plugin_checksums=plugin-checksums.sha256
 EOF
 }
 
+package_artifact_bundle() {
+  local payload_dir bundle_dir preparing_dir archive checksum
+  payload_dir="$GERRIT_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  [ "$(basename "$bundle_dir")" = "$GERRIT_ARTIFACT_BUNDLE_NAME" ] ||
+    die "GERRIT_ARTIFACT_OUTPUT_DIR must end with $GERRIT_ARTIFACT_BUNDLE_NAME/gerrit"
+  archive="$preparing_dir/$GERRIT_ARTIFACT_BUNDLE_NAME.tar.gz"
+  checksum="$archive.sha256"
+  rm -f "$archive" "$checksum"
+  rm -rf "$bundle_dir/checksums"
+  mkdir -p "$bundle_dir/checksums"
+  (
+    cd "$bundle_dir"
+    find . -type f ! -path './checksums/SHA256SUMS' -print0 |
+      sort -z |
+      xargs -0 sha256sum >checksums/SHA256SUMS
+  )
+  tar -C "$preparing_dir" -czf "$archive" "$GERRIT_ARTIFACT_BUNDLE_NAME"
+  (cd "$preparing_dir" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
+  chmod u+rw,go+r "$archive" "$checksum"
+}
+
+prepare_artifact_bundle_workspace() {
+  local payload_dir bundle_dir preparing_dir
+  payload_dir="$GERRIT_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  [ "$payload_dir" = "$GERRIT_BUNDLE_FACTORY_WORK_DIR" ] ||
+    die "GERRIT_ARTIFACT_OUTPUT_DIR must be $GERRIT_BUNDLE_FACTORY_WORK_DIR"
+  mkdir -p "$preparing_dir" ||
+    die "Cannot create Loopforge bundle preparing root as helper account: $preparing_dir"
+  [ -w "$preparing_dir" ] ||
+    die "Loopforge bundle preparing root is not writable by helper account: $preparing_dir"
+  rm -rf "$bundle_dir"
+  mkdir -p "$payload_dir/plugins"
+}
+
 write_plugin_manifests() {
   assert_plugin_jar_set_exact "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins"
   (
@@ -1000,9 +1039,8 @@ cmd_prepare_artifacts() {
   require_command sha256sum
   require_command unzip
   validate_plugins
-  mkdir -p "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins"
   assert_plugin_source_dir_safe
-  rm -f "$GERRIT_ARTIFACT_OUTPUT_DIR/plugins/"*.jar
+  prepare_artifact_bundle_workspace
   prepare_real_gerrit_war
   for_each_plugin write_plugin_artifact
   write_plugin_manifests
@@ -1018,8 +1056,11 @@ cmd_prepare_artifacts() {
       sort -z |
       xargs -0 sha256sum >checksums.sha256
   )
-  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s\n' \
-    "$GERRIT_ARTIFACT_OUTPUT_DIR" "$GERRIT_ARTIFACT_OUTPUT_DIR/manifest.txt" "$GERRIT_ARTIFACT_OUTPUT_DIR/checksums.sha256"
+  package_artifact_bundle
+  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s archive=%s archive_checksum=%s\n' \
+    "$GERRIT_ARTIFACT_OUTPUT_DIR" "$GERRIT_ARTIFACT_OUTPUT_DIR/manifest.txt" "$GERRIT_ARTIFACT_OUTPUT_DIR/checksums.sha256" \
+    "$(dirname "$(dirname "$GERRIT_ARTIFACT_OUTPUT_DIR")")/$GERRIT_ARTIFACT_BUNDLE_NAME.tar.gz" \
+    "$(dirname "$(dirname "$GERRIT_ARTIFACT_OUTPUT_DIR")")/$GERRIT_ARTIFACT_BUNDLE_NAME.tar.gz.sha256"
 }
 
 cmd_install() {

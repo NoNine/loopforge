@@ -13,8 +13,9 @@ env_file=""
 dry_run=0
 assume_yes=0
 readonly JENKINS_AGENT_NATIVE_REMOTE_FS="/var/lib/jenkins-agent"
-readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/artifact-bundle-work/jenkins-agent"
-readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/opt/jenkins-agent-artifacts-bundle/jenkins-agent"
+readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"
+readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle/jenkins-agent"
+readonly JENKINS_AGENT_ARTIFACT_BUNDLE_NAME="jenkins-agent-artifacts-bundle"
 
 usage() {
   cat <<'USAGE'
@@ -681,14 +682,51 @@ bootstrap=jenkins-agent-bootstrap.txt
 EOF
 }
 
+package_artifact_bundle() {
+  local payload_dir bundle_dir preparing_dir archive checksum
+  payload_dir="$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  [ "$(basename "$bundle_dir")" = "$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME" ] ||
+    die "JENKINS_AGENT_ARTIFACT_OUTPUT_DIR must end with $JENKINS_AGENT_ARTIFACT_BUNDLE_NAME/jenkins-agent"
+  archive="$preparing_dir/$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME.tar.gz"
+  checksum="$archive.sha256"
+  rm -f "$archive" "$checksum"
+  rm -rf "$bundle_dir/checksums"
+  mkdir -p "$bundle_dir/checksums"
+  (
+    cd "$bundle_dir"
+    find . -type f ! -path './checksums/SHA256SUMS' -print0 |
+      sort -z |
+      xargs -0 sha256sum >checksums/SHA256SUMS
+  )
+  tar -C "$preparing_dir" -czf "$archive" "$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME"
+  (cd "$preparing_dir" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
+  chmod u+rw,go+r "$archive" "$checksum"
+}
+
+prepare_artifact_bundle_workspace() {
+  local payload_dir bundle_dir preparing_dir
+  payload_dir="$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  [ "$payload_dir" = "$JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR" ] ||
+    die "JENKINS_AGENT_ARTIFACT_OUTPUT_DIR must be $JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR"
+  mkdir -p "$preparing_dir" ||
+    die "Cannot create Loopforge bundle preparing root as helper account: $preparing_dir"
+  [ -w "$preparing_dir" ] ||
+    die "Loopforge bundle preparing root is not writable by helper account: $preparing_dir"
+  rm -rf "$bundle_dir"
+  mkdir -p "$payload_dir/templates"
+}
+
 cmd_prepare_artifacts() {
   load_env normal
   apply_env_defaults
   require_command sha256sum
   validate_os_dependencies
   validate_artifact_output_dir
-  rm -rf "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR"
-  mkdir -p "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/templates"
+  prepare_artifact_bundle_workspace
   write_text_file "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/jenkins-agent-bootstrap.txt" \
     "Jenkins SSH agent bootstrap marker for Ubuntu 24.04 noble with OpenJDK 21."
   write_text_file "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/package-intent.manifest" \
@@ -707,8 +745,11 @@ bundle_contains_keys=no"
       xargs -0 sha256sum >checksums.sha256
   )
   assert_no_ssh_key_material "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR"
-  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s bundle_contains_keys=no\n' \
-    "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/manifest.txt" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/checksums.sha256"
+  package_artifact_bundle
+  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s archive=%s archive_checksum=%s bundle_contains_keys=no\n' \
+    "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/manifest.txt" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/checksums.sha256" \
+    "$(dirname "$(dirname "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR")")/$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME.tar.gz" \
+    "$(dirname "$(dirname "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR")")/$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME.tar.gz.sha256"
 }
 
 cmd_install() {
@@ -757,7 +798,7 @@ validate_os_sshd_service() {
   log_file="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
   sshd_config="$JENKINS_AGENT_STATE_DIR/etc/sshd_config"
   sshd_bin="$(command -v sshd)"
-  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/run") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") && install -d -m 0755 /run/sshd /var/run/sshd && : >$(shell_quote "$log_file") && chown $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$log_file")"
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/run") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") && : >$(shell_quote "$log_file") && chown $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$log_file")"
   run_with_privilege "ssh-keygen -A >>$(shell_quote "$log_file") 2>&1"
   local tmp_config tmp_log
   tmp_config="$(mktemp)"

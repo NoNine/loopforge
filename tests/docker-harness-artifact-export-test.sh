@@ -72,7 +72,8 @@ case "$*" in
             esac
             ;;
           *"/workspace/scripts/gerrit-setup.sh "*" prepare-artifacts")
-            dir="$FAKE_CONTAINER_FS/var/lib/loopforge/artifact-bundle-work/gerrit"
+            bundle_dir="$FAKE_CONTAINER_FS/var/lib/loopforge/preparing/gerrit-artifacts-bundle"
+            dir="$bundle_dir/gerrit"
             mkdir -p "$dir/plugins"
             cat >"$dir/manifest.txt" <<'EOF'
 harness_manifest_version=1
@@ -90,6 +91,10 @@ jenkins_plugin_manager_version=not-applicable
 EOF
             printf 'payload\n' >"$dir/plugins/payload.txt"
             (cd "$dir" && sha256sum manifest.txt plugins/payload.txt >checksums.sha256)
+            mkdir -p "$bundle_dir/checksums"
+            (cd "$bundle_dir" && find . -type f ! -path './checksums/SHA256SUMS' -print0 | sort -z | xargs -0 sha256sum >checksums/SHA256SUMS)
+            (cd "$FAKE_CONTAINER_FS/var/lib/loopforge/preparing" && tar -czf gerrit-artifacts-bundle.tar.gz gerrit-artifacts-bundle)
+            (cd "$FAKE_CONTAINER_FS/var/lib/loopforge/preparing" && sha256sum gerrit-artifacts-bundle.tar.gz >gerrit-artifacts-bundle.tar.gz.sha256)
             ;;
           *)
             exit 0
@@ -139,14 +144,25 @@ grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
   printf 'Expected prepare-artifacts evidence\n' >&2
   exit 1
 }
-grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/artifact-bundle-work/gerrit/manifest.txt"' "$prepare_evidence"
-grep -Fq '"checksum_references": "/var/lib/loopforge/artifact-bundle-work/gerrit/checksums.sha256"' "$prepare_evidence"
-grep -Fq -- '/var/lib/loopforge' "$calls"
-grep -Fq -- '/var/log/loopforge' "$calls"
+grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$prepare_evidence"
+grep -Fq '"checksum_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256;/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/checksums.sha256"' "$prepare_evidence"
 grep -Fq -- '/var/lib/loopforge/rendered' "$calls"
-grep -Fq -- '/var/lib/loopforge/artifact-bundle-work' "$calls"
-grep -Fq -- 'cp container-id:/var/lib/loopforge/artifact-bundle-work/gerrit' "$calls"
-[ -d "$run_dir/target/helper-state/bundle-factory/artifact-bundle-work" ] || {
+grep -Fq -- '/var/lib/loopforge/preparing' "$calls"
+if grep -Fq -- 'install -d -m 0755 -o ci-operator -g ci-operator /var/lib/loopforge' "$calls"; then
+  printf 'bundle-factory prepare-artifacts must not set up the Loopforge helper state root in harness\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'install -d -m 0755 -o ci-operator -g ci-operator /var/log/loopforge' "$calls"; then
+  printf 'bundle-factory prepare-artifacts must not set up the Loopforge helper log root in harness\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'install -d -m 0755 -o ci-operator -g ci-operator /var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit' "$calls"; then
+  printf 'bundle-factory prepare-artifacts must not create role payload dirs in harness\n' >&2
+  exit 1
+fi
+grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz' "$calls"
+grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
+[ -d "$run_dir/target/helper-state/bundle-factory/preparing" ] || {
   printf 'bundle-factory artifact workspace debug backing must be created in host state\n' >&2
   exit 1
 }
@@ -175,18 +191,18 @@ stage_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -nam
   printf 'Expected stage-artifacts evidence\n' >&2
   exit 1
 }
-grep -Fq '"artifact_manifest_references": "/opt/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$stage_evidence"
+grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$stage_evidence"
 grep -Fq "$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz.sha256" "$stage_evidence"
-grep -Fq '/opt/gerrit-artifacts-bundle/checksums/SHA256SUMS' "$stage_evidence"
-grep -Fq '/opt/gerrit-artifacts-bundle/gerrit/checksums.sha256' "$stage_evidence"
+grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/checksums/SHA256SUMS' "$stage_evidence"
+grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/checksums.sha256' "$stage_evidence"
 grep -Fq 'Docker cp simulation-only waiver' "$stage_evidence"
 grep -Fq -- 'cp ' "$calls"
 grep -Fq -- 'gerrit-artifacts-bundle.tar.gz container-id:/tmp/loopforge-docker-cp-' "$calls"
 grep -Fq -- 'gerrit-artifacts-bundle.tar.gz.sha256 container-id:/tmp/loopforge-docker-cp-' "$calls"
-grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging/gerrit/incoming' "$calls"
-grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz' "$calls"
-grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
-grep -Fq -- 'tar -xzf "$archive_name" -C /opt' "$calls"
+grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging' "$calls"
+grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit-artifacts-bundle.tar.gz' "$calls"
+grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
+grep -Fq -- 'tar -xzf "$archive_name" -C "$staging_root"' "$calls"
 grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$calls"
 grep -Fq -- 'find "$target_bundle_dir" -type d -exec chmod 0755 {} +' "$calls"
 grep -Fq -- 'find "$target_bundle_dir" -type f -exec chmod 0644 {} +' "$calls"

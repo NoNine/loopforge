@@ -169,7 +169,7 @@ Staged artifact paths:
 | Location | Path |
 | --- | --- |
 | Bundle factory output | `GERRIT_ARTIFACT_OUTPUT_DIR` |
-| Bundle-factory workspace | `/var/lib/loopforge/artifact-bundle-work/gerrit`; see `docs/artifact-bundle-contract.md` |
+| Bundle-factory workspace | `/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit`; see `docs/artifact-bundle-contract.md` |
 | Docker harness exported output | `generated/simulation/docker/<run-id>/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz` |
 
 Side effects:
@@ -223,7 +223,7 @@ mutation.
 Consumed inputs:
 
 - Reviewed Gerrit env file.
-- Extracted artifact bundle root, normally `/opt/gerrit-artifacts-bundle` in Docker simulation and target deployment. See `docs/artifact-bundle-contract.md`.
+- Extracted artifact bundle root, normally `/var/lib/loopforge/staging/gerrit-artifacts-bundle` in Docker simulation and target deployment. See `docs/artifact-bundle-contract.md`.
 - `manifest.txt`, `checksums.sha256`, `plugin-artifacts.manifest`,
   `plugin-metadata.report`, and `plugin-checksums.sha256`.
 

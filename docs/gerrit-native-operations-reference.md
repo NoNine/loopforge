@@ -122,7 +122,7 @@ Ask an administrator to perform or delegate these production-host tasks:
 - Install OS packages and Java dependencies.
 - Confirm the local Gerrit runtime account and group exist on the Gerrit host.
 - Create and own `/srv/gerrit`, `/srv/gerrit/plugins`, `/opt/gerrit`, and any
-  staged `/opt/gerrit-artifacts-bundle` content as documented.
+  staged `/var/lib/loopforge/staging/gerrit-artifacts-bundle` content as documented.
 - Place `/opt/gerrit/gerrit.war`, initialize Gerrit as `gerrit`, and protect `/srv/gerrit/etc/secure.config`.
 - Create `/etc/systemd/system/gerrit.service`, reload systemd, and start, stop, restart, or enable Gerrit.
 - Run any `chown`, `chmod`, `apt`, `dpkg`, `systemctl`, or writes under `/etc`, `/opt`, or `/srv`.
@@ -290,11 +290,13 @@ approved media or an approved internal transfer path. Run on the Gerrit host:
 ```bash
 cd /home/ci-operator
 sha256sum -c gerrit-artifacts-bundle.tar.gz.sha256
-sudo rm -rf /opt/gerrit-artifacts-bundle
-sudo tar -xzf gerrit-artifacts-bundle.tar.gz -C /opt
-cd /opt/gerrit-artifacts-bundle
+sudo install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging
+sudo rm -rf /var/lib/loopforge/staging/gerrit-artifacts-bundle
+sudo tar -xzf gerrit-artifacts-bundle.tar.gz -C /var/lib/loopforge/staging
+sudo chown -R ci-operator:ci-operator /var/lib/loopforge/staging/gerrit-artifacts-bundle
+cd /var/lib/loopforge/staging/gerrit-artifacts-bundle
 sha256sum -c checksums/SHA256SUMS
-cd /opt/gerrit-artifacts-bundle/gerrit
+cd /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit
 sha256sum -c plugin-checksums.sha256
 find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
   | sort > /tmp/gerrit-plugin-artifacts.installed
@@ -310,15 +312,15 @@ sudo groupadd --gid 61010 gerrit || true
 sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit || true
 sudo chown gerrit:gerrit /srv/gerrit
 sudo install -d -o gerrit -g gerrit -m 0755 /opt/gerrit
-sudo cp /opt/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
+sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
 sudo chown gerrit:gerrit /opt/gerrit/gerrit.war
 sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/plugins
-sudo cp /opt/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/ 2>/dev/null || true
+sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/ 2>/dev/null || true
 sudo chown gerrit:gerrit /srv/gerrit/plugins/*.jar 2>/dev/null || true
 sudo install -d -o gerrit -g gerrit -m 0750 /srv/gerrit/etc
-sudo install -m 0644 /opt/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest /srv/gerrit/etc/plugin-artifacts.manifest
-sudo install -m 0644 /opt/gerrit-artifacts-bundle/gerrit/plugin-metadata.report /srv/gerrit/etc/plugin-metadata.report
-sudo install -m 0644 /opt/gerrit-artifacts-bundle/gerrit/plugin-checksums.sha256 /srv/gerrit/etc/plugin-checksums.sha256
+sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest /srv/gerrit/etc/plugin-artifacts.manifest
+sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-metadata.report /srv/gerrit/etc/plugin-metadata.report
+sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-checksums.sha256 /srv/gerrit/etc/plugin-checksums.sha256
 ```
 
 For artifact recovery, rerun only the artifact archive checksum, extraction,
@@ -342,7 +344,7 @@ Place the Gerrit WAR from the staged bundle-factory artifact bundle. Target
 hosts must not download Gerrit application artifacts as fallback.
 
 ```bash
-cp /opt/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
+cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
 chown gerrit:gerrit /opt/gerrit/gerrit.war
 ```
 
@@ -444,13 +446,13 @@ Install the plugins staged in the Gerrit artifact bundle:
 
 ```bash
 install -d -o gerrit -g gerrit /srv/gerrit/plugins
-cp /opt/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/
+cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/
 chown gerrit:gerrit /srv/gerrit/plugins/*.jar
 find /srv/gerrit/plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
   | sort > /tmp/gerrit-plugin-artifacts.installed
 cmp /tmp/gerrit-plugin-artifacts.installed \
-  /opt/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest
-(cd /opt/gerrit-artifacts-bundle/gerrit && sha256sum -c plugin-checksums.sha256)
+  /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest
+(cd /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit && sha256sum -c plugin-checksums.sha256)
 ```
 
 ### 3.5 Create Gerrit systemd Service

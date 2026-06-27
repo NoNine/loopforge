@@ -130,7 +130,7 @@ Ask an administrator to perform or delegate these production-host tasks:
 - Install OS packages, configure the Jenkins package repository, install `jenkins=2.555.3`, and apply package holds.
 - Confirm the local Jenkins runtime account and group exist on the Jenkins host.
 - Create and own `/var/lib/jenkins`, `/var/lib/jenkins/plugins`,
-  `/var/lib/jenkins/casc`, and any staged `/opt/jenkins-artifacts-bundle`
+  `/var/lib/jenkins/casc`, and any staged `/var/lib/loopforge/staging/jenkins-artifacts-bundle`
   content as documented.
 - Create `/etc/jenkins-casc.env`, set `0600`, and keep it owned by
   `root:root` as protected system-file custody. This does not make root a
@@ -422,11 +422,13 @@ approved media or an approved internal transfer path. Run on the Jenkins host:
 ```bash
 cd /home/ci-operator
 sha256sum -c jenkins-artifacts-bundle.tar.gz.sha256
-sudo rm -rf /opt/jenkins-artifacts-bundle
-sudo tar -xzf jenkins-artifacts-bundle.tar.gz -C /opt
-cd /opt/jenkins-artifacts-bundle
+sudo install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging
+sudo rm -rf /var/lib/loopforge/staging/jenkins-artifacts-bundle
+sudo tar -xzf jenkins-artifacts-bundle.tar.gz -C /var/lib/loopforge/staging
+sudo chown -R ci-operator:ci-operator /var/lib/loopforge/staging/jenkins-artifacts-bundle
+cd /var/lib/loopforge/staging/jenkins-artifacts-bundle
 sha256sum -c checksums/SHA256SUMS
-sudo apt install -y /opt/jenkins-artifacts-bundle/jenkins/jenkins_2.555.3_all.deb
+sudo apt install -y /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/jenkins_2.555.3_all.deb
 sudo apt-mark hold jenkins
 java -version
 ```
@@ -436,7 +438,7 @@ Install or refresh controller plugins from the artifact bundle:
 ```bash
 sudo systemctl stop jenkins || true
 sudo install -d -o jenkins -g jenkins /var/lib/jenkins/plugins
-sudo cp /opt/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
+sudo cp /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
 sudo chown -R jenkins:jenkins /var/lib/jenkins/plugins
 sudo systemctl start jenkins || true
 ```
@@ -522,7 +524,7 @@ Install staged plugin artifacts:
 ```bash
 systemctl stop jenkins
 install -d -o jenkins -g jenkins /var/lib/jenkins/plugins
-cp /opt/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
+cp /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
 chown -R jenkins:jenkins /var/lib/jenkins/plugins
 systemctl start jenkins
 ```

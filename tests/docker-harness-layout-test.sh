@@ -222,7 +222,7 @@ grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/evidence:/var/lib/loopforge/evi
   printf 'Bundle-factory evidence must be host-backed under state for debugging\n' >&2
   exit 1
 }
-grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/artifact-bundle-work:/var/lib/loopforge/artifact-bundle-work' "$repo_root/simulation/docker/compose.yaml" || {
+grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/preparing:/var/lib/loopforge/preparing' "$repo_root/simulation/docker/compose.yaml" || {
   printf 'Bundle-factory artifact workspace must be host-backed under state for debugging\n' >&2
   exit 1
 }
@@ -233,7 +233,7 @@ fi
 for path in \
   '$HARNESS_BUNDLE_FACTORY_RENDERED_DIR' \
   '$HARNESS_STATE_DIR/bundle-factory/evidence' \
-  '$HARNESS_STATE_DIR/bundle-factory/artifact-bundle-work' \
+  '$HARNESS_STATE_DIR/bundle-factory/preparing' \
   '$HARNESS_HOST_DIR' \
   '$HARNESS_TARGET_DIR'
 do
@@ -248,7 +248,7 @@ grep -Fq -- 'prepare_product_home_ownership' "$repo_root/simulation/docker/simul
   exit 1
 }
 grep -Fq -- 'prepare_bundle_factory_workspace_ownership' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must prepare bundle-factory workspace ownership\n' >&2
+  printf 'Docker harness must prepare bundle-factory bind mount ownership\n' >&2
   exit 1
 }
 grep -Fq -- 'prepare_target_helper_owned_paths' "$repo_root/simulation/docker/simulate.sh" || {
@@ -323,6 +323,39 @@ grep -Fq -- 'if ! prepare_bundle_factory_workspace_ownership "$role" "$log"; the
   printf 'Docker harness must fail closed when bundle-factory workspace prep fails\n' >&2
   exit 1
 }
+grep -Fq -- 'scope=docker-simulation-bind-mount' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness bundle-factory prep must be labeled as bind-mount setup\n' >&2
+  exit 1
+}
+grep -Fq -- 'owned_directory_command ci-operator ci-operator 0700 "$work_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must prepare only the bundle-factory preparing bind mount\n' >&2
+  exit 1
+}
+if grep -Fq -- 'owned_directory_command ci-operator ci-operator 0755 "$state_root" 1' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'owned_directory_command ci-operator ci-operator 0755 "$log_root" 1' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'workspace="$(container_bundle_factory_work_dir_for_role "$role")"' "$repo_root/simulation/docker/simulate.sh"
+then
+  printf 'Docker harness must not create bundle-factory helper roots or role payload dirs during prepare-artifacts\n' >&2
+  exit 1
+fi
+for script in \
+  "$repo_root/scripts/gerrit-setup.sh" \
+  "$repo_root/scripts/jenkins-controller-setup.sh" \
+  "$repo_root/scripts/jenkins-agent-setup.sh"
+do
+  grep -Fq -- 'prepare_artifact_bundle_workspace()' "$script" || {
+    printf 'Role helper must own artifact bundle workspace preparation: %s\n' "$script" >&2
+    exit 1
+  }
+  grep -Fq -- 'mkdir -p "$preparing_dir"' "$script" || {
+    printf 'Role helper must create the Loopforge preparing root when practical: %s\n' "$script" >&2
+    exit 1
+  }
+  grep -Fq -- 'rm -rf "$bundle_dir"' "$script" || {
+    printf 'Role helper must clean its own artifact bundle tree: %s\n' "$script" >&2
+    exit 1
+  }
+done
 if grep -Fq -- 'owned_directory_command()' "$repo_root/scripts/common.sh"; then
   printf 'scripts/common.sh must not contain Docker harness-only ownership helpers\n' >&2
   exit 1

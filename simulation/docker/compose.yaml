@@ -22,7 +22,7 @@ services:
       - "../../:/workspace:ro"
       - "${HARNESS_BUNDLE_FACTORY_RENDERED_DIR}:/var/lib/loopforge/rendered"
       - "${HARNESS_STATE_DIR}/bundle-factory/evidence:/var/lib/loopforge/evidence"
-      - "${HARNESS_STATE_DIR}/bundle-factory/artifact-bundle-work:/var/lib/loopforge/artifact-bundle-work"
+      - "${HARNESS_STATE_DIR}/bundle-factory/preparing:/var/lib/loopforge/preparing"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     networks:
       - harness

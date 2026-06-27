@@ -14,6 +14,12 @@ Keep the v1 product boundary clear:
   privilege from the operator account; root-owned OS custody is not a
   Loopforge account role.
 
+## Interaction Rules
+
+- Do not use question countdowns or timed auto-resolution prompts when asking
+  the user for input; ask directly and wait, unless higher-priority system or
+  developer instructions require otherwise.
+
 ## Commit Messages
 
 Use standard Git-style commit messages. Treat these as hard requirements, not
