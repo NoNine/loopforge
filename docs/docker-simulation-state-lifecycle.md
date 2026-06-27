@@ -85,9 +85,19 @@ generated runtime config is missing or inconsistent, because stale containers
 may be the problem being recovered from.
 
 `clean` may share the same container cleanup recovery as `down`. It must not
-delete host generated files unless it validates the canonical run root and run
-marker. If runtime config is missing or inconsistent, `clean` may remove
-selected containers and must report that host generated cleanup was skipped.
+delete generated files outside the canonical run root. If runtime config is
+missing or inconsistent but the canonical run root still exists, `clean` may
+remove selected containers, remove known mutable generated paths, back up
+retained outputs, and clear active retained output directories. If the
+canonical run root is missing, it must report that host generated cleanup was
+skipped.
+
+Retained output backups are host-dominated review copies under
+`host/retained-output-backups/<timestamp>/` and are host-owned. Active target
+role evidence and log directories under `target/evidence/<role>/` and
+`target/logs/<role>/` remain target-dominated while active; `clean` must not
+normalize them to host ownership in place before a later run reuses the same
+directories.
 
 Example recovery after deleting bind mounts while containers still exist:
 

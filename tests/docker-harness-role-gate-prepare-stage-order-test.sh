@@ -69,6 +69,13 @@ case "$*" in
           *"/etc/os-release"*)
             printf '24.04 noble\n'
             ;;
+          *"find /var/lib/loopforge/evidence"*)
+            case "$service" in
+              gerrit-target) printf '/var/lib/loopforge/evidence/gerrit-readiness-test.json\n' ;;
+              jenkins-controller-target) printf '/var/lib/loopforge/evidence/jenkins-controller-readiness-test.json\n' ;;
+              jenkins-agent-target) printf '/var/lib/loopforge/evidence/jenkins-agent-readiness-test.json\n' ;;
+            esac
+            ;;
           "test -x "*)
             exit 0
             ;;
@@ -91,6 +98,35 @@ case "$*" in
         ;;
     esac
     ;;
+  cp\ container-id:/*)
+    src="${1#container-id:}"
+    dest="${2:-}"
+    mkdir -p "$(dirname "$dest")"
+    case "$src" in
+      /var/lib/loopforge/evidence/gerrit-readiness-test.json)
+        printf '%s\n' '{"bounded_log_references":"/var/log/loopforge/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}' >"$dest"
+        ;;
+      /var/lib/loopforge/evidence/jenkins-controller-readiness-test.json)
+        printf '%s\n' '{"bounded_log_references":"/var/log/loopforge/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/target/helper-state/runtime.status"}' >"$dest"
+        ;;
+      /var/lib/loopforge/evidence/jenkins-agent-readiness-test.json)
+        printf '%s\n' '{"bounded_log_references":"/var/log/loopforge/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}' >"$dest"
+        ;;
+      /var/log/loopforge/gerrit.log)
+        printf 'gerrit log\n' >"$dest"
+        ;;
+      /var/log/loopforge/controller.log)
+        printf 'controller log\n' >"$dest"
+        ;;
+      /var/log/loopforge/agent.log)
+        printf 'agent log\n' >"$dest"
+        ;;
+      *)
+        printf 'unexpected docker cp source: %s\n' "$src" >&2
+        exit 1
+        ;;
+    esac
+    ;;
   inspect\ -f\ *State.Running*)
     printf 'true\n'
     ;;
@@ -102,8 +138,12 @@ chmod +x "$fake_bin/docker"
 
 mkdir -p \
   "$run_dir/host/rendered" \
-  "$run_dir/target/evidence" \
-  "$run_dir/target/logs"
+  "$run_dir/target/evidence/gerrit" \
+  "$run_dir/target/evidence/jenkins-controller" \
+  "$run_dir/target/evidence/jenkins-agent" \
+  "$run_dir/target/logs/gerrit" \
+  "$run_dir/target/logs/jenkins-controller" \
+  "$run_dir/target/logs/jenkins-agent"
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
 cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-controller.env"
@@ -131,16 +171,16 @@ HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_host_port
 HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_host_port
 EOF
-printf 'gerrit log\n' >"$run_dir/target/logs/gerrit.log"
-printf 'controller log\n' >"$run_dir/target/logs/controller.log"
-printf 'agent log\n' >"$run_dir/target/logs/agent.log"
-cat >"$run_dir/target/evidence/gerrit-readiness-test.json" <<'EOF'
+printf 'gerrit log\n' >"$run_dir/target/logs/gerrit/gerrit.log"
+printf 'controller log\n' >"$run_dir/target/logs/jenkins-controller/controller.log"
+printf 'agent log\n' >"$run_dir/target/logs/jenkins-agent/agent.log"
+cat >"$run_dir/target/evidence/gerrit/gerrit-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/var/log/loopforge/gerrit.log","service_log_reference":"/srv/gerrit/logs/gerrit.log"}
 EOF
-cat >"$run_dir/target/evidence/jenkins-controller-readiness-test.json" <<'EOF'
+cat >"$run_dir/target/evidence/jenkins-controller/jenkins-controller-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/var/log/loopforge/controller.log","service_log_reference":"/var/lib/jenkins/logs/jenkins-controller.log","runtime_status_reference":"/var/lib/jenkins/target/helper-state/runtime.status"}
 EOF
-cat >"$run_dir/target/evidence/jenkins-agent-readiness-test.json" <<'EOF'
+cat >"$run_dir/target/evidence/jenkins-agent/jenkins-agent-readiness-test.json" <<'EOF'
 {"bounded_log_references":"/var/log/loopforge/agent.log","service_log_reference":"/var/lib/jenkins-agent/logs/agent-service.log"}
 EOF
 
@@ -173,9 +213,9 @@ if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^.* --role$|^.* --role ' "$tmp_
   exit 1
 fi
 
-gerrit_host_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'gerrit-readiness-*.json.host.json' -print | sort | tail -1)"
-controller_host_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.json.host.json' -print | sort | tail -1)"
-agent_host_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.json.host.json' -print | sort | tail -1)"
+gerrit_host_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -name 'gerrit-readiness-*.host.json' -print | sort | tail -1)"
+controller_host_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -name 'jenkins-controller-readiness-*.host.json' -print | sort | tail -1)"
+agent_host_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -name 'jenkins-agent-readiness-*.host.json' -print | sort | tail -1)"
 [ -n "$gerrit_host_evidence" ] || {
   printf 'gerrit normalized host evidence was not written\n' >&2
   exit 1
@@ -229,7 +269,7 @@ if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^prepare-artifacts |^stage-arti
   exit 1
 fi
 for role in gerrit jenkins-controller jenkins-agent; do
-  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/target/logs/configure-role-$role-"*.log || {
+  grep -Fq "staged_artifacts_ready role=$role" "$run_dir/host/logs/harness/configure-role-$role-"*.log || {
     printf 'configure-role did not verify staged artifacts for %s\n' "$role" >&2
     exit 1
   }

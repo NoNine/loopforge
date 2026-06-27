@@ -40,14 +40,27 @@ grep -Fq -- '--home-dir /var/lib/jenkins-agent' "$repo_root/simulation/docker/ta
   printf 'Docker target image must create Jenkins agent with native home /var/lib/jenkins-agent\n' >&2
   exit 1
 }
-grep -Fq -- 'groupadd --system ci-operator' "$repo_root/simulation/docker/target/Dockerfile" || {
+grep -Fq -- 'groupadd --gid 61000 ci-operator' "$repo_root/simulation/docker/target/Dockerfile" || {
   printf 'Docker target image must include a distinct ci-operator group\n' >&2
   exit 1
 }
-grep -Fq -- '--gid ci-operator --home-dir /home/ci-operator --shell /bin/bash ci-operator' "$repo_root/simulation/docker/target/Dockerfile" || {
+grep -Fq -- '--uid 61000 --create-home --gid 61000 --home-dir /home/ci-operator --shell /bin/bash ci-operator' "$repo_root/simulation/docker/target/Dockerfile" || {
   printf 'Docker target image must include a distinct ci-operator account\n' >&2
   exit 1
 }
+for spec in \
+  'groupadd --gid 61010 gerrit' \
+  'useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit' \
+  'groupadd --gid 61020 jenkins' \
+  'useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --shell /bin/bash jenkins' \
+  'groupadd --gid 61030 jenkins-agent' \
+  'useradd --uid 61030 --gid 61030 --home-dir /var/lib/jenkins-agent --shell /bin/bash jenkins-agent'
+do
+  grep -Fq -- "$spec" "$repo_root/simulation/docker/target/Dockerfile" || {
+    printf 'Docker target image must use deterministic account ID spec: %s\n' "$spec" >&2
+    exit 1
+  }
+done
 grep -Fq -- "sudo \\" "$repo_root/simulation/docker/target/Dockerfile" || {
   printf 'Docker target image must install sudo for the ci-operator account\n' >&2
   exit 1
@@ -62,6 +75,10 @@ grep -Fq -- "ci-operator ALL=(ALL) NOPASSWD:ALL" "$repo_root/simulation/docker/t
 }
 grep -Fq -- "chmod 0440 /etc/sudoers.d/harness-ci-operator" "$repo_root/simulation/docker/target/Dockerfile" || {
   printf 'ci-operator sudoers drop-in must be mode 0440\n' >&2
+  exit 1
+}
+grep -Fq -- "tree \\" "$repo_root/simulation/docker/target/Dockerfile" || {
+  printf 'Docker target image must install tree for simulation-only inspection\n' >&2
   exit 1
 }
 if grep -F -- '--home-dir /home/ci-operator' "$repo_root/simulation/docker/target/Dockerfile" |
@@ -155,10 +172,24 @@ grep -Fq -- '${HARNESS_STATE_DIR}/jenkins-agent:/var/lib/loopforge' "$repo_root/
   printf 'Docker compose must mount agent helper state at /var/lib/loopforge\n' >&2
   exit 1
 }
-grep -Fq -- '${HARNESS_LOG_DIR}:/var/log/loopforge' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must mount helper logs at /var/log/loopforge\n' >&2
+for spec in \
+  '${HARNESS_GERRIT_EVIDENCE_DIR}:/var/lib/loopforge/evidence' \
+  '${HARNESS_GERRIT_LOG_DIR}:/var/log/loopforge' \
+  '${HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR}:/var/lib/loopforge/evidence' \
+  '${HARNESS_JENKINS_CONTROLLER_LOG_DIR}:/var/log/loopforge' \
+  '${HARNESS_JENKINS_AGENT_EVIDENCE_DIR}:/var/lib/loopforge/evidence' \
+  '${HARNESS_JENKINS_AGENT_LOG_DIR}:/var/log/loopforge'
+do
+  grep -Fq -- "$spec" "$repo_root/simulation/docker/compose.yaml" || {
+    printf 'Docker compose must mount role-specific evidence/log bind source: %s\n' "$spec" >&2
+    exit 1
+  }
+done
+if grep -Fq -- '${HARNESS_LOG_DIR}:/var/log/loopforge' "$repo_root/simulation/docker/compose.yaml" ||
+  grep -Fq -- '${HARNESS_EVIDENCE_DIR}:/var/lib/loopforge/evidence' "$repo_root/simulation/docker/compose.yaml"; then
+  printf 'Docker compose must not share harness evidence/log roots across target containers\n' >&2
   exit 1
-}
+fi
 grep -Fq -- 'HARNESS_STATE_DIR: "/var/lib/loopforge"' "$repo_root/simulation/docker/compose.yaml" || {
   printf 'Docker compose must expose helper state at /var/lib/loopforge\n' >&2
   exit 1
@@ -228,14 +259,66 @@ grep -Fq -- 'if ! prepare_all_target_helper_owned_paths "$log" ||' "$repo_root/s
   printf 'Docker harness up must prepare target helper-owned paths\n' >&2
   exit 1
 }
-grep -Fq -- 'retained_evidence_logs=host-owned-sideband' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must keep retained evidence/log bind roots host-owned sideband\n' >&2
+grep -Fq -- 'recursive_contract=target-helper-owned' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must label target helper-owned recursive ownership prep\n' >&2
   exit 1
 }
-if grep -Eq 'owned_directory_command ci-operator ci-operator [0-9]+ "\\$(evidence_root|log_root)"' "$repo_root/simulation/docker/simulate.sh"; then
-  printf 'Docker harness must not chown retained evidence/log bind roots to target ci-operator\n' >&2
+grep -Fq -- 'owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must recursively prepare target evidence dirs as ci-operator\n' >&2
   exit 1
-fi
+}
+grep -Fq -- 'owned_directory_command ci-operator ci-operator 0750 "$log_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must recursively prepare target log dirs as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'owned_directory_command ci-operator ci-operator 0700 "$secret_input_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must recursively prepare target secret input dirs as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Gerrit collect-evidence must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Gerrit install must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Gerrit configure must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins controller collect-evidence must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins controller install must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins controller configure-service must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins controller install-plugins must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins controller configure-jcasc must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins agent collect-evidence must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes install' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins agent install must run as ci-operator\n' >&2
+  exit 1
+}
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Jenkins agent configure-runtime must run as ci-operator\n' >&2
+  exit 1
+}
 grep -Fq -- 'if ! prepare_bundle_factory_workspace_ownership "$role" "$log"; then' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Docker harness must fail closed when bundle-factory workspace prep fails\n' >&2
   exit 1
@@ -278,5 +361,9 @@ grep -Fq -- 'docker_cp_file_to_service "$archive" "$service" "$container_archive
 }
 grep -Fq -- 'docker_cp_file_to_service "$checksum" "$service" "$container_checksum" ci-operator ci-operator 0644 "$log"' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Docker harness artifact checksum staging must use ci-operator ownership\n' >&2
+  exit 1
+}
+grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness extracted artifact bundle must be handed to ci-operator\n' >&2
   exit 1
 }

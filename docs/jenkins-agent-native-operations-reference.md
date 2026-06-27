@@ -169,6 +169,8 @@ sha256sum -c /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz.sha256
 sudo bash -s <<'EOF'
 set -euo pipefail
 agent_user=jenkins-agent
+agent_uid=61030
+agent_gid=61030
 remote_fs=/var/lib/jenkins-agent
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
@@ -176,10 +178,10 @@ tar -xzf /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz -C "$workdir"
 cd "$workdir/jenkins-agent-artifacts-bundle"
 sha256sum -c checksums/SHA256SUMS
 if ! getent group "${agent_user}" >/dev/null; then
-  groupadd --system "${agent_user}"
+  groupadd --gid "${agent_gid}" "${agent_user}"
 fi
 if ! getent passwd "${agent_user}" >/dev/null; then
-  useradd --system --gid "${agent_user}" --home-dir "${remote_fs}" --shell /bin/bash "${agent_user}"
+  useradd --uid "${agent_uid}" --gid "${agent_gid}" --home-dir "${remote_fs}" --shell /bin/bash "${agent_user}"
 fi
 install -d -o "${agent_user}" -g "${agent_user}" -m 0750 "${remote_fs}"
 rm -f "${remote_fs}/remoting.jar"

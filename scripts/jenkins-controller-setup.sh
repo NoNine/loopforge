@@ -89,6 +89,10 @@ json_quote() {
   printf '%s\n' "$out"
 }
 
+shell_quote() {
+  printf '%q' "${1:?value required}"
+}
+
 sha256_file() {
   local file
   file="${1:?file required}"
@@ -358,13 +362,59 @@ runtime_account_exists() {
 run_as_runtime() {
   local command
   command="${1:?command required}"
-  if command -v runuser >/dev/null 2>&1; then
+  if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
     runuser -u "$JENKINS_RUNTIME_ACCOUNT" -- sh -lc "$command"
-  elif command -v su >/dev/null 2>&1; then
+  elif [ "$(id -u)" -eq 0 ] && command -v su >/dev/null 2>&1; then
     su -s /bin/sh "$JENKINS_RUNTIME_ACCOUNT" -c "$command"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -n -u "$JENKINS_RUNTIME_ACCOUNT" sh -lc "$command"
   else
-    die "Missing runuser or su for Jenkins runtime execution"
+    die "Missing root runuser/su or passwordless sudo for Jenkins runtime execution"
   fi
+}
+
+run_with_privilege() {
+  local command
+  command="${1:?command required}"
+  if [ "$(id -u)" -eq 0 ]; then
+    sh -c "$command"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -n sh -c "$command"
+  else
+    die "Missing root or passwordless sudo for Jenkins privileged operation"
+  fi
+}
+
+prepare_jenkins_home_ownership() {
+  run_with_privilege "chown -R $(shell_quote "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP") $(shell_quote "$JENKINS_HOME")"
+}
+
+prepare_jenkins_runtime_dirs() {
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$JENKINS_HOME") $(shell_quote "$JENKINS_HOME/state") $(shell_quote "$JENKINS_HOME/logs")"
+}
+
+install_file_as_runtime() {
+  local source target mode target_dir
+  source="${1:?source required}"
+  target="${2:?target required}"
+  mode="${3:?mode required}"
+  target_dir="$(dirname "$target")"
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$target_dir") && install -m $(shell_quote "$mode") -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$source") $(shell_quote "$target")"
+}
+
+copy_tree_as_runtime() {
+  local source target mode
+  source="${1:?source required}"
+  target="${2:?target required}"
+  mode="${3:-0755}"
+  run_with_privilege "rm -rf $(shell_quote "$target") && install -d -m $(shell_quote "$mode") -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$target") && cp -R $(shell_quote "$source/.") $(shell_quote "$target/") && chown -R $(shell_quote "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP") $(shell_quote "$target")"
+}
+
+write_text_file_as_runtime() {
+  local target content
+  target="${1:?target required}"
+  content="${2:?content required}"
+  run_as_runtime "mkdir -p $(shell_quote "$(dirname "$target")") && printf '%s\n' $(shell_quote "$content") >$(shell_quote "$target")"
 }
 
 for_each_csv_value() {
@@ -444,6 +494,32 @@ render_template() {
   mkdir -p "$(dirname "$target")"
   printf '%s\n' "$text" >"$target"
   chmod 0600 "$target"
+}
+
+render_template_as_runtime() {
+  local source target mode tmp
+  source="${1:?source required}"
+  target="${2:?target required}"
+  mode="${3:-0600}"
+  tmp="$(mktemp)"
+  render_template "$source" "$tmp"
+  install_file_as_runtime "$tmp" "$target" "$mode"
+  rm -f "$tmp"
+}
+
+runtime_file_contains() {
+  local file pattern
+  file="${1:?file required}"
+  pattern="${2:?pattern required}"
+  run_as_runtime "grep -Fq -- $(shell_quote "$pattern") $(shell_quote "$file")"
+}
+
+runtime_file_has_no_unresolved_placeholders() {
+  local file
+  file="${1:?file required}"
+  if run_as_runtime "grep -Eq '\\{\\{[^}]+\\}\\}' $(shell_quote "$file")"; then
+    die "Rendered file contains unresolved template placeholders: $file"
+  fi
 }
 
 ldap_bind_password_value() {
@@ -1164,32 +1240,37 @@ cmd_install() {
   verify_staged_artifacts
   ensure_dirs
   if [ -f "$JENKINS_HOME/run/jenkins.pid" ] && kill -0 "$(cat "$JENKINS_HOME/run/jenkins.pid")" 2>/dev/null; then
-    kill "$(cat "$JENKINS_HOME/run/jenkins.pid")" 2>/dev/null || true
+    run_with_privilege "kill $(shell_quote "$(cat "$JENKINS_HOME/run/jenkins.pid")") 2>/dev/null || true"
   fi
   pids="$(ps -eo pid=,args= | awk -v home="$JENKINS_HOME" 'index($0, home) && index($0, "jenkins.war") {print $1}')"
   if [ -n "$pids" ]; then
-    kill $pids 2>/dev/null || true
+    run_with_privilege "kill $pids 2>/dev/null || true"
     sleep 2
-    kill -9 $pids 2>/dev/null || true
+    run_with_privilege "kill -9 $pids 2>/dev/null || true"
   fi
-  rm -rf \
-    "$JENKINS_HOME/war" \
-    "$JENKINS_HOME/war-cache" \
-    "$JENKINS_HOME/plugins" \
-    "$JENKINS_HOME/templates" \
-    "$JENKINS_HOME/state" \
-    "$JENKINS_HOME/etc" \
-    "$JENKINS_HOME/jcasc" \
-    "$JENKINS_HOME/run"
-  mkdir -p "$JENKINS_HOME/war" "$JENKINS_HOME/plugins" "$JENKINS_HOME/templates" "$JENKINS_HOME/state" "$JENKINS_HOME/logs"
-  cp "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war"
-  cp "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-plugin-manager-2.15.0.jar" "$JENKINS_HOME/war/jenkins-plugin-manager.jar"
-  cp -R "$JENKINS_STAGED_ARTIFACT_DIR/templates/." "$JENKINS_HOME/templates/"
-  cp "$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_HOME/artifact-manifest.txt"
-  cp "$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_HOME/artifact-checksums.sha256"
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME"
-  write_text_file "$JENKINS_HOME/state/install.status" "installed"
+  run_with_privilege "rm -rf $(shell_quote "$JENKINS_HOME/war") $(shell_quote "$JENKINS_HOME/war-cache") $(shell_quote "$JENKINS_HOME/plugins") $(shell_quote "$JENKINS_HOME/templates") $(shell_quote "$JENKINS_HOME/state") $(shell_quote "$JENKINS_HOME/etc") $(shell_quote "$JENKINS_HOME/jcasc") $(shell_quote "$JENKINS_HOME/run")"
+  prepare_jenkins_runtime_dirs
+  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war" 0644
+  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-plugin-manager-2.15.0.jar" "$JENKINS_HOME/war/jenkins-plugin-manager.jar" 0644
+  copy_tree_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates" "$JENKINS_HOME/templates" 0755
+  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_HOME/artifact-manifest.txt" 0644
+  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_HOME/artifact-checksums.sha256" 0644
+  write_text_file_as_runtime "$JENKINS_HOME/state/install.status" "installed"
   printf 'status=pass command=install home=%s staged=%s\n' "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR"
+}
+
+jenkins_process_running() {
+  local pid args
+  pid="${1:-}"
+  case "$pid" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  [ -n "$args" ] || return 1
+  printf '%s\n' "$args" | grep -Fq 'jenkins.war' || return 1
+  printf '%s\n' "$args" | grep -Fq "$JENKINS_HOME" || return 1
 }
 
 start_real_jenkins() {
@@ -1198,27 +1279,26 @@ start_real_jenkins() {
   runtime_account_exists
   pidfile="$JENKINS_HOME/run/jenkins.pid"
   log_file="$JENKINS_HOME/logs/jenkins-controller.log"
-  mkdir -p "$JENKINS_HOME/run" "$JENKINS_HOME/logs"
-  if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+  prepare_jenkins_runtime_dirs
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$JENKINS_HOME/run") $(shell_quote "$JENKINS_HOME/war-cache")"
+  if [ -f "$pidfile" ] && jenkins_process_running "$(cat "$pidfile")"; then
     return 0
   fi
   export JENKINS_HOME
   export CASC_JENKINS_CONFIG="$JENKINS_HOME/jcasc/jenkins.yaml"
   export JAVA_OPTS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config=$JENKINS_HOME/jcasc/jenkins.yaml"
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME"
-  mkdir -p "$JENKINS_HOME/war-cache"
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/war-cache"
-  run_as_runtime "JENKINS_HOME=$(printf '%q' "$JENKINS_HOME") CASC_JENKINS_CONFIG=$(printf '%q' "$CASC_JENKINS_CONFIG") nohup java $JAVA_OPTS -jar $(printf '%q' "$JENKINS_HOME/war/jenkins.war") --httpPort=$(printf '%q' "$JENKINS_HTTP_PORT") --webroot=$(printf '%q' "$JENKINS_HOME/war-cache") >$(printf '%q' "$log_file") 2>&1 & echo \$!" >"$pidfile"
+  prepare_jenkins_home_ownership
+  run_as_runtime "JENKINS_HOME=$(shell_quote "$JENKINS_HOME") CASC_JENKINS_CONFIG=$(shell_quote "$CASC_JENKINS_CONFIG") nohup java $JAVA_OPTS -jar $(shell_quote "$JENKINS_HOME/war/jenkins.war") --httpPort=$(shell_quote "$JENKINS_HTTP_PORT") --webroot=$(shell_quote "$JENKINS_HOME/war-cache") >$(shell_quote "$log_file") 2>&1 & echo \$! >$(shell_quote "$pidfile")"
   pid="$(cat "$pidfile")"
   deadline=$((SECONDS + 240))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if ! kill -0 "$pid" 2>/dev/null; then
+    if ! jenkins_process_running "$pid"; then
       tail -40 "$log_file" >&2 || true
       die "Jenkins controller process exited before readiness; log=$log_file"
     fi
     response="$(check_http_endpoint || true)"
     if printf '%s' "$response" | grep -Fq "X-Jenkins: 2.555.3"; then
-      write_text_file "$JENKINS_HOME/state/runtime.status" "pid=$pid endpoint=http://$JENKINS_HOST:$JENKINS_HTTP_PORT/ log=$log_file"
+      write_text_file_as_runtime "$JENKINS_HOME/state/runtime.status" "pid=$pid endpoint=http://$JENKINS_HOST:$JENKINS_HTTP_PORT/ log=$log_file"
       return 0
     fi
     sleep 3
@@ -1235,10 +1315,10 @@ cmd_configure_service() {
   confirm_mutation configure-service || return 0
   verify_staged_artifacts
   ensure_dirs
-  mkdir -p "$JENKINS_HOME/etc" "$JENKINS_HOME/state"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-service.env.template" "$JENKINS_HOME/etc/jenkins-service.env"
+  prepare_jenkins_runtime_dirs
+  render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-service.env.template" "$JENKINS_HOME/etc/jenkins-service.env" 0644
   assert_no_unresolved_placeholders "$JENKINS_HOME/etc/jenkins-service.env"
-  write_text_file "$JENKINS_HOME/state/service-configured.status" \
+  write_text_file_as_runtime "$JENKINS_HOME/state/service-configured.status" \
     "runtime_account=$JENKINS_RUNTIME_ACCOUNT port=$JENKINS_HTTP_PORT controller_executors=0"
   printf 'status=pass command=configure-service service_env=%s runtime_account=%s\n' \
     "$JENKINS_HOME/etc/jenkins-service.env" "$JENKINS_RUNTIME_ACCOUNT"
@@ -1251,11 +1331,10 @@ cmd_install_plugins() {
   runtime_account_exists
   confirm_mutation install-plugins || return 0
   verify_staged_artifacts
-  mkdir -p "$JENKINS_HOME/plugins" "$JENKINS_HOME/state"
-  cp -R "$JENKINS_STAGED_ARTIFACT_DIR/plugins/." "$JENKINS_HOME/plugins/"
+  prepare_jenkins_runtime_dirs
+  copy_tree_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/plugins" "$JENKINS_HOME/plugins" 0755
   plugin_set_digest >/dev/null
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/plugins"
-  write_text_file "$JENKINS_HOME/state/plugins.status" "installed plugins=$JENKINS_PLUGIN_LIST digest=$(plugin_set_digest)"
+  write_text_file_as_runtime "$JENKINS_HOME/state/plugins.status" "installed plugins=$JENKINS_PLUGIN_LIST digest=$(plugin_set_digest)"
   printf 'status=pass command=install-plugins plugin_digest=%s\n' "$(plugin_set_digest)"
 }
 
@@ -1266,17 +1345,14 @@ cmd_configure_jcasc() {
   runtime_account_exists
   confirm_mutation configure-jcasc || return 0
   verify_staged_artifacts
-  mkdir -p "$JENKINS_HOME/jcasc" "$JENKINS_HOME/state"
-  chmod 0700 "$JENKINS_HOME/jcasc"
-  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$JENKINS_HOME/jcasc/jenkins.yaml"
-  assert_no_unresolved_placeholders "$JENKINS_HOME/jcasc/jenkins.yaml"
-  grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC must keep built-in node executors at zero"
-  grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP security realm is missing"
-  grep -Fq -- 'managerPasswordSecret:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP manager password secret is missing"
-  chown -R "$JENKINS_RUNTIME_ACCOUNT:$JENKINS_RUNTIME_GROUP" "$JENKINS_HOME/jcasc"
-  chmod 0700 "$JENKINS_HOME/jcasc"
-  chmod 0600 "$JENKINS_HOME/jcasc/jenkins.yaml"
-  write_text_file "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
+  prepare_jenkins_runtime_dirs
+  run_with_privilege "install -d -m 0700 -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$JENKINS_HOME/jcasc")"
+  render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$JENKINS_HOME/jcasc/jenkins.yaml"
+  runtime_file_has_no_unresolved_placeholders "$JENKINS_HOME/jcasc/jenkins.yaml"
+  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'numExecutors: 0' || die "JCasC must keep built-in node executors at zero"
+  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'ldap:' || die "JCasC LDAP security realm is missing"
+  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
+  write_text_file_as_runtime "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
   printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$JENKINS_HOME/jcasc/jenkins.yaml"
 }
 
@@ -1370,9 +1446,9 @@ check_runtime_plugin_load_log() {
 
 check_jcasc_readiness() {
   [ -s "$JENKINS_HOME/jcasc/jenkins.yaml" ] || die "JCasC file is missing"
-  grep -Fq -- 'ldap:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP realm is missing"
-  grep -Fq -- 'managerPasswordSecret:' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC LDAP manager password secret is missing"
-  grep -Fq -- 'numExecutors: 0' "$JENKINS_HOME/jcasc/jenkins.yaml" || die "JCasC built-in executor policy is missing"
+  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'ldap:' || die "JCasC LDAP realm is missing"
+  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
+  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'numExecutors: 0' || die "JCasC built-in executor policy is missing"
 }
 
 verify_base_readiness_facts() {

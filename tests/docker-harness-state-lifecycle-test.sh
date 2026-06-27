@@ -39,6 +39,56 @@ case "$*" in
     printf '%s\n' "$name"
     ;;
   network\ rm*) exit 0 ;;
+  run\ --rm\ --mount*)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --mount)
+          mount_spec="$2"
+          shift 2
+          ;;
+        ubuntu:24.04)
+          shift
+          break
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    source_path=""
+    IFS=',' read -r _ source_part _ <<EOF_MOUNT
+${mount_spec:-}
+EOF_MOUNT
+    case "$source_part" in
+      source=*) source_path="${source_part#source=}" ;;
+    esac
+    [ -n "$source_path" ] || exit 1
+    [ "${1:-}" = "sh" ] || exit 1
+    [ "${2:-}" = "-c" ] || exit 1
+    script="$3"
+    if printf '%s\n' "$script" | grep -Fq 'rm -rf -- /cleanup-root/target/helper-state'; then
+      rm -rf -- \
+        "$source_path/target/helper-state" \
+        "$source_path/target/product-homes" \
+        "$source_path/target/artifacts/staging" \
+        "$source_path/target/ldap" \
+        "$source_path/target/shared-jenkins-storage" \
+        "$source_path/host/rendered" \
+        "$source_path/host/runtime-inputs" \
+        "$source_path/host/target-ssh" \
+        "$source_path/host/validation-secrets" \
+        "$source_path/host/bundle-factory"
+    fi
+    if printf '%s\n' "$script" | grep -Fq 'backup_root="/cleanup-root/host/retained-output-backups/$backup_name"'; then
+      backup_name="$5"
+      backup_root="$source_path/host/retained-output-backups/$backup_name"
+      mkdir -p "$backup_root/target/artifacts" "$backup_root/host" "$backup_root/target"
+      [ ! -e "$source_path/target/artifacts/exported" ] || cp -a "$source_path/target/artifacts/exported" "$backup_root/target/artifacts/exported"
+      [ ! -e "$source_path/host/evidence" ] || cp -a "$source_path/host/evidence" "$backup_root/host/evidence"
+      [ ! -e "$source_path/target/evidence" ] || cp -a "$source_path/target/evidence" "$backup_root/target/evidence"
+      rm -rf -- "$source_path/target/artifacts/exported" "$source_path/host/evidence" "$source_path/host/logs" "$source_path/target/evidence" "$source_path/target/logs"
+    fi
+    ;;
   compose*)
     if [ "${1:-}" = "compose" ]; then
       shift
@@ -87,8 +137,8 @@ case "$*" in
         printf '%s\t%s\n' "$RUN_DIR/target/helper-state/gerrit" /var/lib/loopforge
         printf '%s\t%s\n' "$RUN_DIR/target/product-homes/gerrit" /srv/gerrit
         printf '%s\t%s\n' "$RUN_DIR/host/validation-secrets/gerrit" /var/lib/loopforge/validation-secrets
-        printf '%s\t%s\n' "$RUN_DIR/evidence" /var/lib/loopforge/evidence
-        printf '%s\t%s\n' "$RUN_DIR/logs" /var/log/loopforge
+        printf '%s\t%s\n' "$RUN_DIR/target/evidence/gerrit" /var/lib/loopforge/evidence
+        printf '%s\t%s\n' "$RUN_DIR/target/logs/gerrit" /var/log/loopforge
         ;;
     esac
     ;;
@@ -181,3 +231,51 @@ printf '%s-gerrit-target\n' "$run_id" >"$tmp_dir/containers"
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" clean >"$tmp_dir/clean-recovery.out"
 grep -Fq 'clean: removed containers cleanup=skipped reason=invalid-or-missing-runtime-config' "$tmp_dir/clean-recovery.out"
+
+rm -f "$tmp_dir/containers" "$calls"
+mkdir -p \
+  "$run_dir/target/helper-state/gerrit" \
+  "$run_dir/target/product-homes/gerrit" \
+  "$run_dir/target/artifacts/staging/gerrit" \
+  "$run_dir/target/artifacts/exported" \
+  "$run_dir/host/evidence/harness" \
+  "$run_dir/target/evidence/gerrit"
+printf 'state\n' >"$run_dir/target/helper-state/gerrit/file"
+printf 'product\n' >"$run_dir/target/product-homes/gerrit/file"
+printf 'stage\n' >"$run_dir/target/artifacts/staging/gerrit/file"
+printf 'artifact\n' >"$run_dir/target/artifacts/exported/file"
+printf 'evidence\n' >"$run_dir/host/evidence/harness/file"
+printf 'role-evidence\n' >"$run_dir/target/evidence/gerrit/file"
+printf '%s-gerrit-target\n' "$run_id" >"$tmp_dir/containers"
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" clean >"$tmp_dir/clean-recovery-existing-root.out"
+grep -Eq 'clean: removed containers runtime data backup=clean-[0-9]{8}T[0-9]{6}Z cleanup=container-recovery' "$tmp_dir/clean-recovery-existing-root.out"
+if grep -Eq '/.*/host/retained-output-backups/clean-[0-9]{8}T[0-9]{6}Z' "$tmp_dir/clean-recovery-existing-root.out"; then
+  printf 'recovery clean terminal summary must not print absolute backup path\n' >&2
+  exit 1
+fi
+grep -Fq "rm -f $run_id-gerrit-target" "$calls"
+[ ! -e "$run_dir/target/helper-state" ] || {
+  printf 'recovery clean should remove mutable helper state when run root exists\n' >&2
+  exit 1
+}
+[ ! -e "$run_dir/target/product-homes" ] || {
+  printf 'recovery clean should remove mutable product homes when run root exists\n' >&2
+  exit 1
+}
+[ ! -e "$run_dir/target/artifacts/staging" ] || {
+  printf 'recovery clean should remove mutable staging when run root exists\n' >&2
+  exit 1
+}
+backup_dir="$(find "$run_dir/host/retained-output-backups" -mindepth 1 -maxdepth 1 -type d -name 'clean-*' -print | sort | tail -1)"
+[ -n "$backup_dir" ] || {
+  printf 'recovery clean should create retained output backup\n' >&2
+  exit 1
+}
+grep -Fq 'artifact' "$backup_dir/target/artifacts/exported/file"
+grep -Fq 'evidence' "$backup_dir/host/evidence/harness/file"
+grep -Fq 'role-evidence' "$backup_dir/target/evidence/gerrit/file"
+[ ! -e "$run_dir/target/artifacts/exported/file" ] || {
+  printf 'recovery clean should clear active retained artifacts\n' >&2
+  exit 1
+}

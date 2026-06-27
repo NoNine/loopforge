@@ -60,6 +60,27 @@ require_doc_text docs/account-model.md \
 require_doc_text docs/account-model.md \
   'The operator account is not a Gerrit or Jenkins runtime account' \
   'Account model must keep the operator account separate from product accounts'
+require_doc_text docs/account-model.md \
+  '## Numeric Identity Policy' \
+  'Account model must document numeric identity policy'
+require_doc_text docs/account-model.md \
+  'The example target-local identity range is `61000-61999`.' \
+  'Account model must document the example numeric identity range'
+require_doc_text docs/account-model.md \
+  '| Jenkins shared integration group | `jenkins-share` | not applicable | `61040` |' \
+  'Account model must document Jenkins shared group example GID'
+require_doc_text docs/account-model.md \
+  'The Jenkins controller runtime account and Jenkins agent runtime account must' \
+  'Account model must reject shared Jenkins controller/agent UID'
+require_doc_text docs/account-model.md \
+  'not share a UID in the recommended v1 model.' \
+  'Account model must reject shared Jenkins controller/agent UID'
+require_doc_text docs/account-model.md \
+  'The shared GID is the cross-host contract for NFS-backed sharing' \
+  'Account model must document NFS shared group numeric contract'
+require_doc_text docs/account-model.md \
+  'For NFS-backed storage, keep `root_squash` enabled' \
+  'Account model must document NFS root_squash guidance'
 require_doc_text simulation/docker/README.md \
   'This target-local `ci-operator` OS account has' \
   'Docker README must document ci-operator passwordless sudo'

@@ -402,7 +402,7 @@ Produced outputs:
 - A helper bounded log file under `GERRIT_LOG_DIR`.
 - Gerrit daemon startup and runtime logs under `GERRIT_SITE_PATH/logs/`.
 - In the shared Docker harness, canonical evidence under
-  `generated/simulation/docker/<run-id>/target/evidence/`.
+  `generated/simulation/docker/<run-id>/target/evidence/gerrit/`.
 
 Evidence Contract fields:
 

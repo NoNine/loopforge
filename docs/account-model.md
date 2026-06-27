@@ -35,11 +35,45 @@ group are `ci-operator:ci-operator` for all modes.
 
 The operator account is not a Gerrit or Jenkins runtime account, application
 admin account, integration account, LDAP bind account, or test user account.
+Target-environment operations should run as the operator account whenever
+practical, including helper commands, staging, validation, and evidence
+collection. Root or delegated privilege is used only for narrow OS operations
+that require it, and service runtime accounts remain service owners rather
+than orchestration identities.
 In Docker simulation, the target-local `ci-operator` OS account has
 passwordless sudo for simulation orchestration and privileged helper
 operations. Logging into a Docker target environment as `ci-operator` does
 not mean the local host account running `simulate.sh` is named
 `ci-operator`.
+
+## Numeric Identity Policy
+
+Account and group names are local deployment choices, but UID and GID values
+are the durable filesystem identity. Ownership on local filesystems, NFS
+exports, bind mounts, backups, and restored data follows numeric UID/GID
+values, not friendly names. Before any target-owned durable path is created,
+operators must define reviewed, stable, non-colliding numeric identities for
+the local OS accounts and groups that can own that data.
+
+The example target-local identity range is `61000-61999`. Use a site-reserved
+range instead when local policy requires it, and verify that the chosen values
+do not collide on every participating host and storage server.
+
+| Role | Example name | Example UID | Example primary GID |
+| --- | --- | --- | --- |
+| Operator account | `ci-operator` | `61000` | `61000` |
+| Gerrit runtime account | `gerrit` | `61010` | `61010` |
+| Jenkins controller runtime account | `jenkins` | `61020` | `61020` |
+| Jenkins agent runtime account | `jenkins-agent` | `61030` | `61030` |
+| Jenkins shared integration group | `jenkins-share` | not applicable | `61040` |
+
+The Jenkins controller runtime account and Jenkins agent runtime account must
+not share a UID in the recommended v1 model. They remain separate OS
+identities for ownership, audit, and least privilege. Cross-role shared
+storage access is granted through the dedicated Jenkins shared integration
+group, not by collapsing the controller and agent into the same UID. A site
+that intentionally reuses these numeric identities must document that as a
+site-specific exception outside the recommended model.
 
 ## Separation Rules
 
@@ -57,11 +91,30 @@ own role-local files only; they are not the cross-role sharing mechanism.
 Cross-role Jenkins controller and agent sharing uses a separate integration
 group from `examples/integration.env.example`. That file is the source of
 truth for the shared group name, shared group GID, and shared storage path.
-`scripts/integration-setup.sh` owns creating or validating that group, adding
-the Jenkins controller runtime account and the Jenkins agent runtime account
-to it, setting group-writable shared storage permissions, and recording
-read/write proof. Role-local helpers must not own this shared group or shared
-storage setup.
+The shared GID is the cross-host contract for NFS-backed sharing and must
+exist with the same numeric value on the Jenkins controller host, Jenkins
+agent host, and any NFS server or export that owns or displays the shared
+path. `scripts/integration-setup.sh` owns creating or validating that group,
+adding the Jenkins controller runtime account and the Jenkins agent runtime
+account to it, setting group-writable shared storage permissions, and
+recording read/write proof. Role-local helpers must not own this shared group
+or shared storage setup.
+
+The shared storage path should be owned by an approved runtime owner and the
+shared integration group with group write and setgid enabled, normally mode
+`2775`. The setgid bit keeps new children in the shared group on typical
+Linux filesystems, but process umask can still remove group write bits. Use
+default ACLs only when setgid plus reviewed umask policy is insufficient, and
+validate ACL behavior consistently on the storage server and clients.
+
+For NFS-backed storage, keep `root_squash` enabled unless an approved
+site-specific storage policy says otherwise. With `root_squash`, client-side
+privileged ownership changes may fail or map to anonymous IDs, so target
+deployment storage should be pre-provisioned server-side or through an
+approved storage-admin workflow and then validated by Loopforge. Do not use
+`all_squash` as the v1 default; if a site intentionally maps all client
+identities to anonymous IDs, document explicit `anonuid` and `anongid` values
+and the resulting audit tradeoff.
 
 Human admin accounts are LDAP-backed human accounts or LDAP-backed groups.
 The Gerrit admin account administers Gerrit and can configure integration

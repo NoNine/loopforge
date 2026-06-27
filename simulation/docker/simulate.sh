@@ -122,8 +122,9 @@ apply_canonical_output_paths() {
   HARNESS_PRODUCT_HOME_DIR="$HARNESS_TARGET_DIR/product-homes"
   HARNESS_STAGING_DIR="$HARNESS_TARGET_DIR/artifacts/staging"
   HARNESS_EXPORTED_ARTIFACT_DIR="$HARNESS_TARGET_DIR/artifacts/exported"
-  HARNESS_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence"
-  HARNESS_LOG_DIR="$HARNESS_TARGET_DIR/logs"
+  HARNESS_EVIDENCE_DIR="$HARNESS_HOST_DIR/evidence/harness"
+  HARNESS_LOG_DIR="$HARNESS_HOST_DIR/logs/harness"
+  HARNESS_RETAINED_OUTPUT_BACKUP_DIR="$HARNESS_HOST_DIR/retained-output-backups"
   HARNESS_RENDERED_ENV="$HARNESS_HOST_DIR/rendered/harness.env"
   HARNESS_RUNTIME_ENV="$HARNESS_HOST_DIR/rendered/harness.runtime.env"
   HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
@@ -138,9 +139,16 @@ apply_canonical_output_paths() {
   HARNESS_LDAP_DATA_DIR="$HARNESS_TARGET_DIR/ldap/data"
   HARNESS_LDAP_CONFIG_DIR="$HARNESS_TARGET_DIR/ldap/config"
   HARNESS_SHARED_JENKINS_STORAGE_DIR="$HARNESS_TARGET_DIR/shared-jenkins-storage"
+  HARNESS_GERRIT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/gerrit"
+  HARNESS_GERRIT_LOG_DIR="$HARNESS_TARGET_DIR/logs/gerrit"
+  HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-controller"
+  HARNESS_JENKINS_CONTROLLER_LOG_DIR="$HARNESS_TARGET_DIR/logs/jenkins-controller"
+  HARNESS_JENKINS_AGENT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-agent"
+  HARNESS_JENKINS_AGENT_LOG_DIR="$HARNESS_TARGET_DIR/logs/jenkins-agent"
   export HARNESS_GENERATED_RUN_DIR HARNESS_HOST_DIR HARNESS_TARGET_DIR
   export HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
-  export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+  export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR
+  export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
   export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
   export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
@@ -148,6 +156,9 @@ apply_canonical_output_paths() {
   export HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
   export HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR HARNESS_LDAP_DATA_DIR
   export HARNESS_LDAP_CONFIG_DIR HARNESS_SHARED_JENKINS_STORAGE_DIR
+  export HARNESS_GERRIT_EVIDENCE_DIR HARNESS_GERRIT_LOG_DIR
+  export HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR HARNESS_JENKINS_CONTROLLER_LOG_DIR
+  export HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
 }
 
 container_name_for_service() {
@@ -203,6 +214,7 @@ reject_custom_output_paths() {
     HARNESS_EXPORTED_ARTIFACT_DIR \
     HARNESS_EVIDENCE_DIR \
     HARNESS_LOG_DIR \
+    HARNESS_RETAINED_OUTPUT_BACKUP_DIR \
     HARNESS_RENDERED_ENV \
     HARNESS_BASELINE_CONTRACT \
     HARNESS_TARGET_SSH_DIR \
@@ -211,7 +223,13 @@ reject_custom_output_paths() {
     HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR \
     HARNESS_LDAP_DATA_DIR \
     HARNESS_LDAP_CONFIG_DIR \
-    HARNESS_SHARED_JENKINS_STORAGE_DIR
+    HARNESS_SHARED_JENKINS_STORAGE_DIR \
+    HARNESS_GERRIT_EVIDENCE_DIR \
+    HARNESS_GERRIT_LOG_DIR \
+    HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR \
+    HARNESS_JENKINS_CONTROLLER_LOG_DIR \
+    HARNESS_JENKINS_AGENT_EVIDENCE_DIR \
+    HARNESS_JENKINS_AGENT_LOG_DIR
   do
     eval "value=\${$name-}"
     [ -n "$value" ] || continue
@@ -223,8 +241,9 @@ reject_custom_output_paths() {
       HARNESS_PRODUCT_HOME_DIR) expected="$(canonical_generated_run_dir)/target/product-homes" ;;
       HARNESS_STAGING_DIR) expected="$(canonical_generated_run_dir)/target/artifacts/staging" ;;
       HARNESS_EXPORTED_ARTIFACT_DIR) expected="$(canonical_generated_run_dir)/target/artifacts/exported" ;;
-      HARNESS_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence" ;;
-      HARNESS_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs" ;;
+      HARNESS_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/host/evidence/harness" ;;
+      HARNESS_LOG_DIR) expected="$(canonical_generated_run_dir)/host/logs/harness" ;;
+      HARNESS_RETAINED_OUTPUT_BACKUP_DIR) expected="$(canonical_generated_run_dir)/host/retained-output-backups" ;;
       HARNESS_RENDERED_ENV) expected="$(canonical_generated_run_dir)/host/rendered/harness.env" ;;
       HARNESS_BASELINE_CONTRACT) expected="$(canonical_generated_run_dir)/host/rendered/artifact-manifest-contract.txt" ;;
       HARNESS_TARGET_SSH_DIR) expected="$(canonical_generated_run_dir)/host/target-ssh" ;;
@@ -234,6 +253,12 @@ reject_custom_output_paths() {
       HARNESS_LDAP_DATA_DIR) expected="$(canonical_generated_run_dir)/target/ldap/data" ;;
       HARNESS_LDAP_CONFIG_DIR) expected="$(canonical_generated_run_dir)/target/ldap/config" ;;
       HARNESS_SHARED_JENKINS_STORAGE_DIR) expected="$(canonical_generated_run_dir)/target/shared-jenkins-storage" ;;
+      HARNESS_GERRIT_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/gerrit" ;;
+      HARNESS_GERRIT_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/gerrit" ;;
+      HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/jenkins-controller" ;;
+      HARNESS_JENKINS_CONTROLLER_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/jenkins-controller" ;;
+      HARNESS_JENKINS_AGENT_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/jenkins-agent" ;;
+      HARNESS_JENKINS_AGENT_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/jenkins-agent" ;;
       *) die "Internal error: unknown output path $name" ;;
     esac
     [ "$value" = "$expected" ] ||
@@ -252,7 +277,7 @@ validate_canonical_run_root() {
   expected_real="$(realpath "$expected")"
   [ "$actual_real" = "$expected_real" ] ||
     die "Generated run directory resolved outside the canonical run root"
-  for child in state product-homes staging exported-artifacts evidence logs; do
+  for child in host target; do
     [ ! -L "$HARNESS_GENERATED_RUN_DIR/$child" ] ||
       die "Generated run child must not be a symlink: $HARNESS_GENERATED_RUN_DIR/$child"
   done
@@ -363,6 +388,12 @@ validate_core_generated_state() {
   require_generated_state_dir "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
   require_generated_state_dir "Gerrit validation secret bind source" "$HARNESS_GERRIT_VALIDATION_SECRET_DIR"
   require_generated_state_dir "shared Jenkins storage bind source" "$HARNESS_SHARED_JENKINS_STORAGE_DIR"
+  require_generated_state_dir "Gerrit evidence bind source" "$HARNESS_GERRIT_EVIDENCE_DIR"
+  require_generated_state_dir "Gerrit log bind source" "$HARNESS_GERRIT_LOG_DIR"
+  require_generated_state_dir "Jenkins controller evidence bind source" "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR"
+  require_generated_state_dir "Jenkins controller log bind source" "$HARNESS_JENKINS_CONTROLLER_LOG_DIR"
+  require_generated_state_dir "Jenkins agent evidence bind source" "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR"
+  require_generated_state_dir "Jenkins agent log bind source" "$HARNESS_JENKINS_AGENT_LOG_DIR"
   require_generated_state_dir "target SSH state" "$HARNESS_TARGET_SSH_DIR"
   require_generated_state_file "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
 }
@@ -386,6 +417,7 @@ HARNESS_STAGING_DIR_OPERATOR_SET="${HARNESS_STAGING_DIR+x}"
 HARNESS_EXPORTED_ARTIFACT_DIR_OPERATOR_SET="${HARNESS_EXPORTED_ARTIFACT_DIR+x}"
 HARNESS_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_EVIDENCE_DIR+x}"
 HARNESS_LOG_DIR_OPERATOR_SET="${HARNESS_LOG_DIR+x}"
+HARNESS_RETAINED_OUTPUT_BACKUP_DIR_OPERATOR_SET="${HARNESS_RETAINED_OUTPUT_BACKUP_DIR+x}"
 HARNESS_RENDERED_ENV_OPERATOR_SET="${HARNESS_RENDERED_ENV+x}"
 HARNESS_BASELINE_CONTRACT_OPERATOR_SET="${HARNESS_BASELINE_CONTRACT+x}"
 HARNESS_TARGET_SSH_DIR_OPERATOR_SET="${HARNESS_TARGET_SSH_DIR+x}"
@@ -395,6 +427,12 @@ HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR_OPERATOR_SET="${HARNESS_BUNDLE_FACT
 HARNESS_LDAP_DATA_DIR_OPERATOR_SET="${HARNESS_LDAP_DATA_DIR+x}"
 HARNESS_LDAP_CONFIG_DIR_OPERATOR_SET="${HARNESS_LDAP_CONFIG_DIR+x}"
 HARNESS_SHARED_JENKINS_STORAGE_DIR_OPERATOR_SET="${HARNESS_SHARED_JENKINS_STORAGE_DIR+x}"
+HARNESS_GERRIT_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_GERRIT_EVIDENCE_DIR+x}"
+HARNESS_GERRIT_LOG_DIR_OPERATOR_SET="${HARNESS_GERRIT_LOG_DIR+x}"
+HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR+x}"
+HARNESS_JENKINS_CONTROLLER_LOG_DIR_OPERATOR_SET="${HARNESS_JENKINS_CONTROLLER_LOG_DIR+x}"
+HARNESS_JENKINS_AGENT_EVIDENCE_DIR_OPERATOR_SET="${HARNESS_JENKINS_AGENT_EVIDENCE_DIR+x}"
+HARNESS_JENKINS_AGENT_LOG_DIR_OPERATOR_SET="${HARNESS_JENKINS_AGENT_LOG_DIR+x}"
 HARNESS_ENV_FILE_OPERATOR_SET="${HARNESS_ENV_FILE+x}"
 HARNESS_GERRIT_ENV_FILE_OPERATOR_SET="${HARNESS_GERRIT_ENV_FILE+x}"
 HARNESS_JENKINS_CONTROLLER_ENV_FILE_OPERATOR_SET="${HARNESS_JENKINS_CONTROLLER_ENV_FILE+x}"
@@ -411,6 +449,7 @@ HARNESS_STAGING_DIR_OPERATOR_VALUE="${HARNESS_STAGING_DIR-}"
 HARNESS_EXPORTED_ARTIFACT_DIR_OPERATOR_VALUE="${HARNESS_EXPORTED_ARTIFACT_DIR-}"
 HARNESS_EVIDENCE_DIR_OPERATOR_VALUE="${HARNESS_EVIDENCE_DIR-}"
 HARNESS_LOG_DIR_OPERATOR_VALUE="${HARNESS_LOG_DIR-}"
+HARNESS_RETAINED_OUTPUT_BACKUP_DIR_OPERATOR_VALUE="${HARNESS_RETAINED_OUTPUT_BACKUP_DIR-}"
 HARNESS_RENDERED_ENV_OPERATOR_VALUE="${HARNESS_RENDERED_ENV-}"
 HARNESS_BASELINE_CONTRACT_OPERATOR_VALUE="${HARNESS_BASELINE_CONTRACT-}"
 HARNESS_TARGET_SSH_DIR_OPERATOR_VALUE="${HARNESS_TARGET_SSH_DIR-}"
@@ -463,8 +502,9 @@ HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-$HARNESS_TARGET_DIR/helper-state}"
 HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_TARGET_DIR/product-homes}"
 HARNESS_STAGING_DIR="${HARNESS_STAGING_DIR:-$HARNESS_TARGET_DIR/artifacts/staging}"
 HARNESS_EXPORTED_ARTIFACT_DIR="${HARNESS_EXPORTED_ARTIFACT_DIR:-$HARNESS_TARGET_DIR/artifacts/exported}"
-HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$HARNESS_TARGET_DIR/evidence}"
-HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$HARNESS_TARGET_DIR/logs}"
+HARNESS_EVIDENCE_DIR="${HARNESS_EVIDENCE_DIR:-$HARNESS_HOST_DIR/evidence/harness}"
+HARNESS_LOG_DIR="${HARNESS_LOG_DIR:-$HARNESS_HOST_DIR/logs/harness}"
+HARNESS_RETAINED_OUTPUT_BACKUP_DIR="${HARNESS_RETAINED_OUTPUT_BACKUP_DIR:-$HARNESS_HOST_DIR/retained-output-backups}"
 HARNESS_INTEGRATION_ENV_FILE="${HARNESS_INTEGRATION_ENV_FILE:-$repo_root/examples/integration.env.example}"
 HARNESS_GERRIT_ENV_FILE="${HARNESS_GERRIT_ENV_FILE:-$repo_root/examples/gerrit.env.example}"
 HARNESS_JENKINS_CONTROLLER_ENV_FILE="${HARNESS_JENKINS_CONTROLLER_ENV_FILE:-$repo_root/examples/jenkins-controller.env.example}"
@@ -484,6 +524,12 @@ HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR="${HARNESS_BUNDLE_FACTORY_VALIDATIO
 HARNESS_LDAP_DATA_DIR="${HARNESS_LDAP_DATA_DIR:-$HARNESS_TARGET_DIR/ldap/data}"
 HARNESS_LDAP_CONFIG_DIR="${HARNESS_LDAP_CONFIG_DIR:-$HARNESS_TARGET_DIR/ldap/config}"
 HARNESS_SHARED_JENKINS_STORAGE_DIR="${HARNESS_SHARED_JENKINS_STORAGE_DIR:-$HARNESS_TARGET_DIR/shared-jenkins-storage}"
+HARNESS_GERRIT_EVIDENCE_DIR="${HARNESS_GERRIT_EVIDENCE_DIR:-$HARNESS_TARGET_DIR/evidence/gerrit}"
+HARNESS_GERRIT_LOG_DIR="${HARNESS_GERRIT_LOG_DIR:-$HARNESS_TARGET_DIR/logs/gerrit}"
+HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR="${HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR:-$HARNESS_TARGET_DIR/evidence/jenkins-controller}"
+HARNESS_JENKINS_CONTROLLER_LOG_DIR="${HARNESS_JENKINS_CONTROLLER_LOG_DIR:-$HARNESS_TARGET_DIR/logs/jenkins-controller}"
+HARNESS_JENKINS_AGENT_EVIDENCE_DIR="${HARNESS_JENKINS_AGENT_EVIDENCE_DIR:-$HARNESS_TARGET_DIR/evidence/jenkins-agent}"
+HARNESS_JENKINS_AGENT_LOG_DIR="${HARNESS_JENKINS_AGENT_LOG_DIR:-$HARNESS_TARGET_DIR/logs/jenkins-agent}"
 
 export HARNESS_MODE HARNESS_RUN_ID HARNESS_PROJECT_NAME
 export HARNESS_UBUNTU_IMAGE HARNESS_LDAP_IMAGE
@@ -493,7 +539,8 @@ export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
 export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
 export HARNESS_GENERATED_RUN_DIR HARNESS_HOST_DIR HARNESS_TARGET_DIR
 export HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
-export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR
+export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
 export HARNESS_JENKINS_SHARED_STORAGE_PATH HARNESS_ENV_FILE
 export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
 export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
@@ -502,6 +549,9 @@ export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
 export HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
 export HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR HARNESS_LDAP_DATA_DIR
 export HARNESS_LDAP_CONFIG_DIR HARNESS_SHARED_JENKINS_STORAGE_DIR
+export HARNESS_GERRIT_EVIDENCE_DIR HARNESS_GERRIT_LOG_DIR
+export HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR HARNESS_JENKINS_CONTROLLER_LOG_DIR
+export HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
 
 compose_kind=""
 compose_cmd=()
@@ -546,6 +596,7 @@ load_env_file() {
     [ -n "$HARNESS_EXPORTED_ARTIFACT_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_EVIDENCE_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_LOG_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] ||
     [ -n "$HARNESS_BASELINE_CONTRACT_OPERATOR_SET" ] ||
     [ -n "$HARNESS_TARGET_SSH_DIR_OPERATOR_SET" ] ||
@@ -554,17 +605,27 @@ load_env_file() {
     [ -n "$HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_LDAP_DATA_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_LDAP_CONFIG_DIR_OPERATOR_SET" ] ||
-    [ -n "$HARNESS_SHARED_JENKINS_STORAGE_DIR_OPERATOR_SET" ]; then
+    [ -n "$HARNESS_SHARED_JENKINS_STORAGE_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_GERRIT_EVIDENCE_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_GERRIT_LOG_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_JENKINS_CONTROLLER_LOG_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR_OPERATOR_SET" ] ||
+    [ -n "$HARNESS_JENKINS_AGENT_LOG_DIR_OPERATOR_SET" ]; then
     die "Docker harness output paths are fixed under generated/simulation/docker/<run-id> for v1; unset HARNESS_* output path overrides"
   fi
   unset HARNESS_GENERATED_RUN_DIR HARNESS_HOST_DIR HARNESS_TARGET_DIR
   unset HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
-  unset HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR
+  unset HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR
+  unset HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
   unset HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
   unset HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
   unset HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
   unset HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR HARNESS_LDAP_DATA_DIR
   unset HARNESS_LDAP_CONFIG_DIR HARNESS_SHARED_JENKINS_STORAGE_DIR
+  unset HARNESS_GERRIT_EVIDENCE_DIR HARNESS_GERRIT_LOG_DIR
+  unset HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR HARNESS_JENKINS_CONTROLLER_LOG_DIR
+  unset HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
   HARNESS_INTEGRATION_ENV_FILE="$repo_root/examples/integration.env.example"
   HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
@@ -640,6 +701,7 @@ load_rendered_config_if_present() {
   export HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR
   export HARNESS_LDAP_DATA_DIR HARNESS_LDAP_CONFIG_DIR
   export HARNESS_SHARED_JENKINS_STORAGE_DIR
+  export HARNESS_RETAINED_OUTPUT_BACKUP_DIR
 }
 
 ensure_runtime_config() {
@@ -751,8 +813,8 @@ copy_runtime_env_inputs() {
   set_env_file_value "$HARNESS_ENV_FILE" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_INTEGRATION_ENV_FILE"
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_STATE_DIR/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_LOG_DIR/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_EVIDENCE_DIR/integration"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_HOST_DIR/logs/integration"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_HOST_DIR/evidence/integration"
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_HOST "127.0.0.1"
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_PORT "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT"
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_USER "ci-operator"
@@ -971,29 +1033,30 @@ validate_selected_container_mounts() {
   validate_container_mount gerrit-target "$HARNESS_PRODUCT_HOME_DIR/gerrit" /srv/gerrit
   validate_container_mount gerrit-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount gerrit-target "$HARNESS_GERRIT_VALIDATION_SECRET_DIR" /var/lib/loopforge/validation-secrets
-  validate_container_mount gerrit-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
-  validate_container_mount gerrit-target "$HARNESS_LOG_DIR" /var/log/loopforge
+  validate_container_mount gerrit-target "$HARNESS_GERRIT_EVIDENCE_DIR" /var/lib/loopforge/evidence
+  validate_container_mount gerrit-target "$HARNESS_GERRIT_LOG_DIR" /var/log/loopforge
   validate_container_mount jenkins-controller-target "$repo_root" /workspace repo
   validate_container_mount jenkins-controller-target "$HARNESS_STATE_DIR/jenkins-controller" /var/lib/loopforge
   validate_container_mount jenkins-controller-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" /var/lib/jenkins
   validate_container_mount jenkins-controller-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount jenkins-controller-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
-  validate_container_mount jenkins-controller-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
-  validate_container_mount jenkins-controller-target "$HARNESS_LOG_DIR" /var/log/loopforge
+  validate_container_mount jenkins-controller-target "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" /var/lib/loopforge/evidence
+  validate_container_mount jenkins-controller-target "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" /var/log/loopforge
   validate_container_mount jenkins-agent-target "$repo_root" /workspace repo
   validate_container_mount jenkins-agent-target "$HARNESS_STATE_DIR/jenkins-agent" /var/lib/loopforge
   validate_container_mount jenkins-agent-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" /var/lib/jenkins-agent
   validate_container_mount jenkins-agent-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount jenkins-agent-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
-  validate_container_mount jenkins-agent-target "$HARNESS_EVIDENCE_DIR" /var/lib/loopforge/evidence
-  validate_container_mount jenkins-agent-target "$HARNESS_LOG_DIR" /var/log/loopforge
+  validate_container_mount jenkins-agent-target "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" /var/lib/loopforge/evidence
+  validate_container_mount jenkins-agent-target "$HARNESS_JENKINS_AGENT_LOG_DIR" /var/log/loopforge
 }
 
 ensure_preflight_dirs() {
   validate_harness_inputs
   mkdir -p \
     "$HARNESS_EVIDENCE_DIR" \
-    "$HARNESS_LOG_DIR"
+    "$HARNESS_LOG_DIR" \
+    "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR"
 }
 
 ensure_dirs() {
@@ -1004,6 +1067,9 @@ ensure_dirs() {
     "$HARNESS_STATE_DIR" \
     "$HARNESS_HOST_DIR" \
     "$HARNESS_TARGET_DIR" \
+    "$HARNESS_HOST_DIR/evidence" \
+    "$HARNESS_HOST_DIR/logs" \
+    "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR" \
     "$HARNESS_PRODUCT_HOME_DIR" \
     "$HARNESS_PRODUCT_HOME_DIR/gerrit" \
     "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" \
@@ -1020,6 +1086,12 @@ ensure_dirs() {
     "$HARNESS_STATE_DIR/jenkins-controller" \
     "$HARNESS_STATE_DIR/jenkins-agent" \
     "$HARNESS_STATE_DIR/integration" \
+    "$HARNESS_GERRIT_EVIDENCE_DIR" \
+    "$HARNESS_GERRIT_LOG_DIR" \
+    "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" \
+    "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" \
+    "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" \
+    "$HARNESS_JENKINS_AGENT_LOG_DIR" \
     "$HARNESS_GERRIT_VALIDATION_SECRET_DIR" \
     "$HARNESS_SHARED_JENKINS_STORAGE_DIR" \
     "$HARNESS_TARGET_SSH_DIR" \
@@ -1041,10 +1113,43 @@ prepare_init_run() {
   write_rendered_helper_envs
 }
 
-bounded_log_path() {
+role_evidence_dir() {
+  case "${1:?role required}" in
+    gerrit) printf '%s\n' "$HARNESS_GERRIT_EVIDENCE_DIR" ;;
+    jenkins-controller) printf '%s\n' "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" ;;
+    jenkins-agent) printf '%s\n' "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" ;;
+    *) printf '%s\n' "$HARNESS_EVIDENCE_DIR" ;;
+  esac
+}
+
+role_log_dir() {
+  case "${1:?role required}" in
+    gerrit) printf '%s\n' "$HARNESS_GERRIT_LOG_DIR" ;;
+    jenkins-controller) printf '%s\n' "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" ;;
+    jenkins-agent) printf '%s\n' "$HARNESS_JENKINS_AGENT_LOG_DIR" ;;
+    *) printf '%s\n' "$HARNESS_LOG_DIR" ;;
+  esac
+}
+
+evidence_dir_for_record() {
+  local checkpoint role
+  checkpoint="${1:?checkpoint required}"
+  role="${2:?role required}"
+  printf '%s\n' "$HARNESS_EVIDENCE_DIR"
+}
+
+bounded_log_dir_for_name() {
   local name
   name="${1:?log name required}"
-  printf '%s/%s-%s.log' "$HARNESS_LOG_DIR" "$name" "$(timestamp_utc)"
+  printf '%s\n' "$HARNESS_LOG_DIR"
+}
+
+bounded_log_path() {
+  local name dir
+  name="${1:?log name required}"
+  dir="$(bounded_log_dir_for_name "$name")"
+  mkdir -p "$dir"
+  printf '%s/%s-%s.log' "$dir" "$name" "$(timestamp_utc)"
 }
 
 validate_tcp_port_value() {
@@ -1586,8 +1691,20 @@ ensure_gerrit_ldap_bind_secret() {
   printf 'validation_secret_ready role=gerrit secret_kind=ldap-bind-password custody=harness-owned-simulation-not-gerrit-artifact public_value_redacted=true\n' >>"$log"
 }
 
+stage_gerrit_ldap_bind_secret() {
+  local log service secret_file container_secret_file
+  log="${1:?log required}"
+  service="${2:?service required}"
+  ensure_gerrit_ldap_bind_secret "$log"
+  secret_file="$HARNESS_GERRIT_VALIDATION_SECRET_DIR/ldap-bind-password"
+  container_secret_file="/var/lib/loopforge/secret-inputs/ldap-bind-password"
+  docker_cp_file_to_service "$secret_file" "$service" "$container_secret_file" ci-operator ci-operator 0600 "$log"
+  printf 'validation_secret_staged role=gerrit secret_kind=ldap-bind-password destination=%s owner=ci-operator mode=0600 public_value_redacted=true\n' \
+    "$container_secret_file" >>"$log"
+}
+
 gerrit_target_secret_env() {
-  printf '%s\n' "LDAP_BIND_PASSWORD_FILE=/var/lib/loopforge/validation-secrets/ldap-bind-password"
+  printf '%s\n' "LDAP_BIND_PASSWORD_FILE=/var/lib/loopforge/secret-inputs/ldap-bind-password"
 }
 
 reset_gerrit_site_state() {
@@ -1862,22 +1979,28 @@ prepare_bundle_factory_workspace_ownership() {
 }
 
 prepare_target_helper_owned_paths() {
-  local role service log state_root rendered_root incoming_dir script
+  local role service log state_root rendered_root secret_input_root incoming_dir evidence_root log_root script
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
   state_root="/var/lib/loopforge"
   rendered_root="/var/lib/loopforge/rendered"
+  secret_input_root="/var/lib/loopforge/secret-inputs"
   incoming_dir="/var/lib/loopforge/staging/$role/incoming"
+  evidence_root="/var/lib/loopforge/evidence"
+  log_root="/var/log/loopforge"
 
   script="$(owned_directory_command ci-operator ci-operator 0700 "$state_root" 0)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$rendered_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0700 "$secret_input_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$incoming_dir" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1)"
+  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$log_root" 1)"
   if ! compose exec -T -u root "$service" sh -c "$script" >>"$log" 2>&1; then
     return 1
   fi
-  printf 'helper_owned_paths_prepared role=%s service=%s state=%s rendered=%s staging=%s owner=ci-operator group=ci-operator retained_evidence_logs=host-owned-sideband\n' \
-    "$role" "$service" "$state_root" "$rendered_root" "$incoming_dir" >>"$log"
+  printf 'helper_owned_paths_prepared role=%s service=%s state=%s rendered=%s secret_inputs=%s staging=%s evidence=%s logs=%s owner=ci-operator group=ci-operator recursive_contract=target-helper-owned\n' \
+    "$role" "$service" "$state_root" "$rendered_root" "$secret_input_root" "$incoming_dir" "$evidence_root" "$log_root" >>"$log"
 }
 
 prepare_all_target_helper_owned_paths() {
@@ -1934,6 +2057,23 @@ docker_cp_file_to_service() {
   compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1
   printf 'transfer_mode=docker-cp-waiver source=%s service=%s destination=%s owner=%s group=%s mode=%s scope=docker-simulation-only\n' \
     "$host_file" "$service" "$container_path" "$owner" "$group" "$mode" >>"$log"
+}
+
+docker_cp_file_from_service() {
+  local service container_path host_file log container_id
+  service="${1:?service required}"
+  container_path="${2:?container path required}"
+  host_file="${3:?host file required}"
+  log="${4:?log required}"
+  container_id="$(container_id_for_service "$service")"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  mkdir -p "$(dirname "$host_file")"
+  if ! docker cp "$container_id:$container_path" "$host_file" >>"$log" 2>&1; then
+    return 1
+  fi
+  chmod u+rw,go-rwx "$host_file" 2>/dev/null || true
+  printf 'transfer_mode=docker-cp-collector service=%s source=%s destination=%s scope=docker-simulation-only\n' \
+    "$service" "$container_path" "$host_file" >>"$log"
 }
 
 stage_rendered_env_file() {
@@ -2211,7 +2351,8 @@ write_evidence() {
   else
     ensure_dirs
   fi
-  file="$HARNESS_EVIDENCE_DIR/${checkpoint}-${role}-$(timestamp_utc).json"
+  file="$(evidence_dir_for_record "$checkpoint" "$role")/${checkpoint}-${role}-$(timestamp_utc).json"
+  mkdir -p "$(dirname "$file")"
   manifest_ref="$(manifest_reference_for_evidence "$checkpoint" "$role")"
   checksum_ref="$(checksum_reference_for_evidence "$checkpoint" "$role")"
   target_container="$(target_container_for_evidence "$role")"
@@ -2309,6 +2450,7 @@ HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
 HARNESS_EXPORTED_ARTIFACT_DIR=$(shell_quote "$HARNESS_EXPORTED_ARTIFACT_DIR")
 HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
 HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
+HARNESS_RETAINED_OUTPUT_BACKUP_DIR=$(shell_quote "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR")
 HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 HARNESS_GERRIT_ENV_FILE=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
@@ -2328,6 +2470,12 @@ HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR=$(shell_quote "$HARNESS_BUNDLE_FACT
 HARNESS_LDAP_DATA_DIR=$(shell_quote "$HARNESS_LDAP_DATA_DIR")
 HARNESS_LDAP_CONFIG_DIR=$(shell_quote "$HARNESS_LDAP_CONFIG_DIR")
 HARNESS_SHARED_JENKINS_STORAGE_DIR=$(shell_quote "$HARNESS_SHARED_JENKINS_STORAGE_DIR")
+HARNESS_GERRIT_EVIDENCE_DIR=$(shell_quote "$HARNESS_GERRIT_EVIDENCE_DIR")
+HARNESS_GERRIT_LOG_DIR=$(shell_quote "$HARNESS_GERRIT_LOG_DIR")
+HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR")
+HARNESS_JENKINS_CONTROLLER_LOG_DIR=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_LOG_DIR")
+HARNESS_JENKINS_AGENT_EVIDENCE_DIR=$(shell_quote "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR")
+HARNESS_JENKINS_AGENT_LOG_DIR=$(shell_quote "$HARNESS_JENKINS_AGENT_LOG_DIR")
 HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/")
 HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
 public_internet_fallback=simulation-only
@@ -2373,6 +2521,7 @@ HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
 HARNESS_EXPORTED_ARTIFACT_DIR=$(shell_quote "$HARNESS_EXPORTED_ARTIFACT_DIR")
 HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
 HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
+HARNESS_RETAINED_OUTPUT_BACKUP_DIR=$(shell_quote "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR")
 HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 HARNESS_GERRIT_ENV_FILE=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
@@ -2392,6 +2541,12 @@ HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR=$(shell_quote "$HARNESS_BUNDLE_FACT
 HARNESS_LDAP_DATA_DIR=$(shell_quote "$HARNESS_LDAP_DATA_DIR")
 HARNESS_LDAP_CONFIG_DIR=$(shell_quote "$HARNESS_LDAP_CONFIG_DIR")
 HARNESS_SHARED_JENKINS_STORAGE_DIR=$(shell_quote "$HARNESS_SHARED_JENKINS_STORAGE_DIR")
+HARNESS_GERRIT_EVIDENCE_DIR=$(shell_quote "$HARNESS_GERRIT_EVIDENCE_DIR")
+HARNESS_GERRIT_LOG_DIR=$(shell_quote "$HARNESS_GERRIT_LOG_DIR")
+HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR")
+HARNESS_JENKINS_CONTROLLER_LOG_DIR=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_LOG_DIR")
+HARNESS_JENKINS_AGENT_EVIDENCE_DIR=$(shell_quote "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR")
+HARNESS_JENKINS_AGENT_LOG_DIR=$(shell_quote "$HARNESS_JENKINS_AGENT_LOG_DIR")
 HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/")
 HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
 HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
@@ -2942,6 +3097,9 @@ cd "$target_bundle_dir"
 sha256sum -c checksums/SHA256SUMS
 cd "$target_payload_dir"
 sha256sum -c checksums.sha256
+chown -R ci-operator:ci-operator "$target_bundle_dir"
+find "$target_bundle_dir" -type d -exec chmod 0755 {} +
+find "$target_bundle_dir" -type f -exec chmod 0644 {} +
 '
   if ! compose exec -T -u root "$service" sh -c "$extract_script" sh \
     "$incoming_dir" \
@@ -2995,59 +3153,72 @@ assert_no_forbidden_success_markers() {
 }
 
 normalize_role_evidence_logs() {
-  local log role pattern state_dir latest
+  local log role pattern state_dir service latest latest_base evidence_copy normalized
   log="${1:?log required}"
   role="${2:?role required}"
   pattern="${3:?pattern required}"
   state_dir="${4:?state dir required}"
-  latest="$(find "$HARNESS_EVIDENCE_DIR" -maxdepth 1 -type f -name "$pattern" -print | sort | tail -1)"
+  service="$(service_for_role "$role")"
+  latest="$(compose exec -T -u ci-operator "$service" sh -c \
+    "find /var/lib/loopforge/evidence -maxdepth 1 -type f -name $(shell_quote "$pattern") -print | sort | tail -1" 2>>"$log" || true)"
   [ -n "$latest" ] || {
     printf 'missing_role_evidence role=%s expected=%s\n' "$role" "$pattern" >>"$log"
     return 1
   }
 
   require_command python3
-  python3 - "$latest" "$latest.host.json" "$HARNESS_LOG_DIR" "$state_dir" <<'PY' >>"$log" 2>&1
+  latest_base="$(basename "$latest")"
+  evidence_copy="$HARNESS_EVIDENCE_DIR/role-source/$role/$latest_base"
+  normalized="$HARNESS_EVIDENCE_DIR/$(basename "${latest_base%.json}").host.json"
+  docker_cp_file_from_service "$service" "$latest" "$evidence_copy" "$log" || return 1
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    case "$ref" in
+      /*)
+        docker_cp_file_from_service "$service" "$ref" "$HARNESS_LOG_DIR/role-snapshots/$role/${ref#/}" "$log" || return 1
+        if [ ! -s "$HARNESS_LOG_DIR/role-snapshots/$role/${ref#/}" ]; then
+          printf 'bounded_log_reference_empty role=%s reference=%s\n' "$role" "$ref" >>"$log"
+          return 1
+        fi
+        ;;
+      *)
+        printf 'unsupported_relative_bounded_log_reference role=%s reference=%s\n' "$role" "$ref" >>"$log"
+        return 1
+        ;;
+    esac
+  done <<EOF
+$(python3 - "$evidence_copy" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    data = json.load(handle)
+
+for ref in data.get("bounded_log_references", "").split(";"):
+    if ref:
+        print(ref)
+PY
+)
+EOF
+
+  python3 - "$evidence_copy" "$normalized" "$HARNESS_LOG_DIR/role-snapshots/$role" <<'PY' >>"$log" 2>&1
 import json
 import pathlib
 import sys
 
 evidence = pathlib.Path(sys.argv[1])
 normalized = pathlib.Path(sys.argv[2])
-host_log = pathlib.Path(sys.argv[3])
-host_state = pathlib.Path(sys.argv[4])
+snapshot_root = pathlib.Path(sys.argv[3])
 data = json.loads(evidence.read_text())
 refs = data.get("bounded_log_references", "")
 mapped = []
 for ref in refs.split(";"):
-    if ref.startswith("/var/log/loopforge/"):
-        mapped_ref = str(host_log / ref.removeprefix("/var/log/loopforge/"))
-        path = pathlib.Path(mapped_ref)
-        if not path.is_file() or path.stat().st_size == 0:
-            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
-        mapped.append(mapped_ref)
-    elif ref.startswith("/var/lib/loopforge/"):
-        mapped_ref = str(host_state / ref.removeprefix("/var/lib/loopforge/"))
-        path = pathlib.Path(mapped_ref)
-        if not path.is_file() or path.stat().st_size == 0:
-            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
-        mapped.append(mapped_ref)
-    elif ref.startswith("/harness/logs/"):
-        mapped_ref = str(host_log / ref.removeprefix("/harness/logs/"))
-        path = pathlib.Path(mapped_ref)
-        if not path.is_file() or path.stat().st_size == 0:
-            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
-        mapped.append(mapped_ref)
-    elif ref.startswith("/harness/state/"):
-        mapped_ref = str(host_state / ref.removeprefix("/harness/state/"))
-        path = pathlib.Path(mapped_ref)
-        if not path.is_file() or path.stat().st_size == 0:
-            raise SystemExit(f"bounded log reference missing or empty: {mapped_ref}")
-        mapped.append(mapped_ref)
+    if not ref:
+        continue
+    if ref.startswith("/"):
+        mapped_ref = snapshot_root / ref.removeprefix("/")
+        mapped.append(str(mapped_ref))
     else:
-        path = pathlib.Path(ref)
-        if not path.is_file() or path.stat().st_size == 0:
-            raise SystemExit(f"bounded log reference missing or empty: {ref}")
         mapped.append(ref)
 
 data["bounded_log_references"] = ";".join(mapped)
@@ -3112,12 +3283,12 @@ cmd_configure_role() {
 
   case "$role" in
     gerrit)
-      ensure_gerrit_ldap_bind_secret "$log"
+      stage_gerrit_ldap_bind_secret "$log" "$service"
       if require_staged_artifacts_in_target gerrit "$service" "$log" &&
         reset_gerrit_site_state "$service" "$log" &&
         prepare_product_home_ownership gerrit "$service" "$log" &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
+        compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -3126,10 +3297,10 @@ cmd_configure_role() {
     jenkins-controller)
       if require_staged_artifacts_in_target jenkins-controller "$service" "$log" &&
         prepare_product_home_ownership jenkins-controller "$service" "$log" &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
+        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -3138,8 +3309,8 @@ cmd_configure_role() {
     jenkins-agent)
       if require_staged_artifacts_in_target jenkins-agent "$service" "$log" &&
         prepare_product_home_ownership jenkins-agent "$service" "$log" &&
-        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1; then
+        compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -3209,9 +3380,9 @@ cmd_validate_role() {
 
   case "$role" in
     gerrit)
-      ensure_gerrit_ldap_bind_secret "$log"
-      if compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
-        compose exec -T "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
+      stage_gerrit_ldap_bind_secret "$log" "$service"
+      if compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
         normalize_gerrit_role_evidence_logs "$log"; then
         rc=0
       else
@@ -3219,8 +3390,8 @@ cmd_validate_role() {
       fi
       ;;
     jenkins-controller)
-      if compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+      if compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
         rc=0
       else
@@ -3228,8 +3399,8 @@ cmd_validate_role() {
       fi
       ;;
     jenkins-agent)
-      if compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
-        compose exec -T "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+      if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_agent_role_evidence_logs "$log"; then
         rc=0
       else
@@ -3487,16 +3658,72 @@ cleanup_mutable_paths_container() {
     >>"$log" 2>&1
 }
 
-verify_preserved_clean_outputs() {
+backup_and_clear_retained_outputs_container() {
+  local log backup_name backup_path uid gid
+  log="${1:?log required}"
+  backup_name="${2:?backup name required}"
+  backup_path="$HARNESS_RETAINED_OUTPUT_BACKUP_DIR/$backup_name"
+  uid="$(id -u)"
+  gid="$(id -g)"
+  docker run --rm \
+    --mount "type=bind,source=$HARNESS_GENERATED_RUN_DIR,target=/cleanup-root" \
+    "$HARNESS_UBUNTU_IMAGE" \
+    sh -c '
+      set -e
+      backup_name="$1"
+      uid="$2"
+      gid="$3"
+      backup_root="/cleanup-root/host/retained-output-backups/$backup_name"
+      mkdir -p "$backup_root/target/artifacts" "$backup_root/host" "$backup_root/target"
+      copy_if_present() {
+        src="$1"
+        dest="$2"
+        [ -e "$src" ] || return 0
+        mkdir -p "$(dirname "$dest")"
+        cp -a "$src" "$dest"
+      }
+      copy_if_present /cleanup-root/target/artifacts/exported "$backup_root/target/artifacts/exported"
+      copy_if_present /cleanup-root/host/evidence "$backup_root/host/evidence"
+      copy_if_present /cleanup-root/host/logs "$backup_root/host/logs"
+      copy_if_present /cleanup-root/target/evidence "$backup_root/target/evidence"
+      copy_if_present /cleanup-root/target/logs "$backup_root/target/logs"
+      rm -rf -- /cleanup-root/target/artifacts/exported /cleanup-root/host/evidence /cleanup-root/host/logs /cleanup-root/target/evidence /cleanup-root/target/logs
+      chown -R "$uid:$gid" "$backup_root"
+    ' sh "$backup_name" "$uid" "$gid" \
+    >>"$log" 2>&1
+  printf '%s\n' "$backup_path"
+}
+
+canonical_run_root_exists_for_recovery() {
+  local expected actual_real expected_real
+  expected="$(canonical_generated_run_dir)"
+  [ "$HARNESS_GENERATED_RUN_DIR" = "$expected" ] || return 1
+  [ -d "$HARNESS_GENERATED_RUN_DIR" ] || return 1
+  [ ! -L "$HARNESS_GENERATED_RUN_DIR" ] || return 1
+  actual_real="$(realpath "$HARNESS_GENERATED_RUN_DIR")"
+  expected_real="$(realpath "$expected")"
+  [ "$actual_real" = "$expected_real" ]
+}
+
+verify_clean_output_dirs() {
   [ -d "$HARNESS_EXPORTED_ARTIFACT_DIR" ] || mkdir -p "$HARNESS_EXPORTED_ARTIFACT_DIR"
   [ -d "$HARNESS_EVIDENCE_DIR" ] || mkdir -p "$HARNESS_EVIDENCE_DIR"
   [ -d "$HARNESS_LOG_DIR" ] || mkdir -p "$HARNESS_LOG_DIR"
+  [ -d "$HARNESS_HOST_DIR/evidence/integration" ] || mkdir -p "$HARNESS_HOST_DIR/evidence/integration"
+  [ -d "$HARNESS_HOST_DIR/logs/integration" ] || mkdir -p "$HARNESS_HOST_DIR/logs/integration"
+  [ -d "$HARNESS_GERRIT_EVIDENCE_DIR" ] || mkdir -p "$HARNESS_GERRIT_EVIDENCE_DIR"
+  [ -d "$HARNESS_GERRIT_LOG_DIR" ] || mkdir -p "$HARNESS_GERRIT_LOG_DIR"
+  [ -d "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" ] || mkdir -p "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR"
+  [ -d "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" ] || mkdir -p "$HARNESS_JENKINS_CONTROLLER_LOG_DIR"
+  [ -d "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" ] || mkdir -p "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR"
+  [ -d "$HARNESS_JENKINS_AGENT_LOG_DIR" ] || mkdir -p "$HARNESS_JENKINS_AGENT_LOG_DIR"
 }
 
 cmd_clean() {
-  local log rc evidence cleanup_fallback container
+  local log rc evidence cleanup_fallback container backup_name backup_path recovery_run_root_exists
   bootstrap_harness_env
   require_command docker
+  recovery_run_root_exists=0
   if runtime_config_valid; then
     detect_compose
     validate_canonical_run_root
@@ -3508,6 +3735,9 @@ cmd_clean() {
       rc=$?
     fi
   else
+    if canonical_run_root_exists_for_recovery; then
+      recovery_run_root_exists=1
+    fi
     ensure_preflight_dirs
     log="$(bounded_log_path clean)"
     cleanup_fallback=skipped-invalid-runtime-config
@@ -3533,9 +3763,30 @@ EOF
   fi
 
   if [ "$cleanup_fallback" = "skipped-invalid-runtime-config" ]; then
-    evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed selected containers with bootstrap recovery; host generated cleanup skipped because runtime config is invalid or missing")"
-    print_command_summary clean "" "removed containers cleanup=skipped reason=invalid-or-missing-runtime-config"
-    return 0
+    if [ "$recovery_run_root_exists" -eq 1 ]; then
+      cleanup_fallback=container-recovery
+      backup_name="clean-$(timestamp_utc)"
+      if ! cleanup_mutable_paths_container "$log"; then
+        evidence="$(write_evidence clean harness fail "simulate.sh clean" "$log" "Generated runtime cleanup failed during recovery")"
+        print_command_failure clean "" failed "$log" "$evidence"
+        return 1
+      fi
+      backup_path="$(backup_and_clear_retained_outputs_container "$log" "$backup_name")" || rc=$?
+      rc="${rc:-0}"
+      if [ "$rc" -ne 0 ]; then
+        evidence="$(write_evidence clean harness fail "simulate.sh clean" "$log" "Retained output backup failed during recovery")"
+        print_command_failure clean "" failed "$log" "$evidence"
+        return "$rc"
+      fi
+      verify_clean_output_dirs
+      evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed selected containers, cleaned mutable generated runtime data, and backed up retained outputs during recovery to $backup_path")"
+      print_command_summary clean "" "removed containers runtime data backup=$backup_name cleanup=$cleanup_fallback"
+      return 0
+    else
+      evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed selected containers with bootstrap recovery; host generated cleanup skipped because runtime config is invalid or missing")"
+      print_command_summary clean "" "removed containers cleanup=skipped reason=invalid-or-missing-runtime-config"
+      return 0
+    fi
   fi
 
   if ! cleanup_mutable_paths_host >>"$log" 2>&1; then
@@ -3548,10 +3799,18 @@ EOF
       return "$rc"
     fi
   fi
+  backup_name="clean-$(timestamp_utc)"
+  backup_path="$(backup_and_clear_retained_outputs_container "$log" "$backup_name")" || rc=$?
+  rc="${rc:-0}"
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(write_evidence clean harness fail "simulate.sh clean" "$log" "Retained output backup failed")"
+    print_command_failure clean "" failed "$log" "$evidence"
+    return "$rc"
+  fi
   ensure_preflight_dirs
-  verify_preserved_clean_outputs
-  evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed mutable generated runtime data and preserved exported artifacts, evidence, and logs")"
-  print_command_summary clean "" "removed runtime data preserved exported-artifacts evidence logs cleanup=$cleanup_fallback"
+  verify_clean_output_dirs
+  evidence="$(write_evidence clean harness pass "simulate.sh clean" "$log" "Removed mutable generated runtime data and backed up retained outputs to $backup_path")"
+  print_command_summary clean "" "removed runtime data backup=$backup_name cleanup=$cleanup_fallback"
 }
 
 parse_env_and_role_args() {

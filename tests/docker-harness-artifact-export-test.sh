@@ -129,7 +129,7 @@ FAKE_CONTAINER_FS="$container_fs" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit >"$tmp_dir/prepare.out"
 
 export_archive="$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz"
-prepare_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'prepare-artifacts-gerrit-*.json' -print | sort | tail -1)"
+prepare_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -name 'prepare-artifacts-gerrit-*.json' -print | sort | tail -1)"
 grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
 [ -f "$export_archive" ] || {
   printf 'Expected exported Gerrit archive\n' >&2
@@ -170,7 +170,7 @@ DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stage-artifacts --role gerrit >"$tmp_dir/stage.out"
 
-stage_evidence="$(find "$run_dir/target/evidence" -maxdepth 1 -type f -name 'stage-artifacts-gerrit-*.json' -print | sort | tail -1)"
+stage_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -name 'stage-artifacts-gerrit-*.json' -print | sort | tail -1)"
 [ -n "$stage_evidence" ] || {
   printf 'Expected stage-artifacts evidence\n' >&2
   exit 1
@@ -187,6 +187,9 @@ grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz' "$calls"
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit/incoming/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
 grep -Fq -- 'tar -xzf "$archive_name" -C /opt' "$calls"
+grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$calls"
+grep -Fq -- 'find "$target_bundle_dir" -type d -exec chmod 0755 {} +' "$calls"
+grep -Fq -- 'find "$target_bundle_dir" -type f -exec chmod 0644 {} +' "$calls"
 
 [ ! -d "$run_dir/target/artifacts/staging/gerrit/gerrit-artifacts-bundle" ] || {
   printf 'stage-artifacts must not extract target bundles on the host\n' >&2

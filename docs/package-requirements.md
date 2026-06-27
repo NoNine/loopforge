@@ -27,7 +27,7 @@ installation is simulation-only.
 | Jenkins controller target | `fontconfig`, `openjdk-21-jre` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins `.deb` is staged as an application artifact, not installed from an apt repository setup path. |
 | Jenkins agent target | `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access. Workload-specific build tools are out of scope. |
 | Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
-| Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
+| Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
 
 ## Layer Rules
 
@@ -61,6 +61,7 @@ document owns the layered rationale.
 | Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
 | Docker `procps` layer | `simulation/docker/simulate.sh` and Gerrit helper runtime checks use `ps` to inspect service processes inside slim containers. |
 | Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
+| Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
 | Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
 
 ## Docker Removal Candidates

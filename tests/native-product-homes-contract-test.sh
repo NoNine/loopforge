@@ -305,8 +305,23 @@ require_pattern scripts/gerrit-setup.sh \
   'require_product_home_ownership "$GERRIT_NATIVE_SITE_PATH" "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "Gerrit"' \
   'Gerrit helper must validate native product home ownership'
 require_pattern scripts/gerrit-setup.sh \
-  'chown -R "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$GERRIT_SITE_PATH"' \
-  'Gerrit install must make product home ownership explicit'
+  'sudo -n -u "$GERRIT_RUNTIME_ACCOUNT" sh -c "$command_text"' \
+  'Gerrit helper must delegate runtime-account operations when run by the operator'
+require_pattern scripts/gerrit-setup.sh \
+  'sudo -n sh -c "$command_text"' \
+  'Gerrit helper must delegate privileged product-home operations when run by the operator'
+require_pattern scripts/gerrit-setup.sh \
+  'prepare_gerrit_runtime_directories' \
+  'Gerrit helper must prepare product-home runtime dirs through delegated helpers'
+require_pattern scripts/gerrit-setup.sh \
+  'install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war" 0644' \
+  'Gerrit install must place the WAR through delegated runtime-owned install'
+require_pattern scripts/gerrit-setup.sh \
+  'render_template_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit.config.template" "$GERRIT_SITE_PATH/etc/gerrit.config"' \
+  'Gerrit configure must render product-home config through delegated runtime-owned install'
+require_pattern scripts/gerrit-setup.sh \
+  'write_secure_config_as_runtime' \
+  'Gerrit configure must write secure config through delegated runtime-owned install'
 reject_pattern scripts/gerrit-setup.sh \
   'GERRIT_RUNTIME_ACCOUNT must be $GERRIT_NATIVE_RUNTIME_ACCOUNT' \
   'Gerrit helper must not require a fixed literal runtime account name'
@@ -325,6 +340,18 @@ require_pattern scripts/jenkins-controller-setup.sh \
 require_pattern scripts/jenkins-controller-setup.sh \
   'require_product_home_ownership "$JENKINS_NATIVE_HOME" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "Jenkins"' \
   'Jenkins helper must validate native product home ownership'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'sudo -n -u "$JENKINS_RUNTIME_ACCOUNT" sh -lc "$command"' \
+  'Jenkins controller helper must delegate runtime-account operations when run by the operator'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'sudo -n sh -c "$command"' \
+  'Jenkins controller helper must delegate privileged product-home operations when run by the operator'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war" 0644' \
+  'Jenkins controller install must place the WAR through delegated runtime-owned install'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$JENKINS_HOME/jcasc/jenkins.yaml"' \
+  'Jenkins controller JCasC must render through delegated runtime-owned install'
 reject_pattern scripts/jenkins-controller-setup.sh \
   'JENKINS_RUNTIME_ACCOUNT must be $JENKINS_NATIVE_RUNTIME_ACCOUNT' \
   'Jenkins helper must not require a fixed literal runtime account name'
@@ -343,6 +370,15 @@ require_pattern scripts/jenkins-agent-setup.sh \
 require_pattern scripts/jenkins-agent-setup.sh \
   'require_product_home_ownership "$JENKINS_AGENT_NATIVE_REMOTE_FS" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "Jenkins agent"' \
   'Agent helper must validate native product home ownership'
+require_pattern scripts/jenkins-agent-setup.sh \
+  'sudo -n sh -c "$command"' \
+  'Jenkins agent helper must delegate privileged target operations when run by the operator'
+require_pattern scripts/jenkins-agent-setup.sh \
+  'install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644' \
+  'Jenkins agent install must place bootstrap files through delegated runtime-owned install'
+require_pattern scripts/jenkins-agent-setup.sh \
+  'render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"' \
+  'Jenkins agent configure-runtime must render runtime profile through delegated runtime-owned install'
 reject_pattern scripts/jenkins-agent-setup.sh \
   'JENKINS_AGENT_ACCOUNT must be $JENKINS_AGENT_NATIVE_ACCOUNT' \
   'Agent helper must not require a fixed literal runtime account name'
@@ -364,10 +400,10 @@ require_pattern scripts/jenkins-agent-setup.sh \
   'Agent helper error must describe the native remote FS boundary'
 
 require_pattern simulation/docker/target/Dockerfile \
-  'groupadd --system ci-operator' \
+  'groupadd --gid 61000 ci-operator' \
   'Docker target image must include a distinct local ci-operator group'
 require_pattern simulation/docker/target/Dockerfile \
-  'useradd --create-home --gid ci-operator --home-dir /home/ci-operator --shell /bin/bash ci-operator' \
+  'useradd --uid 61000 --create-home --gid 61000 --home-dir /home/ci-operator --shell /bin/bash ci-operator' \
   'Docker target image must include a distinct local ci-operator account'
 require_pattern simulation/docker/target/Dockerfile \
   'sudo \' \
@@ -379,13 +415,13 @@ require_pattern simulation/docker/target/Dockerfile \
   'chmod 0440 /etc/sudoers.d/harness-ci-operator' \
   'Docker ci-operator sudoers drop-in must use mode 0440'
 require_pattern simulation/docker/target/Dockerfile \
-  'useradd --system --gid gerrit --home-dir /srv/gerrit --shell /bin/bash gerrit' \
+  'useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit' \
   'Gerrit runtime account must remain distinct from ci-operator'
 require_pattern simulation/docker/target/Dockerfile \
-  'useradd --system --gid jenkins --home-dir /var/lib/jenkins --shell /bin/bash jenkins' \
+  'useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --shell /bin/bash jenkins' \
   'Jenkins runtime account must remain distinct from ci-operator'
 require_pattern simulation/docker/target/Dockerfile \
-  'useradd --system --gid jenkins-agent --home-dir /var/lib/jenkins-agent --shell /bin/bash jenkins-agent' \
+  'useradd --uid 61030 --gid 61030 --home-dir /var/lib/jenkins-agent --shell /bin/bash jenkins-agent' \
   'Jenkins agent runtime account must remain distinct from ci-operator'
 
 reject_pattern scripts/gerrit-setup.sh \

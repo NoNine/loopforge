@@ -365,6 +365,13 @@ write_text_file() {
   printf '%s\n' "$content" >"$target"
 }
 
+write_text_file_as_runtime() {
+  local target content
+  target="${1:?target required}"
+  content="${2:?content required}"
+  run_as_gerrit_runtime "mkdir -p $(shell_quote "$(dirname "$target")") && printf '%s\n' $(shell_quote "$content") >$(shell_quote "$target")"
+}
+
 replace_optional_placeholder() {
   local text placeholder name template_source value
   text="${1:?text required}"
@@ -401,6 +408,16 @@ render_template() {
   printf '%s\n' "$text" >"$target"
 }
 
+render_template_as_runtime() {
+  local source target tmp
+  source="${1:?source required}"
+  target="${2:?target required}"
+  tmp="$(mktemp)"
+  register_cleanup_path "$tmp"
+  render_template "$source" "$tmp"
+  install_file_as_runtime "$tmp" "$target" 0644
+}
+
 read_reviewed_secret_value() {
   local password_file secret
   password_file="$(ldap_bind_password_file)"
@@ -424,8 +441,23 @@ write_secure_config() {
   chmod 0600 "$GERRIT_SITE_PATH/etc/secure.config"
 }
 
+write_secure_config_as_runtime() {
+  local secret target tmp
+  secret="$(read_reviewed_secret_value)"
+  target="$GERRIT_SITE_PATH/etc/secure.config"
+  tmp="$(mktemp)"
+  register_cleanup_path "$tmp"
+  {
+    printf '%s\n' "# Gerrit secure config written from reviewed LDAP bind secret input."
+    printf '\n[ldap]\n'
+    printf 'password = %s\n' "$secret"
+  } >"$tmp"
+  chmod 0600 "$tmp"
+  install_file_as_runtime "$tmp" "$target" 0600
+}
+
 secure_config_password_value() {
-  config_value "$GERRIT_SITE_PATH/etc/secure.config" ldap.password
+  run_as_gerrit_runtime "git config -f $(shell_quote "$GERRIT_SITE_PATH/etc/secure.config") --get ldap.password"
 }
 
 config_value() {
@@ -997,19 +1029,17 @@ cmd_install() {
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
-  mkdir -p "$GERRIT_SITE_PATH/bin" "$GERRIT_SITE_PATH/plugins" "$GERRIT_SITE_PATH/etc" "$GERRIT_SITE_PATH/logs"
+  prepare_gerrit_runtime_directories
   verify_war_artifact "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war"
-  cp "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war"
-  find "$GERRIT_SITE_PATH/plugins" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-  cp -R "$GERRIT_STAGED_ARTIFACT_DIR/plugins/." "$GERRIT_SITE_PATH/plugins/"
+  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war" 0644
+  install_plugin_tree_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/plugins" "$GERRIT_SITE_PATH/plugins"
   verify_plugin_artifacts_in_dir "$GERRIT_SITE_PATH/plugins"
-  cp "$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt" "$GERRIT_SITE_PATH/etc/artifact-manifest.txt"
-  cp "$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256" "$GERRIT_SITE_PATH/etc/artifact-checksums.sha256"
-  cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-artifacts.manifest" "$GERRIT_SITE_PATH/etc/plugin-artifacts.manifest"
-  cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-metadata.report" "$GERRIT_SITE_PATH/etc/plugin-metadata.report"
-  cp "$GERRIT_STAGED_ARTIFACT_DIR/plugin-checksums.sha256" "$GERRIT_SITE_PATH/etc/plugin-checksums.sha256"
-  chown -R "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$GERRIT_SITE_PATH"
-  write_text_file "$GERRIT_SITE_PATH/state/install.status" "installed"
+  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt" "$GERRIT_SITE_PATH/etc/artifact-manifest.txt" 0644
+  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256" "$GERRIT_SITE_PATH/etc/artifact-checksums.sha256" 0644
+  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/plugin-artifacts.manifest" "$GERRIT_SITE_PATH/etc/plugin-artifacts.manifest" 0644
+  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/plugin-metadata.report" "$GERRIT_SITE_PATH/etc/plugin-metadata.report" 0644
+  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/plugin-checksums.sha256" "$GERRIT_SITE_PATH/etc/plugin-checksums.sha256" 0644
+  write_text_file_as_runtime "$GERRIT_SITE_PATH/state/install.status" "installed"
   printf 'status=pass command=install site=%s staged=%s\n' "$GERRIT_SITE_PATH" "$GERRIT_STAGED_ARTIFACT_DIR"
 }
 
@@ -1020,9 +1050,9 @@ cmd_configure() {
   confirm_mutation configure || return 0
   verify_staged_artifacts
   ensure_dirs
-  mkdir -p "$GERRIT_SITE_PATH/etc" "$GERRIT_SITE_PATH/state"
-  render_template "$GERRIT_STAGED_ARTIFACT_DIR/gerrit.config.template" "$GERRIT_SITE_PATH/etc/gerrit.config"
-  write_secure_config
+  prepare_gerrit_runtime_directories
+  render_template_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit.config.template" "$GERRIT_SITE_PATH/etc/gerrit.config"
+  write_secure_config_as_runtime
   assert_no_unresolved_placeholders "$GERRIT_SITE_PATH/etc/gerrit.config"
   printf 'status=pass command=configure site=%s ldap=configured secure_config=written_from_reviewed_secret real_gerrit_start=deferred-to-validate\n' "$GERRIT_SITE_PATH"
 }
@@ -1245,20 +1275,71 @@ is_gerrit_running() {
 run_as_gerrit_runtime() {
   local command_text
   command_text="${1:?command required}"
-  if command -v runuser >/dev/null 2>&1; then
+  if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
     runuser -u "$GERRIT_RUNTIME_ACCOUNT" -- sh -c "$command_text"
     return $?
   fi
-  if command -v su >/dev/null 2>&1; then
+  if [ "$(id -u)" -eq 0 ] && command -v su >/dev/null 2>&1; then
     su -s /bin/sh "$GERRIT_RUNTIME_ACCOUNT" -c "$command_text"
     return $?
   fi
-  die "BLOCKED: Gerrit runtime-account startup requires runuser or su"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n -u "$GERRIT_RUNTIME_ACCOUNT" sh -c "$command_text"
+    return $?
+  fi
+  die "BLOCKED: Gerrit runtime-account startup requires root runuser/su or passwordless sudo"
+}
+
+run_with_privilege() {
+  local command_text
+  command_text="${1:?command required}"
+  if [ "$(id -u)" -eq 0 ]; then
+    sh -c "$command_text"
+    return $?
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -n sh -c "$command_text"
+    return $?
+  fi
+  die "BLOCKED: Gerrit privileged operation requires root or passwordless sudo"
+}
+
+install_file_as_runtime() {
+  local source target mode target_dir
+  source="${1:?source required}"
+  target="${2:?target required}"
+  mode="${3:?mode required}"
+  target_dir="$(dirname "$target")"
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -g $(shell_quote "$GERRIT_RUNTIME_GROUP") $(shell_quote "$target_dir") && install -m $(shell_quote "$mode") -o $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -g $(shell_quote "$GERRIT_RUNTIME_GROUP") $(shell_quote "$source") $(shell_quote "$target")"
+}
+
+install_plugin_tree_as_runtime() {
+  local source target
+  source="${1:?source required}"
+  target="${2:?target required}"
+  run_with_privilege "rm -rf $(shell_quote "$target") && install -d -m 0755 -o $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -g $(shell_quote "$GERRIT_RUNTIME_GROUP") $(shell_quote "$target") && cp -R $(shell_quote "$source/.") $(shell_quote "$target/") && chown -R $(shell_quote "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP") $(shell_quote "$target") && find $(shell_quote "$target") -type d -exec chmod 0755 {} + && find $(shell_quote "$target") -type f -exec chmod 0644 {} +"
 }
 
 prepare_gerrit_runtime_ownership() {
-  require_command chown
-  chown -R "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$GERRIT_SITE_PATH"
+  run_with_privilege "chown -R $(shell_quote "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP") $(shell_quote "$GERRIT_SITE_PATH")"
+}
+
+prepare_gerrit_runtime_directories() {
+  run_with_privilege "mkdir -p $(shell_quote "$GERRIT_SITE_PATH/logs") $(shell_quote "$GERRIT_SITE_PATH/run") $(shell_quote "$GERRIT_SITE_PATH/state")"
+  prepare_gerrit_runtime_ownership
+}
+
+prepare_gerrit_runtime_log() {
+  local log
+  log="$(gerrit_runtime_log)"
+  run_with_privilege ": > $(shell_quote "$log") && chown $(shell_quote "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP") $(shell_quote "$log")"
+}
+
+append_gerrit_runtime_log() {
+  local text log
+  text="${1:?text required}"
+  log="$(gerrit_runtime_log)"
+  run_as_gerrit_runtime "printf '%s\n' $(shell_quote "$text") >> $(shell_quote "$log")"
 }
 
 gerrit_daemon_owner() {
@@ -1298,7 +1379,7 @@ clear_stale_gerrit_runtime_state() {
     if [ -n "$stale_pid" ] &&
       ! { [ "$(ps -p "$stale_pid" -o comm= 2>/dev/null | awk '{print $1}')" = "java" ] &&
         ps -p "$stale_pid" -o args= 2>/dev/null | grep -F "$GERRIT_SITE_PATH" >/dev/null; }; then
-      rm -f "$pidfile"
+      run_as_gerrit_runtime "rm -f $(shell_quote "$pidfile")"
     fi
   fi
 }
@@ -1312,7 +1393,7 @@ is_gerrit_site_initialized() {
 }
 
 record_step7_deferred_integration_status() {
-  write_text_file "$GERRIT_SITE_PATH/state/integration-prerequisites-deferred.status" \
+  write_text_file_as_runtime "$GERRIT_SITE_PATH/state/integration-prerequisites-deferred.status" \
     "jenkins_integration_prerequisites=deferred role_local_config_mutation=none"
 }
 
@@ -1320,7 +1401,7 @@ assert_gerrit_daemon_owner() {
   local pid owner
   pid="$(gerrit_daemon_pid)" ||
     die "BLOCKED: Gerrit daemon PID could not be resolved for owner proof"
-  printf '%s\n' "$pid" >"$(gerrit_pid_file)"
+  write_text_file_as_runtime "$(gerrit_pid_file)" "$pid"
   owner="$(gerrit_daemon_owner)"
   [ "$owner" = "$GERRIT_RUNTIME_ACCOUNT" ] ||
     die "BLOCKED: Gerrit daemon process owner is '$owner', expected '$GERRIT_RUNTIME_ACCOUNT'"
@@ -1332,10 +1413,8 @@ start_real_gerrit() {
   require_command java
   require_command ps
   check_runtime_account_readiness
-  mkdir -p "$GERRIT_SITE_PATH/logs" "$GERRIT_SITE_PATH/run"
-  prepare_gerrit_runtime_ownership
+  prepare_gerrit_runtime_directories
   log="$(gerrit_runtime_log)"
-  mkdir -p "$GERRIT_SITE_PATH/state"
   installed_plugin_digest="$(plugin_set_digest "$GERRIT_SITE_PATH/plugins")"
   stored_plugin_digest="$(cat "$GERRIT_SITE_PATH/state/runtime-plugin.digest" 2>/dev/null || true)"
   clear_stale_gerrit_runtime_state
@@ -1348,10 +1427,10 @@ start_real_gerrit() {
   fi
   java_opts="-Xms128m -Xmx512m"
   if [ ! -x "$GERRIT_SITE_PATH/bin/gerrit.sh" ]; then
-    printf 'timestamp=%s\n' "$(iso_timestamp_utc)" >"$log"
-    printf 'command=java -jar gerrit.war init --batch runtime_account=%s\n' "$GERRIT_RUNTIME_ACCOUNT" >>"$log"
-    chown "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$log"
-    if ! run_as_gerrit_runtime "java $java_opts -jar $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.war") init --batch --no-auto-start -d $(shell_quote "$GERRIT_SITE_PATH")" >>"$log" 2>&1; then
+    prepare_gerrit_runtime_log
+    append_gerrit_runtime_log "timestamp=$(iso_timestamp_utc)"
+    append_gerrit_runtime_log "command=java -jar gerrit.war init --batch runtime_account=$GERRIT_RUNTIME_ACCOUNT"
+    if ! run_as_gerrit_runtime "java $java_opts -jar $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.war") init --batch --no-auto-start -d $(shell_quote "$GERRIT_SITE_PATH") >> $(shell_quote "$log") 2>&1"; then
       printf 'BLOCKED: Gerrit init failed; artifact or config cannot support real startup; log=%s\n' "$log" >&2
       return 1
     fi
@@ -1367,12 +1446,11 @@ start_real_gerrit() {
   clear_stale_gerrit_runtime_state
   prepare_gerrit_runtime_ownership
   marker="plugin-runtime-start-$(timestamp_utc)-$installed_plugin_digest"
-  printf 'marker=%s\n' "$marker" >>"$log"
-  printf '%s\n' "$marker" >"$GERRIT_SITE_PATH/state/plugin-runtime-start.marker"
-  printf '%s\n' "$installed_plugin_digest" >"$GERRIT_SITE_PATH/state/runtime-plugin.digest"
-  printf 'command=%s/bin/gerrit.sh run runtime_account=%s\n' "$GERRIT_SITE_PATH" "$GERRIT_RUNTIME_ACCOUNT" >>"$log"
-  chown "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP" "$log"
-  run_as_gerrit_runtime "$(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.sh") run" >>"$log" 2>&1 &
+  append_gerrit_runtime_log "marker=$marker"
+  write_text_file_as_runtime "$GERRIT_SITE_PATH/state/plugin-runtime-start.marker" "$marker"
+  write_text_file_as_runtime "$GERRIT_SITE_PATH/state/runtime-plugin.digest" "$installed_plugin_digest"
+  append_gerrit_runtime_log "command=$GERRIT_SITE_PATH/bin/gerrit.sh run runtime_account=$GERRIT_RUNTIME_ACCOUNT"
+  run_as_gerrit_runtime "$(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.sh") run >> $(shell_quote "$log") 2>&1" &
   rc=1
   startup_deadline=$((SECONDS + 180))
   while [ "$SECONDS" -lt "$startup_deadline" ]; do

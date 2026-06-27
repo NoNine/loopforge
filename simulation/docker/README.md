@@ -86,6 +86,10 @@ The Docker target image includes product runtime accounts with native homes:
 `gerrit` owns `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and
 `jenkins-agent` owns `/var/lib/jenkins-agent`. These are separate from
 application admin, integration, LDAP bind, and test accounts.
+The image realizes the account model's example numeric IDs: `ci-operator`
+uses UID/GID `61000`, `gerrit` uses `61010`, `jenkins` uses `61020`, and
+`jenkins-agent` uses `61030`. These IDs are Docker simulation defaults, not
+host account mappings.
 
 The Docker target image also includes the default example target-local
 `ci-operator` account. This target-local `ci-operator` OS account has
@@ -93,9 +97,9 @@ passwordless sudo for simulation orchestration and privileged helper
 operations. The operator account does not own `/srv/gerrit`,
 `/var/lib/jenkins`, or `/var/lib/jenkins-agent` and is not a Gerrit, Jenkins
 controller, or Jenkins agent runtime account. Root remains available for
-privileged container operations where the harness needs it. The local host
-account that invokes `simulate.sh` may have any site-local name; it is not
-renamed, mapped, or required to be `ci-operator`.
+privileged container operations where the harness needs it.
+The local host account that invokes `simulate.sh` may have any site-local name
+and is not renamed, mapped, or required to be `ci-operator`.
 
 Use `simulate.sh status --env FILE` after `up` to inspect the selected
 running simulation. The status command prints the run ID, Compose project,
@@ -135,8 +139,11 @@ generated/simulation/docker/<run-id>/
 | Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
 | Transfer scratch | `generated/simulation/docker/<run-id>/target/artifacts/staging/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
-| Evidence | `generated/simulation/docker/<run-id>/target/evidence/` |
-| Bounded logs | `generated/simulation/docker/<run-id>/target/logs/` |
+| Harness evidence | `generated/simulation/docker/<run-id>/host/evidence/harness/` |
+| Harness bounded logs | `generated/simulation/docker/<run-id>/host/logs/harness/` |
+| Integration evidence and logs | `generated/simulation/docker/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
+| Target role evidence | `generated/simulation/docker/<run-id>/target/evidence/<role>/` |
+| Target role bounded logs | `generated/simulation/docker/<run-id>/target/logs/<role>/` |
 
 Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
@@ -163,6 +170,13 @@ step. Rendered helper env files are operator-reviewed runtime inputs first,
 then copied into helper paths before helper execution. The host-side generated
 directories are for operator review, debugging, evidence collection, and
 cleanup; they are not a target payload transfer mechanism.
+
+Active target role evidence and log directories are target-dominated
+helper-owned output, not host sideband state. The Docker harness prepares
+`target/evidence/<role>/` and `target/logs/<role>/` recursively for the
+target-local `ci-operator:ci-operator` identity before role helpers write to
+`/var/lib/loopforge/evidence` or `/var/log/loopforge`. Host-owned copies exist
+only under `host/`, such as clean backup snapshots.
 
 Target operations still install or update product-owned paths such as
 `/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
@@ -191,13 +205,18 @@ host files owned by container users, and Compose does not delete those
 bind-mounted directories, so `clean` is the explicit housekeeping command.
 
 `clean` verifies the selected run marker and operates only under the canonical
-repo-local generated run root. It removes only mutable generated runtime data:
-host rendered inputs and target SSH material, `target/helper-state/`,
+repo-local generated run root. It backs up retained outputs from
+`target/artifacts/exported/`, `host/evidence/`, `host/logs/`,
+`target/evidence/`, and `target/logs/` to
+`host/retained-output-backups/<timestamp>/`, then clears the active retained
+output directories for later run reuse. Backup snapshots are host-owned
+review artifacts; active target outputs are not converted to host ownership in
+place. It removes mutable generated runtime data: host rendered inputs and
+target SSH material, `target/helper-state/`,
 `target/product-homes/`, `target/artifacts/staging/`, `target/ldap/`, and
-`target/shared-jenkins-storage/`. It preserves
-`target/artifacts/exported/`, `target/evidence/`, and `target/logs/`. If the
-host user cannot remove container-owned files, `clean` may use a one-shot
-cleanup container mounted only to the validated run root.
+`target/shared-jenkins-storage/`. If the host user cannot remove
+container-owned files, `clean` may use a one-shot cleanup container mounted
+only to the validated run root.
 
 See `docs/docker-simulation-state-lifecycle.md` for the detailed fresh-run,
 resume/rerun, stale-container, `down`, and `clean` state rules.

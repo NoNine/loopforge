@@ -450,7 +450,7 @@ Produced outputs:
 - Role-local Jenkins controller evidence JSON under `JENKINS_EVIDENCE_DIR`.
 - A helper bounded log file under `JENKINS_LOG_DIR`.
 - In the shared Docker harness, canonical evidence under
-  `generated/simulation/docker/<run-id>/target/evidence/`.
+  `generated/simulation/docker/<run-id>/target/evidence/jenkins-controller/`.
 
 Evidence Contract fields:
 

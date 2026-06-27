@@ -92,12 +92,12 @@ the helper-visible payload directories after archive and checksum validation.
 
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/opt/gerrit-artifacts-bundle/` | Gerrit target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Gerrit bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
-| `/opt/gerrit-artifacts-bundle/gerrit/` | Gerrit target | Gerrit role helper | Root or delegated installer account before copy into `/srv/gerrit` | Readable by Gerrit helper | Gerrit WAR, plugins, templates, manifests, checksums | Must not include integration keys or secrets | Gerrit install consumes this path only |
-| `/opt/jenkins-artifacts-bundle/` | Jenkins controller target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Jenkins bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
-| `/opt/jenkins-artifacts-bundle/jenkins/` | Jenkins controller target | Jenkins controller role helper | Root or delegated installer account before copy into Jenkins home | Readable by Jenkins helper | Jenkins WAR, plugin manager, plugins, templates, manifests, checksums | Must not include Jenkins credentials or keys | Jenkins install consumes this path only |
-| `/opt/jenkins-agent-artifacts-bundle/` | Jenkins agent target | Artifact staging flow | Root or delegated installer account before role consumption | Readable by role helper after checksum verification | Extracted Jenkins agent bundle root | Non-secret bootstrap artifacts only | Checksum verification evidence must reference the staged payload |
-| `/opt/jenkins-agent-artifacts-bundle/jenkins-agent/` | Jenkins agent target | Jenkins agent role helper | Root or delegated installer account before copy into agent state | Readable by agent helper | Agent bootstrap files, templates, manifests, checksums | Must not include authorized keys or private keys | Agent install consumes this path only |
+| `/opt/gerrit-artifacts-bundle/` | Gerrit target | Artifact staging flow | Operator account and group after privileged placement; default example `ci-operator:ci-operator` | Readable by role helper after checksum verification | Extracted Gerrit bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
+| `/opt/gerrit-artifacts-bundle/gerrit/` | Gerrit target | Gerrit role helper | Operator account and group after privileged placement; default example `ci-operator:ci-operator` | Readable by Gerrit helper | Gerrit WAR, plugins, templates, manifests, checksums | Must not include integration keys or secrets | Gerrit install consumes this path only |
+| `/opt/jenkins-artifacts-bundle/` | Jenkins controller target | Artifact staging flow | Operator account and group after privileged placement; default example `ci-operator:ci-operator` | Readable by role helper after checksum verification | Extracted Jenkins bundle root | Non-secret application artifacts only | Checksum verification evidence must reference the staged payload |
+| `/opt/jenkins-artifacts-bundle/jenkins/` | Jenkins controller target | Jenkins controller role helper | Operator account and group after privileged placement; default example `ci-operator:ci-operator` | Readable by Jenkins helper | Jenkins WAR, plugin manager, plugins, templates, manifests, checksums | Must not include Jenkins credentials or keys | Jenkins install consumes this path only |
+| `/opt/jenkins-agent-artifacts-bundle/` | Jenkins agent target | Artifact staging flow | Operator account and group after privileged placement; default example `ci-operator:ci-operator` | Readable by role helper after checksum verification | Extracted Jenkins agent bundle root | Non-secret bootstrap artifacts only | Checksum verification evidence must reference the staged payload |
+| `/opt/jenkins-agent-artifacts-bundle/jenkins-agent/` | Jenkins agent target | Jenkins agent role helper | Operator account and group after privileged placement; default example `ci-operator:ci-operator` | Readable by agent helper | Agent bootstrap files, templates, manifests, checksums | Must not include authorized keys or private keys | Agent install consumes this path only |
 
 ## Docker Simulation Backing
 
@@ -115,6 +115,11 @@ generated/simulation/docker/<run-id>/
 | `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
 | `host/target-ssh/` | `/var/lib/loopforge/target-ssh` in target containers | Host-dominated | Host-generated target SSH identity, public key, and known hosts |
 | `host/validation-secrets/gerrit/` | `/var/lib/loopforge/validation-secrets` in Gerrit target | Host-dominated | Docker simulation-only validation secrets; host directory is `0700` |
+| `host/evidence/harness/` | Harness evidence output | Host-dominated | Harness checkpoint evidence |
+| `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs |
+| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence |
+| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs |
+| `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Host-owned backups of retained outputs before active dirs are cleared |
 | `target/helper-state/bundle-factory/evidence/` | `/var/lib/loopforge/evidence` in bundle factory | Target-dominated | Bundle-factory evidence |
 | `target/helper-state/bundle-factory/artifact-bundle-work/` | `/var/lib/loopforge/artifact-bundle-work` in bundle factory | Target-dominated | Bundle-factory workspaces |
 | `target/helper-state/gerrit/` | `/var/lib/loopforge` in Gerrit target | Target-dominated | Gerrit helper state |
@@ -129,23 +134,27 @@ generated/simulation/docker/<run-id>/
 | `target/product-homes/jenkins-agent/` | `/var/lib/jenkins-agent` in Jenkins agent target | Target-dominated | Docker-backed Jenkins agent home |
 | `target/artifacts/staging/<role>/` | Host-to-target transfer scratch | Target-dominated | Docker simulation staging scratch, not a product API |
 | `target/artifacts/exported/` | Operator-facing artifact export | Target-dominated | Exported archive handoff files and checksums |
-| `target/evidence/` | `/var/lib/loopforge/evidence` in target containers | Target-dominated | Retained Docker simulation evidence |
-| `target/logs/` | `/var/log/loopforge` in target containers | Target-dominated | Retained bounded Docker simulation logs |
+| `target/evidence/<role>/` | `/var/lib/loopforge/evidence` in one target container | Target-dominated | Retained role-local Docker simulation evidence, recursively helper-owned while active |
+| `target/logs/<role>/` | `/var/log/loopforge` in one target container | Target-dominated | Retained role-local bounded Docker simulation logs, recursively helper-owned while active |
 
 Docker simulation host directories exist for operator review, debugging,
 evidence collection, and cleanup. They are not target payload transfer
 mechanisms unless a simulation doc explicitly labels the mechanism as a
 simulation-only waiver, such as Docker `cp` during artifact staging.
 Container-visible helper-owned paths use the target or bundle-factory
-operator account, default example `ci-operator:ci-operator`. Content
-dominance describes who contributes the durable meaningful content, not
-POSIX ownership or initial directory creation. Host-side generated backing
-paths use the local host account that runs the simulation harness; this host
-account is not required to be named `ci-operator`.
+operator account, default example `ci-operator:ci-operator`, recursively for
+the active helper-owned tree. Content dominance describes who contributes the
+durable meaningful content, not POSIX ownership or initial directory
+creation.
+Host-side generated backing paths use the local host account that runs the simulation
+harness; this host account is not required to be named `ci-operator`.
 
-Docker `clean` removes mutable generated runtime data under `host/` and
-`target/` for the selected run root. It preserves
-`target/artifacts/exported/`, `target/evidence/`, and `target/logs/`.
+Docker `clean` backs up retained outputs to
+`host/retained-output-backups/<timestamp>/`, whose copied contents are
+host-owned review artifacts. It clears active retained output directories and
+removes mutable generated runtime data under `host/` and `target/` for the
+selected run root. `clean` must not convert active target-owned outputs into
+host-owned outputs in place.
 
 Evidence produced from Docker or VM simulation must be labeled as simulation
 evidence and must not imply `target-deployment` acceptance.

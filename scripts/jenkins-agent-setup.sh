@@ -78,6 +78,10 @@ json_quote() {
   printf '%s\n' "$out"
 }
 
+shell_quote() {
+  printf '%q' "${1:?value required}"
+}
+
 sha256_file() {
   local file
   file="${1:?file required}"
@@ -422,6 +426,52 @@ write_text_file() {
   printf '%s\n' "$content" >"$target"
 }
 
+run_with_privilege() {
+  local command
+  command="${1:?command required}"
+  if [ "$(id -u)" -eq 0 ]; then
+    sh -c "$command"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -n sh -c "$command"
+  else
+    die "Missing root or passwordless sudo for Jenkins agent privileged operation"
+  fi
+}
+
+prepare_agent_state_dirs() {
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR") $(shell_quote "$JENKINS_AGENT_STATE_DIR/bootstrap") $(shell_quote "$JENKINS_AGENT_STATE_DIR/templates") $(shell_quote "$JENKINS_AGENT_STATE_DIR/state")"
+}
+
+prepare_agent_remote_fs() {
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_REMOTE_FS") && chown -R $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_REMOTE_FS")"
+}
+
+install_file_as_agent() {
+  local source target mode target_dir
+  source="${1:?source required}"
+  target="${2:?target required}"
+  mode="${3:?mode required}"
+  target_dir="$(dirname "$target")"
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$target_dir") && install -m $(shell_quote "$mode") -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$source") $(shell_quote "$target")"
+}
+
+copy_tree_as_agent() {
+  local source target
+  source="${1:?source required}"
+  target="${2:?target required}"
+  run_with_privilege "rm -rf $(shell_quote "$target") && install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$target") && cp -R $(shell_quote "$source/.") $(shell_quote "$target/") && chown -R $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$target")"
+}
+
+write_text_file_as_agent() {
+  local target content tmp
+  target="${1:?target required}"
+  content="${2:?content required}"
+  tmp="$(mktemp)"
+  printf '%s\n' "$content" >"$tmp"
+  install_file_as_agent "$tmp" "$target" 0644
+  rm -f "$tmp"
+}
+
 render_template() {
   local source target text
   source="${1:?source required}"
@@ -440,6 +490,16 @@ render_template() {
   text="${text//\{\{JENKINS_AGENT_EXECUTOR_CONTEXT\}\}/$JENKINS_AGENT_EXECUTOR_CONTEXT}"
   mkdir -p "$(dirname "$target")"
   printf '%s\n' "$text" >"$target"
+}
+
+render_template_as_agent() {
+  local source target tmp
+  source="${1:?source required}"
+  target="${2:?target required}"
+  tmp="$(mktemp)"
+  render_template "$source" "$tmp"
+  install_file_as_agent "$tmp" "$target" 0644
+  rm -f "$tmp"
 }
 
 assert_no_unresolved_placeholders() {
@@ -659,13 +719,13 @@ cmd_install() {
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
-  mkdir -p "$JENKINS_AGENT_STATE_DIR/bootstrap" "$JENKINS_AGENT_STATE_DIR/templates" "$JENKINS_AGENT_STATE_DIR/state"
-  cp "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt"
-  cp "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest" "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest"
-  cp -R "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/." "$JENKINS_AGENT_STATE_DIR/templates/"
-  cp "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_AGENT_STATE_DIR/artifact-manifest.txt"
-  cp "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_AGENT_STATE_DIR/artifact-checksums.sha256"
-  write_text_file "$JENKINS_AGENT_STATE_DIR/state/install.status" "installed"
+  prepare_agent_state_dirs
+  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644
+  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest" "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest" 0644
+  copy_tree_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates" "$JENKINS_AGENT_STATE_DIR/templates"
+  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_AGENT_STATE_DIR/artifact-manifest.txt" 0644
+  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_AGENT_STATE_DIR/artifact-checksums.sha256" 0644
+  write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/install.status" "installed"
   printf 'status=pass command=install state_dir=%s staged=%s\n' "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_STAGED_ARTIFACT_DIR"
 }
 
@@ -680,11 +740,9 @@ ensure_runtime_account_accepts_publickey() {
   shadow_marker="$(awk -F: -v user="$JENKINS_AGENT_ACCOUNT" '$1 == user {print $2}' /etc/shadow 2>/dev/null || true)"
   case "$shadow_marker" in
     ""|"!"|"!!"|"\!"*)
-      if command -v usermod >/dev/null 2>&1; then
-        usermod -p '*' "$JENKINS_AGENT_ACCOUNT"
-      else
+      command -v usermod >/dev/null 2>&1 ||
         die "Runtime account $JENKINS_AGENT_ACCOUNT is locked and usermod is unavailable"
-      fi
+      run_with_privilege "usermod -p '*' $(shell_quote "$JENKINS_AGENT_ACCOUNT")"
       ;;
   esac
 }
@@ -699,10 +757,12 @@ validate_os_sshd_service() {
   log_file="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
   sshd_config="$JENKINS_AGENT_STATE_DIR/etc/sshd_config"
   sshd_bin="$(command -v sshd)"
-  mkdir -p "$JENKINS_AGENT_STATE_DIR/run" "$JENKINS_AGENT_STATE_DIR/logs" /run/sshd /var/run/sshd
-  : >"$log_file"
-  ssh-keygen -A >>"$log_file" 2>&1
-  cat >"$sshd_config" <<EOF
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/run") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") && install -d -m 0755 /run/sshd /var/run/sshd && : >$(shell_quote "$log_file") && chown $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$log_file")"
+  run_with_privilege "ssh-keygen -A >>$(shell_quote "$log_file") 2>&1"
+  local tmp_config tmp_log
+  tmp_config="$(mktemp)"
+  tmp_log="$(mktemp)"
+  cat >"$tmp_config" <<EOF
 Port $JENKINS_AGENT_SSH_PORT
 ListenAddress 0.0.0.0
 HostKey /etc/ssh/ssh_host_ed25519_key
@@ -717,6 +777,8 @@ UsePAM no
 LogLevel VERBOSE
 Subsystem sftp internal-sftp
 EOF
+  install_file_as_agent "$tmp_config" "$sshd_config" 0644
+  rm -f "$tmp_config"
   {
     printf 'timestamp=%s\n' "$(iso_timestamp_utc)"
     printf 'service=os-sshd\n'
@@ -727,9 +789,12 @@ EOF
     printf 'remote_fs=%s\n' "$JENKINS_AGENT_REMOTE_FS"
     printf 'sshd_config=%s\n' "$sshd_config"
     printf 'ownership=target-os-control-plane\n'
-  } >>"$log_file"
-  "$sshd_bin" -t -f "$sshd_config" >>"$log_file" 2>&1 || die "sshd configuration validation failed; log=$log_file"
-  pgrep -x sshd | sed -n '1p' >"$pidfile" || die "Target OS sshd is not running on $JENKINS_AGENT_HOST:$JENKINS_AGENT_SSH_PORT"
+  } >"$tmp_log"
+  run_with_privilege "cat $(shell_quote "$tmp_log") >>$(shell_quote "$log_file")"
+  rm -f "$tmp_log"
+  run_with_privilege "$(shell_quote "$sshd_bin") -t -f $(shell_quote "$sshd_config") >>$(shell_quote "$log_file") 2>&1" || die "sshd configuration validation failed; log=$log_file"
+  pid="$(pgrep -x sshd | sed -n '1p')" || die "Target OS sshd is not running on $JENKINS_AGENT_HOST:$JENKINS_AGENT_SSH_PORT"
+  write_text_file_as_agent "$pidfile" "$pid"
 }
 
 cmd_configure_runtime() {
@@ -745,15 +810,16 @@ cmd_configure_runtime() {
   check_os_dependency_expectations
   ensure_runtime_account_accepts_publickey
   ensure_dirs
-  mkdir -p "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_STATE_DIR/etc" "$JENKINS_AGENT_STATE_DIR/state"
-  chown -R "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_REMOTE_FS"
+  prepare_agent_remote_fs
+  prepare_agent_state_dirs
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc")"
   account_home="$(runtime_account_home)"
   [ -n "$account_home" ] || die "Could not determine home directory for $JENKINS_AGENT_ACCOUNT"
-  render_template "$JENKINS_AGENT_STATE_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
-  render_template "$JENKINS_AGENT_STATE_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
+  render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
+  render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
-  write_text_file "$JENKINS_AGENT_STATE_DIR/state/runtime.status" \
+  write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/runtime.status" \
     "account=$JENKINS_AGENT_ACCOUNT group=$JENKINS_AGENT_GROUP home=$account_home remote_fs=$JENKINS_AGENT_REMOTE_FS node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS ssh_port=$JENKINS_AGENT_SSH_PORT executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT"
   validate_os_sshd_service
   check_ssh_reachability >/dev/null
@@ -781,6 +847,19 @@ check_remote_fs_ownership() {
   [ "$group" = "$JENKINS_AGENT_GROUP" ] || die "Remote filesystem group mismatch: expected $JENKINS_AGENT_GROUP got $group"
 }
 
+sshd_process_running() {
+  local pid args
+  pid="${1:-}"
+  case "$pid" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  [ -n "$args" ] || return 1
+  printf '%s\n' "$args" | grep -Eq '(^|/| )sshd([: ]|$)' || return 1
+}
+
 check_runtime_readiness() {
   verify_staged_artifacts
   validate_agent_render_inputs
@@ -792,7 +871,7 @@ check_runtime_readiness() {
   check_runtime_account
   check_remote_fs_ownership
   [ -f "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" ] || die "Target OS sshd pid marker is missing"
-  kill -0 "$(cat "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid")" 2>/dev/null ||
+  sshd_process_running "$(cat "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid")" ||
     die "Target OS sshd process is not running"
   check_ssh_reachability >/dev/null
 }

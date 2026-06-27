@@ -462,8 +462,8 @@ validate_inputs() {
       die "JENKINS_SHARED_GROUP_GID must be numeric"
       ;;
   esac
-  [ "$JENKINS_SHARED_GROUP_GID" -ge 1 ] && [ "$JENKINS_SHARED_GROUP_GID" -le 60000 ] ||
-    die "JENKINS_SHARED_GROUP_GID must be between 1 and 60000"
+  [ "$JENKINS_SHARED_GROUP_GID" -ge 1 ] && [ "$JENKINS_SHARED_GROUP_GID" -le 65533 ] ||
+    die "JENKINS_SHARED_GROUP_GID must be between 1 and 65533"
   validate_shared_storage_path JENKINS_SHARED_STORAGE_PATH "$JENKINS_SHARED_STORAGE_PATH"
   validate_simple_token JENKINS_GERRIT_CREDENTIAL_ID "$JENKINS_GERRIT_CREDENTIAL_ID"
   validate_simple_token GERRIT_TRIGGER_SERVER_NAME "$GERRIT_TRIGGER_SERVER_NAME"

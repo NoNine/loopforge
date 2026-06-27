@@ -299,8 +299,8 @@ Install the Gerrit artifact files:
 
 ```bash
 sudo install -d -m 0750 /srv/gerrit
-sudo groupadd --system gerrit || true
-sudo useradd --system --gid gerrit --home-dir /srv/gerrit --shell /bin/bash gerrit || true
+sudo groupadd --gid 61010 gerrit || true
+sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit || true
 sudo chown gerrit:gerrit /srv/gerrit
 sudo install -d -o gerrit -g gerrit -m 0755 /opt/gerrit
 sudo cp /opt/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war

@@ -23,16 +23,17 @@ RUN printf 'public_internet_fallback=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LA
       rsync \
       sudo \
       tar \
+      tree \
       unzip \
       wget && \
-    groupadd --system gerrit && \
-    useradd --system --gid gerrit --home-dir /srv/gerrit --shell /bin/bash gerrit && \
-    groupadd --system jenkins && \
-    useradd --system --gid jenkins --home-dir /var/lib/jenkins --shell /bin/bash jenkins && \
-    groupadd --system jenkins-agent && \
-    useradd --system --gid jenkins-agent --home-dir /var/lib/jenkins-agent --shell /bin/bash jenkins-agent && \
-    groupadd --system ci-operator && \
-    useradd --create-home --gid ci-operator --home-dir /home/ci-operator --shell /bin/bash ci-operator && \
+    groupadd --gid 61010 gerrit && \
+    useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit && \
+    groupadd --gid 61020 jenkins && \
+    useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --shell /bin/bash jenkins && \
+    groupadd --gid 61030 jenkins-agent && \
+    useradd --uid 61030 --gid 61030 --home-dir /var/lib/jenkins-agent --shell /bin/bash jenkins-agent && \
+    groupadd --gid 61000 ci-operator && \
+    useradd --uid 61000 --create-home --gid 61000 --home-dir /home/ci-operator --shell /bin/bash ci-operator && \
     printf '%s\n' 'ci-operator ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/harness-ci-operator && \
     chmod 0440 /etc/sudoers.d/harness-ci-operator && \
     visudo -cf /etc/sudoers.d/harness-ci-operator && \

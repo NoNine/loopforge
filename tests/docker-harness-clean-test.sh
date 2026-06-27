@@ -18,6 +18,45 @@ printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
   *"compose down --remove-orphans"*) exit 0 ;;
+  run\ --rm\ --mount*)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --mount)
+          mount_spec="$2"
+          shift 2
+          ;;
+        ubuntu:24.04)
+          shift
+          break
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    source_path=""
+    IFS=',' read -r _ source_part _ <<EOF_MOUNT
+${mount_spec:-}
+EOF_MOUNT
+    case "$source_part" in
+      source=*) source_path="${source_part#source=}" ;;
+    esac
+    [ -n "$source_path" ] || exit 1
+    [ "${1:-}" = "sh" ] || exit 1
+    [ "${2:-}" = "-c" ] || exit 1
+    script="$3"
+    if printf '%s\n' "$script" | grep -Fq 'backup_root="/cleanup-root/host/retained-output-backups/$backup_name"'; then
+      backup_name="$5"
+      backup_root="$source_path/host/retained-output-backups/$backup_name"
+      mkdir -p "$backup_root/target/artifacts" "$backup_root/host" "$backup_root/target"
+      [ ! -e "$source_path/target/artifacts/exported" ] || cp -a "$source_path/target/artifacts/exported" "$backup_root/target/artifacts/exported"
+      [ ! -e "$source_path/host/evidence" ] || cp -a "$source_path/host/evidence" "$backup_root/host/evidence"
+      [ ! -e "$source_path/host/logs" ] || cp -a "$source_path/host/logs" "$backup_root/host/logs"
+      [ ! -e "$source_path/target/evidence" ] || cp -a "$source_path/target/evidence" "$backup_root/target/evidence"
+      [ ! -e "$source_path/target/logs" ] || cp -a "$source_path/target/logs" "$backup_root/target/logs"
+      rm -rf -- "$source_path/target/artifacts/exported" "$source_path/host/evidence" "$source_path/host/logs" "$source_path/target/evidence" "$source_path/target/logs"
+    fi
+    ;;
   *) exit 0 ;;
 esac
 SH
@@ -42,20 +81,28 @@ mkdir -p \
   "$run_dir/target/product-homes/gerrit" \
   "$run_dir/target/artifacts/staging/gerrit" \
   "$run_dir/target/artifacts/exported/gerrit" \
-  "$run_dir/target/evidence" \
-  "$run_dir/target/logs"
+  "$run_dir/host/evidence/harness" \
+  "$run_dir/host/logs/harness" \
+  "$run_dir/target/evidence/gerrit" \
+  "$run_dir/target/logs/gerrit"
 printf 'state\n' >"$run_dir/target/helper-state/runtime/file"
 printf 'product\n' >"$run_dir/target/product-homes/gerrit/file"
 printf 'stage\n' >"$run_dir/target/artifacts/staging/gerrit/file"
 printf 'artifact\n' >"$run_dir/target/artifacts/exported/gerrit/file"
-printf 'evidence\n' >"$run_dir/target/evidence/file"
-printf 'log\n' >"$run_dir/target/logs/file"
+printf 'evidence\n' >"$run_dir/host/evidence/harness/file"
+printf 'log\n' >"$run_dir/host/logs/harness/file"
+printf 'role-evidence\n' >"$run_dir/target/evidence/gerrit/file"
+printf 'role-log\n' >"$run_dir/target/logs/gerrit/file"
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" clean >"$tmp_dir/clean.out"
 
-grep -Fq 'clean: removed runtime data preserved target/artifacts/exported evidence logs cleanup=host' "$tmp_dir/clean.out"
+grep -Eq 'clean: removed runtime data backup=clean-[0-9]{8}T[0-9]{6}Z cleanup=host' "$tmp_dir/clean.out"
+if grep -Eq '/.*/host/retained-output-backups/clean-[0-9]{8}T[0-9]{6}Z' "$tmp_dir/clean.out"; then
+  printf 'clean terminal summary must not print absolute backup path\n' >&2
+  exit 1
+fi
 grep -Fq 'down --remove-orphans' "$calls"
 [ ! -e "$run_dir/target/helper-state" ] || {
   printf 'clean should remove state\n' >&2
@@ -69,12 +116,32 @@ grep -Fq 'down --remove-orphans' "$calls"
   printf 'clean should remove staging\n' >&2
   exit 1
 }
-grep -Fq 'artifact' "$run_dir/target/artifacts/exported/gerrit/file"
-grep -Fq 'evidence' "$run_dir/target/evidence/file"
-[ -d "$run_dir/target/logs" ] || {
-  printf 'clean should preserve logs directory\n' >&2
+backup_dir="$(find "$run_dir/host/retained-output-backups" -mindepth 1 -maxdepth 1 -type d -name 'clean-*' -print | sort | tail -1)"
+[ -n "$backup_dir" ] || {
+  printf 'clean should create a retained output backup\n' >&2
   exit 1
 }
+grep -Fq 'artifact' "$backup_dir/target/artifacts/exported/gerrit/file"
+grep -Fq 'evidence' "$backup_dir/host/evidence/harness/file"
+grep -Fq 'log' "$backup_dir/host/logs/harness/file"
+grep -Fq 'role-evidence' "$backup_dir/target/evidence/gerrit/file"
+grep -Fq 'role-log' "$backup_dir/target/logs/gerrit/file"
+[ -d "$run_dir/target/logs/gerrit" ] && [ -d "$run_dir/target/evidence/gerrit" ] || {
+  printf 'clean should recreate active target evidence/log dirs\n' >&2
+  exit 1
+}
+[ ! -e "$run_dir/target/artifacts/exported/gerrit/file" ] || {
+  printf 'clean should clear active exported artifact contents\n' >&2
+  exit 1
+}
+[ ! -e "$run_dir/target/evidence/gerrit/file" ] || {
+  printf 'clean should clear active target evidence contents\n' >&2
+  exit 1
+}
+if grep -Fq 'chown -R "$uid:$gid" "$path"' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'clean must not normalize retained output ownership in place\n' >&2
+  exit 1
+fi
 
 set +e
 PATH="$fake_bin:$PATH" \

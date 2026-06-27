@@ -90,6 +90,11 @@ Inspect only bounded output:
 - `tail -40 "$log"` or a similarly small bounded tail.
 - Specific failure snippets needed to explain the next action.
 
+Terminal success summaries must stay short and scan-friendly. Do not print
+absolute generated paths when a basename, run ID, snapshot name, or bounded
+`log=`/`evidence=` reference is enough. Keep full paths in generated
+evidence/log files when operators need traceability.
+
 For long-running remote verification, poll sparsely after confirming the
 process is alive and logs are being written. Each poll should inspect only
 process state, exit code, log size, phase/error markers, and bounded failure
@@ -99,6 +104,10 @@ For Docker simulation in this workspace, assume `docker-compose` v1 is
 available. Do not run separate Compose discovery probes before every Docker
 simulation; let `simulation/docker/simulate.sh` perform its own internal
 Compose selection unless a failure specifically points at Compose.
+
+Never repair a stale or inconsistent Docker simulation run in place. Use a
+fresh `HARNESS_RUN_ID`/generated run root for new validation; run `down` and
+`clean` for the old run first.
 
 ## Remote Access Safety
 

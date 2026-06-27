@@ -77,8 +77,11 @@ Docker uses these subpath patterns:
 | Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
 | Staged artifacts | `generated/simulation/docker/<run-id>/target/artifacts/staging/<role>/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
-| Evidence | `generated/simulation/docker/<run-id>/target/evidence/` |
-| Bounded logs | `generated/simulation/docker/<run-id>/target/logs/` |
+| Harness evidence | `generated/simulation/docker/<run-id>/host/evidence/harness/` |
+| Harness bounded logs | `generated/simulation/docker/<run-id>/host/logs/harness/` |
+| Integration evidence and logs | `generated/simulation/docker/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
+| Target role evidence | `generated/simulation/docker/<run-id>/target/evidence/<role>/` |
+| Target role bounded logs | `generated/simulation/docker/<run-id>/target/logs/<role>/` |
 
 `<run-id>` is a unique run identifier, such as a UTC timestamp plus a short
 label. `<environment>` is one of `bundle-factory`, `ldap`, `gerrit`,

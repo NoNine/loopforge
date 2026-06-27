@@ -208,6 +208,14 @@ Lifecycle phases are strict, single-purpose operations. Their contract is:
 - Phase success means the phase completed its own job, not that another phase
   was replayed or repaired implicitly.
 
+Target-environment operations run as the operator account whenever practical.
+The operator account is the default target control-plane identity for helper
+commands, staging, validation, and evidence collection. Root or delegated
+privilege is used only for the narrow OS operations that require it, such as
+package installation, protected path creation, service management, or
+ownership changes. Runtime accounts own and run their services; they are not
+the default orchestration identity.
+
 ## Standard Interfaces
 
 Logical environments communicate through declared interfaces. Utilities must
