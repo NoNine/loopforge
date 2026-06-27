@@ -26,20 +26,33 @@ roles in this package are accounts.
 
 | Account | Source | Purpose |
 | --- | --- | --- |
-| Operator account | Local OS account on operator, bundle-factory, and target environments | Runs orchestration, SSH access, helper commands, privileged operations, and evidence collection. |
+| Operator account | Local OS account on operator, bundle-factory, and target environments | Runs orchestration, SSH access, helper commands, delegated privileged operations, and evidence collection. |
 
 The operator account is configurable through `LOOPFORGE_OPERATOR_ACCOUNT`.
 The operator group is configurable through `LOOPFORGE_OPERATOR_GROUP`, which
 defaults to the selected operator account. The default example account and
 group are `ci-operator:ci-operator` for all modes.
 
+`root` is strictly forbidden as a Loopforge account value or workflow
+identity. Do not configure `root` as the operator account, a runtime account,
+an application admin account, an integration account, an LDAP bind account, a
+test account, or a direct SSH login identity for Loopforge operations. The
+root superuser is an OS-reserved privilege boundary, not a package role.
+
 The operator account is not a Gerrit or Jenkins runtime account, application
 admin account, integration account, LDAP bind account, or test user account.
 Target-environment operations should run as the operator account whenever
 practical, including helper commands, staging, validation, and evidence
-collection. Root or delegated privilege is used only for narrow OS operations
-that require it, and service runtime accounts remain service owners rather
-than orchestration identities.
+collection. Delegated privilege from the operator account is used only for
+narrow OS operations that require it, and service runtime accounts remain
+service owners rather than orchestration identities.
+
+Root-owned system files may exist only where the host OS, package manager, or
+service manager requires protected custody, for example a `root:root 0600`
+systemd environment file. That ownership is an OS custody detail and does not
+make root a Loopforge account, login identity, helper execution identity, or
+runtime identity.
+
 In Docker simulation, the target-local `ci-operator` OS account has
 passwordless sudo for simulation orchestration and privileged helper
 operations. Logging into a Docker target environment as `ci-operator` does
@@ -140,12 +153,13 @@ is directory lookup, and it must not grant application administration,
 runtime ownership, or Gerrit voting rights.
 
 The operator account runs orchestration, SSH access, helper commands, and
-evidence collection in all modes. In Docker simulation, the default example
-target-local `ci-operator` account has passwordless sudo for orchestration
-and privileged helper operations. The Docker target `ci-operator` identity is
-not mapped to the local host username, UID, or GID. Keeping it separate makes
-operator control-plane access distinct from product accounts and prevents
-evidence collection access from being treated as Gerrit or Jenkins authority.
+evidence collection in all modes. It is never `root`. In Docker simulation,
+the default example target-local `ci-operator` account has passwordless sudo
+for orchestration and privileged helper operations. The Docker target
+`ci-operator` identity is not mapped to the local host username, UID, or GID.
+Keeping it separate makes operator control-plane access distinct from product
+accounts and prevents evidence collection access from being treated as Gerrit
+or Jenkins authority.
 
 ## Credential Custody
 

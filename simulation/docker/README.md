@@ -96,8 +96,10 @@ The Docker target image also includes the default example target-local
 passwordless sudo for simulation orchestration and privileged helper
 operations. The operator account does not own `/srv/gerrit`,
 `/var/lib/jenkins`, or `/var/lib/jenkins-agent` and is not a Gerrit, Jenkins
-controller, or Jenkins agent runtime account. Root remains available for
-privileged container operations where the harness needs it.
+controller, or Jenkins agent runtime account. The harness may use
+container-internal delegated privilege for protected OS operations, but root
+is not a Loopforge account, helper execution identity, runtime identity, or
+supported login identity.
 The local host account that invokes `simulate.sh` may have any site-local name
 and is not renamed, mapped, or required to be `ci-operator`.
 

@@ -35,7 +35,9 @@ Assumptions:
 - Jenkins exposes a direct service port on a trusted/internal network.
 - Staging can use an internet-connected Ubuntu 24.04 machine to prepare
   reviewed Jenkins controller application artifacts.
-- Production host commands are run with `sudo` or equivalent delegated administrator privileges unless noted.
+- Production host commands are run by the operator account with `sudo` or
+  equivalent delegated administrator privileges unless noted. Do not use
+  `root` as a Loopforge account or direct login identity.
 
 Recommended versions as of 2026-06-09:
 
@@ -44,7 +46,13 @@ Recommended versions as of 2026-06-09:
 
 Production warning: direct HTTP service ports are documented because that is the selected deployment model. For production environments outside a trusted network, terminate TLS with a reverse proxy or enterprise load balancer before exposing Jenkins to users.
 
-Privilege warning: a production Jenkins install cannot be completed by an unprivileged user alone. Package installation, `/etc`, `/opt`, `/var/lib/jenkins`, file ownership, systemd overrides, service restarts, and root-owned secret files require root or delegated sudo.
+Privilege warning: a production Jenkins install cannot be completed by an
+unprivileged user alone. Package installation, `/etc`, `/opt`,
+`/var/lib/jenkins`, file ownership, systemd overrides, service restarts, and
+protected system secret files require delegated administrator privilege from
+the operator account. Root may own OS-reserved files, but root is not a
+Loopforge account, helper execution identity, runtime identity, or supported
+direct login identity.
 
 Manual authority: this manual is the reference procedure. It intentionally
 contains only native OS and Jenkins operations. Do not add repository
@@ -124,7 +132,9 @@ Ask an administrator to perform or delegate these production-host tasks:
 - Create and own `/var/lib/jenkins`, `/var/lib/jenkins/plugins`,
   `/var/lib/jenkins/casc`, and any staged `/opt/jenkins-artifacts-bundle`
   content as documented.
-- Create `/etc/jenkins-casc.env`, set `0600`, and keep it owned by `root:root`.
+- Create `/etc/jenkins-casc.env`, set `0600`, and keep it owned by
+  `root:root` as protected system-file custody. This does not make root a
+  Loopforge account or workflow identity.
 - Create or edit the Jenkins systemd override, reload systemd, and start, stop, restart, or enable Jenkins.
 - Run any `chown`, `chmod`, `apt`, `dpkg`, `systemctl`, or writes under `/etc`, `/opt`, or `/var/lib`.
 
@@ -569,7 +579,8 @@ Jenkins listens internally on plain HTTP.
 
 If `rootDN` is set, `userSearchBase` and `groupSearchBase` should normally be relative to that root, for example `ou=people` and `ou=groups`. If your organization provides absolute base DNs such as `ou=people,dc=example,dc=internal`, either remove `rootDN` or convert the search bases to relative values. Mixing `rootDN` with absolute search bases can make LDAP searches target the wrong DN.
 
-Store secrets in an environment file readable only by root:
+Store secrets in a protected system environment file readable only by the
+service manager:
 
 ```bash
 cat > /etc/jenkins-casc.env <<'EOF'

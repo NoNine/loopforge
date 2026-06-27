@@ -143,7 +143,7 @@ taxonomy and places each account in the end-to-end system.
 | Jenkins Gerrit integration account | Jenkins controller runtime and Gerrit service | Gerrit service account used by Jenkins for Gerrit SSH authentication, `stream-events`, and `Verified` voting. |
 | Test user account | Verification utility | LDAP-backed human-style account used to prove login/change workflow and disposable Gerrit change behavior. |
 | LDAP bind account | Gerrit and Jenkins services | Read-only LDAP service account used for directory search. |
-| Operator account | Human operator, machine runner, and simulation harness | Configurable local OS account for orchestration, SSH access, helper commands, privileged operations, and evidence collection. Default example is `ci-operator`. |
+| Operator account | Human operator, machine runner, and simulation harness | Configurable local OS account for orchestration, SSH access, helper commands, delegated privileged operations, and evidence collection. Default example is `ci-operator`; `root` is forbidden. |
 
 Credential custody rules from `docs/account-model.md` apply throughout the
 system:
@@ -210,9 +210,10 @@ Lifecycle phases are strict, single-purpose operations. Their contract is:
 
 Target-environment operations run as the operator account whenever practical.
 The operator account is the default target control-plane identity for helper
-commands, staging, validation, and evidence collection. Root or delegated
-privilege is used only for the narrow OS operations that require it, such as
-package installation, protected path creation, service management, or
+commands, staging, validation, and evidence collection. Direct root login or
+root as a workflow identity is not supported. Delegated privilege from the
+operator account is used only for the narrow OS operations that require it,
+such as package installation, protected path creation, service management, or
 ownership changes. Runtime accounts own and run their services; they are not
 the default orchestration identity.
 

@@ -9,6 +9,10 @@ Keep the v1 product boundary clear:
 - v1 does not support offline Ubuntu dependency bundles.
 - Public internet fallback on target hosts is simulation-only and must be
   labeled as such in docs, logs, and verification summaries.
+- `root` is forbidden as a Loopforge account or direct login identity. When
+  privileged target operations are unavoidable, document them as delegated
+  privilege from the operator account; root-owned OS custody is not a
+  Loopforge account role.
 
 ## Commit Messages
 

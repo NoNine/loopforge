@@ -32,8 +32,9 @@ Assumptions:
 - The build agent exposes SSH only on a trusted/internal network.
 - Staging can use an internet-connected Ubuntu 24.04 machine to prepare
   reviewed Jenkins agent application artifacts.
-- Production host commands are run with `sudo` or equivalent delegated
-  administrator privileges unless noted.
+- Production host commands are run by the operator account with `sudo` or
+  equivalent delegated administrator privileges unless noted. Do not use
+  `root` as a Loopforge account or direct login identity.
 
 Recommended versions as of 2026-06-09:
 
@@ -46,8 +47,10 @@ built-in node at zero executors and provide build capacity through agents.
 
 Privilege warning: agent setup cannot be completed by an unprivileged user
 alone. Package installation, local runtime accounts, SSH service control, and
-remote filesystem ownership require root or delegated sudo on the build
-server.
+remote filesystem ownership require delegated administrator privilege from
+the operator account on the build server. Root may own OS-reserved files, but
+root is not a Loopforge account, helper execution identity, runtime identity,
+or supported direct login identity.
 
 Manual authority: this manual is the reference procedure. It intentionally
 contains only native OS, OpenSSH, and Jenkins UI/application operations. Do not

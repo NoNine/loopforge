@@ -59,9 +59,10 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 - `stage-artifacts` verifies the archive checksum, extracts to the target
   extraction root, and verifies the bundle checksum files before service
   mutation.
-- Target extraction may require root or delegated privilege for placement
-  under `/opt`, but the extracted bundle tree must be handed to the operator
-  account and made readable/traversable before role helpers consume it.
+- Target extraction may require delegated privilege from the operator account
+  for placement under `/opt`, but the extracted bundle tree must be handed to
+  the operator account and made readable/traversable before role helpers
+  consume it.
 - Role helpers consume the extracted payload directory only.
 - Helper-owned generated state, runtime inputs, staging handoff, evidence
   inputs, and bounded logs follow `docs/directory-model.md`.
