@@ -203,7 +203,8 @@ print_env_template() {
 }
 
 ensure_dirs() {
-  mkdir -p "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_EVIDENCE_DIR" "$JENKINS_AGENT_LOG_DIR"
+  run_with_privilege "install -d -m 0750 -o $(shell_quote "$LOOPFORGE_OPERATOR_ACCOUNT") -g $(shell_quote "$LOOPFORGE_OPERATOR_GROUP") $(shell_quote "$JENKINS_AGENT_EVIDENCE_DIR") $(shell_quote "$JENKINS_AGENT_LOG_DIR")"
+  prepare_agent_state_dirs
 }
 
 for_each_csv_value() {
@@ -441,6 +442,11 @@ run_with_privilege() {
 
 prepare_agent_state_dirs() {
   run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR") $(shell_quote "$JENKINS_AGENT_STATE_DIR/bootstrap") $(shell_quote "$JENKINS_AGENT_STATE_DIR/templates") $(shell_quote "$JENKINS_AGENT_STATE_DIR/state")"
+}
+
+reset_agent_state_for_install() {
+  run_with_privilege "rm -rf -- $(shell_quote "$JENKINS_AGENT_STATE_DIR/bootstrap") $(shell_quote "$JENKINS_AGENT_STATE_DIR/templates") $(shell_quote "$JENKINS_AGENT_STATE_DIR/state") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") $(shell_quote "$JENKINS_AGENT_STATE_DIR/run") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/artifact-manifest.txt") $(shell_quote "$JENKINS_AGENT_STATE_DIR/artifact-checksums.sha256")"
+  prepare_agent_state_dirs
 }
 
 prepare_agent_remote_fs() {
@@ -756,11 +762,11 @@ cmd_install() {
   load_env normal
   require_env_values
   validate_agent_render_inputs
-  check_agent_runtime_account_readiness
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
-  prepare_agent_state_dirs
+  check_agent_runtime_account_readiness
+  reset_agent_state_for_install
   install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644
   install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest" "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest" 0644
   copy_tree_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates" "$JENKINS_AGENT_STATE_DIR/templates"
@@ -773,6 +779,9 @@ cmd_install() {
 check_agent_runtime_account_readiness() {
   validate_agent_remote_fs
   require_runtime_account_home "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_NATIVE_REMOTE_FS" "Jenkins agent"
+  if [ ! -d "$JENKINS_AGENT_NATIVE_REMOTE_FS" ]; then
+    prepare_agent_remote_fs
+  fi
   require_product_home_ownership "$JENKINS_AGENT_NATIVE_REMOTE_FS" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "Jenkins agent"
 }
 

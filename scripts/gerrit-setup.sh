@@ -156,16 +156,14 @@ assert_no_artifact_key_material() {
 }
 
 load_env_file() {
-  local file prior_ldap_bind_password_file prior_ldap_bind_password
+  local file prior_ldap_bind_password
   file="${env_file:-$default_env_file}"
   [ -f "$file" ] || die "Missing env file: $file"
-  prior_ldap_bind_password_file="${LDAP_BIND_PASSWORD_FILE-__UNSET__}"
   prior_ldap_bind_password="${LDAP_BIND_PASSWORD-__UNSET__}"
   set -a
   # shellcheck disable=SC1090
   . "$file"
   set +a
-  prefer_existing_reviewed_secret LDAP_BIND_PASSWORD_FILE "$prior_ldap_bind_password_file"
   prefer_existing_reviewed_secret LDAP_BIND_PASSWORD "$prior_ldap_bind_password"
 }
 
@@ -272,7 +270,6 @@ apply_env_defaults() {
   GERRIT_LOG_DIR="${GERRIT_LOG_DIR:-/var/log/loopforge}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
-  LDAP_BIND_PASSWORD_FILE="${LDAP_BIND_PASSWORD_FILE:-}"
   LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-}"
   LDAP_USER_BASE="${LDAP_USER_BASE:-ou=people,dc=example,dc=test}"
   LDAP_GROUP_BASE="${LDAP_GROUP_BASE:-ou=groups,dc=example,dc=test}"
@@ -314,7 +311,8 @@ print_env_template() {
 }
 
 ensure_dirs() {
-  mkdir -p "$GERRIT_SITE_PATH" "$GERRIT_EVIDENCE_DIR" "$GERRIT_LOG_DIR"
+  run_with_privilege "install -d -m 0750 -o $(shell_quote "$LOOPFORGE_OPERATOR_ACCOUNT") -g $(shell_quote "$LOOPFORGE_OPERATOR_GROUP") $(shell_quote "$GERRIT_EVIDENCE_DIR") $(shell_quote "$GERRIT_LOG_DIR")"
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -g $(shell_quote "$GERRIT_RUNTIME_GROUP") $(shell_quote "$GERRIT_SITE_PATH")"
 }
 
 for_each_csv_value() {
@@ -420,14 +418,12 @@ render_template_as_runtime() {
 }
 
 read_reviewed_secret_value() {
-  local password_file secret
-  password_file="$(ldap_bind_password_file)"
-  secret="$(tr -d '\r\n' <"$password_file")"
+  local secret
+  secret="$(reviewed_ldap_bind_password)"
   [ -n "$secret" ] || die "Reviewed secret input is empty"
   is_placeholder "$secret" &&
     die "Reviewed secret input must not be a placeholder"
   printf '%s\n' "$secret"
-  [ "$password_file" = "$LDAP_BIND_PASSWORD_FILE" ] || rm -f "$password_file"
 }
 
 write_secure_config() {
@@ -1066,11 +1062,12 @@ cmd_prepare_artifacts() {
 cmd_install() {
   load_env normal
   require_env_values
-  check_runtime_account_readiness
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
+  reset_gerrit_site_for_install
   prepare_gerrit_runtime_directories
+  check_runtime_account_readiness
   verify_war_artifact "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war"
   install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war" 0644
   install_plugin_tree_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/plugins" "$GERRIT_SITE_PATH/plugins"
@@ -1178,51 +1175,26 @@ EOF
   check_ldap_bind_search
 }
 
-ldap_bind_password_file() {
-  if [ -n "$LDAP_BIND_PASSWORD_FILE" ]; then
-    [ -r "$LDAP_BIND_PASSWORD_FILE" ] || die "LDAP bind password file is not readable: $LDAP_BIND_PASSWORD_FILE"
-    local secret
-    secret="$(tr -d '\r\n' <"$LDAP_BIND_PASSWORD_FILE")"
-    [ -n "$secret" ] || die "LDAP bind password file is empty: $LDAP_BIND_PASSWORD_FILE"
-    is_placeholder "$secret" &&
-      die "LDAP bind password file contains a placeholder secret"
-    printf '%s\n' "$LDAP_BIND_PASSWORD_FILE"
-    return 0
-  fi
-  if [ -n "$LDAP_BIND_PASSWORD" ]; then
-    is_placeholder "$LDAP_BIND_PASSWORD" &&
-      die "LDAP bind password value must be reviewed and must not be a placeholder"
-    local tmp_file
-    tmp_file="$(mktemp)"
-    chmod 0600 "$tmp_file"
-    printf '%s' "$LDAP_BIND_PASSWORD" >"$tmp_file"
-    printf '%s\n' "$tmp_file"
-    return 0
-  fi
-  die "BLOCKED: LDAP bind/search proof requires LDAP_BIND_PASSWORD_FILE or LDAP_BIND_PASSWORD; TCP reachability alone is not LDAP access proof"
+reviewed_ldap_bind_password() {
+  [ -n "$LDAP_BIND_PASSWORD" ] ||
+    die "BLOCKED: LDAP bind/search proof requires execution-time LDAP_BIND_PASSWORD; TCP reachability alone is not LDAP access proof"
+  is_placeholder "$LDAP_BIND_PASSWORD" &&
+    die "LDAP bind password value must be reviewed and must not be a placeholder"
+  printf '%s\n' "$LDAP_BIND_PASSWORD"
 }
 
 check_ldap_bind_search() {
-  local password_file cleanup_password_file
+  local secret
   if ! command -v ldapsearch >/dev/null 2>&1; then
     die "BLOCKED: ldapsearch is required to prove LDAP bind/search readiness"
   fi
-  password_file="$(ldap_bind_password_file)"
-  cleanup_password_file=0
-  [ "$password_file" != "$LDAP_BIND_PASSWORD_FILE" ] && cleanup_password_file=1
-  ldapsearch -x -H "$LDAP_URL" -D "$LDAP_BIND_DN" -y "$password_file" \
+  secret="$(reviewed_ldap_bind_password)"
+  ldapsearch -x -H "$LDAP_URL" -D "$LDAP_BIND_DN" -y <(printf '%s' "$secret") \
     -b "$LDAP_USER_BASE" -s base dn >/dev/null 2>&1 ||
-    {
-      [ "$cleanup_password_file" -eq 0 ] || rm -f "$password_file"
-      die "BLOCKED: LDAP bind/search proof failed for configured user base"
-    }
-  ldapsearch -x -H "$LDAP_URL" -D "$LDAP_BIND_DN" -y "$password_file" \
+    die "BLOCKED: LDAP bind/search proof failed for configured user base"
+  ldapsearch -x -H "$LDAP_URL" -D "$LDAP_BIND_DN" -y <(printf '%s' "$secret") \
     -b "$LDAP_GROUP_BASE" -s base dn >/dev/null 2>&1 ||
-    {
-      [ "$cleanup_password_file" -eq 0 ] || rm -f "$password_file"
-      die "BLOCKED: LDAP bind/search proof failed for configured group base"
-    }
-  [ "$cleanup_password_file" -eq 0 ] || rm -f "$password_file"
+    die "BLOCKED: LDAP bind/search proof failed for configured group base"
 }
 
 check_plugin_readiness() {
@@ -1269,11 +1241,8 @@ runtime_plugin_list_log() {
 }
 
 check_secure_config_secret_handling() {
-  local password_file reviewed_secret configured_secret cleanup_password_file
-  password_file="$(ldap_bind_password_file)"
-  cleanup_password_file=0
-  [ "$password_file" = "$LDAP_BIND_PASSWORD_FILE" ] || cleanup_password_file=1
-  reviewed_secret="$(tr -d '\r\n' <"$password_file")"
+  local reviewed_secret configured_secret
+  reviewed_secret="$(reviewed_ldap_bind_password)"
   [ -n "$reviewed_secret" ] || die "Reviewed LDAP bind secret is empty"
   is_placeholder "$reviewed_secret" &&
     die "Reviewed LDAP bind secret is still a placeholder"
@@ -1281,7 +1250,6 @@ check_secure_config_secret_handling() {
   [ -n "$configured_secret" ] || die "Gerrit secure config password is missing"
   [ "$configured_secret" = "$reviewed_secret" ] ||
     die "Gerrit secure config password does not match the reviewed LDAP bind secret input"
-  [ "$cleanup_password_file" -eq 0 ] || rm -f "$password_file"
 }
 
 check_plugin_runtime_loaded() {
@@ -1374,6 +1342,32 @@ prepare_gerrit_runtime_log() {
   local log
   log="$(gerrit_runtime_log)"
   run_with_privilege ": > $(shell_quote "$log") && chown $(shell_quote "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP") $(shell_quote "$log")"
+}
+
+stop_gerrit_for_install_reset() {
+  local pid pids
+  pids="$(ps -eo pid=,args= | awk -v site="$GERRIT_SITE_PATH" 'index($0, site) && (index($0, "GerritCodeReview") || index($0, "gerrit.war")) {print $1}')"
+  if [ -n "$pids" ]; then
+    run_with_privilege "kill $pids 2>/dev/null || true"
+    sleep 2
+    run_with_privilege "kill -9 $pids 2>/dev/null || true"
+  fi
+  if [ -s "$(gerrit_pid_file)" ]; then
+    pid="$(cat "$(gerrit_pid_file)" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      run_with_privilege "kill $(shell_quote "$pid") 2>/dev/null || true"
+      sleep 2
+      run_with_privilege "kill -9 $(shell_quote "$pid") 2>/dev/null || true"
+    fi
+  fi
+  if [ -x "$GERRIT_SITE_PATH/bin/gerrit.sh" ]; then
+    run_with_privilege "timeout 10 su -s /bin/sh $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -c $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.sh stop") >/dev/null 2>&1 || true"
+  fi
+}
+
+reset_gerrit_site_for_install() {
+  stop_gerrit_for_install_reset
+  run_with_privilege "find $(shell_quote "$GERRIT_SITE_PATH") -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && chown $(shell_quote "$GERRIT_RUNTIME_ACCOUNT:$GERRIT_RUNTIME_GROUP") $(shell_quote "$GERRIT_SITE_PATH") && chmod 0755 $(shell_quote "$GERRIT_SITE_PATH")"
 }
 
 append_gerrit_runtime_log() {

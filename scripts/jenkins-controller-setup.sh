@@ -240,8 +240,8 @@ JENKINS_EVIDENCE_DIR
     require_reviewed_value JENKINS_PLUGIN_MANAGER_SOURCE
     require_reviewed_value JENKINS_PLUGIN_SOURCE_DIR
   fi
-  if [ -z "${LDAP_BIND_PASSWORD_FILE:-}" ] && [ -z "${LDAP_BIND_PASSWORD:-}" ]; then
-    die "Missing reviewed LDAP bind password input: set LDAP_BIND_PASSWORD_FILE or LDAP_BIND_PASSWORD"
+  if [ -z "${LDAP_BIND_PASSWORD:-}" ]; then
+    die "Missing reviewed LDAP bind password input: set LDAP_BIND_PASSWORD at execution time"
   fi
 }
 
@@ -328,7 +328,6 @@ apply_env_defaults() {
   JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2088.ve3b_42c663c80,credentials:1502.v5c95e620ddfe,git:5.10.1,gerrit-trigger:3.1971.v217d381e3a_5a_,ldap:807.809.vd3a_4e5e4ec98,matrix-auth:3.2.10,ssh-credentials:372.va_250881b_08cd,ssh-slaves:3.1097.v868116049892,workflow-aggregator:608.v67378e9d3db_1,job-dsl:3654.vdf58f53e2d15,timestamper:1.30,ws-cleanup:0.49}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
-  LDAP_BIND_PASSWORD_FILE="${LDAP_BIND_PASSWORD_FILE:-}"
   LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-}"
   LDAP_USER_BASE="${LDAP_USER_BASE:-ou=people,dc=example,dc=test}"
   LDAP_GROUP_BASE="${LDAP_GROUP_BASE:-ou=groups,dc=example,dc=test}"
@@ -349,7 +348,8 @@ print_env_template() {
 }
 
 ensure_dirs() {
-  mkdir -p "$JENKINS_HOME" "$JENKINS_EVIDENCE_DIR" "$JENKINS_LOG_DIR"
+  run_with_privilege "install -d -m 0750 -o $(shell_quote "$LOOPFORGE_OPERATOR_ACCOUNT") -g $(shell_quote "$LOOPFORGE_OPERATOR_GROUP") $(shell_quote "$JENKINS_EVIDENCE_DIR") $(shell_quote "$JENKINS_LOG_DIR")"
+  prepare_jenkins_runtime_dirs
 }
 
 runtime_account_exists() {
@@ -357,6 +357,9 @@ runtime_account_exists() {
   [ "$JENKINS_HOME" = "$JENKINS_NATIVE_HOME" ] ||
     die "JENKINS_HOME must be $JENKINS_NATIVE_HOME, got $JENKINS_HOME"
   require_runtime_account_home "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_NATIVE_HOME" "Jenkins"
+  if [ ! -d "$JENKINS_NATIVE_HOME" ]; then
+    prepare_jenkins_runtime_dirs
+  fi
   require_product_home_ownership "$JENKINS_NATIVE_HOME" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "Jenkins"
 }
 
@@ -525,12 +528,7 @@ runtime_file_has_no_unresolved_placeholders() {
 
 ldap_bind_password_value() {
   local secret
-  if [ -n "${LDAP_BIND_PASSWORD_FILE:-}" ]; then
-    [ -r "$LDAP_BIND_PASSWORD_FILE" ] || die "LDAP bind password file is not readable: $LDAP_BIND_PASSWORD_FILE"
-    secret="$(tr -d '\r\n' <"$LDAP_BIND_PASSWORD_FILE")"
-  else
-    secret="${LDAP_BIND_PASSWORD:-}"
-  fi
+  secret="${LDAP_BIND_PASSWORD:-}"
   [ -n "$secret" ] || die "LDAP bind password is required for Jenkins LDAP authenticated bind"
   is_placeholder "$secret" &&
     die "LDAP bind password must be reviewed and must not be a placeholder"
@@ -1276,10 +1274,10 @@ cmd_install() {
   load_env normal
   require_env_values
   validate_runtime_owner_inputs
-  runtime_account_exists
   confirm_mutation install || return 0
   verify_staged_artifacts
   ensure_dirs
+  runtime_account_exists
   if [ -f "$JENKINS_HOME/run/jenkins.pid" ] && kill -0 "$(cat "$JENKINS_HOME/run/jenkins.pid")" 2>/dev/null; then
     run_with_privilege "kill $(shell_quote "$(cat "$JENKINS_HOME/run/jenkins.pid")") 2>/dev/null || true"
   fi

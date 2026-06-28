@@ -66,7 +66,12 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
   the release archive pair in the bundle-factory workspace.
 - Role helpers own practical child directory creation. The environment or
   simulation harness only provides prerequisites the helper cannot reasonably
-  provide itself, such as Docker bind-mount backing paths.
+  provide itself, such as Docker bind-mount backing paths. See
+  `docs/system-model.md` for the general helper-versus-harness boundary.
+- LDAP bind passwords are execution-time secret inputs only. They must not be
+  written to artifact bundles, rendered helper env files, runtime env files, or
+  harness-created secret files. Product runtime config may persist required
+  product settings after a role helper writes them.
 - `stage-artifacts` verifies the archive checksum, extracts to the target
   extraction root, and verifies the bundle checksum files before service
   mutation.

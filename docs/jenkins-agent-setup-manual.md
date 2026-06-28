@@ -183,7 +183,12 @@ Produced outputs:
 
 Mutation side effects:
 
-- Creates or updates role-local agent state files.
+- Resets helper-managed children under `JENKINS_AGENT_STATE_DIR` before
+  installing staged output: `bootstrap/`, `templates/`, `state/`, `etc/`,
+  `run/`, `logs/`, `artifact-manifest.txt`, and
+  `artifact-checksums.sha256`.
+- Preserves the configured `JENKINS_AGENT_STATE_DIR` and
+  `JENKINS_AGENT_REMOTE_FS` roots.
 - Does not download Jenkins application artifacts on the target.
 - Does not register a Jenkins node or claim executor scheduling.
 

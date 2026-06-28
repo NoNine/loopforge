@@ -67,7 +67,6 @@ services:
       HARNESS_MODE: "${HARNESS_MODE}"
       HARNESS_STATE_DIR: "/var/lib/loopforge"
       HARNESS_LOG_DIR: "/var/log/loopforge"
-      LDAP_BIND_PASSWORD_FILE: /var/lib/loopforge/secret-inputs/ldap-bind-password
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../:/workspace:ro"

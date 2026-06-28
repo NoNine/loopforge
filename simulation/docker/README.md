@@ -151,6 +151,20 @@ Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
 layout.
 
+The Docker harness does the simulation work it must do: create generated run
+directories, provide bind-mount sources, stage rendered inputs, orchestrate
+containers, and perform explicitly labeled Docker `cp` waivers. Role helpers
+still perform the lifecycle work inside helper-visible paths, including
+artifact preparation, target-local mutation, validation, and evidence
+collection.
+
+LDAP bind passwords are not written to harness secret files, rendered helper
+env files, runtime env files, or artifact bundles. Docker simulation injects
+the LDAP bind password only into helper command environments for the commands
+that need LDAP proof or product runtime configuration. Product runtime config
+files may still persist product-required LDAP settings after the relevant role
+helper writes them.
+
 `prepare-artifacts` writes role artifacts and packs the archive pair inside the
 bundle-factory preparing root, then the harness collector exports those files to
 `target/artifacts/exported/<bundle>.tar.gz` plus `.sha256`.
@@ -174,10 +188,11 @@ cleanup; they are not a target payload transfer mechanism.
 
 Active target role evidence and log directories are target-dominated
 helper-owned output, not host sideband state. The Docker harness prepares
-`target/evidence/<role>/` and `target/logs/<role>/` recursively for the
-target-local `ci-operator:ci-operator` identity before role helpers write to
-`/var/lib/loopforge/evidence` or `/var/log/loopforge`. Host-owned copies exist
-only under `host/`, such as clean backup snapshots.
+the bind-mounted backing directories for the target-local
+`ci-operator:ci-operator` identity so Docker mounts are writable, while role
+helpers own role-local lifecycle creation, cleanup, validation, and evidence
+writes under `/var/lib/loopforge` and `/var/log/loopforge`. Host-owned copies
+exist only under `host/`, such as clean backup snapshots.
 
 Target operations still install or update product-owned paths such as
 `/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,

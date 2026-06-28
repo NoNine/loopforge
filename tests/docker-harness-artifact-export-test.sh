@@ -160,6 +160,10 @@ if grep -Fq -- 'install -d -m 0755 -o ci-operator -g ci-operator /var/lib/loopfo
   printf 'bundle-factory prepare-artifacts must not create role payload dirs in harness\n' >&2
   exit 1
 fi
+if grep -Fq -- 'ldap-bind-password' "$calls"; then
+  printf 'prepare-artifacts must not create or stage LDAP bind secrets\n' >&2
+  exit 1
+fi
 grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz' "$calls"
 grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
 [ -d "$run_dir/target/helper-state/bundle-factory/preparing" ] || {

@@ -42,7 +42,8 @@ Consumed inputs:
 - Gerrit host, HTTP port, SSH port, runtime account, and site path.
 - LDAP URL, read-only bind DN, user base, group base, and admin group.
 - Gerrit admin account or group.
-- LDAP bind password file or reviewed LDAP bind password value.
+- LDAP bind password supplied as execution-time `LDAP_BIND_PASSWORD`; do not
+  store it in the reviewed env file or artifact bundle.
 - Artifact output and staged artifact paths.
 - Verification mode and evidence directory.
 - `GERRIT_PLUGIN_LIST` with comma-separated plugin identifiers using only
@@ -294,7 +295,8 @@ Consumed inputs:
 
 - LDAP URL.
 - Read-only LDAP bind DN.
-- LDAP bind password file or reviewed LDAP bind password value.
+- LDAP bind password supplied as execution-time `LDAP_BIND_PASSWORD`; product
+  runtime config may persist it in Gerrit `secure.config`.
 - User and group bases.
 - Gerrit admin group.
 - Test-user account assumptions from `docs/account-model.md`.

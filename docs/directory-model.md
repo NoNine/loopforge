@@ -73,7 +73,9 @@ Helper-owned paths are execution state, not Gerrit or Jenkins service homes.
 shared integration helper may create and mutate practical child paths during
 reviewed lifecycle commands. Simulation harnesses may prepare Docker bind-mount
 backing paths or other execution prerequisites, but they do not own the
-Loopforge helper state or log roots as product homes.
+Loopforge helper state or log roots as product homes. The general utility
+boundary is defined in `docs/system-model.md`: helpers are self-contained
+where practical, and harnesses do only the environment work they must do.
 
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -117,7 +119,7 @@ generated/simulation/docker/<run-id>/
 | `host/bundle-factory/rendered/` | `/var/lib/loopforge/rendered` in bundle factory | Host-dominated | Bundle-factory rendered inputs |
 | `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
 | `host/target-ssh/` | `/var/lib/loopforge/target-ssh` in target containers | Host-dominated | Host-generated target SSH identity, public key, and known hosts |
-| `host/validation-secrets/gerrit/` | `/var/lib/loopforge/validation-secrets` in Gerrit target | Host-dominated | Docker simulation-only validation secrets; host directory is `0700` |
+| `host/validation-secrets/gerrit/` | `/var/lib/loopforge/validation-secrets` in Gerrit target | Host-dominated | Docker simulation-only SSH validation key material; not used for LDAP bind secrets; host directory is `0700` |
 | `host/evidence/harness/` | Harness evidence output | Host-dominated | Harness checkpoint evidence |
 | `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs |
 | `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence |

@@ -35,6 +35,7 @@ HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")
 HARNESS_INTEGRATION_ENV_FILE=$(printf '%q' "$tmp_dir/integration.env")
+HARNESS_LDAP_BIND_PASSWORD=runtime-secret-must-not-persist
 EOF
 
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
@@ -63,6 +64,15 @@ grep -Fq "HARNESS_JENKINS_AGENT_ENV_FILE=$runtime_dir/jenkins-agent.env" "$runti
 grep -Fq "HARNESS_INTEGRATION_ENV_FILE=$runtime_dir/integration.env" "$runtime_env"
 grep -Fq "HARNESS_GENERATED_RUN_DIR=$run_dir" "$runtime_env"
 grep -Fq "HARNESS_PRODUCT_HOME_DIR=$product_home_dir" "$runtime_env"
+grep -Fq "HARNESS_LDAP_BIND_PASSWORD_REQUIRED=execution-time-only" "$runtime_env"
+if grep -R -Fq 'runtime-secret-must-not-persist' "$host_dir/rendered" "$runtime_dir"; then
+  printf 'Generated runtime files must not store the LDAP bind password\n' >&2
+  exit 1
+fi
+if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=' "$runtime_dir"; then
+  printf 'Runtime input env files must not include HARNESS_LDAP_BIND_PASSWORD\n' >&2
+  exit 1
+fi
 [ "$product_home_dir" != "$state_dir" ] || {
   printf 'Product home dir must not equal harness state dir\n' >&2
   exit 1

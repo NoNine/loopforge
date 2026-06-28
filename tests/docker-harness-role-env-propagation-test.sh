@@ -197,6 +197,11 @@ grep -Fq -- '/var/lib/loopforge/rendered/jenkins-agent.env' "$calls"
 grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/rendered' "$calls"
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/rendered/jenkins-controller.env' "$calls"
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/rendered/jenkins-agent.env' "$calls"
+grep -Fq -- 'exec -T -u ci-operator -e LDAP_BIND_PASSWORD jenkins-controller-target /workspace/scripts/jenkins-controller-setup.sh --env /var/lib/loopforge/rendered/jenkins-controller.env --yes install' "$calls"
+if grep -Fq -- 'readonly-password' "$calls"; then
+  printf 'Docker calls must not include LDAP bind password values\n' >&2
+  exit 1
+fi
 
 grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/gerrit.env"
 grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/jenkins-controller.env"
@@ -218,6 +223,10 @@ grep -Fq 'JENKINS_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/jenkin
 grep -Fq 'JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 grep -Fq 'JENKINS_AGENT_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=' "$runtime_dir"; then
+  printf 'Runtime input/helper env files must not store the LDAP bind password\n' >&2
+  exit 1
+fi
 if grep -Fq '/harness/evidence' \
   "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
   "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \

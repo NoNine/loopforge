@@ -790,7 +790,7 @@ copy_runtime_env_inputs_to() {
   dest_dir="${1:?destination required}"
   mkdir -p "$dest_dir"
   umask 077
-  cp -- "$HARNESS_ENV_FILE" "$dest_dir/harness.env"
+  sed '/^HARNESS_LDAP_BIND_PASSWORD=/d' "$HARNESS_ENV_FILE" >"$dest_dir/harness.env"
   cp -- "$HARNESS_GERRIT_ENV_FILE" "$dest_dir/gerrit.env"
   cp -- "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$dest_dir/jenkins-controller.env"
   cp -- "$HARNESS_JENKINS_AGENT_ENV_FILE" "$dest_dir/jenkins-agent.env"
@@ -911,6 +911,15 @@ compose() {
     detect_compose
   fi
   "${compose_cmd[@]}" --project-name "$HARNESS_PROJECT_NAME" --file "$compose_file" "$@"
+}
+
+compose_exec_with_ldap_password() {
+  local service
+  service="${1:?service required}"
+  shift
+  [ -n "${HARNESS_LDAP_BIND_PASSWORD:-}" ] ||
+    die "Missing HARNESS_LDAP_BIND_PASSWORD for execution-time LDAP bind secret injection"
+  LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" compose exec -T -u ci-operator -e LDAP_BIND_PASSWORD "$service" "$@"
 }
 
 compose_v1_recreate_bug_detected() {
@@ -1658,66 +1667,6 @@ ensure_gerrit_validation_key() {
     "$bundle_public_key" >>"$log"
 }
 
-ensure_gerrit_ldap_bind_secret() {
-  local log secret_file secret_dir
-  log="${1:?log required}"
-  secret_dir="$HARNESS_GERRIT_VALIDATION_SECRET_DIR"
-  secret_file="$HARNESS_GERRIT_VALIDATION_SECRET_DIR/ldap-bind-password"
-  if [ -d "$secret_dir" ] && [ ! -w "$secret_dir" ]; then
-    rm -rf "$secret_dir"
-  fi
-  mkdir -p "$secret_dir"
-  chmod 0700 "$secret_dir"
-  printf '%s' "$HARNESS_LDAP_BIND_PASSWORD" >"$secret_file"
-  chmod 0600 "$secret_file"
-  printf 'validation_secret_ready role=gerrit secret_kind=ldap-bind-password custody=harness-owned-simulation-not-gerrit-artifact public_value_redacted=true\n' >>"$log"
-}
-
-stage_gerrit_ldap_bind_secret() {
-  local log service secret_file container_secret_file
-  log="${1:?log required}"
-  service="${2:?service required}"
-  ensure_gerrit_ldap_bind_secret "$log"
-  secret_file="$HARNESS_GERRIT_VALIDATION_SECRET_DIR/ldap-bind-password"
-  container_secret_file="/var/lib/loopforge/secret-inputs/ldap-bind-password"
-  docker_cp_file_to_service "$secret_file" "$service" "$container_secret_file" ci-operator ci-operator 0600 "$log"
-  printf 'validation_secret_staged role=gerrit secret_kind=ldap-bind-password destination=%s owner=ci-operator mode=0600 public_value_redacted=true\n' \
-    "$container_secret_file" >>"$log"
-}
-
-gerrit_target_secret_env() {
-  printf '%s\n' "LDAP_BIND_PASSWORD_FILE=/var/lib/loopforge/secret-inputs/ldap-bind-password"
-}
-
-reset_gerrit_site_state() {
-  local service log
-  service="${1:?service required}"
-  log="${2:?log required}"
-  compose exec -T -u root "$service" sh -lc '
-    pidfile=/srv/gerrit/logs/gerrit.pid
-    pids="$(ps -eo pid=,args= | awk '\''index($0, "/srv/gerrit") && (index($0, "GerritCodeReview") || index($0, "gerrit.war")) {print $1}'\'')"
-    if [ -n "$pids" ]; then
-      kill $pids 2>/dev/null || true
-      sleep 2
-      kill -9 $pids 2>/dev/null || true
-    fi
-    if [ -s "$pidfile" ]; then
-      pid="$(cat "$pidfile" 2>/dev/null || true)"
-      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        kill "$pid" 2>/dev/null || true
-        sleep 2
-        kill -9 "$pid" 2>/dev/null || true
-      fi
-    fi
-    if [ -x /srv/gerrit/bin/gerrit.sh ]; then
-      timeout 10 su -s /bin/sh gerrit -c "/srv/gerrit/bin/gerrit.sh stop" >/dev/null 2>&1 || true
-    fi
-    rm -rf /srv/gerrit
-    mkdir -p /srv/gerrit
-  ' >>"$log" 2>&1
-  printf 'site_reset role=gerrit path=%s reason=clean-step7-role-gate-runtime-state\n' "/srv/gerrit" >>"$log"
-}
-
 gerrit_bundle_factory_env_file() {
   printf '%s\n' "/var/lib/loopforge/rendered/gerrit-bundle-factory.env"
 }
@@ -1892,39 +1841,6 @@ stage_container_role_env() {
   stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator "$log"
 }
 
-prepare_product_home_ownership() {
-  local role service host_env_file path account group log command
-  role="${1:?role required}"
-  service="${2:?service required}"
-  log="${3:?log required}"
-  host_env_file="$(host_container_env_file_for_role "$role" "$service")"
-  require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
-  case "$role" in
-    gerrit)
-      path="/srv/gerrit"
-      account="$(env_file_value "$host_env_file" GERRIT_RUNTIME_ACCOUNT)"
-      group="$(env_file_value "$host_env_file" GERRIT_RUNTIME_GROUP)"
-      ;;
-    jenkins-controller)
-      path="/var/lib/jenkins"
-      account="$(env_file_value "$host_env_file" JENKINS_RUNTIME_ACCOUNT)"
-      group="$(env_file_value "$host_env_file" JENKINS_RUNTIME_GROUP)"
-      ;;
-    jenkins-agent)
-      path="/var/lib/jenkins-agent"
-      account="$(env_file_value "$host_env_file" JENKINS_AGENT_ACCOUNT)"
-      group="$(env_file_value "$host_env_file" JENKINS_AGENT_GROUP)"
-      ;;
-    *)
-      die "Unknown role '$role'; expected gerrit, jenkins-controller, or jenkins-agent"
-      ;;
-  esac
-  command="$(owned_directory_command "$account" "$group" 0755 "$path" 1)"
-  compose exec -T "$service" sh -c "$command" >>"$log" 2>&1
-  printf 'product_home_ownership_prepared role=%s service=%s path=%s owner=%s group=%s\n' \
-    "$role" "$service" "$path" "$account" "$group" >>"$log"
-}
-
 refresh_target_ssh_known_hosts() {
   local log tmp
   log="${1:?log required}"
@@ -1952,37 +1868,35 @@ prepare_bundle_factory_workspace_ownership() {
     "$role" "$work_root" >>"$log"
 }
 
-prepare_target_helper_owned_paths() {
-  local role service log state_root rendered_root secret_input_root staging_root evidence_root log_root script
+prepare_target_bind_mount_ownership() {
+  local role service log state_root rendered_root staging_root evidence_root log_root script
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
   state_root="/var/lib/loopforge"
   rendered_root="/var/lib/loopforge/rendered"
-  secret_input_root="/var/lib/loopforge/secret-inputs"
   staging_root="/var/lib/loopforge/staging"
   evidence_root="/var/lib/loopforge/evidence"
   log_root="/var/log/loopforge"
 
   script="$(owned_directory_command ci-operator ci-operator 0700 "$state_root" 0)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$rendered_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0700 "$secret_input_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$staging_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1)"
   script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$log_root" 1)"
   if ! compose exec -T -u root "$service" sh -c "$script" >>"$log" 2>&1; then
     return 1
   fi
-  printf 'helper_owned_paths_prepared role=%s service=%s state=%s rendered=%s secret_inputs=%s staging=%s evidence=%s logs=%s owner=ci-operator group=ci-operator recursive_contract=target-helper-owned\n' \
-    "$role" "$service" "$state_root" "$rendered_root" "$secret_input_root" "$staging_root" "$evidence_root" "$log_root" >>"$log"
+  printf 'target_bind_mounts_prepared role=%s service=%s state=%s rendered=%s staging=%s evidence=%s logs=%s owner=ci-operator group=ci-operator scope=docker-simulation-bind-mount\n' \
+    "$role" "$service" "$state_root" "$rendered_root" "$staging_root" "$evidence_root" "$log_root" >>"$log"
 }
 
-prepare_all_target_helper_owned_paths() {
+prepare_all_target_bind_mount_ownership() {
   local log
   log="${1:?log required}"
-  prepare_target_helper_owned_paths gerrit gerrit-target "$log"
-  prepare_target_helper_owned_paths jenkins-controller jenkins-controller-target "$log"
-  prepare_target_helper_owned_paths jenkins-agent jenkins-agent-target "$log"
+  prepare_target_bind_mount_ownership gerrit gerrit-target "$log"
+  prepare_target_bind_mount_ownership jenkins-controller jenkins-controller-target "$log"
+  prepare_target_bind_mount_ownership jenkins-agent jenkins-agent-target "$log"
 }
 
 copy_bundle_factory_artifacts_to_host() {
@@ -2432,7 +2346,7 @@ HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "<redacted>")
+HARNESS_LDAP_BIND_PASSWORD_REQUIRED=execution-time-only
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
@@ -2503,7 +2417,7 @@ HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "$HARNESS_LDAP_ADMIN_PASSWORD")
 HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "$HARNESS_LDAP_CONFIG_PASSWORD")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
+HARNESS_LDAP_BIND_PASSWORD_REQUIRED=execution-time-only
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
@@ -2793,10 +2707,7 @@ cmd_up() {
   check_ubuntu_service_baseline gerrit-target gerrit
   check_ubuntu_service_baseline jenkins-controller-target jenkins-controller
   check_ubuntu_service_baseline jenkins-agent-target jenkins-agent
-  if ! prepare_all_target_helper_owned_paths "$log" ||
-    ! prepare_product_home_ownership gerrit gerrit-target "$log" ||
-    ! prepare_product_home_ownership jenkins-controller jenkins-controller-target "$log" ||
-    ! prepare_product_home_ownership jenkins-agent jenkins-agent-target "$log" ||
+  if ! prepare_all_target_bind_mount_ownership "$log" ||
     ! refresh_target_ssh_known_hosts "$log"; then
     evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start ownership preparation failed")"
     print_command_failure up "" failed "$log" "$evidence"
@@ -2954,7 +2865,7 @@ cmd_prepare_artifacts() {
     return 1
   fi
   if [ "$role" = "gerrit" ]; then
-    ensure_gerrit_ldap_bind_secret "$log"
+    :
   elif [ "$role" = "jenkins-controller" ]; then
     :
   elif [ "$role" = "jenkins-agent" ]; then
@@ -3258,12 +3169,9 @@ cmd_configure_role() {
 
   case "$role" in
     gerrit)
-      stage_gerrit_ldap_bind_secret "$log" "$service"
       if require_staged_artifacts_in_target gerrit "$service" "$log" &&
-        reset_gerrit_site_state "$service" "$log" &&
-        prepare_product_home_ownership gerrit "$service" "$log" &&
-        compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -3271,11 +3179,10 @@ cmd_configure_role() {
       ;;
     jenkins-controller)
       if require_staged_artifacts_in_target jenkins-controller "$service" "$log" &&
-        prepare_product_home_ownership jenkins-controller "$service" "$log" &&
-        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -3283,7 +3190,6 @@ cmd_configure_role() {
       ;;
     jenkins-agent)
       if require_staged_artifacts_in_target jenkins-agent "$service" "$log" &&
-        prepare_product_home_ownership jenkins-agent "$service" "$log" &&
         compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
         compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1; then
         rc=0
@@ -3355,9 +3261,8 @@ cmd_validate_role() {
 
   case "$role" in
     gerrit)
-      stage_gerrit_ldap_bind_secret "$log" "$service"
-      if compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" env "$(gerrit_target_secret_env)" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
+      if compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
         normalize_gerrit_role_evidence_logs "$log"; then
         rc=0
       else
@@ -3365,8 +3270,8 @@ cmd_validate_role() {
       fi
       ;;
     jenkins-controller)
-      if compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" env LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+      if compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
         rc=0
       else
