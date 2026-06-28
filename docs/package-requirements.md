@@ -5,6 +5,10 @@ It has two parts: host prerequisites by mode, and layered package
 requirements. A package can be required by the product runtime, by the
 Loopforge helper scripts, or only by Docker simulation.
 
+`docs/version-baseline.md` owns the default Ubuntu, Java, Gerrit, Jenkins,
+plugin-manager, and Jenkins agent/tooling versions. This document owns the
+package layer rationale for that baseline.
+
 Native target hosts install OS packages from approved internal Ubuntu/OS
 repositories. Application artifacts are separate from OS packages and are
 staged through reviewed artifact bundles. v1 does not support offline Ubuntu

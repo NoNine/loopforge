@@ -3,23 +3,24 @@
 ## Purpose
 
 This digest summarizes behavior proven in the draft repository at
-`/home/ubuntu/ai-assisted/gerrit-jenkins`.
+`/home/ubuntu/ai-assisted/gerrit-jenkins`. It is historical reference input,
+not stable product authority.
 
 Do not copy code, docs, templates, scripts, config files, command bodies, or
 verbatim implementation from the draft repository. Use this digest only for
 behavior, workflow order, validation expectations, integration intent, and
 known failure boundaries.
 
-Implementation agents for this repository should use this digest, `docs/prd.md`,
-and the implementation plans in this repository. They should not open or copy
-from the draft repository unless a human explicitly approves a new reference
-review.
+Implementation agents may use this digest with `docs/implementation-plan.md`
+for implementation context. They should resolve current product authority
+through `docs/docs-management.md`, and they must not open or copy from the
+draft repository unless a human explicitly approves a new reference review.
 
 ## Authority Notes
 
-`docs/prd.md` and `docs/implementation-plan.md` govern v1 boundaries and
-intended topology. When draft repository materials are stale or conflict with
-the v1 plan, this digest follows the v1 plan.
+Current Loopforge authority docs govern v1 boundaries and intended topology.
+When draft repository materials are stale or conflict with current authorities,
+this digest is subordinate to the current authorities.
 
 For Docker simulation, stale draft lab docs may describe fewer runtime
 containers. v1 uses the five-environment model from the implementation plan:

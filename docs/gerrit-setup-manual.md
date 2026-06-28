@@ -23,16 +23,9 @@ handoff are later integration-step work. Use
 `docs/artifact-bundle-contract.md` for the bundle workspace, archive, and
 extraction-root contract.
 
-Default baseline:
-
-| Item | Default |
-| --- | --- |
-| Ubuntu target | 24.04.4 LTS, release `24.04`, codename `noble` |
-| Java | OpenJDK 21 |
-| Gerrit | 3.13.6 |
-
-Gerrit 3.14.0 is not the default. Use it only after a reviewed baseline update
-across the package.
+Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, and Gerrit
+`3.13.6`. `docs/version-baseline.md` owns the package-wide baseline and
+reviewed update rules.
 
 ## Phase 1: Operator Inputs
 
@@ -85,8 +78,8 @@ Secret-redaction expectations:
 Consumed inputs:
 
 - Reviewed Gerrit env file.
-- Target host baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21 expectation,
-  approved internal Ubuntu/OS package repositories, and reachable LDAP.
+- Target host baseline from `docs/version-baseline.md`, approved internal
+  Ubuntu/OS package repositories, and reachable LDAP.
 - Gerrit OS dependency expectations defined in
   `docs/package-requirements.md`.
 

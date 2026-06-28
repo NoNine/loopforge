@@ -36,11 +36,10 @@ Assumptions:
   equivalent delegated administrator privileges unless noted. Do not use
   `root` as a Loopforge account or direct login identity.
 
-Recommended versions as of 2026-06-09:
-
-- Java: OpenJDK 21.
-- Jenkins agent launcher: Jenkins SSH Build Agents plugin from the controller
-  plugin bundle.
+Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, OpenSSH
+server/client tooling, and the Jenkins SSH Build Agents plugin from the
+controller plugin bundle. `docs/version-baseline.md` owns the package-wide
+baseline and reviewed update rules.
 
 Production warning: do not run builds on the Jenkins controller. Keep the
 built-in node at zero executors and provide build capacity through agents.

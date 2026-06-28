@@ -39,10 +39,10 @@ Assumptions:
   equivalent delegated administrator privileges unless noted. Do not use
   `root` as a Loopforge account or direct login identity.
 
-Recommended versions as of 2026-06-09:
-
-- Jenkins: `2.555.3 LTS` from the official `debian-stable` package repository.
-- Java: OpenJDK 21.
+Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, Jenkins controller
+`2.555.3 LTS`, and Jenkins Plugin Installation Manager Tool `2.15.0`.
+`docs/version-baseline.md` owns the package-wide baseline and reviewed update
+rules.
 
 Production warning: direct HTTP service ports are documented because that is the selected deployment model. For production environments outside a trusted network, terminate TLS with a reverse proxy or enterprise load balancer before exposing Jenkins to users.
 

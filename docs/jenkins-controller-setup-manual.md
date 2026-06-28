@@ -24,14 +24,10 @@ definitions, but they must not contain SSH private keys, public keys,
 and Jenkins-to-agent keypair generation and public-key handoff are later
 integration-step work.
 
-Default baseline:
-
-| Item | Default |
-| --- | --- |
-| Ubuntu target | 24.04.4 LTS, release `24.04`, codename `noble` |
-| Java | OpenJDK 21 |
-| Jenkins controller | 2.555.3 LTS |
-| Jenkins Plugin Installation Manager Tool | 2.15.0 |
+Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, Jenkins controller
+`2.555.3 LTS`, and Jenkins Plugin Installation Manager Tool `2.15.0`.
+`docs/version-baseline.md` owns the package-wide baseline and reviewed update
+rules.
 
 ## Phase 1: Operator Inputs
 
@@ -93,8 +89,8 @@ Secret-redaction expectations:
 Consumed inputs:
 
 - Reviewed Jenkins controller env file.
-- Target host baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21 expectation,
-  approved internal Ubuntu/OS package repositories, and reachable LDAP.
+- Target host baseline from `docs/version-baseline.md`, approved internal
+  Ubuntu/OS package repositories, and reachable LDAP.
 - Gerrit and Jenkins agent endpoint values as inventory for deferred later
   shared-integration inventory values only; Step 8 preflight does not require
   Gerrit or agent SSH reachability.

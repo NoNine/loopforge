@@ -2,8 +2,8 @@
 
 This directory defines the shared simulation model for the v1 Gerrit/Jenkins
 setup package. Layer-specific command ownership lives in the Docker and VM
-README files; this file owns the common topology, baseline, source boundaries,
-output conventions, and the simulation realization of lifecycle checkpoints.
+README files; this file owns the common topology, source boundaries, output
+conventions, and the simulation realization of lifecycle checkpoints.
 
 The model has two layers:
 
@@ -28,19 +28,11 @@ Gerrit or Jenkins product account.
 
 ## Version Baseline
 
-Version baseline inputs for both simulation layers:
-
-- Ubuntu 24.04.4 LTS, release `24.04`, codename `noble`
-- OpenJDK 21 for Gerrit, Jenkins controller, and Jenkins agent
-- Gerrit `3.13.6`
-- Jenkins controller `2.555.3 LTS`
-- Jenkins Plugin Installation Manager Tool `2.15.0`
-- Jenkins agent OpenJDK 21 plus SSH server/client tooling and the Jenkins SSH
-  Build Agents plugin from the controller plugin bundle
-
-Future verifiers must fail or report blocked rather than claim comparable
-readiness when the Ubuntu, Java, Gerrit, Jenkins controller, plugin-manager,
-or Jenkins agent/plugin-bundle versions differ from this baseline.
+`docs/version-baseline.md` owns the default version baseline for both
+simulation layers. Future verifiers must fail or report blocked rather than
+claim comparable readiness when the Ubuntu, Java, Gerrit, Jenkins controller,
+plugin-manager, or Jenkins agent/plugin-bundle versions differ from the
+reviewed baseline.
 
 ## Source Boundaries
 

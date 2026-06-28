@@ -33,11 +33,9 @@ Assumptions:
   equivalent delegated administrator privileges unless noted. Do not use
   `root` as a Loopforge account or direct login identity.
 
-Recommended versions as of 2026-06-09:
-
-- Gerrit: `3.13.6` for conservative production rollout.
-- Gerrit `3.14.0` is the current/latest line, but a `.0` release should be tested carefully before production.
-- Java: OpenJDK 21.
+Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, and Gerrit
+`3.13.6`. `docs/version-baseline.md` owns the package-wide baseline and
+reviewed update rules.
 
 Production warning: direct HTTP service ports are documented because that is the selected deployment model. For production environments outside a trusted network, terminate TLS with a reverse proxy or enterprise load balancer before exposing Gerrit to users.
 

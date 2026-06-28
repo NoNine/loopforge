@@ -15,16 +15,8 @@ the PRD and above topic-specific docs, operator manuals, simulation docs, and
 helper script implementations. Topic-specific docs provide details inside the
 boundaries defined here.
 
-Authority order:
-
-1. `docs/prd.md`: product scope, goals, non-goals, and acceptance criteria.
-2. `docs/system-model.md`: system entities, relationships, interfaces, modes,
-   lifecycle boundaries, and ownership rules.
-3. Topic docs and manuals, including `docs/account-model.md`,
-   `docs/directory-model.md`, `docs/artifact-bundle-contract.md`,
-   `docs/validation-and-evidence.md`, `docs/gerrit-trigger-integration.md`,
-   role setup manuals, and simulation docs.
-4. Helper scripts and verifier scripts, which implement the documented model.
+Use `docs/docs-management.md` for the full layered authority model and review
+checklist.
 
 If this model exposes a new product requirement or changes the product
 boundary, update `docs/prd.md` explicitly instead of carrying the requirement

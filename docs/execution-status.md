@@ -2,12 +2,14 @@
 
 ## Purpose
 
-This file is the durable resume ledger for `docs/implementation-plan.md`.
-Authoritative product and plan sources remain, in order:
+This file is the durable resume ledger for implementation work. It records
+accepted steps, commits, verification logs, active guardrails, blockers,
+waivers, and the next authorized work item.
 
-- `docs/prd.md`
-- `docs/implementation-plan.md`
-- `docs/reference-digest.md`
+Use `docs/docs-management.md` to resolve documentation authority. Product
+truth belongs in the stable authority docs. `docs/implementation-plan.md` is
+the active implementation roadmap, and `docs/reference-digest.md` is
+historical draft-behavior input constrained by current Loopforge authorities.
 
 Keep entries concise. Record only status, commit, verification logs, and facts
 needed to resume or audit work. Do not paste command output or subagent
@@ -235,8 +237,9 @@ transcripts here.
 
 ## Resume Instructions
 
-1. Read `docs/prd.md`, `docs/implementation-plan.md`,
-   `docs/reference-digest.md`, and this ledger.
+1. Read `docs/docs-management.md`, `docs/prd.md`,
+   `docs/implementation-plan.md`, `docs/reference-digest.md`, and this
+   ledger.
 2. Check `git status --short`.
 3. Keep `docs/execution-status.md` unstaged unless the user explicitly
    requests a ledger snapshot commit.
@@ -248,7 +251,8 @@ transcripts here.
 
 ## Update Rules
 
-- Keep this file subordinate to the PRD, implementation plan, and digest.
+- Keep this file subordinate to `docs/docs-management.md` and the stable
+  authority docs it identifies.
 - Keep entries concise: status, commit, verification, and resume-critical notes.
 - Do not paste full logs, transcripts, or repeated historical detail.
 - Do not turn this file into a second implementation plan.

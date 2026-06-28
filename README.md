@@ -142,6 +142,11 @@ accounts.
 
 ## Documentation Guide
 
+AI agents and reviewers should start with `docs/docs-management.md` when a
+change affects documentation ownership, source-of-truth boundaries, or
+cross-document consistency. It defines the layered authority model and the
+review checklist for docs changes.
+
 Scope and model:
 
 - `docs/prd.md` defines product goals, non-goals, requirements, and acceptance
@@ -155,6 +160,8 @@ Topic references:
   simulation accounts.
 - `docs/directory-model.md` defines product homes, helper-owned state,
   artifact extraction paths, runtime scratch, and simulation backing.
+- `docs/version-baseline.md` defines the default Ubuntu, Java, Gerrit,
+  Jenkins, plugin-manager, and Jenkins agent/tooling baseline.
 - `docs/package-requirements.md` defines layered Ubuntu package requirements
   for product runtimes, helper scripts, bundle factory, and Docker simulation.
 - `docs/artifact-bundle-contract.md` defines application artifact archive

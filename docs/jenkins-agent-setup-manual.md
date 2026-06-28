@@ -27,14 +27,10 @@ voting. Jenkins controller node registration, credential storage, executor
 count, label assignment, and scheduling validation remain in the later
 integration step.
 
-Default baseline:
-
-| Item | Default |
-| --- | --- |
-| Ubuntu target | 24.04.4 LTS, release `24.04`, codename `noble` |
-| Java | OpenJDK 21 |
-| Agent SSH tooling | OpenSSH server and client |
-| Jenkins plugin dependency | Jenkins SSH Build Agents plugin from the controller plugin bundle |
+Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, OpenSSH
+server/client tooling, and the Jenkins SSH Build Agents plugin from the
+controller plugin bundle. `docs/version-baseline.md` owns the package-wide
+baseline and reviewed update rules.
 
 ## Phase 1: Operator Inputs
 
@@ -76,9 +72,8 @@ Secret-redaction expectations:
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
-- Target host baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21 expectation,
-  OpenSSH server/client tooling, approved internal Ubuntu/OS package
-  repositories, and agent host inventory values.
+- Target host baseline from `docs/version-baseline.md`, approved internal
+  Ubuntu/OS package repositories, and agent host inventory values.
 - Jenkins controller-side assumption that the SSH Build Agents plugin is in
   the curated controller plugin bundle.
 

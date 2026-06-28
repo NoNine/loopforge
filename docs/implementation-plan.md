@@ -2,8 +2,10 @@
 
 ## Purpose
 
-This document defines the implementation plan for building the v1
-Gerrit/Jenkins setup package described in `docs/prd.md`.
+This document is the active implementation roadmap for building the v1
+Gerrit/Jenkins setup package described in `docs/prd.md`. It is not the stable
+product authority; use `docs/docs-management.md` to resolve the owning
+authority for current product facts.
 
 The behavior digest is `docs/reference-digest.md`. That digest summarizes the
 known-working draft repository behavior without allowing implementation agents
@@ -58,26 +60,10 @@ manifest and checksum on the target before any target mutation.
 
 ## Version Baseline
 
-All role helpers, Docker harnesses, Docker simulation, VM verifier scaffolds,
-and future real VM verification must use the same default version combination
-unless a later reviewed change updates this baseline everywhere.
-
-- Ubuntu target baseline: Ubuntu 24.04.4 LTS, release `24.04`, codename
-  `noble`.
-- Java runtime: OpenJDK 21 for Gerrit, Jenkins controller, and Jenkins agent.
-- Gerrit: `3.13.6` for the default conservative production rollout.
-- Gerrit `3.14.0` is treated as a current/latest line noted by the reference
-  material, but it is not the v1 default because `.0` releases require careful
-  production testing.
-- Jenkins controller: `2.555.3 LTS`.
-- Jenkins Plugin Installation Manager Tool: `2.15.0`.
-- Jenkins agent: no standalone Jenkins core version; it uses OpenJDK 21,
-  SSH server/client tooling, and the Jenkins SSH Build Agents plugin from the
-  controller plugin bundle.
-
-Evidence records and verifier summaries must record this version combination.
-Docker and VM verification must fail or report blocked rather than claiming
-comparable verification when the environment does not match the baseline.
+`docs/version-baseline.md` owns the default v1 version baseline and update
+rules. Implementation steps below must keep helpers, Docker harnesses, Docker
+simulation, VM verifier scaffolds, future real VM verification, tests, and
+evidence expectations aligned with that baseline.
 
 ## Evidence Contract
 
@@ -419,10 +405,10 @@ Harness implementation decisions:
 - Use a boundary-first target model. The Gerrit, Jenkins controller, and
   Jenkins agent targets are host-like target containers, not prebuilt
   Gerrit/Jenkins service images with embedded application artifacts.
-- Use the Version Baseline for the bundle factory, Gerrit target, Jenkins
-  controller target, and Jenkins agent target. A Docker image tag such as
-  `ubuntu:24.04` may represent the Ubuntu 24.04.4 LTS `noble` baseline only
-  when the harness records the resolved image digest or OS release evidence.
+- Use `docs/version-baseline.md` for the bundle factory, Gerrit target,
+  Jenkins controller target, and Jenkins agent target. Docker image tags may
+  represent the reviewed Ubuntu baseline only when the harness records the
+  resolved image digest or OS release evidence.
 - Use a real LDAP service image for the LDAP environment so LDAP reachability
   and seeded directory assumptions can be checked by later role gates.
 - Do not use `gerritcodereview/gerrit` or `jenkins/jenkins` as Step 6 target
@@ -580,9 +566,8 @@ Implementation notes:
 - Gerrit manifests must record `artifact_source=curated-bundle-factory`,
   `os_dependency_source=approved-internal-os-repos`,
   `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
-- Gerrit defaults to the Version Baseline: Gerrit `3.13.6` and OpenJDK 21 on
-  Ubuntu 24.04.4 LTS `noble`. Gerrit `3.14.0` is not the default and may be
-  used only after a reviewed baseline update.
+- Gerrit defaults to `docs/version-baseline.md`. Non-default Gerrit versions
+  may be used only after a reviewed baseline update.
 - Gerrit target commands consume only staged artifacts from the bundle factory
   output and must verify target-side manifests and checksums before install or
   configuration.
@@ -702,9 +687,7 @@ Implementation notes:
   consistent with the controller manual and helper behavior, but never add
   repository helper commands to it.
 - Treat plugin versions and checksums as curated artifacts.
-- Jenkins controller defaults to the Version Baseline: Jenkins `2.555.3 LTS`,
-  OpenJDK 21, and Jenkins Plugin Installation Manager Tool `2.15.0` on Ubuntu
-  24.04.4 LTS `noble`.
+- Jenkins controller defaults to `docs/version-baseline.md`.
 - `prepare-artifacts` must run in the shared Docker harness bundle factory
   environment, and Jenkins controller target commands must consume only staged
   bundle factory output.
@@ -839,9 +822,7 @@ Implementation notes:
   the agent manual and helper behavior, but never add repository helper
   commands to it.
 - The agent must have a dedicated runtime user and remote filesystem path.
-- Jenkins agent defaults to the Version Baseline: Ubuntu 24.04.4 LTS `noble`,
-  OpenJDK 21, SSH server/client tooling, and the Jenkins SSH Build Agents
-  plugin from the controller plugin bundle.
+- Jenkins agent defaults to `docs/version-baseline.md`.
 - `prepare-artifacts` must run in the shared Docker harness bundle factory
   environment, and Jenkins agent target commands must consume only staged
   bundle factory output.
@@ -1125,11 +1106,8 @@ Implementation notes:
   configuration.
 - VM verification must use the Step 10 evidence model for scaffold,
   target-deployment, or simulation mode labels.
-- VM verification must use the same version combination as the Docker harness
-  and Docker simulation: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, Gerrit
-  `3.13.6`, Jenkins `2.555.3 LTS`, Jenkins Plugin Installation Manager Tool
-  `2.15.0`, and the Jenkins SSH Build Agents plugin from the controller plugin
-  bundle.
+- VM verification must use the same reviewed baseline as the Docker harness
+  and Docker simulation.
 - The future VM model is target-deployment validation, not strict air-gap
   verification.
 - The VM scaffold must reference `scripts/integration-setup.sh` as the future

@@ -162,10 +162,10 @@ The Gerrit admin account may apply the access configuration, but the granted
 actor must be the Jenkins Gerrit integration account or group. The human admin
 account must not be configured as the Gerrit Trigger identity.
 
-The ACL workflow treats Gerrit `3.13.6` as the v1 REST baseline. Later Gerrit
-versions may be used only when runtime REST compatibility checks pass. If the
-server version or REST behavior is unsupported, the helper must fail closed
-before any configuration mutation.
+The ACL workflow treats the Gerrit version in `docs/version-baseline.md` as
+the v1 REST baseline. Non-default Gerrit versions may be used only when
+runtime REST compatibility checks pass. If the server version or REST behavior
+is unsupported, the helper must fail closed before any configuration mutation.
 
 Evidence planning for ACL configuration records the `All-Projects` label
 configuration review, the project/ref vote scope, ACL mode, Gerrit version,
