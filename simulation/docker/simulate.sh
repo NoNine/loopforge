@@ -367,7 +367,6 @@ validate_core_generated_state() {
     service="$(service_for_role "$role")"
     require_generated_state_file "$role target helper env" "$(host_container_env_file_for_role "$role" "$service")"
   done
-  require_generated_state_dir "state directory" "$HARNESS_STATE_DIR"
   require_generated_state_dir "host contribution directory" "$HARNESS_HOST_DIR"
   require_generated_state_dir "target contribution directory" "$HARNESS_TARGET_DIR"
   require_generated_state_dir "product home directory" "$HARNESS_PRODUCT_HOME_DIR"
@@ -375,25 +374,13 @@ validate_core_generated_state() {
   require_generated_state_dir "exported artifact directory" "$HARNESS_EXPORTED_ARTIFACT_DIR"
   require_generated_state_dir "evidence directory" "$HARNESS_EVIDENCE_DIR"
   require_generated_state_dir "log directory" "$HARNESS_LOG_DIR"
-  require_generated_state_dir "bundle factory rendered bind source" "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR"
-  require_generated_state_dir "bundle factory evidence bind source" "$HARNESS_STATE_DIR/bundle-factory/evidence"
-  require_generated_state_dir "bundle factory preparing bind source" "$HARNESS_STATE_DIR/bundle-factory/preparing"
+  require_generated_state_dir "bundle factory operator input source" "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR"
   require_generated_state_dir "LDAP data bind source" "$HARNESS_LDAP_DATA_DIR"
   require_generated_state_dir "LDAP config bind source" "$HARNESS_LDAP_CONFIG_DIR"
-  require_generated_state_dir "Gerrit helper state bind source" "$HARNESS_STATE_DIR/gerrit"
-  require_generated_state_dir "Jenkins controller helper state bind source" "$HARNESS_STATE_DIR/jenkins-controller"
-  require_generated_state_dir "Jenkins agent helper state bind source" "$HARNESS_STATE_DIR/jenkins-agent"
   require_generated_state_dir "Gerrit product home bind source" "$HARNESS_PRODUCT_HOME_DIR/gerrit"
   require_generated_state_dir "Jenkins controller product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller"
   require_generated_state_dir "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
-  require_generated_state_dir "Gerrit validation secret bind source" "$HARNESS_GERRIT_VALIDATION_SECRET_DIR"
   require_generated_state_dir "shared Jenkins storage bind source" "$HARNESS_SHARED_JENKINS_STORAGE_DIR"
-  require_generated_state_dir "Gerrit evidence bind source" "$HARNESS_GERRIT_EVIDENCE_DIR"
-  require_generated_state_dir "Gerrit log bind source" "$HARNESS_GERRIT_LOG_DIR"
-  require_generated_state_dir "Jenkins controller evidence bind source" "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR"
-  require_generated_state_dir "Jenkins controller log bind source" "$HARNESS_JENKINS_CONTROLLER_LOG_DIR"
-  require_generated_state_dir "Jenkins agent evidence bind source" "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR"
-  require_generated_state_dir "Jenkins agent log bind source" "$HARNESS_JENKINS_AGENT_LOG_DIR"
   require_generated_state_dir "target SSH state" "$HARNESS_TARGET_SSH_DIR"
   require_generated_state_file "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
 }
@@ -891,6 +878,14 @@ validate_shared_storage_path() {
 
 detect_compose() {
   validate_harness_inputs
+  if [ "${HARNESS_FORCE_COMPOSE_V1_FOR_TESTS:-0}" = "1" ]; then
+    command -v docker-compose >/dev/null 2>&1 ||
+      die "Docker Compose v1 test hook requested but docker-compose is missing"
+    compose_kind="docker-compose v1"
+    compose_cmd=(docker-compose)
+    return 0
+  fi
+
   if docker compose version >/dev/null 2>&1; then
     compose_kind="docker compose v2"
     compose_cmd=(docker compose)
@@ -1032,32 +1027,16 @@ validate_selected_container_mounts() {
   require_command docker
   detect_compose
   validate_container_mount bundle-factory "$repo_root" /workspace repo
-  validate_container_mount bundle-factory "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR" /var/lib/loopforge/rendered
-  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/evidence" /var/lib/loopforge/evidence
-  validate_container_mount bundle-factory "$HARNESS_STATE_DIR/bundle-factory/preparing" /var/lib/loopforge/preparing
   validate_container_mount ldap "$HARNESS_LDAP_DATA_DIR" /var/lib/ldap
   validate_container_mount ldap "$HARNESS_LDAP_CONFIG_DIR" /etc/ldap/slapd.d
   validate_container_mount gerrit-target "$repo_root" /workspace repo
-  validate_container_mount gerrit-target "$HARNESS_STATE_DIR/gerrit" /var/lib/loopforge
   validate_container_mount gerrit-target "$HARNESS_PRODUCT_HOME_DIR/gerrit" /srv/gerrit
-  validate_container_mount gerrit-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
-  validate_container_mount gerrit-target "$HARNESS_GERRIT_VALIDATION_SECRET_DIR" /var/lib/loopforge/validation-secrets
-  validate_container_mount gerrit-target "$HARNESS_GERRIT_EVIDENCE_DIR" /var/lib/loopforge/evidence
-  validate_container_mount gerrit-target "$HARNESS_GERRIT_LOG_DIR" /var/log/loopforge
   validate_container_mount jenkins-controller-target "$repo_root" /workspace repo
-  validate_container_mount jenkins-controller-target "$HARNESS_STATE_DIR/jenkins-controller" /var/lib/loopforge
   validate_container_mount jenkins-controller-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" /var/lib/jenkins
-  validate_container_mount jenkins-controller-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount jenkins-controller-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
-  validate_container_mount jenkins-controller-target "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" /var/lib/loopforge/evidence
-  validate_container_mount jenkins-controller-target "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" /var/log/loopforge
   validate_container_mount jenkins-agent-target "$repo_root" /workspace repo
-  validate_container_mount jenkins-agent-target "$HARNESS_STATE_DIR/jenkins-agent" /var/lib/loopforge
   validate_container_mount jenkins-agent-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" /var/lib/jenkins-agent
-  validate_container_mount jenkins-agent-target "$HARNESS_TARGET_SSH_DIR" /var/lib/loopforge/target-ssh generated
   validate_container_mount jenkins-agent-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
-  validate_container_mount jenkins-agent-target "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" /var/lib/loopforge/evidence
-  validate_container_mount jenkins-agent-target "$HARNESS_JENKINS_AGENT_LOG_DIR" /var/log/loopforge
 }
 
 ensure_preflight_dirs() {
@@ -1073,7 +1052,6 @@ ensure_dirs() {
   validate_product_home_dir
   ensure_preflight_dirs
   mkdir -p \
-    "$HARNESS_STATE_DIR" \
     "$HARNESS_HOST_DIR" \
     "$HARNESS_TARGET_DIR" \
     "$HARNESS_HOST_DIR/evidence" \
@@ -1086,15 +1064,9 @@ ensure_dirs() {
     "$HARNESS_STAGING_DIR" \
     "$HARNESS_EXPORTED_ARTIFACT_DIR" \
     "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR" \
-    "$HARNESS_STATE_DIR/bundle-factory/evidence" \
-    "$HARNESS_STATE_DIR/bundle-factory/preparing" \
     "$HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR" \
     "$HARNESS_LDAP_DATA_DIR" \
     "$HARNESS_LDAP_CONFIG_DIR" \
-    "$HARNESS_STATE_DIR/gerrit" \
-    "$HARNESS_STATE_DIR/jenkins-controller" \
-    "$HARNESS_STATE_DIR/jenkins-agent" \
-    "$HARNESS_STATE_DIR/integration" \
     "$HARNESS_GERRIT_EVIDENCE_DIR" \
     "$HARNESS_GERRIT_LOG_DIR" \
     "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" \
@@ -1668,11 +1640,11 @@ ensure_gerrit_validation_key() {
 }
 
 gerrit_bundle_factory_env_file() {
-  printf '%s\n' "/var/lib/loopforge/rendered/gerrit-bundle-factory.env"
+  printf '%s\n' "/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env"
 }
 
 jenkins_controller_bundle_factory_env_file() {
-  printf '%s\n' "/var/lib/loopforge/rendered/jenkins-controller-bundle-factory.env"
+  printf '%s\n' "/home/ci-operator/loopforge-inputs/bundle-factory/jenkins-controller-bundle-factory.env"
 }
 
 container_env_file_for_role() {
@@ -1680,11 +1652,10 @@ container_env_file_for_role() {
   role="${1:?role required}"
   service="${2:?service required}"
   if [ "$service" = "bundle-factory" ]; then
-    printf '/var/lib/loopforge/rendered/%s.env\n' "$role"
+    printf '/home/ci-operator/loopforge-inputs/bundle-factory/%s.env\n' "$role"
     return 0
   fi
-  state_dir="$(container_state_dir_for_service "$service")"
-  printf '%s/rendered/%s.env\n' "$state_dir" "$role"
+  printf '/home/ci-operator/loopforge-inputs/%s.env\n' "$role"
 }
 
 container_state_dir_for_service() {
@@ -1838,7 +1809,8 @@ stage_container_role_env() {
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   container_env_file="$(container_env_file_for_role "$role" "$service")"
   require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
-  stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator "$log"
+  stage_operator_input_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator 0640 "$log"
+  printf '%s\n' "$container_env_file"
 }
 
 refresh_target_ssh_known_hosts() {
@@ -1855,48 +1827,31 @@ refresh_target_ssh_known_hosts() {
   printf 'target_ssh_known_hosts=ready file=%s scope=docker-simulation\n' "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" >>"$log"
 }
 
-prepare_bundle_factory_workspace_ownership() {
-  local role log work_root script
-  role="${1:?role required}"
+stage_target_ssh_authorized_key_for_service() {
+  local service log public_key container_public_key command
+  service="${1:?service required}"
   log="${2:?log required}"
-  work_root="/var/lib/loopforge/preparing"
-  script="$(owned_directory_command ci-operator ci-operator 0700 "$work_root" 1)"
-  if ! compose exec -T -u root bundle-factory sh -c "$script" >>"$log" 2>&1; then
+  public_key="$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
+  container_public_key="/home/ci-operator/loopforge-inputs/target-ssh/ci-operator.pub"
+  stage_operator_input_file "$service" "$public_key" "$container_public_key" ci-operator ci-operator 0644 "$log" ||
+    return 1
+  command="$(owned_directory_command ci-operator ci-operator 0700 /home/ci-operator/.ssh 0)"
+  command="$command && cp $(shell_quote "$container_public_key") /home/ci-operator/.ssh/authorized_keys"
+  command="$command && chown ci-operator:ci-operator /home/ci-operator/.ssh/authorized_keys"
+  command="$command && chmod 0600 /home/ci-operator/.ssh/authorized_keys"
+  if ! compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1; then
     return 1
   fi
-  printf 'bundle_factory_bind_mount_prepared role=%s service=bundle-factory preparing=%s owner=ci-operator group=ci-operator scope=docker-simulation-bind-mount\n' \
-    "$role" "$work_root" >>"$log"
+  printf 'target_ssh_authorized_key_installed service=%s source=%s input=%s destination=/home/ci-operator/.ssh/authorized_keys transfer_mode=docker-cp-input-waiver custody=docker-simulation-control-plane scope=docker-simulation-control-plane\n' \
+    "$service" "$public_key" "$container_public_key" >>"$log"
 }
 
-prepare_target_bind_mount_ownership() {
-  local role service log state_root rendered_root staging_root evidence_root log_root script
-  role="${1:?role required}"
-  service="${2:?service required}"
-  log="${3:?log required}"
-  state_root="/var/lib/loopforge"
-  rendered_root="/var/lib/loopforge/rendered"
-  staging_root="/var/lib/loopforge/staging"
-  evidence_root="/var/lib/loopforge/evidence"
-  log_root="/var/log/loopforge"
-
-  script="$(owned_directory_command ci-operator ci-operator 0700 "$state_root" 0)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$rendered_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$staging_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1)"
-  script="$script && $(owned_directory_command ci-operator ci-operator 0750 "$log_root" 1)"
-  if ! compose exec -T -u root "$service" sh -c "$script" >>"$log" 2>&1; then
-    return 1
-  fi
-  printf 'target_bind_mounts_prepared role=%s service=%s state=%s rendered=%s staging=%s evidence=%s logs=%s owner=ci-operator group=ci-operator scope=docker-simulation-bind-mount\n' \
-    "$role" "$service" "$state_root" "$rendered_root" "$staging_root" "$evidence_root" "$log_root" >>"$log"
-}
-
-prepare_all_target_bind_mount_ownership() {
-  local log
+stage_target_ssh_authorized_keys() {
+  local log service
   log="${1:?log required}"
-  prepare_target_bind_mount_ownership gerrit gerrit-target "$log"
-  prepare_target_bind_mount_ownership jenkins-controller jenkins-controller-target "$log"
-  prepare_target_bind_mount_ownership jenkins-agent jenkins-agent-target "$log"
+  for service in gerrit-target jenkins-controller-target jenkins-agent-target; do
+    stage_target_ssh_authorized_key_for_service "$service" "$log" || return 1
+  done
 }
 
 copy_bundle_factory_artifacts_to_host() {
@@ -1959,10 +1914,34 @@ docker_cp_file_to_service() {
   if ! docker cp "$host_file" "$container_id:$tmp_path" >>"$log" 2>&1; then
     return 1
   fi
-  command="$(owned_directory_command "$owner" "$group" 0750 "$dest_dir" 0)"
+  command="test -d $(shell_quote "$dest_dir")"
   command="$command && mv $(shell_quote "$tmp_path") $(shell_quote "$container_path") && chown $(shell_quote "$owner:$group") $(shell_quote "$container_path") && chmod $(shell_quote "$mode") $(shell_quote "$container_path")"
   compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1
   printf 'transfer_mode=docker-cp-waiver source=%s service=%s destination=%s owner=%s group=%s mode=%s scope=docker-simulation-only\n' \
+    "$host_file" "$service" "$container_path" "$owner" "$group" "$mode" >>"$log"
+}
+
+stage_operator_input_file() {
+  local service host_file container_path owner group mode log container_id tmp_path dest_dir command
+  service="${1:?service required}"
+  host_file="${2:?host file required}"
+  container_path="${3:?container path required}"
+  owner="${4:?owner required}"
+  group="${5:?group required}"
+  mode="${6:?mode required}"
+  log="${7:?log required}"
+  require_readable_file "Docker cp operator input source file" "$host_file"
+  container_id="$(container_id_for_service "$service")"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  tmp_path="/tmp/loopforge-input-cp-$$-$(basename "$container_path")"
+  dest_dir="$(dirname "$container_path")"
+  if ! docker cp "$host_file" "$container_id:$tmp_path" >>"$log" 2>&1; then
+    return 1
+  fi
+  command="$(owned_directory_command "$owner" "$group" 0700 "$dest_dir" 0)"
+  command="$command && mv $(shell_quote "$tmp_path") $(shell_quote "$container_path") && chown $(shell_quote "$owner:$group") $(shell_quote "$container_path") && chmod $(shell_quote "$mode") $(shell_quote "$container_path")"
+  compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1
+  printf 'transfer_mode=docker-cp-input-waiver source=%s service=%s destination=%s owner=%s group=%s mode=%s custody=operator-input scope=docker-simulation-only\n' \
     "$host_file" "$service" "$container_path" "$owner" "$group" "$mode" >>"$log"
 }
 
@@ -1983,7 +1962,7 @@ docker_cp_file_from_service() {
     "$service" "$container_path" "$host_file" >>"$log"
 }
 
-stage_rendered_env_file() {
+stage_operator_env_file() {
   local service host_env_file container_env_file owner group log
   service="${1:?service required}"
   host_env_file="${2:?host env file required}"
@@ -1991,7 +1970,7 @@ stage_rendered_env_file() {
   owner="${4:?owner required}"
   group="${5:?group required}"
   log="${6:?log required}"
-  docker_cp_file_to_service "$host_env_file" "$service" "$container_env_file" "$owner" "$group" 0640 "$log"
+  stage_operator_input_file "$service" "$host_env_file" "$container_env_file" "$owner" "$group" 0640 "$log"
   printf '%s\n' "$container_env_file"
 }
 
@@ -2346,7 +2325,7 @@ HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD_REQUIRED=execution-time-only
+HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
@@ -2417,7 +2396,7 @@ HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "$HARNESS_LDAP_ADMIN_PASSWORD")
 HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "$HARNESS_LDAP_CONFIG_PASSWORD")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD_REQUIRED=execution-time-only
+HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
@@ -2687,15 +2666,9 @@ cmd_up() {
     rc=$?
     if compose_v1_recreate_bug_detected "$log"; then
       {
-        printf 'compose_recovery=docker-compose-v1-containerconfig\n'
-        printf 'recovery_action=down-remove-orphans-and-retry-up\n'
+        printf 'compose_recovery_required=docker-compose-v1-containerconfig\n'
+        printf 'recovery_instruction=run-down-or-clean-before-up\n'
       } >>"$log"
-      compose down --remove-orphans >>"$log" 2>&1 || true
-      if compose up -d --build >>"$log" 2>&1; then
-        rc=0
-      else
-        rc=$?
-      fi
     fi
   fi
   if [ "$rc" -ne 0 ]; then
@@ -2707,9 +2680,13 @@ cmd_up() {
   check_ubuntu_service_baseline gerrit-target gerrit
   check_ubuntu_service_baseline jenkins-controller-target jenkins-controller
   check_ubuntu_service_baseline jenkins-agent-target jenkins-agent
-  if ! prepare_all_target_bind_mount_ownership "$log" ||
-    ! refresh_target_ssh_known_hosts "$log"; then
-    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start ownership preparation failed")"
+  if ! stage_target_ssh_authorized_keys "$log"; then
+    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start target SSH public-key staging failed")"
+    print_command_failure up "" failed "$log" "$evidence"
+    return 1
+  fi
+  if ! refresh_target_ssh_known_hosts "$log"; then
+    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start target SSH known_hosts refresh failed")"
     print_command_failure up "" failed "$log" "$evidence"
     return 1
   fi
@@ -2859,19 +2836,7 @@ cmd_prepare_artifacts() {
   fi
 
   : >"$log"
-  if ! prepare_bundle_factory_workspace_ownership "$role" "$log"; then
-    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Bundle factory workspace ownership preparation failed")"
-    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
-    return 1
-  fi
-  if [ "$role" = "gerrit" ]; then
-    :
-  elif [ "$role" = "jenkins-controller" ]; then
-    :
-  elif [ "$role" = "jenkins-agent" ]; then
-    :
-  fi
-  role_env_file="$(stage_rendered_env_file "$service" "$host_env_file" "$role_env_file" ci-operator ci-operator "$log")"
+  role_env_file="$(stage_operator_env_file "$service" "$host_env_file" "$role_env_file" ci-operator ci-operator "$log")"
 
   if [ "$role" = "gerrit" ]; then
     if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
@@ -2918,6 +2883,16 @@ cmd_prepare_artifacts() {
   print_command_summary prepare-artifacts "$role" "ok artifact-export=$(basename "$export_archive")"
 }
 
+prepare_target_workspace_for_role() {
+  local role service helper log role_env_file
+  role="${1:?role required}"
+  service="${2:?service required}"
+  helper="$(helper_for_role "$role")"
+  log="${3:?log required}"
+  role_env_file="$(stage_container_role_env "$role" "$service" "$log")"
+  compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-target-workspace >>"$log" 2>&1
+}
+
 cmd_stage_artifacts() {
   local role service archive checksum target_bundle_dir target_payload_dir log evidence
   local staging_root archive_name checksum_name container_archive container_checksum extract_script
@@ -2955,6 +2930,12 @@ cmd_stage_artifacts() {
     return 1
   fi
 
+  if ! prepare_target_workspace_for_role "$role" "$service" "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Role helper target workspace preparation failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+
   if ! docker_cp_file_to_service "$archive" "$service" "$container_archive" ci-operator ci-operator 0644 "$log"; then
     evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact archive failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
@@ -2975,7 +2956,7 @@ target_payload_dir="$5"
 cd "$staging_root"
 sha256sum -c "$checksum_name"
 rm -rf "$target_bundle_dir"
-tar -xzf "$archive_name" -C "$staging_root"
+tar --no-same-owner -xzf "$archive_name" -C "$staging_root"
 test -d "$target_bundle_dir"
 test -f "$target_payload_dir/manifest.txt"
 test -f "$target_payload_dir/checksums.sha256"
@@ -2983,11 +2964,8 @@ cd "$target_bundle_dir"
 sha256sum -c checksums/SHA256SUMS
 cd "$target_payload_dir"
 sha256sum -c checksums.sha256
-chown -R ci-operator:ci-operator "$target_bundle_dir"
-find "$target_bundle_dir" -type d -exec chmod 0755 {} +
-find "$target_bundle_dir" -type f -exec chmod 0644 {} +
 '
-  if ! compose exec -T -u root "$service" sh -c "$extract_script" sh \
+  if ! compose exec -T -u ci-operator "$service" sh -c "$extract_script" sh \
     "$staging_root" \
     "$checksum_name" \
     "$archive_name" \
@@ -3039,7 +3017,7 @@ assert_no_forbidden_success_markers() {
 }
 
 normalize_role_evidence_logs() {
-  local log role pattern state_dir service latest latest_base evidence_copy normalized
+  local log role pattern state_dir service latest latest_base evidence_copy normalized role_log_copy
   log="${1:?log required}"
   role="${2:?role required}"
   pattern="${3:?pattern required}"
@@ -3054,15 +3032,16 @@ normalize_role_evidence_logs() {
 
   require_command python3
   latest_base="$(basename "$latest")"
-  evidence_copy="$HARNESS_EVIDENCE_DIR/role-source/$role/$latest_base"
+  evidence_copy="$(role_evidence_dir "$role")/$latest_base"
   normalized="$HARNESS_EVIDENCE_DIR/$(basename "${latest_base%.json}").host.json"
   docker_cp_file_from_service "$service" "$latest" "$evidence_copy" "$log" || return 1
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     case "$ref" in
       /*)
-        docker_cp_file_from_service "$service" "$ref" "$HARNESS_LOG_DIR/role-snapshots/$role/${ref#/}" "$log" || return 1
-        if [ ! -s "$HARNESS_LOG_DIR/role-snapshots/$role/${ref#/}" ]; then
+        role_log_copy="$(role_log_dir "$role")/${ref#/}"
+        docker_cp_file_from_service "$service" "$ref" "$role_log_copy" "$log" || return 1
+        if [ ! -s "$role_log_copy" ]; then
           printf 'bounded_log_reference_empty role=%s reference=%s\n' "$role" "$ref" >>"$log"
           return 1
         fi
@@ -3087,7 +3066,7 @@ PY
 )
 EOF
 
-  python3 - "$evidence_copy" "$normalized" "$HARNESS_LOG_DIR/role-snapshots/$role" <<'PY' >>"$log" 2>&1
+  python3 - "$evidence_copy" "$normalized" "$(role_log_dir "$role")" <<'PY' >>"$log" 2>&1
 import json
 import pathlib
 import sys

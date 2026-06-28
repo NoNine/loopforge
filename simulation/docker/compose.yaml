@@ -20,9 +20,6 @@ services:
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../:/workspace:ro"
-      - "${HARNESS_BUNDLE_FACTORY_RENDERED_DIR}:/var/lib/loopforge/rendered"
-      - "${HARNESS_STATE_DIR}/bundle-factory/evidence:/var/lib/loopforge/evidence"
-      - "${HARNESS_STATE_DIR}/bundle-factory/preparing:/var/lib/loopforge/preparing"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     networks:
       - harness
@@ -70,12 +67,7 @@ services:
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../:/workspace:ro"
-      - "${HARNESS_STATE_DIR}/gerrit:/var/lib/loopforge"
       - "${HARNESS_PRODUCT_HOME_DIR}/gerrit:/srv/gerrit"
-      - "${HARNESS_TARGET_SSH_DIR}:/var/lib/loopforge/target-ssh:ro"
-      - "${HARNESS_GERRIT_VALIDATION_SECRET_DIR}:/var/lib/loopforge/validation-secrets"
-      - "${HARNESS_GERRIT_EVIDENCE_DIR}:/var/lib/loopforge/evidence"
-      - "${HARNESS_GERRIT_LOG_DIR}:/var/log/loopforge"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     ports:
       - "127.0.0.1:${HARNESS_GERRIT_HTTP_HOST_PORT}:8080"
@@ -103,12 +95,8 @@ services:
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../:/workspace:ro"
-      - "${HARNESS_STATE_DIR}/jenkins-controller:/var/lib/loopforge"
       - "${HARNESS_PRODUCT_HOME_DIR}/jenkins-controller:/var/lib/jenkins"
-      - "${HARNESS_TARGET_SSH_DIR}:/var/lib/loopforge/target-ssh:ro"
       - "${HARNESS_SHARED_JENKINS_STORAGE_DIR}:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
-      - "${HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR}:/var/lib/loopforge/evidence"
-      - "${HARNESS_JENKINS_CONTROLLER_LOG_DIR}:/var/log/loopforge"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     ports:
       - "127.0.0.1:${HARNESS_JENKINS_HTTP_HOST_PORT}:8080"
@@ -136,12 +124,8 @@ services:
       SIMULATION_ONLY_PUBLIC_INTERNET_FALLBACK: "simulation-only"
     volumes:
       - "../../:/workspace:ro"
-      - "${HARNESS_STATE_DIR}/jenkins-agent:/var/lib/loopforge"
       - "${HARNESS_PRODUCT_HOME_DIR}/jenkins-agent:/var/lib/jenkins-agent"
-      - "${HARNESS_TARGET_SSH_DIR}:/var/lib/loopforge/target-ssh:ro"
       - "${HARNESS_SHARED_JENKINS_STORAGE_DIR}:${HARNESS_JENKINS_SHARED_STORAGE_PATH}"
-      - "${HARNESS_JENKINS_AGENT_EVIDENCE_DIR}:/var/lib/loopforge/evidence"
-      - "${HARNESS_JENKINS_AGENT_LOG_DIR}:/var/log/loopforge"
       - "./scripts/harness-sleep.sh:/usr/local/bin/harness-sleep.sh:ro"
     ports:
       - "127.0.0.1:${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT}:22"

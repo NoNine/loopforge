@@ -34,6 +34,7 @@ Commands:
   preflight
   propose-plugin-versions
   prepare-artifacts
+  prepare-target-workspace
   install
   configure-service
   install-plugins
@@ -348,8 +349,24 @@ print_env_template() {
 }
 
 ensure_dirs() {
-  run_with_privilege "install -d -m 0750 -o $(shell_quote "$LOOPFORGE_OPERATOR_ACCOUNT") -g $(shell_quote "$LOOPFORGE_OPERATOR_GROUP") $(shell_quote "$JENKINS_EVIDENCE_DIR") $(shell_quote "$JENKINS_LOG_DIR")"
+  prepare_loopforge_helper_dirs "$JENKINS_EVIDENCE_DIR" "$JENKINS_LOG_DIR"
   prepare_jenkins_runtime_dirs
+}
+
+prepare_loopforge_helper_dirs() {
+  local command path
+  command="install -d -m 0750 -o $(shell_quote "$LOOPFORGE_OPERATOR_ACCOUNT") -g $(shell_quote "$LOOPFORGE_OPERATOR_GROUP")"
+  for path in "$@"; do
+    command="$command $(shell_quote "$path")"
+  done
+  run_with_privilege "$command"
+}
+
+cmd_prepare_target_workspace() {
+  load_env normal
+  confirm_mutation prepare-target-workspace || return 0
+  prepare_loopforge_helper_dirs /var/lib/loopforge /var/log/loopforge /var/lib/loopforge/staging "$JENKINS_EVIDENCE_DIR" "$JENKINS_LOG_DIR"
+  printf 'status=pass command=prepare-target-workspace state_root=/var/lib/loopforge log_root=/var/log/loopforge\n'
 }
 
 runtime_account_exists() {
@@ -1226,10 +1243,7 @@ prepare_artifact_bundle_workspace() {
   preparing_dir="$(dirname "$bundle_dir")"
   [ "$payload_dir" = "$JENKINS_BUNDLE_FACTORY_WORK_DIR" ] ||
     die "JENKINS_ARTIFACT_OUTPUT_DIR must be $JENKINS_BUNDLE_FACTORY_WORK_DIR"
-  mkdir -p "$preparing_dir" ||
-    die "Cannot create Loopforge bundle preparing root as helper account: $preparing_dir"
-  [ -w "$preparing_dir" ] ||
-    die "Loopforge bundle preparing root is not writable by helper account: $preparing_dir"
+  prepare_loopforge_helper_dirs "$preparing_dir"
   rm -rf "$bundle_dir"
   mkdir -p "$payload_dir/plugins" "$payload_dir/templates"
 }
@@ -1617,7 +1631,7 @@ parse_args() {
         usage
         exit 0
         ;;
-      print-env-template|preflight|propose-plugin-versions|prepare-artifacts|install|configure-service|install-plugins|configure-jcasc|validate|collect-evidence)
+      print-env-template|preflight|propose-plugin-versions|prepare-artifacts|prepare-target-workspace|install|configure-service|install-plugins|configure-jcasc|validate|collect-evidence)
         command_name="$1"
         shift
         [ "$#" -eq 0 ] || die_usage "Unexpected arguments after command: $*"
@@ -1647,6 +1661,7 @@ main() {
     preflight) cmd_preflight ;;
     propose-plugin-versions) cmd_propose_plugin_versions ;;
     prepare-artifacts) cmd_prepare_artifacts ;;
+    prepare-target-workspace) cmd_prepare_target_workspace ;;
     install) cmd_install ;;
     configure-service) cmd_configure_service ;;
     install-plugins) cmd_install_plugins ;;

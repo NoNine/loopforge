@@ -137,7 +137,6 @@ generated/simulation/docker/<run-id>/
 | Output kind | Docker run-scoped pattern |
 | --- | --- |
 | Host-contributed inputs | `generated/simulation/docker/<run-id>/host/` |
-| Target helper state | `generated/simulation/docker/<run-id>/target/helper-state/` |
 | Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
 | Transfer scratch | `generated/simulation/docker/<run-id>/target/artifacts/staging/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
@@ -152,18 +151,21 @@ those roots, but the operator-facing Docker model has one run-scoped output
 layout.
 
 The Docker harness does the simulation work it must do: create generated run
-directories, provide bind-mount sources, stage rendered inputs, orchestrate
-containers, and perform explicitly labeled Docker `cp` waivers. Role helpers
-still perform the lifecycle work inside helper-visible paths, including
-artifact preparation, target-local mutation, validation, and evidence
-collection.
+directories, provide required product and LDAP bind-mount sources, retain
+reviewed input copies, orchestrate containers, and perform explicitly labeled
+Docker `cp` waivers. Role helpers still perform lifecycle work inside
+helper-visible paths, including creation of `/var/lib/loopforge` and
+`/var/log/loopforge`, artifact preparation, target-local mutation,
+validation, and evidence collection.
 
-LDAP bind passwords are not written to harness secret files, rendered helper
-env files, runtime env files, or artifact bundles. Docker simulation injects
-the LDAP bind password only into helper command environments for the commands
-that need LDAP proof or product runtime configuration. Product runtime config
-files may still persist product-required LDAP settings after the relevant role
-helper writes them.
+Docker simulation uses a simulation-owned fake LDAP bind password for the
+local LDAP container's read-only user. The default example value is not a real
+organization secret and must not be replaced with one. The harness redacts
+that value from rendered summaries, runtime input copies, helper env files,
+logs, evidence, and artifact bundles, then injects it only into helper command
+environments for commands that need LDAP proof or product runtime
+configuration. Product runtime config files may still persist
+product-required LDAP settings after the relevant role helper writes them.
 
 `prepare-artifacts` writes role artifacts and packs the archive pair inside the
 bundle-factory preparing root, then the harness collector exports those files to
@@ -176,23 +178,25 @@ helper-visible bundle paths.
 
 Bundle-factory and target helper state are helper-visible at
 `/var/lib/loopforge`, and helper logs are helper-visible at
-`/var/log/loopforge`. Bundle-factory `/var/lib/loopforge` debug subdirectories
-are host-backed under `host/bundle-factory/` for rendered inputs and
-`target/helper-state/bundle-factory/` for bundle-factory-produced outputs,
-not `target/product-homes/`.
-Successful artifacts still leave that environment through the explicit export
-step. Rendered helper env files are operator-reviewed runtime inputs first,
-then copied into helper paths before helper execution. The host-side generated
-directories are for operator review, debugging, evidence collection, and
-cleanup; they are not a target payload transfer mechanism.
+`/var/log/loopforge`. Those roots are not Docker bind mounts in the role
+containers. Successful artifacts leave the bundle factory through the explicit
+export step. Full reviewed helper env files remain in operator input custody
+under `host/runtime-inputs/`, then Docker simulation copies them to
+`/home/ci-operator/loopforge-inputs` with a labeled `docker cp` input waiver
+before helper execution. They are not copied into `/var/lib/loopforge` and the
+LDAP bind password value is still injected only at command execution time.
+The run-scoped target SSH public key is staged the same way as Docker
+simulation control-plane input and then installed as the target-local
+`ci-operator` `authorized_keys` file during `up`. The private key remains only
+under host-side `host/target-ssh/`.
 
-Active target role evidence and log directories are target-dominated
-helper-owned output, not host sideband state. The Docker harness prepares
-the bind-mounted backing directories for the target-local
-`ci-operator:ci-operator` identity so Docker mounts are writable, while role
-helpers own role-local lifecycle creation, cleanup, validation, and evidence
-writes under `/var/lib/loopforge` and `/var/log/loopforge`. Host-owned copies
-exist only under `host/`, such as clean backup snapshots.
+Active target role evidence and log directories are helper-owned output inside
+the container. The host collector copies bounded evidence and logs out with a
+labeled Docker `cp` collector waiver. Role helpers own role-local lifecycle
+creation, cleanup, validation, and evidence writes under `/var/lib/loopforge`
+and `/var/log/loopforge`. Host-owned copies exist only under generated host
+review locations, such as harness evidence/log directories and clean backup
+snapshots.
 
 Target operations still install or update product-owned paths such as
 `/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
@@ -204,11 +208,9 @@ REST JSON bodies, public-key handoff, or installing Jenkins `known_hosts`.
 They must not be used to bypass expected access to reviewed helper inputs or
 helper-owned state.
 
-Helper-owned sideband directories may be backed by host directories in the
-Docker simulation, but the container helper owns the runtime files. The host
-collector may read generated evidence, logs, and exported artifacts and may
-clean up the selected run root. Jenkins-owned private keys under integration
-keys are the deliberate exception: the Jenkins controller owns the
+The host collector may read generated evidence, logs, and exported artifacts
+and may clean up the selected run root. Jenkins-owned private keys under
+integration keys are the deliberate exception: the Jenkins controller owns the
 Jenkins-to-Gerrit and Jenkins-to-agent private keys, while generated Groovy
 scripts, status files, evidence, and public-key metadata remain harness
 sideband state.
@@ -230,7 +232,8 @@ review artifacts; active target outputs are not converted to host ownership in
 place. It removes mutable generated runtime data: host rendered inputs and
 target SSH material, `target/helper-state/`,
 `target/product-homes/`, `target/artifacts/staging/`, `target/ldap/`, and
-`target/shared-jenkins-storage/`. If the host user cannot remove
+`target/shared-jenkins-storage/`. `target/helper-state/` is retained only for
+host-orchestrated integration helper state, not role helper roots. If the host user cannot remove
 container-owned files, `clean` may use a one-shot cleanup container mounted
 only to the validated run root.
 

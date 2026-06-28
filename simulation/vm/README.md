@@ -9,6 +9,10 @@ boundaries, output conventions, and checkpoint contract from
 `simulation/README.md`. This file documents VM-specific command ownership and
 future-gate expectations.
 
+VM simulation may use simulation-owned fake LDAP bind passwords for its own
+LDAP VM, matching Docker simulation. Those values must be labeled as test
+credentials and must not be replaced with real organization LDAP secrets.
+
 The bundle factory VM runs role helper `prepare-artifacts` commands. It is an
 environment, not a public API, and there is no standalone
 `bundle-factory-helper.sh`.

@@ -160,50 +160,12 @@ grep -Fq -- '${HARNESS_PRODUCT_HOME_DIR}/jenkins-agent:/var/lib/jenkins-agent' "
   printf 'Docker compose must mount Jenkins agent remote FS from HARNESS_PRODUCT_HOME_DIR\n' >&2
   exit 1
 }
-grep -Fq -- '${HARNESS_STATE_DIR}/gerrit:/var/lib/loopforge' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must mount Gerrit helper state at /var/lib/loopforge\n' >&2
-  exit 1
-}
-grep -Fq -- '${HARNESS_STATE_DIR}/jenkins-controller:/var/lib/loopforge' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must mount Jenkins helper state at /var/lib/loopforge\n' >&2
-  exit 1
-}
-grep -Fq -- '${HARNESS_STATE_DIR}/jenkins-agent:/var/lib/loopforge' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must mount agent helper state at /var/lib/loopforge\n' >&2
-  exit 1
-}
-for spec in \
-  '${HARNESS_GERRIT_EVIDENCE_DIR}:/var/lib/loopforge/evidence' \
-  '${HARNESS_GERRIT_LOG_DIR}:/var/log/loopforge' \
-  '${HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR}:/var/lib/loopforge/evidence' \
-  '${HARNESS_JENKINS_CONTROLLER_LOG_DIR}:/var/log/loopforge' \
-  '${HARNESS_JENKINS_AGENT_EVIDENCE_DIR}:/var/lib/loopforge/evidence' \
-  '${HARNESS_JENKINS_AGENT_LOG_DIR}:/var/log/loopforge'
-do
-  grep -Fq -- "$spec" "$repo_root/simulation/docker/compose.yaml" || {
-    printf 'Docker compose must mount role-specific evidence/log bind source: %s\n' "$spec" >&2
-    exit 1
-  }
-done
-if grep -Fq -- '${HARNESS_LOG_DIR}:/var/log/loopforge' "$repo_root/simulation/docker/compose.yaml" ||
-  grep -Fq -- '${HARNESS_EVIDENCE_DIR}:/var/lib/loopforge/evidence' "$repo_root/simulation/docker/compose.yaml"; then
-  printf 'Docker compose must not share harness evidence/log roots across target containers\n' >&2
+if grep -Eq ':/var/lib/loopforge(/|$)|:/var/log/loopforge(/|$)' "$repo_root/simulation/docker/compose.yaml"; then
+  printf 'Docker compose must not bind-mount container-visible Loopforge roots\n' >&2
   exit 1
 fi
-grep -Fq -- 'HARNESS_STATE_DIR: "/var/lib/loopforge"' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must expose helper state at /var/lib/loopforge\n' >&2
-  exit 1
-}
-grep -Fq -- 'HARNESS_LOG_DIR: "/var/log/loopforge"' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must expose helper logs at /var/log/loopforge\n' >&2
-  exit 1
-}
-if grep -Eq '\$\{HARNESS_STATE_DIR\}/(gerrit|jenkins-controller|jenkins-agent):/harness/state' "$repo_root/simulation/docker/compose.yaml"; then
-  printf 'Docker target helper state/log mounts must not expose /harness paths\n' >&2
-  exit 1
-fi
-if grep -Eq ':/harness/(state|evidence|logs)' "$repo_root/simulation/docker/compose.yaml"; then
-  printf 'Docker compose must not mount legacy /harness sideband paths\n' >&2
+if grep -Eq '/var/lib/loopforge|/var/log/loopforge' "$repo_root/simulation/docker/scripts/harness-sleep.sh"; then
+  printf 'Docker container entrypoint must not create helper-owned Loopforge roots\n' >&2
   exit 1
 fi
 if grep -Eq '\$\{HARNESS_STATE_DIR\}/[^:]*:(/srv/gerrit|/var/lib/jenkins|/var/lib/jenkins-agent)' "$repo_root/simulation/docker/compose.yaml"; then
@@ -214,71 +176,74 @@ if grep -Eq '\$\{HARNESS_STAGING_DIR\}/[^:]*:/opt/' "$repo_root/simulation/docke
   printf 'Target artifact bundles must not be host bind-mounted under /opt\n' >&2
   exit 1
 fi
-grep -Fq -- '${HARNESS_BUNDLE_FACTORY_RENDERED_DIR}:/var/lib/loopforge/rendered' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Bundle-factory rendered inputs must be host-backed under host/ for debugging\n' >&2
-  exit 1
-}
-grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/evidence:/var/lib/loopforge/evidence' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Bundle-factory evidence must be host-backed under state for debugging\n' >&2
-  exit 1
-}
-grep -Fq -- '${HARNESS_STATE_DIR}/bundle-factory/preparing:/var/lib/loopforge/preparing' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Bundle-factory artifact workspace must be host-backed under state for debugging\n' >&2
-  exit 1
-}
-if grep -Eq '\$\{HARNESS_PRODUCT_HOME_DIR\}/bundle-factory[^:]*:/var/lib/loopforge' "$repo_root/simulation/docker/compose.yaml"; then
-  printf 'Bundle-factory helper state must not be backed by target/product-homes\n' >&2
+if grep -Fq -- 'prepare_product_home_ownership' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'prepare_bundle_factory_workspace_ownership' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'prepare_target_bind_mount_ownership' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'prepare_all_target_bind_mount_ownership' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'target_bind_mounts_prepared' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'bundle_factory_bind_mount_prepared' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker harness must not own container-visible Loopforge/product ownership prep\n' >&2
   exit 1
 fi
-for path in \
-  '$HARNESS_BUNDLE_FACTORY_RENDERED_DIR' \
-  '$HARNESS_STATE_DIR/bundle-factory/evidence' \
-  '$HARNESS_STATE_DIR/bundle-factory/preparing' \
-  '$HARNESS_HOST_DIR' \
-  '$HARNESS_TARGET_DIR'
-do
-  grep -Fq -- "$path" "$repo_root/simulation/docker/simulate.sh" || {
-    printf 'Docker harness must create bundle-factory debug backing directory %s\n' "$path" >&2
-    exit 1
-  }
-done
-
-if grep -Fq -- 'prepare_product_home_ownership' "$repo_root/simulation/docker/simulate.sh"; then
-  printf 'Docker harness must not own product home ownership during role lifecycle\n' >&2
+if grep -Fq -- '/var/lib/loopforge/rendered' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker harness must not stage helper env files under Loopforge rendered state\n' >&2
   exit 1
 fi
-grep -Fq -- 'prepare_bundle_factory_workspace_ownership' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must prepare bundle-factory bind mount ownership\n' >&2
-  exit 1
-}
-grep -Fq -- 'prepare_target_bind_mount_ownership' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must prepare target bind mount ownership\n' >&2
-  exit 1
-}
-grep -Fq -- 'if ! prepare_all_target_bind_mount_ownership "$log" ||' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness up must prepare target bind mounts\n' >&2
-  exit 1
-}
-grep -Fq -- 'target_bind_mounts_prepared' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must label target bind mount preparation\n' >&2
-  exit 1
-}
-if grep -Fq -- 'recursive_contract=target-helper-owned' "$repo_root/simulation/docker/simulate.sh"; then
-  printf 'Docker harness must not label bind-mount prep as helper-owned lifecycle\n' >&2
+if grep -Fq -- '/var/lib/loopforge/target-ssh' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- '/var/lib/loopforge/target-ssh' "$repo_root/simulation/docker/scripts/harness-sleep.sh"; then
+  printf 'Docker target SSH inputs must not use Loopforge helper state paths\n' >&2
   exit 1
 fi
-grep -Fq -- 'owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must recursively prepare target evidence dirs as ci-operator\n' >&2
+grep -Fq -- '/home/ci-operator/loopforge-inputs' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must transfer helper env files to operator input custody\n' >&2
   exit 1
 }
-grep -Fq -- 'owned_directory_command ci-operator ci-operator 0750 "$log_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must recursively prepare target log dirs as ci-operator\n' >&2
+grep -Fq -- 'transfer_mode=docker-cp-input-waiver' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must label helper env input transfers as simulation-only waivers\n' >&2
   exit 1
 }
+grep -Fq -- 'prepare-target-workspace' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must invoke helper-owned target workspace preparation before staging artifacts\n' >&2
+  exit 1
+}
+if grep -Fq -- 'owned_directory_command ci-operator ci-operator 0750 "$evidence_root" 1' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'owned_directory_command ci-operator ci-operator 0750 "$log_root" 1' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'owned_directory_command ci-operator ci-operator 0700 "$work_root" 1' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker harness must not recursively prepare helper-owned Loopforge dirs\n' >&2
+  exit 1
+fi
 if grep -Fq -- 'secret_input_root' "$repo_root/simulation/docker/simulate.sh"; then
   printf 'Docker harness must not prepare LDAP secret input directories\n' >&2
   exit 1
 fi
+grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-password}"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker simulation must keep a fake LDAP bind password default for simulation-owned LDAP\n' >&2
+  exit 1
+}
+grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker runtime summaries must redact the simulation-owned LDAP bind password\n' >&2
+  exit 1
+}
+grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$repo_root/simulation/docker/examples/docker.env.example" || {
+  printf 'Docker env example must document the fake simulation LDAP bind password\n' >&2
+  exit 1
+}
+grep -Fq -- 'real organization LDAP secret' "$repo_root/simulation/docker/examples/docker.env.example" || {
+  printf 'Docker env example must forbid real organization LDAP secrets\n' >&2
+  exit 1
+}
+grep -Fq -- '/home/ci-operator/loopforge-inputs/target-ssh/ci-operator.pub' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must stage target SSH public key through operator input custody\n' >&2
+  exit 1
+}
+grep -Fq -- 'target_ssh_authorized_key_installed' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness must label target SSH authorized_keys installation\n' >&2
+  exit 1
+}
+grep -Fq -- 'custody=docker-simulation-control-plane' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker target SSH public key staging must be labeled as simulation control-plane custody\n' >&2
+  exit 1
+}
 grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Gerrit collect-evidence must run as ci-operator\n' >&2
   exit 1
@@ -327,25 +292,6 @@ grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --en
   printf 'Jenkins agent configure-runtime must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'if ! prepare_bundle_factory_workspace_ownership "$role" "$log"; then' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must fail closed when bundle-factory workspace prep fails\n' >&2
-  exit 1
-}
-grep -Fq -- 'scope=docker-simulation-bind-mount' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness bundle-factory prep must be labeled as bind-mount setup\n' >&2
-  exit 1
-}
-grep -Fq -- 'owned_directory_command ci-operator ci-operator 0700 "$work_root" 1' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must prepare only the bundle-factory preparing bind mount\n' >&2
-  exit 1
-}
-if grep -Fq -- 'owned_directory_command ci-operator ci-operator 0755 "$state_root" 1' "$repo_root/simulation/docker/simulate.sh" ||
-  grep -Fq -- 'owned_directory_command ci-operator ci-operator 0755 "$log_root" 1' "$repo_root/simulation/docker/simulate.sh" ||
-  grep -Fq -- 'workspace="$(container_bundle_factory_work_dir_for_role "$role")"' "$repo_root/simulation/docker/simulate.sh"
-then
-  printf 'Docker harness must not create bundle-factory helper roots or role payload dirs during prepare-artifacts\n' >&2
-  exit 1
-fi
 for script in \
   "$repo_root/scripts/gerrit-setup.sh" \
   "$repo_root/scripts/jenkins-controller-setup.sh" \
@@ -355,8 +301,17 @@ do
     printf 'Role helper must own artifact bundle workspace preparation: %s\n' "$script" >&2
     exit 1
   }
-  grep -Fq -- 'mkdir -p "$preparing_dir"' "$script" || {
-    printf 'Role helper must create the Loopforge preparing root when practical: %s\n' "$script" >&2
+  grep -Fq -- 'prepare_loopforge_helper_dirs "$preparing_dir"' "$script" ||
+    grep -Fq -- 'run_with_privilege "install -d -m 0750 -o $(shell_quote "$LOOPFORGE_OPERATOR_ACCOUNT") -g $(shell_quote "$LOOPFORGE_OPERATOR_GROUP") $(shell_quote "$preparing_dir")"' "$script" || {
+    printf 'Role helper must create the Loopforge preparing root: %s\n' "$script" >&2
+    exit 1
+  }
+  grep -Fq -- 'prepare-target-workspace' "$script" || {
+    printf 'Role helper must expose prepare-target-workspace: %s\n' "$script" >&2
+    exit 1
+  }
+  grep -Fq -- 'prepare_loopforge_helper_dirs /var/lib/loopforge /var/log/loopforge /var/lib/loopforge/staging' "$script" || {
+    printf 'Role helper must create Loopforge target roots and staging: %s\n' "$script" >&2
     exit 1
   }
   grep -Fq -- 'rm -rf "$bundle_dir"' "$script" || {
@@ -388,16 +343,12 @@ grep -Fq -- 'owned_directory_command()' "$repo_root/simulation/docker/simulate.s
   printf 'Docker harness must own its local directory ownership command construction\n' >&2
   exit 1
 }
-grep -Fq -- 'owned_directory_command "$owner" "$group" 0750 "$dest_dir" 0' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness transfer staging must use local ownership helper\n' >&2
+grep -Fq -- 'command="test -d $(shell_quote "$dest_dir")"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness artifact staging must require helper-created destination dirs\n' >&2
   exit 1
 }
 grep -Fq -- 'bundle_factory_artifact_export' "$repo_root/simulation/docker/simulate.sh" || {
   printf 'Docker harness must explicitly export bundle-factory artifacts to host\n' >&2
-  exit 1
-}
-grep -Fq -- '/var/lib/loopforge/rendered' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness must prepare bundle-factory rendered input directory\n' >&2
   exit 1
 }
 grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper"' "$repo_root/simulation/docker/simulate.sh" || {
@@ -408,8 +359,9 @@ grep -Fq -- 'transfer_mode=docker-cp-waiver' "$repo_root/simulation/docker/simul
   printf 'Docker harness must label Docker cp transfers as simulation-only waivers\n' >&2
   exit 1
 }
-grep -Fq -- 'stage_rendered_env_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator "$log"' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness target env staging must use ci-operator ownership\n' >&2
+grep -Fq -- 'stage_operator_env_file()' "$repo_root/simulation/docker/simulate.sh" &&
+  grep -Fq -- 'stage_operator_env_file "$service" "$host_env_file"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness target env staging must use operator input custody\n' >&2
   exit 1
 }
 grep -Fq -- 'docker_cp_file_to_service "$archive" "$service" "$container_archive" ci-operator ci-operator 0644 "$log"' "$repo_root/simulation/docker/simulate.sh" || {
@@ -420,7 +372,17 @@ grep -Fq -- 'docker_cp_file_to_service "$checksum" "$service" "$container_checks
   printf 'Docker harness artifact checksum staging must use ci-operator ownership\n' >&2
   exit 1
 }
-grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$repo_root/simulation/docker/simulate.sh" || {
-  printf 'Docker harness extracted artifact bundle must be handed to ci-operator\n' >&2
+grep -Fq -- 'compose exec -T -u ci-operator "$service" sh -c "$extract_script"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness artifact extraction must run as ci-operator\n' >&2
   exit 1
 }
+grep -Fq -- 'tar --no-same-owner -xzf "$archive_name" -C "$staging_root"' "$repo_root/simulation/docker/simulate.sh" || {
+  printf 'Docker harness artifact extraction must not preserve archive owners\n' >&2
+  exit 1
+}
+if grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'find "$target_bundle_dir" -type d -exec chmod 0755 {} +' "$repo_root/simulation/docker/simulate.sh" ||
+  grep -Fq -- 'find "$target_bundle_dir" -type f -exec chmod 0644 {} +' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker harness must not recursively repair extracted helper-owned bundle ownership\n' >&2
+  exit 1
+fi

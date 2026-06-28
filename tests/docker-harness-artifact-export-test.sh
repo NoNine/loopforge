@@ -18,6 +18,12 @@ cat >"$fake_bin/docker" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
 case "$*" in
+  "ps -a --format {{.Names}}")
+    if [ "${FAKE_CONTAINERS_EXIST:-0}" = "1" ]; then
+      printf '%s-bundle-factory\n%s-ldap\n%s-gerrit-target\n%s-jenkins-controller-target\n%s-jenkins-agent-target\n' \
+        "$HARNESS_PROJECT_NAME" "$HARNESS_PROJECT_NAME" "$HARNESS_PROJECT_NAME" "$HARNESS_PROJECT_NAME" "$HARNESS_PROJECT_NAME"
+    fi
+    ;;
   cp\ *)
     src="${2:?source required}"
     dest="${3:?destination required}"
@@ -126,11 +132,13 @@ EOF
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
+FAKE_CONTAINERS_EXIST=0 \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
+FAKE_CONTAINERS_EXIST=1 \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit >"$tmp_dir/prepare.out"
 
 export_archive="$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz"
@@ -146,7 +154,11 @@ grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
 }
 grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$prepare_evidence"
 grep -Fq '"checksum_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256;/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/checksums.sha256"' "$prepare_evidence"
-grep -Fq -- '/var/lib/loopforge/rendered' "$calls"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env' "$calls"
+if grep -Fq -- '/var/lib/loopforge/rendered' "$calls"; then
+  printf 'prepare-artifacts must not stage helper env files under Loopforge rendered state\n' >&2
+  exit 1
+fi
 grep -Fq -- '/var/lib/loopforge/preparing' "$calls"
 if grep -Fq -- 'install -d -m 0755 -o ci-operator -g ci-operator /var/lib/loopforge' "$calls"; then
   printf 'bundle-factory prepare-artifacts must not set up the Loopforge helper state root in harness\n' >&2
@@ -166,16 +178,8 @@ if grep -Fq -- 'ldap-bind-password' "$calls"; then
 fi
 grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz' "$calls"
 grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
-[ -d "$run_dir/target/helper-state/bundle-factory/preparing" ] || {
-  printf 'bundle-factory artifact workspace debug backing must be created in host state\n' >&2
-  exit 1
-}
-[ -d "$run_dir/host/bundle-factory/rendered" ] || {
-  printf 'bundle-factory rendered input debug backing must be created in host state\n' >&2
-  exit 1
-}
-[ -d "$run_dir/target/helper-state/bundle-factory/evidence" ] || {
-  printf 'bundle-factory evidence debug backing must be created in host state\n' >&2
+[ -d "$run_dir/host/runtime-inputs/helper-envs/bundle-factory" ] || {
+  printf 'bundle-factory operator input envs must be retained under host runtime inputs\n' >&2
   exit 1
 }
 [ ! -e "$run_dir/target/product-homes/bundle-factory" ] || {
@@ -188,6 +192,7 @@ tar -xOf "$export_archive" gerrit-artifacts-bundle/checksums/SHA256SUMS >/dev/nu
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
+FAKE_CONTAINERS_EXIST=1 \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stage-artifacts --role gerrit >"$tmp_dir/stage.out"
 
 stage_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -name 'stage-artifacts-gerrit-*.json' -print | sort | tail -1)"
@@ -201,15 +206,23 @@ grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/checksums/SHA256SUM
 grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/checksums.sha256' "$stage_evidence"
 grep -Fq 'Docker cp simulation-only waiver' "$stage_evidence"
 grep -Fq -- 'cp ' "$calls"
+grep -Fq -- 'prepare-target-workspace' "$calls"
 grep -Fq -- 'gerrit-artifacts-bundle.tar.gz container-id:/tmp/loopforge-docker-cp-' "$calls"
 grep -Fq -- 'gerrit-artifacts-bundle.tar.gz.sha256 container-id:/tmp/loopforge-docker-cp-' "$calls"
-grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging' "$calls"
+grep -Fq -- 'test -d /var/lib/loopforge/staging' "$calls"
+if grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging' "$calls"; then
+  printf 'stage-artifacts must not create helper-owned staging dirs from the harness\n' >&2
+  exit 1
+fi
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit-artifacts-bundle.tar.gz' "$calls"
 grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/staging/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
-grep -Fq -- 'tar -xzf "$archive_name" -C "$staging_root"' "$calls"
-grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$calls"
-grep -Fq -- 'find "$target_bundle_dir" -type d -exec chmod 0755 {} +' "$calls"
-grep -Fq -- 'find "$target_bundle_dir" -type f -exec chmod 0644 {} +' "$calls"
+grep -Fq -- 'tar --no-same-owner -xzf "$archive_name" -C "$staging_root"' "$calls"
+if grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$calls" ||
+  grep -Fq -- 'find "$target_bundle_dir" -type d -exec chmod 0755 {} +' "$calls" ||
+  grep -Fq -- 'find "$target_bundle_dir" -type f -exec chmod 0644 {} +' "$calls"; then
+  printf 'stage-artifacts must extract helper-owned bundles as ci-operator without recursive harness ownership repair\n' >&2
+  exit 1
+fi
 
 [ ! -d "$run_dir/target/artifacts/staging/gerrit/gerrit-artifacts-bundle" ] || {
   printf 'stage-artifacts must not extract target bundles on the host\n' >&2

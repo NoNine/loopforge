@@ -66,25 +66,31 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
   the release archive pair in the bundle-factory workspace.
 - Role helpers own practical child directory creation. The environment or
   simulation harness only provides prerequisites the helper cannot reasonably
-  provide itself, such as Docker bind-mount backing paths. See
+  provide itself, such as generated run roots, container lifecycle, or explicit
+  file transfer waivers. Docker simulation must not create container-visible
+  `/var/lib/loopforge` or `/var/log/loopforge` role-helper roots. See
   `docs/system-model.md` for the general helper-versus-harness boundary.
-- LDAP bind passwords are execution-time secret inputs only. They must not be
-  written to artifact bundles, rendered helper env files, runtime env files, or
-  harness-created secret files. Product runtime config may persist required
-  product settings after a role helper writes them.
+- LDAP bind passwords must not be written to artifact bundles, rendered helper
+  env files, runtime env files, or harness-created secret files. Docker and VM
+  simulation may use labeled simulation-owned fake LDAP bind passwords for
+  their own LDAP services; target-deployment LDAP bind passwords remain
+  execution-time secret inputs only. Product runtime config may persist
+  required product settings after a role helper writes them.
 - `stage-artifacts` verifies the archive checksum, extracts to the target
   extraction root, and verifies the bundle checksum files before service
   mutation.
 - Target extraction uses helper-owned staging under `/var/lib/loopforge`; the
-  extracted bundle tree must be owned by the operator account and made
-  readable/traversable before role helpers consume it.
+  staging root is created by the role helper, and transfer utilities may copy
+  archive pairs into that existing root only through a labeled transfer
+  waiver. Extraction should preserve operator-account ownership, for example
+  by extracting as the operator account without preserving archive owners.
 - Role helpers consume the extracted payload directory only.
-- Helper-owned generated state, runtime inputs, staging handoff, evidence
-  inputs, and bounded logs follow `docs/directory-model.md`.
+- Helper-owned generated state, staging handoff, evidence inputs, and bounded
+  logs follow `docs/directory-model.md`. Full reviewed helper env files remain
+  operator inputs and must not be embedded in bundles.
 - Docker and VM simulation may back these paths with generated host
-  directories, bind mounts, container copies, or VM transfer paths, but the
-  helper-visible paths stay product-like and the lifecycle checks remain
-  required.
+  directories, container copies, or VM transfer paths, but helper-visible
+  paths stay product-like and the lifecycle checks remain required.
 
 ## Mode Parity
 

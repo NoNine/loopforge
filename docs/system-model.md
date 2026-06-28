@@ -68,10 +68,12 @@ must not be presented as `target-deployment` proof.
 ## Helper-Owned Generated State
 
 Helper-owned generated execution state is separate from service-owned product
-homes. Helper state holds rendered inputs, runtime inputs, staging handoff,
-evidence inputs, bounded logs, and related helper-managed state. Service-owned
-state remains under the native Gerrit, Jenkins controller, and Jenkins agent
-homes.
+homes and from operator input custody. Helper state holds staging handoff,
+evidence, bounded logs, bundle-factory preparation state, and related
+helper-managed state. Full reviewed helper env files remain operator inputs
+and are transferred to target-side operator input locations for execution;
+they are not helper state. Service-owned state remains under the native
+Gerrit, Jenkins controller, and Jenkins agent homes.
 
 The helper-owned paths are not service homes. They are the workspace used by
 helper scripts and integration workflows to prepare, stage, validate, and
@@ -85,7 +87,8 @@ can reasonably manage as the operator account. Simulation harnesses and
 environment setup provide prerequisites that helpers cannot provide
 themselves, such as generated run roots, bind-mount backing paths, container
 lifecycle, or file transfer waivers; they must not replace helper-owned
-lifecycle work or pre-populate helper outputs as success.
+lifecycle work, create container-visible Loopforge roots for role helpers, or
+pre-populate helper outputs as success.
 
 ## Actors
 
@@ -172,11 +175,15 @@ and must follow approved secret handling and evidence redaction rules.
 
 Simulation modes must not consume real organization LDAP bind secrets.
 `docker-simulation` and `vm-simulation` use simulation-owned LDAP directories,
-users, groups, bind accounts, and bind passwords only. Simulation env files,
-mounted secrets, generated state, logs, and evidence must not contain real
-LDAP bind DNs or passwords. If a simulation run is configured with real target
-LDAP secrets, it must fail closed rather than preserve or exercise those
-secrets.
+users, groups, bind accounts, and bind passwords only. Simulation-owned fake
+LDAP bind passwords may appear in simulation bootstrap env files so the local
+LDAP service can seed its read-only user. They must stay labeled as
+simulation-owned test credentials and must not be embedded in bundles,
+evidence, logs, helper-owned state, or target-deployment inputs. Simulation
+env files, mounted secrets, generated state, logs, and evidence must not
+contain real LDAP bind DNs or passwords. If a simulation run is configured
+with real target LDAP secrets, it must fail closed rather than preserve or
+exercise those secrets.
 
 Simulation evidence must identify LDAP as simulation or test LDAP.
 `target-deployment` evidence may record LDAP URL, base DN, bind account

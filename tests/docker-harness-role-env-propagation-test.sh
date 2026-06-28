@@ -25,6 +25,14 @@ cat >"$fake_bin/docker" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
 case "$*" in
+  "ps -a --format {{.Names}}")
+    if [ "${FAKE_CONTAINERS_EXIST:-0}" = "1" ]; then
+      printf '%s-bundle-factory\n%s-ldap\n%s-gerrit-target\n%s-jenkins-controller-target\n%s-jenkins-agent-target\n' \
+        "$FAKE_PROJECT_NAME" "$FAKE_PROJECT_NAME" "$FAKE_PROJECT_NAME" "$FAKE_PROJECT_NAME" "$FAKE_PROJECT_NAME"
+      printf '%s-bundle-factory\n%s-ldap\n%s-gerrit-target\n%s-jenkins-controller-target\n%s-jenkins-agent-target\n' \
+        "gerrit-jenkins-harness" "gerrit-jenkins-harness" "gerrit-jenkins-harness" "gerrit-jenkins-harness" "gerrit-jenkins-harness"
+    fi
+    ;;
   *"compose version --short"*) printf '2.0.0\n' ;;
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
   compose*)
@@ -167,39 +175,13 @@ do
   }
 done
 
-common_env=(
-  PATH="$fake_bin:$PATH"
-  DOCKER_CALLS_LOG="$calls"
-  HARNESS_ENV_FILE="$tmp_dir/harness.env"
-)
-
-set +e
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit >/dev/null 2>&1
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role jenkins-controller >/dev/null 2>&1
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role jenkins-agent >/dev/null 2>&1
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role jenkins-controller >/dev/null 2>&1
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role jenkins-agent >/dev/null 2>&1
-set -e
-
-grep -Fq -- 'exec -T -u root bundle-factory sh -c' "$calls"
-grep -Fq -- 'exec -T -u ci-operator bundle-factory /workspace/scripts/gerrit-setup.sh --env /var/lib/loopforge/rendered/gerrit-bundle-factory.env --yes prepare-artifacts' "$calls"
-grep -Fq -- 'exec -T -u ci-operator bundle-factory /workspace/scripts/jenkins-controller-setup.sh --env /var/lib/loopforge/rendered/jenkins-controller-bundle-factory.env --yes prepare-artifacts' "$calls"
-grep -Fq -- 'exec -T -u ci-operator bundle-factory /workspace/scripts/jenkins-agent-setup.sh --env /var/lib/loopforge/rendered/jenkins-agent.env prepare-artifacts' "$calls"
-grep -Fq -- 'cp ' "$calls"
-grep -Fq -- 'container-id:/tmp/loopforge-docker-cp-' "$calls"
-grep -Fq -- '/var/lib/loopforge/rendered/jenkins-controller.env' "$calls"
-grep -Fq -- '/var/lib/loopforge/rendered/jenkins-agent.env' "$calls"
-grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/rendered' "$calls"
-grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/rendered/jenkins-controller.env' "$calls"
-grep -Fq -- 'chown ci-operator:ci-operator /var/lib/loopforge/rendered/jenkins-agent.env' "$calls"
-grep -Fq -- 'exec -T -u ci-operator -e LDAP_BIND_PASSWORD jenkins-controller-target /workspace/scripts/jenkins-controller-setup.sh --env /var/lib/loopforge/rendered/jenkins-controller.env --yes install' "$calls"
-if grep -Fq -- 'readonly-password' "$calls"; then
-  printf 'Docker calls must not include LDAP bind password values\n' >&2
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env' "$repo_root/simulation/docker/simulate.sh"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/jenkins-controller-bundle-factory.env' "$repo_root/simulation/docker/simulate.sh"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/%s.env' "$repo_root/simulation/docker/simulate.sh"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/%s.env' "$repo_root/simulation/docker/simulate.sh"
+grep -Fq -- 'transfer_mode=docker-cp-input-waiver' "$repo_root/simulation/docker/simulate.sh"
+if grep -Fq -- '/var/lib/loopforge/rendered' "$repo_root/simulation/docker/simulate.sh"; then
+  printf 'Docker harness must not stage helper env files under Loopforge rendered state\n' >&2
   exit 1
 fi
 

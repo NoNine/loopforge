@@ -20,7 +20,7 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-state_dir="$run_dir/target/helper-state"
+host_dir="$run_dir/host"
 
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
@@ -45,6 +45,6 @@ grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/init-run.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/init-run.out"
 
-runtime_env="$state_dir/rendered/harness.runtime.env"
+runtime_env="$host_dir/rendered/harness.runtime.env"
 grep -Fq "HARNESS_RUN_ID=$run_id" "$runtime_env"
 grep -Fq "HARNESS_PROJECT_NAME=$run_id" "$runtime_env"

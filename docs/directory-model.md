@@ -69,21 +69,21 @@ helper-owned `/var/lib/loopforge/` state.
 
 Helper-owned paths are execution state, not Gerrit or Jenkins service homes.
 `/var/lib/loopforge` is the Loopforge helper state root, and
-`/var/log/loopforge` is the Loopforge helper log root. Role helpers and the
-shared integration helper may create and mutate practical child paths during
-reviewed lifecycle commands. Simulation harnesses may prepare Docker bind-mount
-backing paths or other execution prerequisites, but they do not own the
-Loopforge helper state or log roots as product homes. The general utility
-boundary is defined in `docs/system-model.md`: helpers are self-contained
-where practical, and harnesses do only the environment work they must do.
+`/var/log/loopforge` is the Loopforge helper log root. Role helpers create
+these roots and practical child paths during reviewed lifecycle commands,
+including bundle-factory `prepare-artifacts` and target workspace
+preparation. Simulation harnesses do not pre-create, bind-mount, or
+recursively repair container-visible Loopforge roots for role helpers. The
+general utility boundary is defined in `docs/system-model.md`: helpers are
+self-contained where practical, and harnesses do only the environment work
+they must do.
 
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/var/lib/loopforge/` | Bundle factory and targets | Role helpers and shared integration helper | Operator account and group; default example `ci-operator:ci-operator` | Private where secrets or rendered inputs are present | Loopforge helper state root: rendered inputs, staging handoff, helper state, evidence inputs, integration status | Mixed; child paths can contain secrets or sensitive reviewed inputs | Evidence may reference child paths, but must not include secret values |
-| `/var/lib/loopforge/rendered/` | Bundle factory and targets | Docker simulation init-run flow and helpers | Operator account and group; default example `ci-operator:ci-operator` | Runtime input files are private, normally `0600` for env files | Reviewed and rendered runtime inputs | Sensitive because env files may include secret-bearing variables or paths | Evidence may record file names and redaction status |
+| `/var/lib/loopforge/` | Bundle factory and targets | Role helpers | Operator account and group; default example `ci-operator:ci-operator` | Private where sensitive child state is present | Loopforge helper state root: staging handoff, helper state, evidence, and bundle preparation state | Mixed; child paths can contain sensitive operational metadata | Evidence may reference child paths, but must not include secret values |
 | `/var/lib/loopforge/preparing/` | Bundle factory | Role helper `prepare-artifacts` | Operator account and group; default example `ci-operator:ci-operator` | Writable by helper only | Prepared role bundle trees, release archives, manifests, and checksums | Non-secret artifact workspace; must not contain private keys, passwords, tokens, or LDAP bind secrets | Role helpers create this path when practical, then create and clean their own bundle trees |
-| `/var/lib/loopforge/staging/` | Targets | Docker/VM/target transfer surface and role helpers | Operator account and group; default example `ci-operator:ci-operator` | Writable only by reviewed staging flow | Incoming release archive pairs and extracted one-time bundle trees | Non-secret handoff; must not become an OS dependency bundle | Missing or checksum-mismatched content blocks readiness; extracted bundle trees are disposable staging state |
-| `/var/lib/loopforge/evidence/` | Bundle factory and targets | Role helpers, integration helper, evidence collector | Operator account and group; default example `ci-operator:ci-operator` | Writable by helper; readable by approved evidence reviewers | JSON summaries, status records, bounded references | Must be redacted; may include public key fingerprints and paths | Retained for audit; simulation cleanup preserves generated evidence |
+| `/var/lib/loopforge/staging/` | Targets | Role helpers; transfer utilities may copy archive pairs into the existing helper-created root through an explicit waiver | Operator account and group; default example `ci-operator:ci-operator` | Writable by helper and reviewed transfer flow | Incoming release archive pairs and extracted one-time bundle trees | Non-secret handoff; must not become an OS dependency bundle | Missing or checksum-mismatched content blocks readiness; extracted bundle trees are disposable staging state |
+| `/var/lib/loopforge/evidence/` | Bundle factory and targets | Role helpers and evidence collector | Operator account and group; default example `ci-operator:ci-operator` | Writable by helper; readable by approved evidence reviewers | JSON summaries, status records, bounded references | Must be redacted; may include public key fingerprints and paths | Retained for audit; simulation cleanup preserves generated evidence copies |
 | `/var/log/loopforge/` | Bundle factory and targets | Helpers | Operator account and group; default example `ci-operator:ci-operator` | Writable by helper; bounded reads only | Loopforge helper log root: helper logs and command logs | Must not include private keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env values | Evidence may include bounded log references |
 
 Public internet fallback on target hosts is not a supported product behavior.
@@ -116,21 +116,16 @@ generated/simulation/docker/<run-id>/
 | --- | --- | --- | --- |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env and manifest contract |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, normally written with mode `0600` |
-| `host/bundle-factory/rendered/` | `/var/lib/loopforge/rendered` in bundle factory | Host-dominated | Bundle-factory rendered inputs |
+| `host/bundle-factory/rendered/` | Host-side reviewed bundle-factory input copies | Host-dominated | Operator review copy before Docker `cp` input transfer |
 | `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
-| `host/target-ssh/` | `/var/lib/loopforge/target-ssh` in target containers | Host-dominated | Host-generated target SSH identity, public key, and known hosts |
-| `host/validation-secrets/gerrit/` | `/var/lib/loopforge/validation-secrets` in Gerrit target | Host-dominated | Docker simulation-only SSH validation key material; not used for LDAP bind secrets; host directory is `0700` |
+| `host/target-ssh/` | Host-side target SSH material | Host-dominated | Host-generated target SSH identity, public key, and known hosts; Docker simulation copies only the public key into targets through `/home/ci-operator/loopforge-inputs` as control-plane input |
+| `host/validation-secrets/gerrit/` | Host-side Docker simulation validation key material | Host-dominated | Docker simulation-only SSH validation key material; not used for LDAP bind secrets; host directory is `0700` |
 | `host/evidence/harness/` | Harness evidence output | Host-dominated | Harness checkpoint evidence |
 | `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs |
 | `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence |
 | `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs |
 | `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Host-owned backups of retained outputs before active dirs are cleared |
-| `target/helper-state/bundle-factory/evidence/` | `/var/lib/loopforge/evidence` in bundle factory | Target-dominated | Bundle-factory evidence |
-| `target/helper-state/bundle-factory/preparing/` | `/var/lib/loopforge/preparing` in bundle factory | Target-dominated | Bundle-factory workspaces |
-| `target/helper-state/gerrit/` | `/var/lib/loopforge` in Gerrit target | Target-dominated | Gerrit helper state |
-| `target/helper-state/jenkins-controller/` | `/var/lib/loopforge` in Jenkins controller target | Target-dominated | Jenkins controller helper state |
-| `target/helper-state/jenkins-agent/` | `/var/lib/loopforge` in Jenkins agent target | Target-dominated | Jenkins agent helper state |
-| `target/helper-state/integration/` | Shared integration helper state | Target-dominated | Cross-role integration status and helper state |
+| `target/helper-state/integration/` | Shared integration helper state | Target-dominated | Cross-role integration status and helper state for the host-orchestrated integration utility |
 | `target/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | Target-dominated | Shared Jenkins controller/agent integration storage |
 | `target/ldap/data/` | `/var/lib/ldap` in LDAP container | Target-dominated | Simulation-owned LDAP data |
 | `target/ldap/config/` | `/etc/ldap/slapd.d` in LDAP container | Target-dominated | Simulation-owned LDAP configuration |
@@ -143,15 +138,15 @@ generated/simulation/docker/<run-id>/
 | `target/logs/<role>/` | `/var/log/loopforge` in one target container | Target-dominated | Retained role-local bounded Docker simulation logs, recursively helper-owned while active |
 
 Docker simulation host directories exist for operator review, debugging,
-evidence collection, and cleanup. They are not target payload transfer
-mechanisms unless a simulation doc explicitly labels the mechanism as a
-simulation-only waiver, such as Docker `cp` during artifact staging.
-Container-visible helper-owned paths use the target or bundle-factory
-operator account, default example `ci-operator:ci-operator`, recursively for
-the active helper-owned tree. Content dominance describes who contributes the
-durable meaningful content, not POSIX ownership or initial directory
-creation.
-Host-side generated backing paths use the local host account that runs the simulation
+evidence collection, cleanup, and explicit Docker `cp` waivers. They are not
+target payload transfer mechanisms unless a simulation doc explicitly labels
+the mechanism as a simulation-only waiver, such as Docker `cp` during artifact
+staging or operator input transfer. Container-visible role helper paths under
+`/var/lib/loopforge` and `/var/log/loopforge` are created by the helpers with
+the target or bundle-factory operator account, default example
+`ci-operator:ci-operator`. Content dominance describes who contributes the
+durable meaningful content, not POSIX ownership of host review copies.
+Host-side generated paths use the local host account that runs the simulation
 harness; this host account is not required to be named `ci-operator`.
 
 Docker `clean` backs up retained outputs to

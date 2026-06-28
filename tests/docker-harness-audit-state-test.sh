@@ -64,28 +64,12 @@ case "$*" in
           "stat -Lc %d:%i "*)
             case "$service:$*" in
               bundle-factory:*"/workspace") stat -Lc '%d:%i' "$REPO_ROOT" ;;
-              bundle-factory:*"/var/lib/loopforge/rendered") stat -Lc '%d:%i' "$RUN_DIR/host/bundle-factory/rendered" ;;
-              bundle-factory:*"/var/lib/loopforge/evidence") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/bundle-factory/evidence" ;;
-              bundle-factory:*"/var/lib/loopforge/preparing") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/bundle-factory/preparing" ;;
               ldap:*"/var/lib/ldap") stat -Lc '%d:%i' "$RUN_DIR/target/ldap/data" ;;
               ldap:*"/etc/ldap/slapd.d") stat -Lc '%d:%i' "$RUN_DIR/target/ldap/config" ;;
               gerrit-target:*"/workspace"|jenkins-controller-target:*"/workspace"|jenkins-agent-target:*"/workspace") stat -Lc '%d:%i' "$REPO_ROOT" ;;
-              gerrit-target:*"/var/lib/loopforge") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/gerrit" ;;
               gerrit-target:*"/srv/gerrit") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/gerrit" ;;
-              gerrit-target:*"/var/lib/loopforge/validation-secrets") stat -Lc '%d:%i' "$RUN_DIR/host/validation-secrets/gerrit" ;;
-              gerrit-target:*"/var/lib/loopforge/target-ssh") stat -Lc '%d:%i' "$RUN_DIR/host/target-ssh" ;;
-              gerrit-target:*"/var/lib/loopforge/evidence") stat -Lc '%d:%i' "$RUN_DIR/target/evidence/gerrit" ;;
-              jenkins-controller-target:*"/var/lib/loopforge/evidence") stat -Lc '%d:%i' "$RUN_DIR/target/evidence/jenkins-controller" ;;
-              jenkins-agent-target:*"/var/lib/loopforge/evidence") stat -Lc '%d:%i' "$RUN_DIR/target/evidence/jenkins-agent" ;;
-              gerrit-target:*"/var/log/loopforge") stat -Lc '%d:%i' "$RUN_DIR/target/logs/gerrit" ;;
-              jenkins-controller-target:*"/var/log/loopforge") stat -Lc '%d:%i' "$RUN_DIR/target/logs/jenkins-controller" ;;
-              jenkins-agent-target:*"/var/log/loopforge") stat -Lc '%d:%i' "$RUN_DIR/target/logs/jenkins-agent" ;;
-              jenkins-controller-target:*"/var/lib/loopforge") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/jenkins-controller" ;;
-              jenkins-controller-target:*"/var/lib/loopforge/target-ssh") stat -Lc '%d:%i' "$RUN_DIR/host/target-ssh" ;;
               jenkins-controller-target:*"/var/lib/jenkins") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/jenkins-controller" ;;
               jenkins-controller-target:*"/mnt/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/target/shared-jenkins-storage" ;;
-              jenkins-agent-target:*"/var/lib/loopforge") stat -Lc '%d:%i' "$RUN_DIR/target/helper-state/jenkins-agent" ;;
-              jenkins-agent-target:*"/var/lib/loopforge/target-ssh") stat -Lc '%d:%i' "$RUN_DIR/host/target-ssh" ;;
               jenkins-agent-target:*"/var/lib/jenkins-agent") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/jenkins-agent" ;;
               jenkins-agent-target:*"/mnt/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/target/shared-jenkins-storage" ;;
               *)
@@ -108,9 +92,6 @@ case "$*" in
     case "$*" in
       *-bundle-factory)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/host/bundle-factory/rendered" /var/lib/loopforge/rendered
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/bundle-factory/evidence" /var/lib/loopforge/evidence
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/bundle-factory/preparing" /var/lib/loopforge/preparing
         ;;
       *-ldap)
         printf '%s\t%s\n' "$RUN_DIR/target/ldap/data" /var/lib/ldap
@@ -118,30 +99,17 @@ case "$*" in
         ;;
       *-gerrit-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/gerrit" /var/lib/loopforge
         printf '%s\t%s\n' "$RUN_DIR/target/product-homes/gerrit" /srv/gerrit
-        printf '%s\t%s\n' "$RUN_DIR/host/validation-secrets/gerrit" /var/lib/loopforge/validation-secrets
-        printf '%s\t%s\n' "$RUN_DIR/host/target-ssh" /var/lib/loopforge/target-ssh
-        printf '%s\t%s\n' "$RUN_DIR/target/evidence/gerrit" /var/lib/loopforge/evidence
-        printf '%s\t%s\n' "$RUN_DIR/target/logs/gerrit" /var/log/loopforge
         ;;
       *-jenkins-controller-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/jenkins-controller" /var/lib/loopforge
-        printf '%s\t%s\n' "$RUN_DIR/host/target-ssh" /var/lib/loopforge/target-ssh
         printf '%s\t%s\n' "$RUN_DIR/target/product-homes/jenkins-controller" /var/lib/jenkins
         printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /mnt/jenkins-shared
-        printf '%s\t%s\n' "$RUN_DIR/target/evidence/jenkins-controller" /var/lib/loopforge/evidence
-        printf '%s\t%s\n' "$RUN_DIR/target/logs/jenkins-controller" /var/log/loopforge
         ;;
       *-jenkins-agent-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/jenkins-agent" /var/lib/loopforge
-        printf '%s\t%s\n' "$RUN_DIR/host/target-ssh" /var/lib/loopforge/target-ssh
         printf '%s\t%s\n' "$RUN_DIR/target/product-homes/jenkins-agent" /var/lib/jenkins-agent
         printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /mnt/jenkins-shared
-        printf '%s\t%s\n' "$RUN_DIR/target/evidence/jenkins-agent" /var/lib/loopforge/evidence
-        printf '%s\t%s\n' "$RUN_DIR/target/logs/jenkins-agent" /var/log/loopforge
         ;;
     esac
     ;;
@@ -190,6 +158,11 @@ RUN_DIR="$run_dir" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" audit-state >"$tmp_dir/audit.out"
 
 grep -Fq 'audit-state: ok' "$tmp_dir/audit.out"
-grep -Fq 'exec -T gerrit-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
-grep -Fq 'exec -T jenkins-controller-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
-grep -Fq 'exec -T jenkins-agent-target stat -Lc %d:%i /var/lib/loopforge' "$calls"
+grep -Fq 'exec -T gerrit-target stat -Lc %d:%i /srv/gerrit' "$calls"
+grep -Fq 'exec -T jenkins-controller-target stat -Lc %d:%i /var/lib/jenkins' "$calls"
+grep -Fq 'exec -T jenkins-agent-target stat -Lc %d:%i /var/lib/jenkins-agent' "$calls"
+if grep -Fq 'stat -Lc %d:%i /var/lib/loopforge' "$calls" ||
+  grep -Fq 'stat -Lc %d:%i /var/log/loopforge' "$calls"; then
+  printf 'audit-state must not enforce helper-owned Loopforge roots as Docker bind mounts\n' >&2
+  exit 1
+fi

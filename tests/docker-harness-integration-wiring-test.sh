@@ -82,8 +82,8 @@ env "${common_env[@]}" \
 grep -Fq -- '--yes prove-integration' "$integration_calls"
 
 grep -Fq -- 'listener_pid_file="/tmp/loopforge-stream-events-listener.pid"' "$repo_root/scripts/integration-setup.sh"
-grep -Fq -- 'container_listener_log="$(integration_container_log_dir)/$listener_name"' "$repo_root/scripts/integration-setup.sh"
-grep -Fq -- "gerrit stream-events >'\$container_listener_log' 2>&1 &" "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'target_listener_log="$(jenkins_ops_tmp_dir)/$listener_name"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- "gerrit stream-events >'\$target_listener_log' 2>&1 &" "$repo_root/scripts/integration-setup.sh"
 grep -Fq -- 'cleanup_stream_events_listener()' "$repo_root/scripts/integration-setup.sh"
 grep -Fq -- 'Gerrit REST could not create stream-events validation change' "$repo_root/scripts/integration-setup.sh"
 grep -Fq -- 'server.start()' "$repo_root/scripts/integration-setup.sh"
@@ -107,7 +107,7 @@ if grep -Fq -- 'docker exec "$(jenkins_container)" ssh' "$repo_root/scripts/inte
 fi
 
 missing_marker_calls="$tmp_dir/missing-marker-integration-calls.log"
-rm -f "$state_dir/rendered/integration-validate-pass.env"
+rm -f "$host_dir/rendered/integration-validate-pass.env"
 set +e
 env \
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper" \

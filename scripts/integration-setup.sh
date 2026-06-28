@@ -946,7 +946,7 @@ ensure_gerrit_verification_project() {
   target_json="/tmp/verification-project.json"
   cat >"$project_json" <<EOF
 {
-  "description": "Docker Step 11 disposable verification project",
+  "description": "Loopforge disposable integration verification project",
   "submit_type": "MERGE_IF_NECESSARY",
   "create_empty_commit": true
 }
@@ -974,7 +974,7 @@ ensure_verified_label_and_access() {
 
   cat >"$label_json" <<EOF
 {
-  "commit_message": "Docker Step 11 simulation-only direct REST Verified label",
+  "commit_message": "Loopforge simulation-only direct REST Verified label",
   "function": "NoBlock",
   "default_value": 0,
   "values": {
@@ -991,7 +991,7 @@ EOF
 
   cat >"$global_access_json" <<EOF
 {
-  "commit_message": "Docker Step 11 simulation-only direct REST stream-events access",
+  "commit_message": "Loopforge simulation-only direct REST stream-events access",
   "add": {
     "refs/meta/config": {
       "permissions": {
@@ -1025,7 +1025,7 @@ EOF
 
   cat >"$project_access_json" <<EOF
 {
-  "commit_message": "Docker Step 11 simulation-only direct REST verification project access",
+  "commit_message": "Loopforge simulation-only direct REST verification project access",
   "add": {
     "refs/meta/config": {
       "permissions": {
@@ -1320,7 +1320,7 @@ def credential = new BasicSSHUserPrivateKey(
   $q_account,
   new BasicSSHUserPrivateKey.DirectEntryPrivateKeySource(key),
   '',
-  'Docker Step 11 Jenkins agent SSH key')
+  'Loopforge Jenkins agent SSH key')
 store.addCredentials(com.cloudbees.plugins.credentials.domains.Domain.global(), credential)
 def old = j.getNode($q_node)
 if (old != null) {
@@ -1562,7 +1562,7 @@ prove_stream_events() {
   change_file="$(integration_host_state_dir)/status/stream-event-create-result.json"
   cat >"$project_json" <<EOF
 {
-  "description": "Docker Step 11 stream-events validation project",
+  "description": "Loopforge stream-events validation project",
   "submit_type": "MERGE_IF_NECESSARY",
   "create_empty_commit": true
 }
@@ -1571,7 +1571,7 @@ EOF
 {
   "project": "$event_project",
   "branch": "master",
-  "subject": "Docker Step 11 stream-events validation"
+  "subject": "Loopforge stream-events validation"
 }
 EOF
   target_write_file gerrit "$project_json" "$target_project_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
@@ -1678,7 +1678,7 @@ create_gerrit_change() {
   result_file="$(integration_host_state_dir)/status/change.json"
   cat >"$(integration_host_state_dir)/status/create-project.json" <<EOF
 {
-  "description": "Docker Step 11 disposable verification project",
+  "description": "Loopforge disposable integration verification project",
   "submit_type": "MERGE_IF_NECESSARY",
   "create_empty_commit": true
 }
@@ -1687,7 +1687,7 @@ EOF
 {
   "project": "$GERRIT_VERIFICATION_PROJECT",
   "branch": "master",
-  "subject": "Docker Step 11 verification change"
+  "subject": "Loopforge integration verification"
 }
 EOF
   target_write_file gerrit "$(integration_host_state_dir)/status/create-project.json" "$project_file" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
@@ -1755,7 +1755,7 @@ post_simulation_verified_vote() {
   target_json="/tmp/simulation-verified-vote.json"
   cat >"$review_post_json" <<EOF
 {
-  "message": "Docker Step 11 simulation-only direct REST verification passed on Jenkins agent $JENKINS_AGENT_NODE_NAME via label $JENKINS_AGENT_SCHEDULING_LABEL",
+  "message": "Loopforge simulation-only direct REST verification passed on Jenkins agent $JENKINS_AGENT_NODE_NAME via label $JENKINS_AGENT_SCHEDULING_LABEL",
   "labels": {
     "Verified": 1
   },
