@@ -132,8 +132,8 @@ maps Docker commands to lifecycle checkpoints.
 
 `down` and `clean` are the only Docker phases allowed to recover from stale
 existing containers. Other phases must report inconsistent state and stop.
-`docs/docker-simulation-state-lifecycle.md` owns the detailed Docker
-generated-state, stale-container, and cleanup rules.
+`simulation/docker/README.md` owns the detailed Docker generated-state,
+stale-container, and cleanup rules.
 
 ## Evidence Obligations
 

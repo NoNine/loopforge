@@ -211,11 +211,10 @@ justification plus compatibility evidence.
 
 ### Docker Simulation Helpers
 
-Docker simulation command behavior is documented in
-`simulation/docker/README.md`. Durable command-to-checkpoint mapping is
-documented in `docs/lifecycle-contract.md`. Docker generated-state lifecycle,
+Docker simulation command behavior, generated-state lifecycle,
 stale-container recovery, and fresh-run rules are documented in
-`docs/docker-simulation-state-lifecycle.md`.
+`simulation/docker/README.md`. Durable command-to-checkpoint mapping is
+documented in `docs/lifecycle-contract.md`.
 
 Docker simulation behavior notes:
 
@@ -235,7 +234,7 @@ Docker simulation behavior notes:
   `generated/simulation/docker/<run-id>/`; lifecycle and cleanup commands do
   not support arbitrary output roots.
 - Docker generated-state lifecycle, stale-container recovery, and fresh-run
-  rules are defined in `docs/docker-simulation-state-lifecycle.md`.
+  rules are defined in `simulation/docker/README.md`.
 - `clean` is separate from `down` because Docker bind mounts may leave
   container-owned host data, while evidence, logs, and exported artifacts must
   remain reviewable.

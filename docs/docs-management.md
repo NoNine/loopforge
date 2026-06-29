@@ -46,8 +46,7 @@ Use this order when deciding where a product or process fact belongs:
    remain free of repository helper command transcripts.
 7. Simulation docs own simulation realization details:
    `simulation/README.md`, `simulation/docker/README.md`,
-   `simulation/vm/README.md`, and focused lifecycle docs such as
-   `docs/docker-simulation-state-lifecycle.md`.
+   and `simulation/vm/README.md`.
 8. Helper scripts, templates, examples, tests, and verifiers implement or
    check the documented model. They should not become the only place where a
    product behavior is defined.
