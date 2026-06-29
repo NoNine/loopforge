@@ -22,6 +22,11 @@ Current Loopforge authority docs govern v1 boundaries and intended topology.
 When draft repository materials are stale or conflict with current authorities,
 this digest is subordinate to the current authorities.
 
+`docs/lifecycle-contract.md` owns durable lifecycle behavior. This digest may
+provide historical workflow context, but it must not define phase order,
+checkpoint semantics, mutation boundaries, resume/rerun behavior, or Docker
+command mapping.
+
 For Docker simulation, stale draft lab docs may describe fewer runtime
 containers. v1 uses the five-environment model from the implementation plan:
 bundle factory, LDAP, Gerrit, Jenkins controller, and Jenkins agent.
@@ -206,22 +211,11 @@ justification plus compatibility evidence.
 
 ### Docker Simulation Helpers
 
-Docker simulation should expose:
-
-| Command | Behavior intent |
-| --- | --- |
-| `simulation/docker/simulate.sh preflight` | Check local Docker/Compose tooling, static harness files, script wiring, and baseline labels while bootstrapping from the harness env file. |
-| `simulation/docker/simulate.sh init-run` | Initialize simulation configs from the bootstrap env file and browser-visible URLs, copy selected inputs into run-scoped runtime inputs, and write the generated-run marker under `generated/simulation/docker/<run-id>/`. |
-| `simulation/docker/simulate.sh prepare-artifacts` | Run role helper `prepare-artifacts` commands in the bundle factory container, retain manifests/checksums/source labels, and export successful bundle archives plus checksums to target-dominated `target/artifacts/exported/`. |
-| `simulation/docker/simulate.sh stage-artifacts` | Stage prepared bundle archives from host-owned handoff files to Gerrit, Jenkins controller, and Jenkins agent containers, then verify target-side manifests and checksums under `/var/lib/loopforge/staging`. |
-| `simulation/docker/simulate.sh up` | Start the five-environment simulation after artifacts/configs exist, using the bootstrap env file to locate the run-scoped runtime config. |
-| `simulation/docker/simulate.sh configure-role` | Run role-local install and configuration for one or all roles without rerunning artifact phases. |
-| `simulation/docker/simulate.sh validate-role` | Run role-local validation and evidence collection for one or all roles without rerunning configuration. |
-| `simulation/docker/simulate.sh configure-integration` | Expose Docker targets through the standard SSH/service interfaces, then invoke the shared integration helper for durable cross-role configuration. |
-| `simulation/docker/simulate.sh validate-integration` | Invoke passive shared integration validation and write the validation marker. |
-| `simulation/docker/simulate.sh prove-integration` | Require the validation marker, then invoke active shared integration proof without rerunning validation. |
-| `simulation/docker/simulate.sh down` | Stop the simulation without deleting retained generated output. |
-| `simulation/docker/simulate.sh clean` | Manually remove mutable generated runtime data under the validated repo-local generated run root while preserving exported artifacts, evidence, and logs. |
+Docker simulation command behavior is documented in
+`simulation/docker/README.md`. Durable command-to-checkpoint mapping is
+documented in `docs/lifecycle-contract.md`. Docker generated-state lifecycle,
+stale-container recovery, and fresh-run rules are documented in
+`docs/docker-simulation-state-lifecycle.md`.
 
 Docker simulation behavior notes:
 

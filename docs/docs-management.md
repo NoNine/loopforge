@@ -17,9 +17,14 @@ Use this order when deciding where a product or process fact belongs:
 
 1. `docs/prd.md` owns product goals, non-goals, requirements, acceptance
    criteria, and v1 product boundaries.
-2. `docs/system-model.md` owns environments, actors, services, interfaces,
-   deployment modes, lifecycle checkpoints, and ownership rules.
-3. Topic authority docs own detailed cross-cutting contracts:
+2. `docs/system-model.md` owns the conceptual architecture: environments,
+   actors, utilities, services, interfaces, deployment modes, and
+   cross-cutting system invariants. It must remain substantive, but it is not
+   the documentation index.
+3. `docs/lifecycle-contract.md` owns temporal behavior: phase order,
+   checkpoint semantics, mutation boundaries, stop/review/resume points,
+   rerun rules, lifecycle command mapping, and lifecycle evidence obligations.
+4. Topic authority docs own detailed cross-cutting contracts:
    `docs/account-model.md` for accounts and credential custody,
    `docs/directory-model.md` for path ownership and generated state,
    `docs/version-baseline.md` for default component versions,
@@ -28,21 +33,22 @@ Use this order when deciding where a product or process fact belongs:
    boundaries, `docs/validation-and-evidence.md` for evidence and redaction,
    and `docs/gerrit-trigger-integration.md` for Gerrit Trigger and `Verified`
    behavior.
-4. Operator manuals own procedural application of the model:
+5. Operator manuals own procedural application of the model and lifecycle
+   contract:
    `docs/gerrit-setup-manual.md`,
    `docs/jenkins-controller-setup-manual.md`,
    `docs/jenkins-agent-setup-manual.md`, and
    `docs/integration-setup-manual.md`.
-5. Native operation references own direct OS and application procedures:
+6. Native operation references own direct OS and application procedures:
    `docs/gerrit-native-operations-reference.md`,
    `docs/jenkins-controller-native-operations-reference.md`, and
    `docs/jenkins-agent-native-operations-reference.md`. These references must
    remain free of repository helper command transcripts.
-6. Simulation docs own simulation realization details:
+7. Simulation docs own simulation realization details:
    `simulation/README.md`, `simulation/docker/README.md`,
    `simulation/vm/README.md`, and focused lifecycle docs such as
    `docs/docker-simulation-state-lifecycle.md`.
-7. Helper scripts, templates, examples, tests, and verifiers implement or
+8. Helper scripts, templates, examples, tests, and verifiers implement or
    check the documented model. They should not become the only place where a
    product behavior is defined.
 
@@ -84,6 +90,11 @@ Use this checklist for documentation changes:
 
 - The changed fact lives in its authority document.
 - Consumer docs repeat only the procedure-specific detail they need.
+- `docs/system-model.md` remains the conceptual architecture authority rather
+  than a generic documentation index; new topic docs need a distinct contract
+  or detail role.
+- Lifecycle phase order, checkpoint semantics, mutation boundaries, and
+  resume/rerun behavior live in `docs/lifecycle-contract.md`.
 - Product boundary language remains intact: v1 is not a strict air-gapped
   installer, offline Ubuntu dependency bundles are unsupported, and public
   internet fallback on target hosts is simulation-only and labeled as such.

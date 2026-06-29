@@ -48,8 +48,9 @@ target-deployment documentation.
 ```
 
 Docker, VM, and target-deployment modes realize the same logical environments
-with different infrastructure boundaries. Detailed interfaces and lifecycle
-ownership are documented in `docs/system-model.md`.
+with different infrastructure boundaries. Detailed interfaces are documented
+in `docs/system-model.md`; phase order and checkpoint behavior are documented
+in `docs/lifecycle-contract.md`.
 
 ## Docker Simulation Flow
 
@@ -152,7 +153,9 @@ Scope and model:
 - `docs/prd.md` defines product goals, non-goals, requirements, and acceptance
   criteria.
 - `docs/system-model.md` defines environments, actors, accounts, utilities,
-  interfaces, lifecycle checkpoints, modes, and evidence relationships.
+  interfaces, deployment modes, and evidence relationships.
+- `docs/lifecycle-contract.md` defines phase order, lifecycle checkpoints,
+  mutation boundaries, resume/rerun behavior, and command mapping.
 
 Topic references:
 
@@ -174,7 +177,7 @@ Topic references:
 Simulation:
 
 - `simulation/README.md` defines the shared simulation topology, version
-  baseline, output conventions, and checkpoint contract.
+  baseline, output conventions, and simulation realization details.
 - `simulation/docker/README.md` documents the Docker simulation CLI command
   surface.
 

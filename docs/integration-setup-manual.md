@@ -13,6 +13,10 @@ targets across Docker simulation, VM simulation, and `target-deployment`.
 Docker APIs are simulation lifecycle internals and are not the shared
 integration communication surface.
 
+`docs/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
+mutation boundaries, and resume/rerun rules. This manual owns only the shared
+integration command workflow and cross-role procedure inside that contract.
+
 Current implementation caveat: the script still executes only the Docker
 simulation path until the SSH target-interface refactor is implemented. That
 temporary implementation must fail closed outside `docker-simulation` and must

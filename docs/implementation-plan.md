@@ -231,114 +231,31 @@ Acceptance criteria:
 
 ## Step 4: Define The Operator Workflow Contract
 
-Document the default operator workflow as a phase contract, not as a full
-runnable command transcript. The contract must define phase order, execution
-environment, helper command ownership, inputs and outputs, side effects, and
-the checkpoint that lets operators stop, review evidence, and resume at a known
-boundary. The cross-role command sequence belongs in
-`docs/integration-setup-manual.md`.
+Durable lifecycle behavior now lives in `docs/lifecycle-contract.md`. Keep
+this implementation step as historical context only. Future changes to phase
+order, checkpoint semantics, mutation boundaries, resume/rerun behavior, or
+Docker command mapping belong in the lifecycle contract, not in this plan.
 
-Workflow contract:
-
-| Phase | Machine/environment | Helper commands | Inputs/outputs | Side effects | Required checkpoint |
-| --- | --- | --- | --- | --- | --- |
-| Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed role env files, removes all `CHANGE_ME` values, keeps secrets out of committed examples, reviews cross-role values, and confirms browser-visible URLs for simulation. | None beyond local env-file creation. | Reviewed env files exist for Gerrit, Jenkins controller, and Jenkins agent, and preflight failures are resolved before mutation. |
-| Artifacts | Bundle factory | `prepare-artifacts` | Consumes reviewed role env files and produces role artifact directories, manifests, and checksums. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
-| Artifact staging | Bundle factory and target hosts | Operator-managed file transfer; role-local checksum verification in `install` or `preflight` | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Operator copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
-| Gerrit readiness | Gerrit host | `install`, `configure`, `validate` | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit. | Step 7 role gate only: Gerrit starts, uses LDAP, exposes HTTP/SSH, records bounded logs, and stops before Jenkins integration mutation. |
-| Jenkins controller readiness | Jenkins controller | `install`, `configure-service`, `install-plugins`, `configure-jcasc`, `validate` | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, and JCasC evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files, installs plugins, and starts or restarts Jenkins. | Controller-only checkpoint: Jenkins starts, uses LDAP/JCasC, has required plugins, records bounded logs, and stops before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
-| Jenkins agent readiness | Jenkins agent | `install`, `configure-runtime`, `validate` | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Installs packages from approved sources and creates or updates agent-host runtime files and SSH service state. | Step 9 role gate only: the agent host proves OS/tooling, SSH daemon, runtime account, filesystem, staged artifact, bounded log, and evidence readiness, and stops before credential transfer, controller node registration, or scheduling proof. |
-| Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/integration-setup-manual.md` for the cross-role command sequence and stop/review points. |
-| Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
-
-See `docs/system-model.md` for the phase behavior contract and lifecycle
-boundary rules.
-
-Operator sequencing rules:
-
-- Run `prepare-artifacts` from the bundle factory environment for each role.
-- Stage prepared artifacts by operator-managed file transfer from the bundle
-  factory to each target host before running target-host installation, then
-  verify manifests and checksums on the target host before mutation.
-- Application artifact bundles for Gerrit, Jenkins controller, and Jenkins
-  agent are key-free. They must not contain SSH private keys, public keys,
-  `authorized_keys`, or generated key/public-key handoff files. Keypair
-  generation and public-key handoff between Gerrit, Jenkins controller, and
-  agent are integration-step work.
-- Target-host OS dependencies come from approved internal Ubuntu/OS package
-  repositories. Public internet fallback for target-host OS dependency
-  installation is simulation-only and must be labeled in docs, logs, manifests,
-  and verification summaries.
-- Complete Gerrit, Jenkins controller, and Jenkins agent role-only bringup
-  before running the shared cross-role integration helper.
-- Use `docs/integration-setup-manual.md` for the approved cross-role helper
-  command workflow. Role manuals must hand off to that document instead of
-  duplicating the full integration command sequence.
-- `target-deployment` integration defaults to a global `Verified` CI label in reviewed
-  `All-Projects` configuration. Jenkins read and `label-Verified -1..+1`
-  grants stay scoped to the reviewed project and ref pattern, while
-  `stream-events` remains a global capability grant.
-- Jenkins Gerrit Trigger uses SSH for authentication and `stream-events`. The
-  Gerrit REST review API is the default `Verified` vote posting path. Legacy
-  SSH review commands or flags require explicit operator justification and
-  compatibility evidence.
-- The Jenkins agent helper must not register controller nodes.
-- Treat role-local `validate` as role-only readiness validation. Treat shared
-  `validate-integration` and `prove-integration` as later cross-role acceptance
-  for Gerrit SSH, event streaming, Jenkins agent scheduling, REST vote posting,
-  and Gerrit review state.
-
-Generated key transfer contract:
-
-- Jenkins controller owns the Jenkins-to-Gerrit private key and the
-  Jenkins-to-agent private key.
-- Gerrit and Jenkins agent integration steps consume only public keys, never
-  Jenkins-held private keys.
-- Role manuals must name the env fields or files used for each public key
-  transfer and must state expected file ownership and permissions.
-- Evidence may record key fingerprints, public-key paths, and credential IDs,
-  but must redact private-key material, passwords, tokens, and LDAP bind
-  secrets.
-- Key rotation is an explicit repeat of key generation, public key transfer,
-  role-side reconfiguration, validation, and evidence collection.
-
-Operator safety rules:
-
-- Run `--dry-run` where supported before mutating target hosts, Jenkins, or
-  Gerrit.
-- Require interactive confirmation for mutating helper commands unless a
-  reviewed `--yes` flag is provided.
-- Each phase that mutates a host or application must describe expected side
-  effects before execution.
-- Each phase must emit bounded logs or evidence references so a failed run can
-  be reviewed without replaying verbose runtime output.
+The cross-role command sequence belongs in `docs/integration-setup-manual.md`.
+Gerrit Trigger, ACL, label, vote, and failure-classification behavior belongs
+in `docs/gerrit-trigger-integration.md`. Account and credential custody
+belongs in `docs/account-model.md`.
 
 Verification:
 
 ```bash
-rg -n "Operator Workflow Contract|Phase \\| Machine/environment \\| Helper commands \\| Inputs/outputs \\| Side effects \\| Required checkpoint" docs/implementation-plan.md
-rg -n "Artifact staging|Generated key transfer contract|Operator safety rules" docs/implementation-plan.md
-rg -n "private key|public key|fingerprint|redact|CHANGE_ME|staged artifact" docs/implementation-plan.md
-rg -n "^scripts/.+--env .+--yes" docs/implementation-plan.md
-rg -n "integration-setup.sh|configure-integration|validate-integration|prove-integration" docs/implementation-plan.md
+test -f docs/lifecycle-contract.md
+rg -n "Operator Workflow Contract|Lifecycle Checkpoints|Docker Command Mapping" docs/lifecycle-contract.md
+rg -n "lifecycle-contract.md" docs/docs-management.md docs/system-model.md simulation/docker/README.md
 rg -n "^[[:space:]]*(run|configure-controller-node)$" docs/implementation-plan.md
 ```
 
 Acceptance criteria:
 
-- The documented operator workflow has no catch-all `run` command.
-- The workflow identifies which side owns Jenkins-to-Gerrit and
-  Jenkins-to-agent key generation.
-- The workflow defines artifact staging from the bundle factory to target hosts
-  and requires target-side checksum verification before installation.
-- The workflow defines public key transfers, private-key custody, and evidence
-  redaction requirements.
-- The workflow identifies mutating phases and requires confirmation or reviewed
-  `--yes` before mutation.
-- The workflow separates agent host runtime setup from controller-side node
-  registration and scheduling validation.
-- The implementation plan does not embed a full runnable operator command
-  transcript; runnable transcripts belong in future operator manuals.
+- The stable workflow contract is in `docs/lifecycle-contract.md`.
+- This implementation plan does not embed the durable lifecycle authority.
+- Consumer docs link to the lifecycle contract instead of redefining shared
+  checkpoint semantics.
 
 ## Step 5: Define Gerrit Trigger Integration
 

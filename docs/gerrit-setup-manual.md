@@ -4,6 +4,10 @@ This manual is the authority for the Gerrit role. The helper
 `scripts/gerrit-setup.sh` is a repeatable accelerator for reviewed env files;
 it does not replace operator review.
 
+`docs/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
+mutation boundaries, and resume/rerun rules. This manual owns only the
+Gerrit-specific application of that contract.
+
 Maintain this manual with `docs/gerrit-native-operations-reference.md`. The
 native reference is the strong reference for direct OS and Gerrit operations
 and must remain free of repository helper commands.

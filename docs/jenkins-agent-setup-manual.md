@@ -4,6 +4,10 @@ This manual is the authority for the Jenkins SSH build-agent host role. The
 helper `scripts/jenkins-agent-setup.sh` is a repeatable accelerator for
 reviewed env files; it does not replace operator review.
 
+`docs/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
+mutation boundaries, and resume/rerun rules. This manual owns only the Jenkins
+agent-specific application of that contract.
+
 Maintain this manual with `docs/jenkins-agent-native-operations-reference.md`.
 The native reference is the strong reference for direct OS, OpenSSH, and
 Jenkins agent operations and must remain free of repository helper commands.

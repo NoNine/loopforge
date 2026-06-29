@@ -6,14 +6,15 @@ This document models Loopforge's initial experiment environment. The initial
 environment constructs and verifies a Gerrit/Jenkins integration stack with
 LDAP-backed identity assumptions, a Jenkins SSH build agent, Gerrit Trigger,
 `Verified` voting, and evidence collection. This model defines the
-environments, actors, accounts, utilities, services, interfaces, lifecycle
-boundaries, deployment modes, and evidence relationships used by Loopforge. It
-is not a command transcript.
+environments, actors, accounts, utilities, services, interfaces, deployment
+modes, and evidence relationships used by Loopforge. It is not a command
+transcript or lifecycle procedure.
 
 `docs/prd.md` remains the product scope authority. This system model sits below
 the PRD and above topic-specific docs, operator manuals, simulation docs, and
 helper script implementations. Topic-specific docs provide details inside the
-boundaries defined here.
+boundaries defined here. `docs/lifecycle-contract.md` defines how setup moves
+through phases, checkpoints, mutation boundaries, and resume/rerun behavior.
 
 Use `docs/docs-management.md` for the full layered authority model and review
 checklist.
@@ -42,7 +43,7 @@ identity sources, not by whether the hosts are physical machines or VMs.
 Product behavior should be modeled as early as practical and as much as
 practical. New or changed behavior should document the intended
 `target-deployment` behavior, simulation realization, ownership boundaries,
-interfaces, lifecycle checkpoints, and evidence limits before or alongside
+interfaces, lifecycle effects, and evidence limits before or alongside
 implementation.
 
 Simulation modes model the same logical product behavior as target deployment.
@@ -200,29 +201,32 @@ Trigger setup, Jenkins agent registration from the controller side, scheduling
 proof, `Verified` voting, and integration evidence belong to
 `scripts/integration-setup.sh`.
 
-## Phase Behavior Rules
+## Lifecycle Boundary
 
-Lifecycle phases are strict, single-purpose operations. Their contract is:
+`docs/lifecycle-contract.md` owns phase behavior rules, checkpoint semantics,
+mutation boundaries, operator sequencing, Docker command mapping, and
+resume/rerun behavior. This system model defines the conceptual architecture
+used by that lifecycle contract.
 
-- Each phase checks its prerequisites before doing work.
-- Missing inputs, artifacts, services, or checkpoints fail clearly and stop.
-- Each phase owns only its own work and does not rerun or repair another
-  phase.
-- Later phases do not silently trigger earlier phases.
-- Repeated operator invocation is treated as an intentional rerun of that
-  same phase.
-- Phase logs and evidence stay bounded and identify the producing phase.
-- Phase success means the phase completed its own job, not that another phase
-  was replayed or repaired implicitly.
+Lifecycle implementations must preserve these system invariants:
 
-Target-environment operations run as the operator account whenever practical.
-The operator account is the default target control-plane identity for helper
-commands, staging, validation, and evidence collection. Direct root login or
-root as a workflow identity is not supported. Delegated privilege from the
-operator account is used only for the narrow OS operations that require it,
-such as package installation, protected path creation, service management, or
-ownership changes. Runtime accounts own and run their services; they are not
-the default orchestration identity.
+- Simulation modes model the same logical product behavior as target
+  deployment and must not manufacture success by bypassing declared
+  interfaces, role helpers, shared integration helper ownership, native
+  product paths, runtime accounts, staged artifact verification, or real
+  runtime and evidence checks.
+- Target-environment operations use the operator account as the default
+  control-plane identity whenever practical. Direct root login or root as a
+  workflow identity is not supported; privileged target operations are
+  delegated from the operator account.
+- Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,
+  Jenkins agent registration from the controller side, scheduling proof,
+  `Verified` voting, and integration evidence belong to
+  `scripts/integration-setup.sh`.
+- Passing evidence must represent real runtime checks for the claimed
+  lifecycle checkpoint. Unsupported, unimplemented, unavailable, or modeled
+  behavior must be reported as `blocked`, `unsupported`, or `not-applicable`,
+  not as `pass`.
 
 ## Standard Interfaces
 
@@ -250,33 +254,6 @@ Service API calls may originate from the operator workstation/control node or
 from a target environment when network reachability requires it. The selected
 origin must be recorded in bounded logs or evidence when it affects
 interpretation of the proof.
-
-## Lifecycle Checkpoints
-
-The setup system moves through checkpoints. Each checkpoint has an owner, a
-mutation boundary, and evidence obligations.
-
-The simulation docs provide layer-specific realizations of this lifecycle
-model. They may split, collapse, or add simulation-only command phases, but
-they must preserve the checkpoint semantics defined here.
-
-| Checkpoint | Owner | Boundary |
-| --- | --- | --- |
-| Input review | Human operator or machine runner | Prepare reviewed env files and remove placeholders. No target mutation. |
-| Artifact preparation | Bundle factory through role helpers | Prepare application artifacts, manifests, checksums, and source-boundary labels. Target hosts are not mutated. |
-| Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target environments and verify target-side manifests/checksums before service mutation. |
-| Role-local setup | Role helpers | Install/configure only the role-local target state for Gerrit, Jenkins controller, or Jenkins agent. |
-| Role-local validation | Role helpers | Prove role readiness without cross-role integration claims. |
-| Shared integration setup | `scripts/integration-setup.sh` | Create or validate cross-role keys, ACL workflow, credentials, node registration, trigger server, jobs, and shared storage. |
-| Cross-role validation | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove Jenkins-to-Gerrit SSH, `stream-events`, effective Gerrit label/access state, Jenkins-to-agent SSH, node readiness, and scheduling. |
-| End-to-end trigger verification | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove disposable Gerrit change, event delivery, Jenkins build, agent execution, REST vote posting, and Gerrit review state. |
-| Evidence audit | Global evidence collector and actor review | Validate evidence completeness, redaction, manifests, checksums, mode labels, and bounded log references. |
-
-Each mutating checkpoint must have a reviewed input source, a bounded log
-reference, and a resumable status or evidence boundary. Passing evidence must
-represent real runtime checks for the claimed checkpoint. Unsupported,
-unimplemented, unavailable, or modeled behavior must be reported as
-`blocked`, `unsupported`, or `not-applicable`, not as `pass`.
 
 ## Integration ACL Model
 

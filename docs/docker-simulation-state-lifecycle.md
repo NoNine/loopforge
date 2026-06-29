@@ -1,9 +1,9 @@
 # Docker Simulation State Lifecycle
 
 This document defines how Docker simulation commands treat generated state and
-existing Compose containers. It applies the general operator workflow rule from
-`docs/system-model.md`: each phase checks its prerequisites, performs
-only its own phase work, and fails clearly instead of rerunning other phases.
+existing Compose containers. It is subordinate to
+`docs/lifecycle-contract.md`, which owns phase behavior rules, checkpoint
+semantics, mutation boundaries, and resume/rerun behavior.
 
 Docker simulation state is run-scoped under:
 

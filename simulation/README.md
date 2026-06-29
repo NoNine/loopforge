@@ -3,7 +3,8 @@
 This directory defines the shared simulation model for the v1 Gerrit/Jenkins
 setup package. Layer-specific command ownership lives in the Docker and VM
 README files; this file owns the common topology, source boundaries, output
-conventions, and the simulation realization of lifecycle checkpoints.
+conventions, and simulation realization details. `docs/lifecycle-contract.md`
+owns checkpoint semantics for all modes.
 
 The model has two layers:
 
@@ -87,23 +88,28 @@ Docker `clean` is manual and conservative: it removes mutable generated
 runtime state while preserving exported artifact archives, evidence, and
 logs.
 
-## Checkpoint Contract
+## Lifecycle Realization
 
-This table operationalizes the lifecycle checkpoints defined in
-`docs/system-model.md`. Some rows correspond directly to those checkpoints,
-while others are simulation-layer additions or collapsed/split realizations
-for Docker and VM execution.
+`docs/lifecycle-contract.md` defines checkpoint semantics, pass/block
+conditions, mutation boundaries, and evidence obligations. Simulation layers
+may split, collapse, or add simulation-only commands, but they must preserve
+that contract and keep terminal output short.
 
-| Checkpoint | Purpose | What it does | Output/evidence | Pass or block condition |
-| --- | --- | --- | --- | --- |
-| Preflight | Answer whether this environment can run the tools. | Checks required local tools, command surfaces, run naming, and version/source-boundary constraints before service mutation. Docker preflight may bootstrap from the operator env file, but it does not render runtime inputs. Terminal output is a short summary line. | Preflight evidence and bounded logs. | Pass only when prerequisites and baseline constraints are ready; fail or block on missing tools, invalid names, missing helpers, or baseline drift. |
-| Input rendering | Answer what exact operator-selected config this run will use. | Loads the selected env file, applies defaults, resolves run-scoped paths and ports, records redacted env values, and writes layer-specific rendered env files. Docker rendering also persists run identity for later lifecycle commands. Terminal output is a short summary; Docker `status` prints live browser URLs from running containers. | Rendered env files and render evidence. | Pass when selected input files exist, rendered inputs are complete, and secrets are redacted; fail on invalid or unavailable configured values. |
-| Artifact preparation | Produce application artifacts in the bundle factory. | Runs role helper `prepare-artifacts` commands in the bundle factory and creates role artifacts, manifests, checksums, and source-boundary labels. | Bundle factory artifact directories, `manifest.txt`, `checksums.sha256`, and preparation evidence. | Pass only when required artifacts, manifests, checksums, and simulation-only source labels exist; block comparable readiness on missing or drifted manifest metadata. |
-| Artifact staging | Move prepared artifacts to targets before mutation. | Copies prepared artifacts to target/service environments and verifies manifest and checksum data on the target side. | Staged artifact directories, checksum verification logs, and staging evidence. | Pass only after target-side manifest/checksum verification succeeds; fail or block on missing artifacts, checksum mismatch, or manifest drift. |
-| Service configuration | Start or configure role-local runtime environments. | Starts the simulation environments and runs role-local install/configuration paths needed before readiness checks. Terminal output uses short lifecycle summaries. | Service startup/configuration logs and evidence. | Pass when required environments are running/configured against the version baseline; fail on startup or configuration errors. |
-| Readiness checks | Prove service readiness without claiming full trigger success. | Runs role-local readiness gates, then validates cross-role integration readiness such as SSH paths, stream-events, agent connection, and scheduling. Terminal output stays short and role-oriented. | Readiness evidence, integration evidence, and bounded logs. | Pass only on real runtime checks; fail on role-local errors and block when cross-role proof is not implemented or unavailable. |
-| End-to-end execution | Prove the full Gerrit Trigger workflow. | Creates or uses a disposable verification change, proves Gerrit event receipt, Jenkins job scheduling, agent execution, and Gerrit `Verified +1`. Success prints a short final summary. | End-to-end verification evidence and bounded logs. | Pass only when the real workflow completes; block if readiness did not pass or trigger proof is unavailable. |
-| Evidence audit | Summarize retained proof without rerunning the workflow. | Collects and reviews evidence, manifests, checksums, log references, redaction status, and source-boundary labels. | Audit summaries and evidence references. | Pass when evidence is complete, bounded, redacted, and traceable; fail or block on missing proof, unredacted secrets, or unsupported claims. |
+Simulation-specific realization notes:
+
+- `preflight` checks local tooling, command surfaces, run naming, and
+  version/source-boundary constraints before service mutation.
+- Input rendering records the exact operator-selected config for a run,
+  including redacted env values and layer-specific rendered inputs.
+- Artifact preparation runs role helper `prepare-artifacts` commands in the
+  bundle factory.
+- Artifact staging verifies manifest and checksum data on the target side
+  before service mutation.
+- Readiness checks must be real runtime checks. Role-local readiness does not
+  claim cross-role trigger success.
+- End-to-end execution must prove Gerrit event receipt, Jenkins job
+  scheduling, agent execution, and Gerrit `Verified +1`.
+- Evidence audit summarizes retained proof without rerunning the workflow.
 
 Role helpers stay role-local in both layers. Cross-role SSH, trigger setup,
 integration validation, trigger verification, and integration evidence use

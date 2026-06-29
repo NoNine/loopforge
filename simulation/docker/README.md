@@ -12,6 +12,7 @@ simulation/docker/simulate.sh [--env FILE] <command>
 orchestration. Do not add standalone Docker phase scripts or a second Docker
 verifier CLI.
 
+Lifecycle checkpoint semantics are defined in `docs/lifecycle-contract.md`.
 Generated-state and stale-container behavior is defined in
 `docs/docker-simulation-state-lifecycle.md`.
 
@@ -21,6 +22,9 @@ is not authority for native target-host baselines. See
 `docs/package-requirements.md` for the package classification.
 
 ## Command Reference
+
+This section owns Docker command behavior. The command-to-checkpoint mapping
+is summarized in `docs/lifecycle-contract.md`.
 
 Composite command:
 
@@ -237,7 +241,8 @@ host-orchestrated integration helper state, not role helper roots. If the host u
 container-owned files, `clean` may use a one-shot cleanup container mounted
 only to the validated run root.
 
-See `docs/docker-simulation-state-lifecycle.md` for the detailed fresh-run,
+See `docs/lifecycle-contract.md` for phase behavior rules and
+`docs/docker-simulation-state-lifecycle.md` for the detailed fresh-run,
 resume/rerun, stale-container, `down`, and `clean` state rules.
 
 Typical flows:
