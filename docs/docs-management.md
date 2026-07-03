@@ -31,8 +31,9 @@ Use this order when deciding where a product or process fact belongs:
    `docs/package-requirements.md` for host and package prerequisites,
    `docs/artifact-bundle-contract.md` for artifact contents and source
    boundaries, `docs/validation-and-evidence.md` for evidence and redaction,
-   and `docs/gerrit-trigger-integration.md` for Gerrit Trigger and `Verified`
-   behavior.
+   `docs/gerrit-trigger-integration.md` for Gerrit Trigger and `Verified`
+   behavior, and `docs/ci-model.md` for external product CI configuration
+   ownership and generated Jenkins job modeling.
 5. Operator manuals own procedural application of the model and lifecycle
    contract:
    `docs/gerrit-setup-manual.md`,
