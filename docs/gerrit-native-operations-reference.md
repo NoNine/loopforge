@@ -11,10 +11,11 @@ Public internet fallback on target hosts is simulation-only and must be labeled
 as such in docs, logs, and verification summaries.
 
 Gerrit application artifact bundles are key-free. They may contain reviewed
-Gerrit application files, plugin jars, templates, manifests, and checksums, but
-not SSH private keys, public keys, `authorized_keys`, or generated public-key
-handoff files. Jenkins-to-Gerrit keypair generation and public-key handoff are
-integration operations after Gerrit role-local readiness is proven.
+Gerrit application files, templates, manifests, and checksums, but not external
+Gerrit plugin jars, SSH private keys, public keys, `authorized_keys`, or
+generated public-key handoff files. Jenkins-to-Gerrit keypair generation and
+public-key handoff are integration operations after Gerrit role-local readiness
+is proven.
 
 
 Audience: production operators installing Gerrit on Ubuntu 24.04 LTS without Docker.
@@ -112,10 +113,9 @@ resolution.
 ### 1.1 If You Do Not Have Root Privileges
 
 Use this manual as an administrator handoff. Without root, you can prepare
-Gerrit application artifacts on a permitted staging machine, stage Gerrit
-plugin jars for review, draft `gerrit.config` and `secure.config` values,
-collect required host/DNS/LDAP values, and run network checks that your
-account is allowed to run.
+Gerrit application artifacts on a permitted staging machine, draft
+`gerrit.config` and `secure.config` values, collect required host/DNS/LDAP
+values, and run network checks that your account is allowed to run.
 
 Ask an administrator to perform or delegate these production-host tasks:
 
@@ -173,94 +173,22 @@ https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
 Run on the bundle-factory VM:
 
 ```bash
-mkdir -p ~/gerrit-artifacts-bundle/{gerrit/plugins,checksums}
+mkdir -p ~/gerrit-artifacts-bundle/{gerrit,checksums}
 cd ~/gerrit-artifacts-bundle/gerrit
 wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
   --continue -O gerrit-3.13.6.war \
   https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
 ```
 
-Download the selected Gerrit plugin jars on the bundle-factory VM:
+Do not add external Gerrit plugin jars to the Loopforge Gerrit artifact bundle.
+External plugins are operator-managed manual operations after Loopforge has
+installed and validated core Gerrit.
+
+Verify the Gerrit WAR archive:
 
 ```bash
 cd ~/gerrit-artifacts-bundle/gerrit
-wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
-  --continue -O plugins/events-log.jar \
-  https://gerrit-ci.gerritforge.com/job/plugin-events-log-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/events-log/events-log.jar
-wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
-  --continue -O plugins/metrics-reporter-prometheus.jar \
-  https://gerrit-ci.gerritforge.com/job/plugin-metrics-reporter-prometheus-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/metrics-reporter-prometheus/metrics-reporter-prometheus.jar
-wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
-  --continue -O plugins/healthcheck.jar \
-  https://gerrit-ci.gerritforge.com/job/plugin-healthcheck-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/healthcheck/healthcheck.jar
-```
-
-Record and review the approved plugin source pins:
-
-```bash
-cat > plugin-source-catalog.tsv <<'EOF'
-plugin	jar	sha256	gerrit_api_line	source_url
-events-log	events-log.jar	7c36b24e0885546c0a09502c022386b88b5894b649fba6b4c1cd595d23c7c695	3.13	https://gerrit-ci.gerritforge.com/job/plugin-events-log-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/events-log/events-log.jar
-metrics-reporter-prometheus	metrics-reporter-prometheus.jar	d1edafbd620b1dbab76530788cf8af7b279eb935e6ade788589fb69e3e20f8d3	3.13	https://gerrit-ci.gerritforge.com/job/plugin-metrics-reporter-prometheus-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/metrics-reporter-prometheus/metrics-reporter-prometheus.jar
-healthcheck	healthcheck.jar	289a931fdf0aa251c306c1cf2914635267a818f7e4abbd2862d4406a80885798	3.13	https://gerrit-ci.gerritforge.com/job/plugin-healthcheck-bazel-stable-3.13/lastSuccessfulBuild/artifact/bazel-bin/plugins/healthcheck/healthcheck.jar
-EOF
-```
-
-Plugin compatibility rules:
-
-- Every staged plugin jar must be built for the selected Gerrit major/minor
-  line, for example Gerrit `3.13.x`.
-- Mutable upstream plugin URLs are acceptable only when the reviewed source
-  pin includes the expected SHA256 and the jar metadata checks pass.
-- Do not use plugin jars built for another Gerrit line unless the plugin
-  maintainer explicitly documents compatibility.
-- Treat missing expected plugins or unexpected extra plugin jars as
-  release-blocking issues.
-- Add `replication` or `webhooks` later only after selecting approved compatible
-  plugin artifact URLs for the selected Gerrit line.
-
-Verify source pins, plugin metadata, missing jars, and extra jars:
-
-```bash
-cd ~/gerrit-artifacts-bundle/gerrit
-awk 'NR > 1 { print $3 "  plugins/" $2 }' plugin-source-catalog.tsv \
-  > plugin-checksums.expected
-sha256sum -c plugin-checksums.expected
-
-cat > plugin-artifacts.expected <<'EOF'
-events-log.jar
-healthcheck.jar
-metrics-reporter-prometheus.jar
-EOF
-find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
-  | sort > plugin-artifacts.manifest
-comm -23 plugin-artifacts.expected plugin-artifacts.manifest \
-  > plugin-artifacts.missing
-comm -13 plugin-artifacts.expected plugin-artifacts.manifest \
-  > plugin-artifacts.unexpected
-test ! -s plugin-artifacts.missing
-test ! -s plugin-artifacts.unexpected
-
-{
-  printf 'plugin\tjar\tsha256\tgerrit_plugin_name\tgerrit_api_version\texpected_api_line\tsource_url\n'
-  awk 'NR > 1 { print }' plugin-source-catalog.tsv |
-    while IFS="$(printf '\t')" read -r plugin jar sha api_line url; do
-      plugin_name="$(unzip -p "plugins/$jar" META-INF/MANIFEST.MF |
-        tr -d '\r' | awk -F': ' '$1 == "Gerrit-PluginName" { print $2; exit }')"
-      api_version="$(unzip -p "plugins/$jar" META-INF/MANIFEST.MF |
-        tr -d '\r' | awk -F': ' '$1 == "Gerrit-ApiVersion" { print $2; exit }')"
-      test "$plugin_name" = "$plugin"
-      case "$api_version" in
-        "$api_line".*|"$api_line".*-SNAPSHOT) ;;
-        *) exit 1 ;;
-      esac
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$plugin" "$jar" "$sha" "$plugin_name" "$api_version" "$api_line" "$url"
-    done
-} > plugin-metadata.report
-
-find plugins -type f -name '*.jar' -print0 |
-  sort -z | xargs -0 sha256sum > plugin-checksums.sha256
+unzip -t gerrit-3.13.6.war >/dev/null
 ```
 
 Create manifests, checksums, and archive:
@@ -280,11 +208,8 @@ artifact_source=curated-bundle-factory
 os_dependency_source=approved-internal-os-repos
 public_internet_fallback=simulation-only
 bundle_contains_keys=no
-plugins=events-log,metrics-reporter-prometheus,healthcheck
+external_gerrit_plugins=operator-managed
 war=gerrit-3.13.6.war
-plugin_artifacts=plugin-artifacts.manifest
-plugin_metadata=plugin-metadata.report
-plugin_checksums=plugin-checksums.sha256
 EOF
 (cd gerrit && find . -type f ! -name checksums.sha256 -print0 \
   | sort -z | xargs -0 sha256sum > checksums.sha256)
@@ -296,9 +221,7 @@ sha256sum ~/gerrit-artifacts-bundle.tar.gz > ~/gerrit-artifacts-bundle.tar.gz.sh
 
 The approved Gerrit release unit is the combination of the artifact archive,
 its `.sha256` file, the internal `SHA256SUMS` file, payload
-`checksums.sha256`, `manifest.txt`, `plugin-source-catalog.tsv`,
-`plugin-artifacts.manifest`, `plugin-metadata.report`, and
-`plugin-checksums.sha256`.
+`checksums.sha256`, and `manifest.txt`.
 
 #### 2.2.2 Install the Gerrit Artifact Bundle Manually
 
@@ -316,10 +239,6 @@ cd /var/lib/loopforge/staging/gerrit-artifacts-bundle
 sha256sum -c checksums/SHA256SUMS
 cd /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit
 sha256sum -c checksums.sha256
-sha256sum -c plugin-checksums.sha256
-find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
-  | sort > /tmp/gerrit-plugin-artifacts.installed
-cmp /tmp/gerrit-plugin-artifacts.installed plugin-artifacts.manifest
 java -version
 ```
 
@@ -334,19 +253,14 @@ sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/bin
 sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /srv/gerrit/bin/gerrit.war
 sudo chown gerrit:gerrit /srv/gerrit/bin/gerrit.war
 sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/plugins
-sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/ 2>/dev/null || true
-sudo chown gerrit:gerrit /srv/gerrit/plugins/*.jar 2>/dev/null || true
 sudo install -d -o gerrit -g gerrit -m 0750 /srv/gerrit/etc
 sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/manifest.txt /srv/gerrit/etc/artifact-manifest.txt
 sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/checksums.sha256 /srv/gerrit/etc/artifact-checksums.sha256
-sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest /srv/gerrit/etc/plugin-artifacts.manifest
-sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-metadata.report /srv/gerrit/etc/plugin-metadata.report
-sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-checksums.sha256 /srv/gerrit/etc/plugin-checksums.sha256
 ```
 
 For artifact recovery, rerun only the artifact archive checksum, extraction,
-WAR copy, and plugin copy commands. OS package recovery uses the approved
-internal Ubuntu/OS package repository path.
+and WAR copy commands. OS package recovery uses the approved internal
+Ubuntu/OS package repository path.
 
 ## 3. Gerrit Installation
 
@@ -384,7 +298,8 @@ Recommended answers:
 - Authentication method: `LDAP`
 - HTTP daemon listen URL: `http://*:8080/`
 - SSH daemon listen port: `29418`
-- Core plugins: install only required plugins; keep plugin scope minimal.
+- Built-in plugin prompts: install only site-approved built-in plugins; keep
+  plugin scope minimal.
 
 For offline installation, do not allow `init` to fetch optional libraries from the internet unless the artifact was staged.
 
@@ -449,31 +364,31 @@ chmod 0600 /srv/gerrit/etc/secure.config
 
 ### 3.4 Install Gerrit Plugins
 
-Recommended production plugins:
+External Gerrit plugins are operator-managed. Loopforge does not fetch, bundle,
+install, checksum, or validate plugin jars because external plugin delivery is
+not stable enough for the v1 bundle contract.
+
+Common operator-selected plugins include:
 
 - `events-log`: enables missed-event replay for Jenkins Gerrit Trigger.
 - `metrics-reporter-prometheus`: exports operational metrics.
 - `healthcheck`: optional health checks for monitoring.
 
-Repository replication and outbound webhooks can be added later after approved
-compatible plugin artifact URLs are selected.
+Repository replication, outbound webhooks, ownership, HA, event-broker, and
+issue-tracker plugins are deployment-specific operator choices.
 
 Plugin rule: Gerrit plugin jars must match the selected Gerrit major/minor line.
-The installed plugin jar set must exactly match the staged
-`plugin-artifacts.manifest`; missing expected jars and unexpected extra jars
-are release-blocking.
+Operators should source plugins from approved internal mirrors or reviewed
+artifact sources, record checksums outside the Loopforge bundle, install jars
+under `/srv/gerrit/plugins`, and restart Gerrit under the documented service
+control path.
 
-Install the plugins staged in the Gerrit artifact bundle:
+Manual operator example:
 
 ```bash
 install -d -o gerrit -g gerrit /srv/gerrit/plugins
-cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/
-chown gerrit:gerrit /srv/gerrit/plugins/*.jar
-find /srv/gerrit/plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
-  | sort > /tmp/gerrit-plugin-artifacts.installed
-cmp /tmp/gerrit-plugin-artifacts.installed \
-  /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest
-(cd /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit && sha256sum -c plugin-checksums.sha256)
+install -m 0644 -o gerrit -g gerrit /approved/plugin.jar /srv/gerrit/plugins/plugin.jar
+sha256sum /srv/gerrit/plugins/plugin.jar
 ```
 
 ### 3.5 Create Gerrit systemd Service
@@ -515,10 +430,10 @@ tail -n 100 /srv/gerrit/logs/gerrit.log
 
 Gerrit-native role readiness stops before cross-role Jenkins integration.
 The Gerrit role proves the Gerrit service, LDAP configuration, HTTP endpoint,
-SSH endpoint, plugin loading, runtime account, staged artifacts, and bounded
-evidence. It does not register Jenkins public keys, create Gerrit Trigger
-credentials, grant stream-events permission, apply `Verified` voting grants,
-or prove trigger delivery.
+SSH endpoint, runtime account, staged artifacts, and bounded evidence. It does
+not register Jenkins public keys, create Gerrit Trigger credentials, install or
+validate external Gerrit plugins, grant stream-events permission, apply
+`Verified` voting grants, or prove trigger delivery.
 
 Later cross-role work belongs to the separate integration workflow, not this
 role-local native reference. That later workflow owns Jenkins-to-Gerrit
@@ -556,7 +471,6 @@ Acceptance checks:
 - Gerrit survives reboot.
 - LDAP users can log in.
 - Gerrit SSH works on port `29418`.
-- Required plugins load successfully.
 - Jenkins integration prerequisites from Section 4 are deferred to
   `integration-native-operations-reference.md`.
 
@@ -583,9 +497,11 @@ Upgrade principles:
 
 - Back up before every upgrade.
 - Test the target Gerrit WAR in staging.
-- Use plugins built for the same Gerrit major/minor line.
 - Rebuild the Gerrit artifact bundle and record checksums for every approved
   application artifact upgrade.
+- If operators install external plugins, use jars built for the same Gerrit
+  major/minor line and track their source approvals outside the Loopforge
+  bundle.
 
 ## 7. References
 

@@ -20,10 +20,10 @@ installation is simulation-only and must be labeled that way in logs and
 evidence.
 
 Gerrit application artifact bundles are key-free. They may contain reviewed
-templates, manifests, checksums, WAR files, and plugin jars, but they must not
-contain SSH private keys, public keys, `authorized_keys`, or generated
-public-key handoff files. Jenkins-to-Gerrit keypair generation and public-key
-handoff are later integration-step work. Use
+templates, manifests, checksums, and WAR files, but they must not contain SSH
+private keys, public keys, `authorized_keys`, generated public-key handoff
+files, or external Gerrit plugin jars. Jenkins-to-Gerrit keypair generation
+and public-key handoff are later integration-step work. Use
 `docs/artifact-bundle-contract.md` for the bundle workspace, archive, and
 extraction-root contract.
 
@@ -43,14 +43,9 @@ Consumed inputs:
   store it in the reviewed env file or artifact bundle.
 - Artifact output and staged artifact paths.
 - Verification mode and evidence directory.
-- `GERRIT_PLUGIN_LIST` with comma-separated plugin identifiers using only
-  letters, digits, underscore, dot, and dash. This is operator-owned plugin
-  intent; unknown plugin names fail closed until a reviewed source catalog
-  entry exists in the helper.
 - Optional bundle-factory artifact source inputs: `GERRIT_WAR_SOURCE`,
-  `GERRIT_PLUGIN_SOURCE_DIR`, and `GERRIT_DOWNLOAD_ARTIFACTS`. For v1,
-  `GERRIT_DOWNLOAD_ARTIFACTS=1` is the preferred bundle-factory path.
-  `GERRIT_PLUGIN_SOURCE_DIR` is only an optional reviewed local-jar override.
+  and `GERRIT_DOWNLOAD_ARTIFACTS`. For v1, `GERRIT_DOWNLOAD_ARTIFACTS=1`
+  is simulation-only for the Gerrit WAR source.
 - `GERRIT_OS_DEPENDENCIES`, whose baseline and layered package rationale are
   defined in `docs/package-requirements.md`.
 - Gerrit `3.13.6`, Java `21`, and Ubuntu `24.04`/`noble` are internal helper
@@ -132,11 +127,6 @@ Consumed inputs:
 - Reviewed Gerrit env values.
 - Version baseline: Gerrit 3.13.6, OpenJDK 21, Ubuntu release `24.04`,
   codename `noble`.
-- Gerrit plugin list.
-- Internal approved Gerrit plugin source catalog entries for every selected
-  plugin. The default v1 catalog covers `events-log`,
-  `metrics-reporter-prometheus`, and `healthcheck`, with jar filename, mutable
-  upstream source URL, expected SHA256, and Gerrit API line `3.13`.
 - Gerrit templates under `templates/gerrit/`.
 
 Produced outputs:
@@ -144,11 +134,9 @@ Produced outputs:
 - `manifest.txt`.
 - `checksums.sha256`.
 - Real Gerrit WAR artifact, normally `gerrit-3.13.6.war`.
-- Selected Gerrit plugin jar artifacts matching the Gerrit 3.13 line.
-- `plugin-artifacts.manifest`, `plugin-metadata.report`, and
-  `plugin-checksums.sha256` proving the selected plugin set, plugin metadata,
-  and checksums.
 - Gerrit config and secure config templates for this role.
+- No external Gerrit plugin jars or plugin proof files. External Gerrit
+  plugins are operator-managed manual operations outside the Loopforge bundle.
 - No `Verified` label or Jenkins integration access templates. Those are
   cross-role integration artifacts and are not staged by the Gerrit role
   helper.
@@ -184,18 +172,10 @@ Side effects:
 - Public artifact downloads are allowed only in the bundle factory or staging
   context. In Docker simulation, helper output labels that public internet use
   as `simulation-only`.
-- If the real Gerrit WAR or selected plugin jars are unavailable or invalid,
-  `prepare-artifacts` exits nonzero with a blocked reason instead of writing
-  placeholder files.
-- Mutable upstream plugin URLs are allowed only when the helper verifies the
-  expected SHA256, `Gerrit-PluginName`, and `Gerrit-ApiVersion` metadata from
-  the reviewed source catalog. The prepared plugin jar set must exactly match
-  `GERRIT_PLUGIN_LIST`; missing expected jars and unexpected extra jars are
-  rejected.
-- To add a Gerrit plugin in v1, update `GERRIT_PLUGIN_LIST`, add a reviewed
-  helper source catalog entry with jar name, URL, SHA256, and Gerrit API line,
-  then run the normal `prepare-artifacts` phase. There is no separate
-  propose-plugin-versions command or runtime plugin install command.
+- If the real Gerrit WAR is unavailable or invalid, `prepare-artifacts` exits
+  nonzero with a blocked reason instead of writing placeholder files.
+- External Gerrit plugins are not downloaded, bundled, installed, checksummed,
+  or validated by the Gerrit role helper.
 - Because it writes new bundle-factory artifacts, `prepare-artifacts` is a
   mutating helper command and requires `--yes` after reviewed env
   confirmation.
@@ -222,19 +202,15 @@ Consumed inputs:
 
 - Reviewed Gerrit env file.
 - Extracted artifact bundle root, normally `/var/lib/loopforge/staging/gerrit-artifacts-bundle` in Docker simulation and target deployment. See `docs/artifact-bundle-contract.md`.
-- `manifest.txt`, `checksums.sha256`, `plugin-artifacts.manifest`,
-  `plugin-metadata.report`, and `plugin-checksums.sha256`.
+- `manifest.txt` and `checksums.sha256`.
 
 Produced outputs:
 
 - Gerrit site tree under `GERRIT_SITE_PATH`.
 - `bin/gerrit.war`.
-- `plugins/*.jar`.
+- An empty `/srv/gerrit/plugins` directory for later operator-managed use.
 - `etc/artifact-manifest.txt`.
 - `etc/artifact-checksums.sha256`.
-- `etc/plugin-artifacts.manifest`.
-- `etc/plugin-metadata.report`.
-- `etc/plugin-checksums.sha256`.
 - Install readiness marker under `state/install.status`.
 
 Mutation side effects:
@@ -242,8 +218,7 @@ Mutation side effects:
 - Creates or updates Gerrit role-local site files.
 - Does not download application artifacts on the target.
 - Fails before mutation if the staged Gerrit WAR is not a valid archive.
-- Fails before mutation if staged plugin metadata/checksums are missing or the
-  staged plugin jar set does not exactly match `GERRIT_PLUGIN_LIST`.
+- Does not install, remove, or validate external Gerrit plugin jars.
 
 Helper:
 
@@ -266,7 +241,7 @@ Produced outputs:
 - `etc/gerrit.config`.
 - `etc/secure.config` written from reviewed LDAP bind secret input.
 - Real Gerrit site runtime configuration ready to start from the staged Gerrit
-  WAR, rendered config, plugin set, and reviewed HTTP/SSH ports.
+  WAR, rendered config, and reviewed HTTP/SSH ports.
 
 Mutation side effects:
 
@@ -355,15 +330,12 @@ Validation evidence covers:
 - Endpoint reachability: a request to the reviewed Gerrit HTTP endpoint reaches
   the running Gerrit service.
 - Artifact freshness: validation compares the installed WAR, rendered config,
-  plugin metadata report, plugin checksums, and plugin-set digest to the
-  staged manifest and checksum inputs.
+  staged manifest, and checksum inputs.
 - LDAP access: the Gerrit target binds and searches the reviewed LDAP user and
   group bases using reviewed bind secret input that is also written to
   `etc/secure.config`.
 - SSH access: a TCP connection to the reviewed SSH port returns a Gerrit SSH
   response from the running Gerrit service.
-- Plugin readiness: the installed plugin jar set exactly matches the staged
-  set and the expected plugins are loaded by the running Gerrit daemon.
 - Jenkins integration prerequisites: explicitly deferred. Validation must not
   require or apply Gerrit-owned `All-Projects.git`/`All-Users.git` Jenkins
   access state, `Verified` voting grants, or stream-events grants.
@@ -418,13 +390,12 @@ Evidence Contract fields:
 - Bounded log references.
 - Redaction status.
 
-`collect-evidence` is fail-closed. It verifies staged artifacts, plugin
-metadata, checksums, the real Gerrit daemon process, HTTP endpoint, SSH
-banner, LDAP bind/search access, exact plugin files, and runtime plugin loads
-before it writes passing evidence. Passing evidence references concrete
-bounded log files that exist and records that Jenkins integration
-prerequisites are deferred. Because it can start Gerrit and writes new
-evidence files, it is a mutating helper command and requires `--yes` after
+`collect-evidence` is fail-closed. It verifies staged artifacts, checksums,
+the real Gerrit daemon process, HTTP endpoint, SSH banner, and LDAP
+bind/search access before it writes passing evidence. Passing evidence
+references concrete bounded log files that exist and records that Jenkins
+integration prerequisites are deferred. Because it can start Gerrit and writes
+new evidence files, it is a mutating helper command and requires `--yes` after
 reviewed env confirmation.
 
 Helper:
