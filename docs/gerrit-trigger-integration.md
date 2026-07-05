@@ -2,7 +2,7 @@
 
 This document defines the v1 contract for Gerrit Trigger integration between
 Jenkins and Gerrit. It is based on the behavior digest in
-`docs/reference-digest.md` and stays within the product boundary in
+`docs/references/reference-digest.md` and stays within the product boundary in
 `docs/prd.md`.
 
 The contract covers the integration account, SSH key custody, the reviewed

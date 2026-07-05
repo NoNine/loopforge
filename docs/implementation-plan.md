@@ -7,15 +7,16 @@ Gerrit/Jenkins setup package described in `docs/prd.md`. It is not the stable
 product authority; use `docs/docs-management.md` to resolve the owning
 authority for current product facts.
 
-The behavior digest is `docs/reference-digest.md`. That digest summarizes the
-known-working draft repository behavior without allowing implementation agents
-to copy code, docs, templates, scripts, config files, command bodies, or
-verbatim implementation from `/home/ubuntu/ai-assisted/gerrit-jenkins`.
+The behavior digest is `docs/references/reference-digest.md`. That digest
+summarizes the known-working draft repository behavior without allowing
+implementation agents to copy code, docs, templates, scripts, config files,
+command bodies, or verbatim implementation from
+`/home/ubuntu/ai-assisted/gerrit-jenkins`.
 
-Implementation agents must use `docs/reference-digest.md`, `docs/prd.md`, the
-role native-operations references, and this plan as their reference set. Do not
-open or copy from the draft repository unless a human explicitly approves a
-new reference review.
+Implementation agents must use `docs/references/reference-digest.md`,
+`docs/prd.md`, the role native-operations references, and this plan as their
+reference set. Do not open or copy from the draft repository unless a human
+explicitly approves a new reference review.
 
 The draft behavior was originally framed around air-gapped installation. This
 package must adapt the behavior to the v1 boundary:
@@ -86,7 +87,7 @@ README.md
 docs/
   prd.md
   implementation-plan.md
-  reference-digest.md
+  references/reference-digest.md
   account-model.md
   gerrit-setup-manual.md
   jenkins-controller-setup-manual.md
@@ -259,7 +260,7 @@ Acceptance criteria:
 
 ## Step 5: Define Gerrit Trigger Integration
 
-Use the trigger behavior summarized in `docs/reference-digest.md` as source
+Use the trigger behavior summarized in `docs/references/reference-digest.md` as source
 material, and make `docs/gerrit-trigger-integration.md` the topic authority
 for Gerrit Trigger, ACL, label, vote, and failure-classification behavior.
 
@@ -435,7 +436,7 @@ Acceptance criteria:
 ## Step 7: Create The Gerrit Manual And Helper
 
 Use the Gerrit helper and integration behavior summarized in
-`docs/reference-digest.md`.
+`docs/references/reference-digest.md`.
 
 Create:
 
@@ -556,7 +557,7 @@ Acceptance criteria:
 ## Step 8: Create The Jenkins Controller Manual And Helper
 
 Use the Jenkins controller helper and integration behavior summarized in
-`docs/reference-digest.md`.
+`docs/references/reference-digest.md`.
 
 Create:
 
@@ -699,7 +700,7 @@ Acceptance criteria:
 
 ## Step 9: Create The Jenkins Agent Manual And Helper
 
-Use the Jenkins agent helper behavior summarized in `docs/reference-digest.md`.
+Use the Jenkins agent helper behavior summarized in `docs/references/reference-digest.md`.
 
 Create:
 
@@ -855,7 +856,7 @@ Acceptance criteria:
 
 ## Step 11: Build Docker Simulation
 
-Use the Docker simulation behavior summarized in `docs/reference-digest.md`.
+Use the Docker simulation behavior summarized in `docs/references/reference-digest.md`.
 
 Create Docker simulation assets under `simulation/docker/` for:
 
@@ -980,7 +981,7 @@ Step 12 is not a real VM implementation. VM infrastructure is not available by
 default, so this step creates only the non-mutating verifier scaffold needed to
 document and gate future VM work.
 
-Use the VM simulation behavior summarized in `docs/reference-digest.md` as the
+Use the VM simulation behavior summarized in `docs/references/reference-digest.md` as the
 future command contract, but do not claim that real VM provisioning,
 configuration, or end-to-end verification is implemented in this step.
 

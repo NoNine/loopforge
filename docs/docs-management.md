@@ -55,6 +55,16 @@ Use this order when deciding where a product or process fact belongs:
 When layers conflict, update the higher authority or the stale consumer in the
 same logical change. Do not preserve contradictory text for compatibility.
 
+## Reference Material
+
+`docs/references/` contains non-authoritative research notes and historical
+input. These documents can inform product decisions, implementation plans, or
+future docs changes, but they do not define current Loopforge behavior.
+
+When reference material conflicts with authority docs, update the authority
+doc only when the product decision changes. Otherwise, treat the reference
+material as stale or contextual input.
+
 ## Execution Ledger Role
 
 `docs/execution-status.md` is a mutable resume ledger. It may record current

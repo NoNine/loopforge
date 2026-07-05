@@ -8,7 +8,7 @@ waivers, and the next authorized work item.
 
 Use `docs/docs-management.md` to resolve documentation authority. Product
 truth belongs in the stable authority docs. `docs/implementation-plan.md` is
-the active implementation roadmap, and `docs/reference-digest.md` is
+the active implementation roadmap, and `docs/references/reference-digest.md` is
 historical draft-behavior input constrained by current Loopforge authorities.
 
 Keep entries concise. Record only status, commit, verification logs, and facts
@@ -238,7 +238,7 @@ transcripts here.
 ## Resume Instructions
 
 1. Read `docs/docs-management.md`, `docs/prd.md`,
-   `docs/implementation-plan.md`, `docs/reference-digest.md`, and this
+   `docs/implementation-plan.md`, `docs/references/reference-digest.md`, and this
    ledger.
 2. Check `git status --short`.
 3. Keep `docs/execution-status.md` unstaged unless the user explicitly
