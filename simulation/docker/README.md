@@ -109,9 +109,11 @@ and is not renamed, mapped, or required to be `ci-operator`.
 
 Use `simulate.sh status --env FILE` after `up` to inspect the selected
 running simulation. The status command prints the run ID, Compose project,
-live browser URLs, and seeded Docker simulation login accounts. It is
-read-only and fails when the selected run's containers are not running, so it
-does not rely on stale port data from rendered config files.
+live browser URLs, and seeded Docker simulation human login accounts. The
+Jenkins Gerrit integration account is created later as a Gerrit service
+account by the shared integration step, not seeded as an LDAP password user.
+It is read-only and fails when the selected run's containers are not running,
+so it does not rely on stale port data from rendered config files.
 
 Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The

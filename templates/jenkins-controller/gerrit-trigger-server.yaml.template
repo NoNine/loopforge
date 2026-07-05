@@ -6,8 +6,8 @@
 # - Reference a Jenkins credential ID that holds the controller-owned private
 #   key.
 # - Use SSH for Gerrit authentication and stream-events. The default Verified
-#   vote posting path is the Gerrit REST review API handled by the shared
-#   integration helper, not legacy SSH review commands.
+#   vote posting path is the Gerrit REST review API handled by Gerrit Trigger,
+#   not legacy SSH review commands or helper-side vote posting.
 #
 # Replace placeholders before use. This is a declarative template shape for a
 # later JCasC/helper step, not standalone executable automation.
@@ -23,6 +23,14 @@ unclassified:
           gerritUserName: "{{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}"
           gerritFrontEndUrl: "{{GERRIT_HTTP_URL}}"
           gerritAuthKeyCredentialId: "{{JENKINS_GERRIT_CREDENTIAL_ID}}"
+          useRestApi: true
+          restVerified: true
+          gerritHttpUserName: "{{JENKINS_GERRIT_INTEGRATION_ACCOUNT}}"
+          gerritHttpPasswordTokenId: "{{JENKINS_GERRIT_TOKEN_ID}}"
+          gerritBuildStartedVerifiedValue: 0
+          gerritBuildSuccessfulVerifiedValue: 1
+          gerritBuildFailedVerifiedValue: -1
+          gerritBuildUnstableVerifiedValue: -1
 
 # Do not add default legacy SSH review command examples here. Legacy SSH review
 # commands or flags require explicit operator justification and compatibility
@@ -36,7 +44,7 @@ unclassified:
 # - Gerrit SSH and stream-events check result.
 # - Bounded log paths.
 #
-# Evidence must not record the private key material.
+# Evidence must not record the private key material or Gerrit auth token value.
 # A private-key file path can be used only as a reviewed alternative after the
 # Jenkins helper verifies the installed Gerrit Trigger/JCasC syntax. Do not set
 # a live file-path field alongside the credential ID in this template.

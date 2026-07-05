@@ -318,7 +318,7 @@ Edit `/srv/gerrit/etc/gerrit.config`:
 
 [auth]
   type = LDAP
-  gitBasicAuthPolicy = LDAP
+  gitBasicAuthPolicy = HTTP_LDAP
 
 [ldap]
   server = ldap://LDAP_HOST:389
@@ -346,7 +346,11 @@ behind a reverse proxy or load balancer, this should normally be the external
 HTTPS URL, for example `https://gerrit.example.internal/`, even when Gerrit
 listens internally on plain HTTP.
 
-Use `gitBasicAuthPolicy = LDAP` when REST API or Git-over-HTTP clients should authenticate with the user's LDAP password. `gitBasicAuthPolicy = HTTP` expects a Gerrit-generated HTTP password for an already provisioned account, which is a different operational model.
+Use `gitBasicAuthPolicy = HTTP_LDAP` when REST API or Git-over-HTTP clients
+must support both Gerrit-generated HTTP auth tokens and LDAP passwords. Human
+LDAP-backed users can still authenticate with LDAP passwords, while Gerrit
+service accounts such as `jenkins-gerrit` use Gerrit-generated HTTP auth
+tokens.
 
 Store LDAP bind password in `/srv/gerrit/etc/secure.config`:
 

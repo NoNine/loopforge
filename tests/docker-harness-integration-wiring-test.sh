@@ -96,9 +96,42 @@ if sed -n '/cmd_prove_integration()/,/^}/p' "$repo_root/scripts/integration-setu
   exit 1
 fi
 if sed -n '/validate_integration_impl()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
-  grep -Eq -- 'prove_stream_events|schedule_smoke_build|prove_shared_storage_rw|create_gerrit_change|post_simulation_verified_vote|validate_agent_online|configure_verification_job'
+  grep -Eq -- 'prove_stream_events|schedule_smoke_build|prove_shared_storage_rw|create_gerrit_change|validate_agent_online|configure_verification_job'
 then
   printf 'validate-integration must stay passive and must not run active proof\n' >&2
+  exit 1
+fi
+grep -Fq -- 'GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-gerrit}"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-gerrit-verification}"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'JENKINS_GERRIT_TOKEN_ID="${JENKINS_GERRIT_TOKEN_ID:-jenkins-trigger}"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'ensure_gerrit_admin_account_provisioned "$log"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'ensure_gerrit_test_account_provisioned "$log"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'ensure_gerrit_integration_account "$log"' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'gerrit_account_provision=simulation-login' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'Gerrit $role account is not provisioned or the credential was rejected; sign in once as' "$repo_root/scripts/integration-setup.sh"
+grep -Fq -- 'review_apply=gerrit-trigger-rest' "$repo_root/scripts/integration-setup.sh"
+if ! sed -n '/prove_stream_events()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
+  grep -Fq -- 'ensure_gerrit_test_account_provisioned "$log"'
+then
+  printf 'stream-events proof must provision/check the Gerrit test account\n' >&2
+  exit 1
+fi
+if ! sed -n '/create_gerrit_change()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
+  grep -Fq -- 'ensure_gerrit_test_account_provisioned "$log"'
+then
+  printf 'verification change proof must provision/check the Gerrit test account\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'JENKINS_GERRIT_INTEGRATION_PASSWORD' "$repo_root/scripts/integration-setup.sh"; then
+  printf 'integration helper must not require a password-backed jenkins-gerrit account\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'post_simulation_verified_vote' "$repo_root/scripts/integration-setup.sh"; then
+  printf 'prove-integration must not post the Gerrit Verified vote directly\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'docker-gerrit' "$repo_root/scripts/integration-setup.sh"; then
+  printf 'integration helper defaults must not use Docker-specific Gerrit names\n' >&2
   exit 1
 fi
 if grep -Fq -- 'docker exec "$(jenkins_container)" ssh' "$repo_root/scripts/integration-setup.sh"; then

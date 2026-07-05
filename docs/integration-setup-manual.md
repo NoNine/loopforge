@@ -34,6 +34,10 @@ reviewed `All-Projects` configuration. Jenkins read access and
 pattern. The `stream-events` permission remains a global capability grant.
 Jenkins Gerrit Trigger uses SSH for authentication and event streaming, while
 the Gerrit REST review API is the default path for posting `Verified` votes.
+For the REST path, the helper generates a Gerrit HTTP auth token for the
+`jenkins-gerrit` service account during `configure-integration` and stores it
+only in Jenkins Gerrit Trigger configuration. Operators do not provide the
+service-account REST token as a normal env input.
 
 Helper-generated shared state and helper logs on target environments live
 under `/var/lib/loopforge/` and `/var/log/loopforge/`.
@@ -76,10 +80,12 @@ Required operator inputs include:
 - Reviewed shared integration env file, normally copied from
   `examples/integration.env.example`.
 - Gerrit admin credential or approved automation credential for creating the
-  reviewed `All-Projects` label/config change and project/ref access change.
+  reviewed `All-Projects` label/config change, project/ref access change, and
+  Jenkins Gerrit integration auth token.
 - Jenkins admin credential or approved automation credential for credential,
   Gerrit Trigger, node, and job configuration.
 - Jenkins Gerrit integration account or group.
+- Gerrit integration auth token ID, defaulting to `jenkins-trigger`.
 - Gerrit project and ref scope for Jenkins read and `label-Verified -1..+1`
   grants.
 - Jenkins agent node name, scheduling label, executor policy, and remote
@@ -87,6 +93,15 @@ Required operator inputs include:
 - Disposable verification project, branch, job, and run ID values.
 - Target OS SSH inventory for Gerrit, Jenkins controller, and Jenkins agent:
   host, port, user, identity file, and known-hosts file.
+
+The Gerrit admin and test accounts must already be provisioned in Gerrit before
+target deployment integration begins. LDAP directory entries alone are not
+enough for Gerrit REST Basic Auth under the `HTTP_LDAP` policy; these users
+must sign in to Gerrit once, or the site must provision the accounts through an
+approved equivalent. Docker and VM simulation may perform this initial login
+automatically with simulation-owned credentials. The Jenkins Gerrit integration
+account is different: the integration helper creates or validates it as a
+Gerrit service account and then generates its Gerrit auth token.
 
 Custody and redaction rules:
 
@@ -119,8 +134,8 @@ OS/control-plane access:
 Service endpoints:
 
 - Gerrit HTTP REST comes from the reviewed Gerrit role env and is used for
-  account/key registration, config-review workflow, review posting, and state
-  checks.
+  service-account token generation, account/key registration, config-review
+  workflow, review state checks, and Gerrit Trigger vote posting.
 - Gerrit SSH comes from the reviewed Gerrit role env and is used for
   Jenkins-to-Gerrit authentication and `stream-events` proof.
 - Jenkins HTTP/API/script access comes from the reviewed Jenkins controller

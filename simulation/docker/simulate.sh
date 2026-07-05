@@ -2722,7 +2722,6 @@ cmd_status() {
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit' 'gerrit-admin' 'admin-password' 'Gerrit admin user'
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'Jenkins' 'jenkins-admin' 'admin-password' 'Jenkins admin user'
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit' 'test-user' 'test-password' 'Test/change workflow user'
-  printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit integration' 'jenkins-gerrit' 'integration-password' 'Jenkins-to-Gerrit integration account'
   printf '  %-18s  %-14s  %-20s  %-40s\n' '------------------' '--------------' '--------------------' '----------------------------------------'
 }
 

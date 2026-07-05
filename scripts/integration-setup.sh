@@ -177,8 +177,8 @@ apply_defaults() {
   INTEGRATION_TEST_ACCOUNT="${INTEGRATION_TEST_ACCOUNT:-test-user}"
   INTEGRATION_TEST_PASSWORD="${INTEGRATION_TEST_PASSWORD:-test-password}"
   JENKINS_GERRIT_INTEGRATION_ACCOUNT="${JENKINS_GERRIT_INTEGRATION_ACCOUNT:-jenkins-gerrit}"
-  JENKINS_GERRIT_INTEGRATION_PASSWORD="${JENKINS_GERRIT_INTEGRATION_PASSWORD:-integration-password}"
   JENKINS_GERRIT_INTEGRATION_GROUP="${JENKINS_GERRIT_INTEGRATION_GROUP:-gerrit-integration}"
+  JENKINS_GERRIT_TOKEN_ID="${JENKINS_GERRIT_TOKEN_ID:-jenkins-trigger}"
   JENKINS_GERRIT_CREDENTIAL_ID="${JENKINS_GERRIT_CREDENTIAL_ID:-jenkins-gerrit-ssh}"
   JENKINS_AGENT_CREDENTIAL_ID="${JENKINS_AGENT_CREDENTIAL_ID:-jenkins-agent-ssh}"
   JENKINS_SHARED_GROUP="${JENKINS_SHARED_GROUP:-}"
@@ -186,8 +186,8 @@ apply_defaults() {
   JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
   LOOPFORGE_OPERATOR_ACCOUNT="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
   LOOPFORGE_OPERATOR_GROUP="${LOOPFORGE_OPERATOR_GROUP:-$LOOPFORGE_OPERATOR_ACCOUNT}"
-  GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-docker-gerrit}"
-  JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-docker-gerrit-verification}"
+  GERRIT_TRIGGER_SERVER_NAME="${GERRIT_TRIGGER_SERVER_NAME:-gerrit}"
+  JENKINS_VERIFICATION_JOB="${JENKINS_VERIFICATION_JOB:-gerrit-verification}"
   if [ -z "$INTEGRATION_GERRIT_ACL_MODE" ]; then
     case "$INTEGRATION_MODE" in
       docker-simulation|vm-simulation)
@@ -473,10 +473,10 @@ validate_inputs() {
   validate_account_name INTEGRATION_TEST_ACCOUNT "$INTEGRATION_TEST_ACCOUNT"
   validate_account_name JENKINS_GERRIT_INTEGRATION_ACCOUNT "$JENKINS_GERRIT_INTEGRATION_ACCOUNT"
   validate_simple_token JENKINS_GERRIT_INTEGRATION_GROUP "$JENKINS_GERRIT_INTEGRATION_GROUP"
+  validate_simple_token JENKINS_GERRIT_TOKEN_ID "$JENKINS_GERRIT_TOKEN_ID"
   validate_shell_embedded_secret INTEGRATION_GERRIT_ADMIN_PASSWORD "$INTEGRATION_GERRIT_ADMIN_PASSWORD"
   validate_shell_embedded_secret INTEGRATION_JENKINS_ADMIN_PASSWORD "$INTEGRATION_JENKINS_ADMIN_PASSWORD"
   validate_shell_embedded_secret INTEGRATION_TEST_PASSWORD "$INTEGRATION_TEST_PASSWORD"
-  validate_shell_embedded_secret JENKINS_GERRIT_INTEGRATION_PASSWORD "$JENKINS_GERRIT_INTEGRATION_PASSWORD"
   case "$JENKINS_AGENT_EXECUTORS" in
     ""|*[!0-9]*)
       die "JENKINS_AGENT_EXECUTORS must be numeric"
@@ -859,6 +859,146 @@ gerrit_curl_text() {
     $(shell_quote "http://$GERRIT_HOST:$GERRIT_HTTP_PORT/a$path")"
 }
 
+gerrit_login_ldap_user() {
+  local user password log
+  user="${1:?user required}"
+  password="${2:?password required}"
+  log="${3:?log required}"
+  target_exec gerrit "tmp_cookie=\$(mktemp /tmp/gerrit-login-cookie.XXXXXX) && \
+    trap 'rm -f \"\$tmp_cookie\"' EXIT && \
+    curl -fsS -c \"\$tmp_cookie\" -b \"\$tmp_cookie\" \
+      --data-urlencode $(shell_quote "username=$user") \
+      --data-urlencode $(shell_quote "password=$password") \
+      --data $(shell_quote "rememberme=1") \
+      $(shell_quote "http://$GERRIT_HOST:$GERRIT_HTTP_PORT/login/") >/dev/null"
+  printf 'gerrit_account_provision=simulation-login account=%s\n' "$user" >>"$log"
+}
+
+ensure_gerrit_ldap_account_provisioned() {
+  local account password role command log
+  account="${1:?account required}"
+  password="${2:?password required}"
+  role="${3:?role required}"
+  command="${4:?command required}"
+  log="${5:?log required}"
+  if gerrit_curl "$account" "$password" GET "/accounts/self" >/dev/null 2>&1; then
+    printf 'gerrit_%s_account=provisioned account=%s\n' "$role" "$account" >>"$log"
+    return 0
+  fi
+  if simulation_mode; then
+    gerrit_login_ldap_user "$account" "$password" "$log" >>"$log" 2>&1
+    gerrit_curl "$account" "$password" GET "/accounts/self" >>"$log" 2>&1 ||
+      die "Gerrit $role account was not provisioned after simulation login: $account"
+    printf 'gerrit_%s_account=provisioned-after-simulation-login account=%s\n' "$role" "$account" >>"$log"
+    return 0
+  fi
+  printf 'gerrit_%s_account=not-ready account=%s mode=%s\n' "$role" "$account" "$INTEGRATION_MODE" >>"$log"
+  die "Gerrit $role account is not provisioned or the credential was rejected; sign in once as $account and verify the credential before running $command"
+}
+
+ensure_gerrit_admin_account_provisioned() {
+  local log
+  log="${1:?log required}"
+  ensure_gerrit_ldap_account_provisioned \
+    "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" \
+    "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
+    admin \
+    configure-integration \
+    "$log"
+}
+
+ensure_gerrit_test_account_provisioned() {
+  local log
+  log="${1:?log required}"
+  ensure_gerrit_ldap_account_provisioned \
+    "$INTEGRATION_TEST_ACCOUNT" \
+    "$INTEGRATION_TEST_PASSWORD" \
+    test \
+    prove-integration \
+    "$log"
+}
+
+gerrit_response_json_field() {
+  local field text
+  field="${1:?field required}"
+  text="${2:?response required}"
+  python3 - "$field" "$text" <<'PY'
+import json
+import sys
+
+field = sys.argv[1]
+text = sys.argv[2]
+if text.startswith(")]}'"):
+    text = text.split("\n", 1)[1]
+data = json.loads(text)
+value = data.get(field, "")
+if value is None:
+    value = ""
+print(value)
+PY
+}
+
+ensure_gerrit_integration_account() {
+  local log account account_json target_json q_username q_name q_display_name
+  log="${1:?log required}"
+  account="$(url_encode "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
+  if gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/accounts/$account" >>"$log" 2>&1; then
+    printf 'gerrit_service_account=exists account=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
+    return 0
+  fi
+  account_json="$(integration_host_state_dir)/status/gerrit-service-account.json"
+  target_json="/tmp/gerrit-service-account.json"
+  q_username="$(json_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
+  q_name="$(json_quote "Jenkins Gerrit Integration")"
+  q_display_name="$(json_quote "Jenkins Gerrit")"
+  cat >"$account_json" <<EOF
+{
+  "username": $q_username,
+  "name": $q_name,
+  "display_name": $q_display_name
+}
+EOF
+  target_write_file gerrit "$account_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
+  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
+    PUT "/accounts/$account" "$target_json" >>"$log" 2>&1
+  printf 'gerrit_service_account=created account=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
+}
+
+generate_gerrit_integration_token() {
+  local log account token_id token_json target_json response token
+  log="${1:?log required}"
+  account="$(url_encode "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
+  token_id="$(url_encode "$JENKINS_GERRIT_TOKEN_ID")"
+  token_json="$(integration_host_state_dir)/status/gerrit-auth-token-request.json"
+  target_json="/tmp/gerrit-auth-token-request.json"
+  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
+    GET "/accounts/$account" >>"$log" 2>&1 ||
+    die "Gerrit integration account does not exist: $JENKINS_GERRIT_INTEGRATION_ACCOUNT"
+  cat >"$token_json" <<EOF
+{
+  "id": "$JENKINS_GERRIT_TOKEN_ID"
+}
+EOF
+  target_write_file gerrit "$token_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
+  if gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
+    DELETE "/accounts/$account/tokens/$token_id" >/dev/null 2>&1; then
+    printf 'gerrit_auth_token=deleted-prior account=%s token_id=%s\n' \
+      "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_TOKEN_ID" >>"$log"
+  else
+    printf 'gerrit_auth_token=no-prior-token account=%s token_id=%s\n' \
+      "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_TOKEN_ID" >>"$log"
+  fi
+  response="$(
+    gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
+      PUT "/accounts/$account/tokens/$token_id" "$target_json"
+  )"
+  token="$(gerrit_response_json_field token "$response")"
+  [ -n "$token" ] || die "Gerrit did not return a generated auth token for $JENKINS_GERRIT_INTEGRATION_ACCOUNT"
+  printf 'gerrit_auth_token=generated account=%s token_id=%s\n' \
+    "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_TOKEN_ID" >>"$log"
+  printf '%s\n' "$token"
+}
+
 gerrit_account_has_capability() {
   local user password capability response
   user="${1:?user required}"
@@ -884,9 +1024,11 @@ gerrit_project_has_verified_label() {
 }
 
 gerrit_account_can_vote_verified() {
-  local project response
+  local project user password response
   project="${1:?project required}"
-  response="$(gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" GET "/projects/$project/labels/?inherited&voteable-on-ref=refs/heads/master")"
+  user="${2:?user required}"
+  password="${3:?password required}"
+  response="$(gerrit_curl "$user" "$password" GET "/projects/$project/labels/?inherited&voteable-on-ref=refs/heads/master")"
   python3 - "$response" <<'PY'
 import json
 import sys
@@ -906,21 +1048,14 @@ PY
 }
 
 ensure_gerrit_rest_admin() {
-  local log admin_member
+  local log
   log="${1:?log required}"
-  admin_member="${INTEGRATION_GERRIT_ADMIN_ACCOUNT// /%20}"
   if gerrit_account_has_capability "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" administrateServer >>"$log" 2>&1; then
     printf 'gerrit_rest_admin=ready account=%s\n' "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" >>"$log"
     return 0
   fi
-  printf 'gerrit_rest_admin=missing account=%s repair=rest-internal-administrators\n' "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" >>"$log"
-  if ! gerrit_account_has_capability "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" administrateServer >>"$log" 2>&1; then
-    die "Configured Gerrit admin lacks administrateServer and no REST admin account is available for reviewed ACL setup"
-  fi
-  gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" PUT "/groups/Administrators/members/$admin_member" >>"$log" 2>&1
-  gerrit_account_has_capability "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" administrateServer >>"$log" 2>&1 ||
-    die "REST Administrators group repair did not grant administrateServer to configured Gerrit admin"
-  printf 'gerrit_rest_admin=ready account=%s repair=rest-internal-administrators\n' "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" >>"$log"
+  printf 'gerrit_rest_admin=missing account=%s\n' "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" >>"$log"
+  die "Configured Gerrit admin lacks administrateServer for reviewed integration setup"
 }
 
 ensure_gerrit_integration_group() {
@@ -1066,7 +1201,7 @@ EOF
     POST "/projects/$project_id/access" "/tmp/integration-project-access.json" >>"$log" 2>&1
   printf 'access_apply=simulation-only-direct-rest project=%s ref_pattern=%s endpoint=projects.access permissions=read,label-Verified\n' "$GERRIT_VERIFICATION_PROJECT" "$GERRIT_VERIFICATION_REF_PATTERN" >>"$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$all_projects_id/labels/Verified" >>"$log" 2>&1
-  gerrit_account_can_vote_verified "$project_id" >>"$log" 2>&1 ||
+  gerrit_account_can_vote_verified "$project_id" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_REST_TOKEN" >>"$log" 2>&1 ||
     die "Verified label is not voteable by Jenkins integration account on $GERRIT_VERIFICATION_PROJECT"
   printf 'verified_label=ready project=All-Projects voteable_project=%s voteable_by=%s\n' "$GERRIT_VERIFICATION_PROJECT" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
 }
@@ -1137,6 +1272,8 @@ jenkins_script() {
     set -e
     crumb_json='$(jenkins_ops_tmp_dir)/jenkins-crumb.json'
     cookie_jar='$(jenkins_ops_tmp_dir)/jenkins-cookies.txt'
+    script_out='$(jenkins_ops_tmp_dir)/jenkins-script.out'
+    trap 'rm -f \"\$crumb_json\" \"\$cookie_jar\" \"\$script_out\" '\''$target_script'\''' EXIT
     curl -fsS -u '$INTEGRATION_JENKINS_ADMIN_ACCOUNT:$INTEGRATION_JENKINS_ADMIN_PASSWORD' \
       -c \"\$cookie_jar\" \
       \"http://$JENKINS_HOST:$JENKINS_HTTP_PORT/crumbIssuer/api/json\" >\"\$crumb_json\"
@@ -1145,7 +1282,6 @@ jenkins_script() {
     test -n \"\$crumb\"
     test -n \"\$crumb_field\"
     crumb_header=\"\$crumb_field:\$crumb\"
-    script_out='$(jenkins_ops_tmp_dir)/jenkins-script.out'
     curl -fsS -u '$INTEGRATION_JENKINS_ADMIN_ACCOUNT:$INTEGRATION_JENKINS_ADMIN_PASSWORD' \
       -b \"\$cookie_jar\" -H \"\$crumb_header\" \
       --data-urlencode \"script@$target_script\" \
@@ -1202,12 +1338,13 @@ copy_controller_public_key_to_target() {
 }
 
 register_gerrit_public_key() {
-  local account public_path log
+  local account public_path rest_token log
   account="${1:?account required}"
   public_path="${2:?public key required}"
-  log="${3:?log required}"
+  rest_token="${3:?rest token required}"
+  log="${4:?log required}"
   copy_controller_public_key_to_target "$public_path" gerrit /tmp/jenkins-gerrit.pub "$log"
-  if gerrit_curl_text "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" "/accounts/self/sshkeys" "/tmp/jenkins-gerrit.pub" >>"$log" 2>&1; then
+  if gerrit_curl_text "$account" "$rest_token" "/accounts/self/sshkeys" "/tmp/jenkins-gerrit.pub" >>"$log" 2>&1; then
     printf 'key_registration=rest-self\n' >>"$log"
     return 0
   fi
@@ -1222,19 +1359,21 @@ configure_gerrit_ssh_impl() {
   require_command scp
   ensure_dirs
   log="$(bounded_log_path configure-jenkins-gerrit-ssh)"
+  ensure_gerrit_admin_account_provisioned "$log"
+  ensure_gerrit_rest_admin "$log"
+  ensure_gerrit_integration_account "$log"
   ensure_target_integration_dirs
   private="$(ensure_controller_keypair jenkins-gerrit "$log")"
   public="$private.pub"
   fp="$(controller_public_key_fingerprint "$public")"
   ensure_controller_private_key_permissions "$private"
-  gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" GET "/accounts/self" >>"$log" 2>&1
-  register_gerrit_public_key "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$public" "$log"
+  JENKINS_GERRIT_REST_TOKEN="$(generate_gerrit_integration_token "$log")"
+  gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_REST_TOKEN" GET "/accounts/self" >>"$log" 2>&1
+  register_gerrit_public_key "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$public" "$JENKINS_GERRIT_REST_TOKEN" "$log"
   account_status="$(status_file jenkins-gerrit-account)"
   key_status="$(status_file jenkins-gerrit-key)"
-  printf 'account=%s public_key_fingerprint=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$fp" >"$account_status"
+  printf 'account=%s public_key_fingerprint=%s token_id=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$fp" "$JENKINS_GERRIT_TOKEN_ID" >"$account_status"
   printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s\n' "$fp" "$private" >"$key_status"
-  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/accounts/self" >>"$log" 2>&1
-  ensure_gerrit_rest_admin "$log"
 
   case "$INTEGRATION_GERRIT_ACL_MODE" in
     apply-direct)
@@ -1249,7 +1388,7 @@ configure_gerrit_ssh_impl() {
   esac
   acl_status="$(status_file gerrit-acl)"
   printf 'apply_mode=simulation-only-direct-rest acl_scope=verification-project group=%s mode=%s\n' "$JENKINS_GERRIT_INTEGRATION_GROUP" "$INTEGRATION_MODE" >"$acl_status"
-  write_evidence jenkins-to-gerrit-ssh configured "Jenkins-owned key generated, public key registered through Gerrit REST, and simulation-only integration ACLs applied through labeled direct Gerrit REST test automation" "$log" "public_key_fingerprint=$fp apply_mode=simulation-only-direct-rest" >/dev/null
+  write_evidence jenkins-to-gerrit-ssh configured "Jenkins-owned key generated, Gerrit auth token generated, public key registered through Gerrit REST, and simulation-only integration ACLs applied through labeled direct Gerrit REST test automation" "$log" "public_key_fingerprint=$fp token_id=$JENKINS_GERRIT_TOKEN_ID apply_mode=simulation-only-direct-rest" >/dev/null
   printf 'status=pass component=jenkins-gerrit-ssh public_key_fingerprint=%s acl_apply=simulation-only-direct-rest log=%s\n' "$fp" "$log"
 }
 
@@ -1345,6 +1484,8 @@ EOF
 configure_trigger_server_impl() {
   local log groovy q_gerrit_trigger_server q_gerrit_host q_gerrit_user q_gerrit_url q_gerrit_key q_gerrit_http_user q_gerrit_http_password
   ensure_dirs
+  [ -n "${JENKINS_GERRIT_REST_TOKEN:-}" ] ||
+    die "Missing generated Gerrit auth token; run configure_gerrit_ssh_impl before configuring Gerrit Trigger"
   log="$(bounded_log_path configure-trigger-server)"
   ensure_target_integration_dirs
   groovy="$(mktemp "${TMPDIR:-/tmp}/configure-trigger-server.XXXXXX.groovy")"
@@ -1354,7 +1495,7 @@ configure_trigger_server_impl() {
   q_gerrit_url="$(groovy_quote "http://$GERRIT_HOST:$GERRIT_HTTP_PORT/")"
   q_gerrit_key="$(groovy_quote "$(jenkins_ops_keys_dir)/jenkins-gerrit")"
   q_gerrit_http_user="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_ACCOUNT")"
-  q_gerrit_http_password="$(groovy_quote "$JENKINS_GERRIT_INTEGRATION_PASSWORD")"
+  q_gerrit_http_password="$(groovy_quote "$JENKINS_GERRIT_REST_TOKEN")"
   cat >"$groovy" <<EOF
 import jenkins.model.Jenkins
 import com.sonyericsson.hudson.plugins.gerrit.trigger.PluginImpl
@@ -1399,7 +1540,7 @@ EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
   printf 'trigger_server=%s mode=real-gerrit-trigger-plugin\n' "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger-server)"
-  write_evidence trigger-server configured "Jenkins Gerrit Trigger server configured through the Jenkins runtime plugin API" "$log" "trigger_server=$GERRIT_TRIGGER_SERVER_NAME" >/dev/null
+  write_evidence trigger-server configured "Jenkins Gerrit Trigger server configured through the Jenkins runtime plugin API with generated Gerrit auth token" "$log" "trigger_server=$GERRIT_TRIGGER_SERVER_NAME token_id=$JENKINS_GERRIT_TOKEN_ID" >/dev/null
   printf 'status=pass component=trigger-server log=%s\n' "$log"
 }
 
@@ -1539,12 +1680,12 @@ trigger.setGerritBuildUnstableVerifiedValue(-1)
 job.addTrigger(trigger)
 job.save()
 trigger.start(job, true)
-println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=simulation-only-direct-rest')
+println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_label + ' trigger_server=' + $q_gerrit_trigger_server + ' gerrit_trigger=enabled review_apply=gerrit-trigger-rest')
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
-  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=simulation-only-direct-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file verification-job)"
-  write_evidence verification-job configured "Disposable Jenkins verification job configured for active integration proof" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=simulation-only-direct-rest" >/dev/null
+  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=gerrit-trigger-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file verification-job)"
+  write_evidence verification-job configured "Disposable Jenkins verification job configured for active integration proof" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=gerrit-trigger-rest" >/dev/null
 }
 
 prove_stream_events() {
@@ -1574,6 +1715,7 @@ EOF
   "subject": "Loopforge stream-events validation"
 }
 EOF
+  ensure_gerrit_test_account_provisioned "$log"
   target_write_file gerrit "$project_json" "$target_project_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   target_write_file gerrit "$event_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if ! gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" PUT "/projects/$event_project" "$target_project_json" >>"$log" 2>&1; then
@@ -1652,8 +1794,8 @@ validate_integration_impl() {
   target_exec jenkins-controller "test -d '$JENKINS_SHARED_STORAGE_PATH' && test \"\$(stat -c '%G' '$JENKINS_SHARED_STORAGE_PATH')\" = '$JENKINS_SHARED_GROUP'" >/dev/null ||
     die "Shared Jenkins storage is not configured; run configure-integration with --yes first"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/accounts/self" >>"$log" 2>&1
-  gerrit_account_can_vote_verified "$(url_encode "$GERRIT_VERIFICATION_PROJECT")" >>"$log" 2>&1 ||
-    die "Verified label is not voteable by Jenkins integration account on $GERRIT_VERIFICATION_PROJECT"
+  gerrit_project_has_verified_label "$(url_encode All-Projects)" ||
+    die "Verified label is not configured in All-Projects"
   validate_agent_configured "$log"
   write_evidence shared-storage pass "Shared storage configuration exists for controller and agent runtime accounts" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH" >/dev/null
   write_evidence jenkins-to-gerrit-ssh pass "Jenkins-to-Gerrit key material and Gerrit access configuration are present" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
@@ -1697,6 +1839,7 @@ EOF
       die "Gerrit REST could not create or find disposable project $GERRIT_VERIFICATION_PROJECT"
   fi
   printf 'project_create=rest-or-existing project=%s\n' "$GERRIT_VERIFICATION_PROJECT" >>"$log"
+  ensure_gerrit_test_account_provisioned "$log"
   gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" GET "/accounts/self" >/dev/null
   gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" POST "/changes/" "$json_file" >"$result_file"
   python3 - "$result_file" <<'PY'
@@ -1746,31 +1889,38 @@ EOF
   rm -f "$groovy"
 }
 
-post_simulation_verified_vote() {
-  local log change patchset review_post_json target_json
+wait_for_verified_vote() {
+  local log change review_json vote_result
   log="${1:?log required}"
   change="${2:?change required}"
-  patchset="${3:?patchset required}"
-  review_post_json="$(integration_host_state_dir)/status/simulation-verified-vote.json"
-  target_json="/tmp/simulation-verified-vote.json"
-  cat >"$review_post_json" <<EOF
-{
-  "message": "Loopforge simulation-only direct REST verification passed on Jenkins agent $JENKINS_AGENT_NODE_NAME via label $JENKINS_AGENT_SCHEDULING_LABEL",
-  "labels": {
-    "Verified": 1
-  },
-  "tag": "autogenerated:simulation-direct-rest"
-}
-EOF
-  target_write_file gerrit "$review_post_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
-  gerrit_curl "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$JENKINS_GERRIT_INTEGRATION_PASSWORD" \
-    POST "/changes/$change/revisions/$patchset/review" "$target_json" >>"$log" 2>&1
-  printf 'review_apply=simulation-only-direct-rest change=%s patchset=%s label=Verified value=+1 account=%s\n' \
-    "$change" "$patchset" "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >>"$log"
+  review_json="$(integration_host_state_dir)/status/review.json"
+  for _ in $(seq 1 30); do
+    if gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/changes/$change/revisions/current/review" >"$review_json" 2>>"$log"; then
+      vote_result="$(python3 - "$review_json" <<'PY'
+import json, pathlib, sys
+text = pathlib.Path(sys.argv[1]).read_text()
+if text.startswith(")]}'"):
+    text = text.split("\n", 1)[1]
+data = json.loads(text)
+labels = data.get("labels", {})
+verified = labels.get("Verified", {})
+print(verified.get("approved", {}).get("_account_id", "missing"))
+PY
+)"
+      if [ "$vote_result" != "missing" ]; then
+        printf 'review_apply=gerrit-trigger-rest change=%s label=Verified value=+1 approver_account_id=%s\n' \
+          "$change" "$vote_result" >>"$log"
+        printf '%s\n' "$vote_result"
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  die "Verified +1 vote was not present on Gerrit change after Jenkins build completion"
 }
 
 cmd_prove_integration() {
-  local log change patchset change_id review_json vote_result evidence
+  local log change patchset change_id vote_result evidence
   load_inputs
   confirm_mutation prove-integration || return 0
   require_runtime_mode_supported_for_mutation
@@ -1788,28 +1938,14 @@ $(create_gerrit_change "$log")
 EOF
   printf 'created_change=%s patchset=%s change_id=%s\n' "$change" "$patchset" "$change_id" >>"$log"
   run_verification_build "$log" "$change" "$patchset"
-  post_simulation_verified_vote "$log" "$change" "$patchset"
-  review_json="$(integration_host_state_dir)/status/review.json"
-  gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/changes/$change/revisions/current/review" >"$review_json"
-  vote_result="$(python3 - "$review_json" <<'PY'
-import json, pathlib, sys
-text = pathlib.Path(sys.argv[1]).read_text()
-if text.startswith(")]}'"):
-    text = text.split("\n", 1)[1]
-data = json.loads(text)
-labels = data.get("labels", {})
-verified = labels.get("Verified", {})
-print(verified.get("approved", {}).get("_account_id", "missing"))
-PY
-)"
-  [ "$vote_result" != "missing" ] || die "Verified +1 vote was not present on Gerrit change"
+  vote_result="$(wait_for_verified_vote "$log" "$change")"
   write_evidence shared-storage pass "Controller runtime account wrote through the shared Jenkins storage path and agent runtime account read the proof through the same mounted path" "$log" "group=$JENKINS_SHARED_GROUP gid=$JENKINS_SHARED_GROUP_GID storage_path=$JENKINS_SHARED_STORAGE_PATH writer=$JENKINS_RUNTIME_ACCOUNT reader=$JENKINS_AGENT_ACCOUNT" >/dev/null
   write_evidence jenkins-to-gerrit-ssh pass "Real SSH command to Gerrit succeeded as Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
   write_evidence stream-events pass "Gerrit stream-events SSH command accepted for Jenkins integration account" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
   write_evidence agent-connection pass "Jenkins runtime OS user connected to Jenkins agent and Jenkins node came online" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
   write_evidence job-execution pass "Disposable Jenkins verification job executed successfully on the configured agent" "$log" "change=$change job=$JENKINS_VERIFICATION_JOB" >/dev/null
-  evidence="$(write_evidence verified-vote pass "Gerrit review state contains a real Verified +1 posted by the Jenkins integration account through simulation-only direct Gerrit REST" "$log" "change=$change patchset=$patchset review_apply=simulation-only-direct-rest")"
-  printf 'status=pass command=prove-integration proof=real change=%s patchset=%s shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass job_execution=pass verified_vote=pass review_apply=simulation-only-direct-rest evidence=%s log=%s\n' "$change" "$patchset" "$evidence" "$log"
+  evidence="$(write_evidence verified-vote pass "Gerrit review state contains a real Verified +1 posted by Gerrit Trigger after the Jenkins verification job succeeded" "$log" "change=$change patchset=$patchset review_apply=gerrit-trigger-rest approver_account_id=$vote_result")"
+  printf 'status=pass command=prove-integration proof=real change=%s patchset=%s shared_storage=pass jenkins_to_gerrit_ssh=pass stream_events=pass agent_connection=pass job_execution=pass verified_vote=pass review_apply=gerrit-trigger-rest evidence=%s log=%s\n' "$change" "$patchset" "$evidence" "$log"
 }
 
 cmd_collect_evidence() {

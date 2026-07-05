@@ -137,9 +137,11 @@ separate from runtime accounts prevents service process ownership from also
 granting application administration.
 
 The Jenkins Gerrit integration account is a Gerrit service account. Jenkins
-uses it to authenticate to Gerrit, stream events, and vote `Verified`. It is
-separate from human admin accounts so automated voting and event streaming can
-be permissioned, audited, rotated, and disabled without changing human access.
+uses its SSH key to authenticate to Gerrit and stream events, and uses its
+Gerrit-generated HTTP auth token to vote `Verified` through the REST review
+API. It is separate from human admin accounts so automated voting and event
+streaming can be permissioned, audited, rotated, and disabled without changing
+human access.
 
 The test user account is an LDAP-backed human-style test account. It verifies
 LDAP-backed login and the disposable Gerrit change workflow. It is separate

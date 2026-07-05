@@ -144,7 +144,7 @@ taxonomy and places each account in the end-to-end system.
 | Jenkins shared integration group | Integration helper | Local OS group shared by Jenkins controller and Jenkins agent runtime accounts for reviewed shared storage proof only. |
 | Gerrit admin account | Human Gerrit administrator or approved machine runner | LDAP-backed human account or group used to create or approve Gerrit configuration changes. |
 | Jenkins admin account | Human Jenkins administrator or approved machine runner | LDAP-backed human account or group used to configure Jenkins credentials, nodes, trigger server, and verification jobs. |
-| Jenkins Gerrit integration account | Jenkins controller runtime and Gerrit service | Gerrit service account used by Jenkins for Gerrit SSH authentication, `stream-events`, and `Verified` voting. |
+| Jenkins Gerrit integration account | Jenkins controller runtime and Gerrit service | Gerrit service account used by Jenkins for Gerrit SSH `stream-events` and REST `Verified` voting with a Gerrit-generated auth token. |
 | Test user account | Verification utility | LDAP-backed human-style account used to prove login/change workflow and disposable Gerrit change behavior. |
 | LDAP bind account | Gerrit and Jenkins services | Read-only LDAP service account used for directory search. |
 | Operator account | Human operator, machine runner, and simulation harness | Configurable local OS account for orchestration, SSH access, helper commands, delegated privileged operations, and evidence collection. Default example is `ci-operator`; `root` is forbidden. |

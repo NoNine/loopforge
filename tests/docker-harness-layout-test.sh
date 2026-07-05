@@ -77,6 +77,14 @@ grep -Fq -- "chmod 0440 /etc/sudoers.d/harness-ci-operator" "$repo_root/simulati
   printf 'ci-operator sudoers drop-in must be mode 0440\n' >&2
   exit 1
 }
+if grep -Fq -- 'uid=jenkins-gerrit' "$repo_root/simulation/docker/ldap/50-harness-seed.ldif"; then
+  printf 'Docker LDAP seed must not create password-backed jenkins-gerrit\n' >&2
+  exit 1
+fi
+if grep -Fq -- 'integration-password' "$repo_root/simulation/docker/ldap/50-harness-seed.ldif"; then
+  printf 'Docker LDAP seed must not contain a jenkins-gerrit password\n' >&2
+  exit 1
+fi
 grep -Fq -- "tree \\" "$repo_root/simulation/docker/target/Dockerfile" || {
   printf 'Docker target image must install tree for simulation-only inspection\n' >&2
   exit 1

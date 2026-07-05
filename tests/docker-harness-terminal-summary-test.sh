@@ -67,7 +67,10 @@ grep -Fq "Login accounts" "$tmp_dir/status.out"
 grep -Fq "Gerrit              gerrit-admin    admin-password        Gerrit admin user" "$tmp_dir/status.out"
 grep -Fq "Jenkins             jenkins-admin   admin-password        Jenkins admin user" "$tmp_dir/status.out"
 grep -Fq "Gerrit              test-user       test-password         Test/change workflow user" "$tmp_dir/status.out"
-grep -Fq "Gerrit integration  jenkins-gerrit  integration-password  Jenkins-to-Gerrit integration account" "$tmp_dir/status.out"
+if grep -Fq "Gerrit integration  jenkins-gerrit  integration-password" "$tmp_dir/status.out"; then
+  printf 'status must not print a password-backed Gerrit integration account\n' >&2
+  exit 1
+fi
 tail -1 "$tmp_dir/status.out" | grep -Fq -- "------------------  --------------  --------------------  ----------------------------------------"
 
 PATH="$fake_bin:$PATH" \

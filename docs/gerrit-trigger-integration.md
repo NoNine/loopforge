@@ -18,6 +18,8 @@ Before Gerrit Trigger verification starts:
 
 - Gerrit is running with LDAP-backed authentication.
 - Jenkins is running with LDAP-backed human admin access.
+- The Gerrit admin account is provisioned in Gerrit, not only present in LDAP.
+- The test user account is provisioned in Gerrit, not only present in LDAP.
 - The Jenkins agent is registered under the reviewed node name and can run
   jobs on the selected scheduling label.
 - The Jenkins Gerrit integration account exists as a Gerrit service account or
@@ -44,34 +46,43 @@ controller-write/agent-read proof.
 
 1. Jenkins controller generates or receives the Jenkins-to-Gerrit SSH keypair
    through the controller integration-key workflow.
-2. Gerrit receives only the Jenkins-to-Gerrit public key and associates it with
+2. Gerrit admin and test-user access are validated with provisioned Gerrit
+   accounts. Docker and VM simulation may perform the initial web login with
+   simulation-owned credentials; target deployment requires the operator to
+   provision LDAP-backed accounts before automation.
+3. Gerrit creates or validates the Jenkins Gerrit integration service account.
+4. Gerrit generates an HTTP auth token for the Jenkins Gerrit integration
+   account using the reviewed token ID, normally `jenkins-trigger`.
+5. Gerrit receives only the Jenkins-to-Gerrit public key and associates it with
    the Jenkins Gerrit integration account.
-3. `target-deployment` setup defines the global `Verified` label in reviewed
+6. `target-deployment` setup defines the global `Verified` label in reviewed
    `All-Projects` configuration.
-4. The operator chooses an explicit Gerrit project and ref scope for Jenkins
+7. The operator chooses an explicit Gerrit project and ref scope for Jenkins
    read access and `label-Verified -1..+1` grants.
-5. Gerrit grants `stream-events` as a global capability to the Jenkins Gerrit
+8. Gerrit grants `stream-events` as a global capability to the Jenkins Gerrit
    integration actor or group. `target-deployment` setup creates reviewed
    Gerrit configuration changes through the REST API and waits for external
    approval/submission. Docker and VM simulation create the same review
    changes and auto-submit them under simulation policy by default.
-6. Jenkins stores the controller-held private key as a credential. The
+9. Jenkins stores the controller-held private key as a credential. The
    credential ID may be recorded in evidence only when it does not encode a
    username, hostname, secret value, or other sensitive material.
-7. The integration helper validates shared Jenkins controller/agent storage
+10. The integration helper validates shared Jenkins controller/agent storage
    using `examples/integration.env.example`.
-8. Jenkins configures a Gerrit Trigger server that connects as the Jenkins
-   Gerrit integration account.
-9. Jenkins registers a disposable verification job that responds to
+11. Jenkins configures a Gerrit Trigger server that connects as the Jenkins
+   Gerrit integration account over SSH for `stream-events` and uses the
+   generated Gerrit auth token for REST review posting.
+12. Jenkins registers a disposable verification job that responds to
    `patchset-created`.
-10. Verification creates a disposable Gerrit project and change labeled as
+13. Verification confirms the test user is provisioned, then creates a
+    disposable Gerrit project and change labeled as
    verification artifacts.
-11. The disposable change emits a `patchset-created` event.
-12. Jenkins receives the event and schedules the verification job on the
+14. The disposable change emits a `patchset-created` event.
+15. Jenkins receives the event and schedules the verification job on the
     selected Jenkins agent scheduling label.
-13. The job runs on the Jenkins agent and Jenkins posts `Verified +1` to the
-    Gerrit change through the Gerrit REST review API.
-14. Evidence records the shared storage proof, change, build, vote, and
+16. The job runs on the Jenkins agent and Gerrit Trigger posts `Verified +1`
+    to the Gerrit change through the Gerrit REST review API.
+17. Evidence records the shared storage proof, change, build, vote, and
     verification mode.
 
 ## Templates
@@ -124,8 +135,9 @@ fallback. It must be recorded in logs and evidence as
 permit direct `All-Projects.git` editing, direct site-Git mutation, direct
 `refs/meta/config` Git editing, or `gerrit set-account` fallbacks.
 
-Jenkins Gerrit Trigger uses SSH for authentication and `stream-events`. The
-default vote posting path is the Gerrit REST review API. Legacy SSH review
+Jenkins Gerrit Trigger uses SSH for `stream-events` and the Gerrit REST review
+API for vote posting. The REST path authenticates as the Jenkins Gerrit
+integration account with a Gerrit-generated HTTP auth token. Legacy SSH review
 commands or flags are not part of the default workflow; they require explicit
 operator justification and compatibility evidence for the installed Gerrit and
 Gerrit Trigger versions. The event stream still proves Jenkins-to-Gerrit SSH

@@ -15,7 +15,7 @@
 
 [auth]
 	type = LDAP
-	gitBasicAuthPolicy = LDAP
+	gitBasicAuthPolicy = HTTP_LDAP
 
 [ldap]
 	server = {{LDAP_URL}}

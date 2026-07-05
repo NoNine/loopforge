@@ -13,19 +13,36 @@ function_body="$(
     capture && /^}/ { exit }
   ' "$repo_root/scripts/integration-setup.sh"
 )"
+json_field_function="$(
+  awk '
+    /^gerrit_response_json_field\(\) \{/ { capture = 1 }
+    capture { print }
+    capture && /^}/ { exit }
+  ' "$repo_root/scripts/integration-setup.sh"
+)"
 
 cat >"$tmp_dir/harness.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 JENKINS_GERRIT_INTEGRATION_ACCOUNT=jenkins-gerrit
-JENKINS_GERRIT_INTEGRATION_PASSWORD=integration-password
+JENKINS_GERRIT_REST_TOKEN=generated-token
 gerrit_curl() {
   cat "\$GERRIT_CURL_RESPONSE_FILE"
 }
 $function_body
-gerrit_account_can_vote_verified verification-disposable-gerrit
+gerrit_account_can_vote_verified verification-disposable-gerrit "\$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "\$JENKINS_GERRIT_REST_TOKEN"
 EOF
 chmod +x "$tmp_dir/harness.sh"
+
+cat >"$tmp_dir/token-parser.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+$json_field_function
+response=")]}'"$'\n''{"token":"generated-token"}'
+[ "\$(gerrit_response_json_field token "\$response")" = generated-token ]
+EOF
+chmod +x "$tmp_dir/token-parser.sh"
+"$tmp_dir/token-parser.sh"
 
 cat >"$tmp_dir/labels-array.json" <<'EOF'
 )]}'

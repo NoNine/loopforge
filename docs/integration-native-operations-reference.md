@@ -50,6 +50,7 @@ Record these values before shared integration:
 | Jenkins scheduling labels | `JENKINS_AGENT_LABELS` |
 | Gerrit integration account | `jenkins-gerrit` or reviewed site value |
 | Gerrit integration group | reviewed site value |
+| Gerrit integration auth token ID | `jenkins-trigger` or reviewed site value |
 | Gerrit project/ref scope | reviewed project and ref pattern |
 | Jenkins Gerrit credential ID | reviewed Jenkins credential ID |
 | Jenkins agent credential ID | reviewed Jenkins credential ID |
@@ -66,6 +67,12 @@ Prerequisites:
   readiness.
 - The operator has Gerrit administrator access sufficient to create reviewable
   `All-Projects` and project config changes.
+- The Gerrit administrator account is already provisioned in Gerrit. If the
+  account comes from LDAP, sign in once through Gerrit before using REST
+  administration; an LDAP directory entry alone is not a Gerrit account.
+- The test user account is already provisioned in Gerrit. If the account comes
+  from LDAP, sign in once through Gerrit before using it for disposable change
+  creation during proof.
 - The operator has Jenkins administrator access sufficient to create credentials,
   configure Gerrit Trigger, register SSH nodes, and create disposable validation
   jobs.
@@ -74,6 +81,8 @@ Credential custody:
 
 - The Jenkins controller owns the Jenkins-to-Gerrit private key.
 - Gerrit receives only the matching Jenkins-to-Gerrit public key.
+- Gerrit issues a Gerrit HTTP auth token for the Jenkins Gerrit integration
+  account. Record only the reviewed token ID, not the token value.
 - The Jenkins controller owns the Jenkins-to-agent private key.
 - The Jenkins agent receives only the matching Jenkins-to-agent public key.
 - Evidence may record public-key fingerprints, credential IDs, account names,
@@ -145,14 +154,26 @@ On the Jenkins controller, create a Jenkins SSH credential whose private key is
 `/var/lib/jenkins/.ssh/jenkins-gerrit`. The credential ID must be the reviewed
 Jenkins Gerrit credential ID and must not encode secret material.
 
+In Gerrit, generate or rotate an HTTP auth token for the Gerrit integration
+account using the reviewed token ID, normally `jenkins-trigger`. The token is
+for Gerrit REST review posting by Gerrit Trigger. It is not an LDAP password,
+and it is not used for `stream-events` SSH authentication.
+
+If the Gerrit integration account does not exist yet, create it as a Gerrit
+service account before generating the token. Do not create it as an LDAP user
+or assign it an LDAP password for Loopforge integration.
+
 Configure the Gerrit Trigger server in Jenkins with:
 
 - Gerrit host and SSH port.
 - Gerrit HTTP URL.
 - Jenkins Gerrit integration account.
 - Jenkins SSH credential ID for Gerrit.
+- Gerrit HTTP username set to the Jenkins Gerrit integration account.
+- Gerrit HTTP password/token set to the generated Gerrit auth token.
 - Event stream enabled over Gerrit SSH.
-- REST review API settings for posting `Verified` votes.
+- REST review API settings for posting `Verified` votes from the verification
+  job result.
 
 Validate that Jenkins can connect to Gerrit and establish an event stream. If
 SSH authentication succeeds but event streaming fails, classify the failure as a
