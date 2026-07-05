@@ -119,9 +119,12 @@ SoCs those branch patterns imply.
 Any chosen representation should be able to describe:
 
 - App repositories and the jobs or pipelines that apply to them.
+- Multi-repo app groups where one buildable product unit spans more than one
+  Gerrit repository.
 - Branch patterns selected by each job or pipeline.
 - Target SoCs selected by branch, job, or release parameter.
-- App-owned Jenkinsfiles or other pipeline entrypoints.
+- App-owned Jenkinsfiles or other pipeline entrypoints, including entrypoints
+  owned by a main repository for a multi-repo app group.
 - Gerrit-triggered verify jobs, scheduled jobs, and manual release jobs.
 - Product-specific jobs that do not fit a shared naming convention.
 
@@ -135,6 +138,7 @@ Any chosen representation should validate enough to prevent common mistakes:
 - Generated job name collisions inside the product Jenkins folder.
 - Branch selection that does not map to the intended target SoCs.
 - Ambiguous branch pattern precedence when overlapping patterns are used.
+- Missing branch or ref alignment rules for multi-repo app groups.
 - Missing app-owned Jenkinsfiles or pipeline entrypoints.
 - Secret-bearing configuration checked into the product CI repository.
 
@@ -167,6 +171,46 @@ The product CI configuration could express branch selection like this:
 
 Loopforge does not assign meaning to those branch names. The product decides
 what `main`, `feature/*`, `soc-a-*`, and `soc-b-*` mean.
+
+## Multi-Repo Applications
+
+Some products are built from a set of repositories rather than from one
+standalone app repository. In that shape, a satellite repository may not build
+meaningfully by itself. A change in the satellite repository still needs CI,
+but the build must use a coherent set of refs for the main repository and the
+other dependent repositories.
+
+Product CI configuration may model that as a multi-repo app group. The group
+should identify the repositories that form the buildable unit, which
+repositories can trigger CI, which repository owns the Jenkinsfile or pipeline
+entrypoint, and how branches or refs are aligned across the group.
+
+The repo-set mechanism is product-owned. A product may use AOSP `repo`
+manifests, plain Git checkout lists, Git submodules, product-owned workspace
+scripts, Jenkins shared libraries, package lockfiles, or another reviewed
+representation. Loopforge does not require AOSP `repo`, a manifests
+repository, or any specific multi-repo checkout tool.
+
+For a satellite repository patchset, a typical verify flow is:
+
+```text
+triggering repo: product-a/driver at refs/changes/...
+pipeline repo:   product-a/main at the matching branch
+dependent repo:  product-a/lib at the matching branch or pinned ref
+entrypoint:      product-a/main:Jenkinsfile.verify
+```
+
+The generated job should pass enough context for the pipeline entrypoint to
+build the correct repo set. The Jenkinsfile or product-owned pipeline code
+usually performs the detailed multi-repo checkout and build orchestration.
+Products may put more checkout logic in generated jobs, but that is a product
+choice rather than a Loopforge requirement.
+
+When changes across multiple repositories depend on each other, product CI may
+build a change group instead of a single patchset. Gerrit topics are one
+common grouping mechanism. The product CI repository owns the policy for
+selecting related changes, validating that the group is coherent, and applying
+those changes to the repo set before running the pipeline.
 
 ## Generated Jobs
 
@@ -215,13 +259,15 @@ For the example scenario above, standard generated jobs could be:
 
 Generated jobs are Jenkins wrappers. The pipeline behavior lives in the
 application repository Jenkinsfile or pipeline entrypoint selected by the
-product CI configuration.
+product CI configuration. For multi-repo app groups, that entrypoint may live
+in a pipeline owner repository rather than in the repository whose Gerrit
+change triggered the job.
 
 Generated jobs must resolve the app-owned pipeline entrypoint from the
-checked-out app repository ref being built. They must not embed
-product-specific build or test logic centrally. This lets different branches,
-tags, or Gerrit patchsets carry different Jenkinsfile content and still have
-the correct pipeline behavior for that ref.
+checked-out app repository ref or pipeline owner repository ref being built.
+They must not embed product-specific build or test logic centrally. This lets
+different branches, tags, or Gerrit patchsets carry different Jenkinsfile
+content and still have the correct pipeline behavior for that ref.
 
 For a Gerrit-triggered verify job, the generated job should:
 
@@ -229,9 +275,12 @@ For a Gerrit-triggered verify job, the generated job should:
 - Check out the exact Gerrit patchset ref, submitted ref, or other matching
   app repository ref.
 - Resolve the selected Jenkinsfile or pipeline entrypoint from that checkout
-  so branch-specific or patchset-specific pipeline changes are honored.
+  or from the selected pipeline owner repository checkout so branch-specific
+  or patchset-specific pipeline changes are honored.
 - Pass build context to the Jenkinsfile, including the matched branch pattern
-  and target SoC list derived from the product CI configuration.
+  and target SoC list derived from the product CI configuration. For
+  multi-repo app groups, also pass the triggering repository, triggering ref,
+  aligned branch or ref set, and any selected change group.
 - Let the Jenkinsfile run product-specific build and test behavior.
 - Report `Verified +1` or `Verified -1` through the Loopforge-supported
   Gerrit integration path.
