@@ -78,22 +78,19 @@ reset_plugins
 make_plugin "$artifact_dir/build" matrix-project 849.v0cd64ed7e531
 make_plugin "$artifact_dir/build" junit 1335.v6b_a_a_e18534e1
 make_plugin "$artifact_dir/build" structs 362.va_0a_839590b_61
-generate_plugins_lock "$artifact_dir/plugins.lock.txt"
-assert_direct_plugin_pins_in_lock "$artifact_dir/plugins.lock.txt"
-grep -Fq 'structs:362.va_0a_839590b_61' "$artifact_dir/plugins.lock.txt"
+assert_direct_plugin_pins_in_dir "$plugin_dir"
+plugin_fact_stream "$plugin_dir" | grep -Fq 'structs:362.va_0a_839590b_61'
 
 reset_plugins
 make_plugin "$artifact_dir/build" matrix-project 849.v0cd64ed7e531
 make_plugin "$artifact_dir/build" junit 1304.vc85a_b_ca_96613
-generate_plugins_lock "$artifact_dir/plugins.lock.txt"
 assert_fails_with 'Direct Jenkins plugin pin drift for junit' \
-  assert_direct_plugin_pins_in_lock "$artifact_dir/plugins.lock.txt"
+  assert_direct_plugin_pins_in_dir "$plugin_dir"
 
 reset_plugins
 make_plugin "$artifact_dir/build" matrix-project 849.v0cd64ed7e531
-generate_plugins_lock "$artifact_dir/plugins.lock.txt"
-assert_fails_with 'Accepted direct Jenkins plugin pin is missing from plugins.lock.txt: junit' \
-  assert_direct_plugin_pins_in_lock "$artifact_dir/plugins.lock.txt"
+assert_fails_with 'Accepted direct Jenkins plugin pin is missing from resolved plugin artifacts: junit' \
+  assert_direct_plugin_pins_in_dir "$plugin_dir"
 TEST_BODY
 
 bash "$test_script" "$tmp_dir/artifacts"

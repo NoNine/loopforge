@@ -191,10 +191,9 @@ transcripts here.
   `logs/spec-compliance-rereview-20260620122254.log`;
   `logs/plugin-manager-align-local-20260620121546.log`
 - Notes: Jenkins Plugin Installation Manager handles dependency resolution.
-  Exact direct pins are verified against generated `plugins.lock.txt`; warning,
-  advisory, and update markers stay reviewable through `--yes`; runtime
-  plugin-load failures remain fatal. Jenkins Web UI behavior is documented as
-  PluginManager/UpdateCenter based.
+  Exact direct pins are verified from resolved plugin artifact manifests, and
+  runtime plugin-load failures remain fatal. Jenkins Web UI behavior is
+  documented as PluginManager/UpdateCenter based.
 - Guardrail: End-to-end Docker simulation is on hold until the user explicitly
   instructs it.
 

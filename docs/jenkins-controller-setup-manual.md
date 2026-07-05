@@ -128,46 +128,14 @@ For dry-run review:
 scripts/jenkins-controller-setup.sh --env examples/jenkins-controller.env.example --dry-run preflight
 ```
 
-## Phase 3: Jenkins Direct Plugin Version Proposal
+## Phase 3: Jenkins Direct Plugin Pin Review
 
-Plugin version proposal runs in the bundle factory environment, not on the
-Jenkins controller target. The Jenkins Plugin Installation Manager Tool is the
-authoritative resolver for this workflow. Proposals use the tool's
-latest-compatible behavior for Jenkins 2.555.3 so operators review current
-direct plugin pins before accepting them.
-
-Consumed inputs:
-
-- Reviewed Jenkins controller env values.
-- `JENKINS_DIRECT_PLUGIN_NAMES`, names only.
-- The package v1 Jenkins baseline: Jenkins 2.555.3 LTS and Jenkins Plugin
-  Installation Manager Tool 2.15.0.
-- Reviewed Jenkins WAR and Plugin Installation Manager artifact source paths,
-  or `JENKINS_DOWNLOAD_ARTIFACTS=1` in the bundle-factory Docker simulation
-  path.
-
-Produced outputs:
-
-- `plugins.intent.txt`, generated from `JENKINS_DIRECT_PLUGIN_NAMES`.
-- `plugin-version-proposals.txt`, containing only direct
-  latest-compatible `plugin-name:version` proposals.
-- `plugin-version-resolution-report.txt`, preserving the full Plugin
-  Installation Manager resolver output as evidence.
-
-Acceptance:
-
-- Review the proposal and full resolver report.
-- Accept explicitly with `--write-env --yes`; this updates only
-  `JENKINS_PLUGIN_LIST` in the reviewed env file.
-- `JENKINS_PLUGIN_LIST` remains limited to direct plugin pins and is not a
-  transitive dependency lock.
-
-Helper:
-
-```bash
-scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> propose-plugin-versions
-scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --write-env --yes propose-plugin-versions
-```
+Direct plugin pin review is an operator input step, not a helper-generated
+proposal workflow. Operators review and record `JENKINS_PLUGIN_LIST` in the
+reviewed Jenkins controller env file as direct `plugin-name:version` pins.
+The list must contain exactly one accepted pin for each
+`JENKINS_DIRECT_PLUGIN_NAMES` entry and must not include transitive
+dependencies.
 
 ## Phase 4: Curated Jenkins Controller Artifact And Plugin Preparation
 
@@ -207,15 +175,6 @@ Produced outputs:
 - Curated Jenkins Plugin Installation Manager Tool artifact.
 - Curated Jenkins plugin artifacts, including resolved dependency plugins,
   staged from reviewed sources or resolved in the bundle factory.
-- `plugins.seed.txt`, generated from accepted direct pins as internal Plugin
-  Installation Manager input.
-- `plugins.lock.txt`, generated from downloaded plugin manifests as the
-  audited full direct-plus-transitive closure. It is evidence output, not
-  operator input.
-- Plugin artifact manifest, plugin resolution report, and plugin review
-  report.
-- `plugin-warning-review.metadata`, recording the plugin warning marker count,
-  review report name, and whether `--yes` accepted the warning review.
 - Controller-only JCasC and service templates.
 - No Jenkins credentials, Gerrit Trigger server, agent-node, disposable
   verification job, or trigger-verification env templates are staged by the
@@ -223,12 +182,8 @@ Produced outputs:
   shared integration workflow.
 - `manifest.txt` records `artifact_source=curated-bundle-factory`,
   `os_dependency_source=approved-internal-os-repos`,
-  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
-- If `plugin-review-report.txt` contains warning, security, or update markers,
-  `prepare-artifacts` prints a bounded summary and stops unless the operator
-  reruns with `--yes` after review. Automation may pass `--yes` only after
-  that review is part of the change procedure; no per-advisory waiver file is
-  used in v1.
+  `public_internet_fallback=simulation-only`, `bundle_contains_keys=no`,
+  direct plugin pins, and resolved plugin count.
 
 Staged artifact paths:
 
@@ -411,8 +366,7 @@ Validation evidence covers:
   reviewed LDAP endpoint.
 - Plugin readiness: every accepted direct plugin pin from
   `JENKINS_PLUGIN_LIST` is installed from staged artifacts at the exact
-  accepted version, the full direct-plus-transitive closure is retained in
-  `plugins.lock.txt`, and Jenkins startup log checks prevent plugin-load
+  accepted version, and Jenkins startup log checks prevent plugin-load
   failures from passing validation.
 - JCasC readiness: LDAP realm exists and the built-in node has zero executors.
 - Gerrit SSH connectivity: deferred to the later integration step.
