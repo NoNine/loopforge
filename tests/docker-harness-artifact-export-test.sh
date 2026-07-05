@@ -84,22 +84,19 @@ case "$*" in
             cat >"$dir/manifest.txt" <<'EOF'
 harness_manifest_version=1
 role=gerrit
+bundle_name=gerrit-artifacts-bundle
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
-artifact_source=curated-bundle-factory
-os_dependency_source=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no
 gerrit_version=3.13.6
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
+war=gerrit-3.13.6.war
+template_count=2
 EOF
             printf 'payload\n' >"$dir/plugins/payload.txt"
             (cd "$dir" && sha256sum manifest.txt plugins/payload.txt >checksums.sha256)
-            mkdir -p "$bundle_dir/checksums"
-            (cd "$bundle_dir" && find . -type f ! -path './checksums/SHA256SUMS' -print0 | sort -z | xargs -0 sha256sum >checksums/SHA256SUMS)
-            (cd "$FAKE_CONTAINER_FS/var/lib/loopforge/preparing" && tar -czf gerrit-artifacts-bundle.tar.gz gerrit-artifacts-bundle)
+            (cd "$bundle_dir" && tar -czf "$FAKE_CONTAINER_FS/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz" gerrit)
             (cd "$FAKE_CONTAINER_FS/var/lib/loopforge/preparing" && sha256sum gerrit-artifacts-bundle.tar.gz >gerrit-artifacts-bundle.tar.gz.sha256)
             ;;
           *)
@@ -148,6 +145,10 @@ grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
   printf 'Expected exported Gerrit archive\n' >&2
   exit 1
 }
+[ ! -e "$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.txt" ] || {
+  printf 'Did not expect exported Gerrit review sibling\n' >&2
+  exit 1
+}
 [ -n "$prepare_evidence" ] || {
   printf 'Expected prepare-artifacts evidence\n' >&2
   exit 1
@@ -178,6 +179,10 @@ if grep -Fq -- 'ldap-bind-password' "$calls"; then
 fi
 grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz' "$calls"
 grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
+if grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.txt' "$calls"; then
+  printf 'prepare-artifacts must not export Gerrit review sibling\n' >&2
+  exit 1
+fi
 [ -d "$run_dir/host/runtime-inputs/helper-envs/bundle-factory" ] || {
   printf 'bundle-factory operator input envs must be retained under host runtime inputs\n' >&2
   exit 1
@@ -186,8 +191,11 @@ grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundl
   printf 'bundle-factory runtime state must not be created under target/product-homes\n' >&2
   exit 1
 }
-tar -tzf "$export_archive" | grep -Fq 'gerrit-artifacts-bundle/gerrit/manifest.txt'
-tar -xOf "$export_archive" gerrit-artifacts-bundle/checksums/SHA256SUMS >/dev/null
+tar -tzf "$export_archive" | grep -Fq 'gerrit/manifest.txt'
+if tar -tzf "$export_archive" | grep -Eq '(^|/)checksums/SHA256SUMS$|source-boundary.log|package-intent.manifest|gerrit-artifacts-bundle.txt'; then
+  printf 'exported archive contains removed audit files\n' >&2
+  exit 1
+fi
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
@@ -200,10 +208,13 @@ stage_evidence="$(find "$run_dir/host/evidence/harness" -maxdepth 1 -type f -nam
   printf 'Expected stage-artifacts evidence\n' >&2
   exit 1
 }
-grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$stage_evidence"
+grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/staging/gerrit/manifest.txt"' "$stage_evidence"
 grep -Fq "$run_dir/target/artifacts/exported/gerrit-artifacts-bundle.tar.gz.sha256" "$stage_evidence"
-grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/checksums/SHA256SUMS' "$stage_evidence"
-grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/checksums.sha256' "$stage_evidence"
+grep -Fq '/var/lib/loopforge/staging/gerrit/checksums.sha256' "$stage_evidence"
+if grep -Fq '/var/lib/loopforge/staging/gerrit-artifacts-bundle/checksums/SHA256SUMS' "$stage_evidence"; then
+  printf 'stage evidence must not reference archive-level SHA256SUMS\n' >&2
+  exit 1
+fi
 grep -Fq 'Docker cp simulation-only waiver' "$stage_evidence"
 grep -Fq -- 'cp ' "$calls"
 grep -Fq -- 'prepare-target-workspace' "$calls"

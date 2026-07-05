@@ -20,7 +20,7 @@ readonly GERRIT_INTERNAL_UBUNTU_RELEASE="24.04"
 readonly GERRIT_INTERNAL_UBUNTU_CODENAME="noble"
 readonly GERRIT_NATIVE_SITE_PATH="/srv/gerrit"
 readonly GERRIT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"
-readonly GERRIT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit"
+readonly GERRIT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/gerrit"
 readonly GERRIT_ARTIFACT_BUNDLE_NAME="gerrit-artifacts-bundle"
 
 usage() {
@@ -557,15 +557,14 @@ verify_staged_artifacts() {
   awk -F= '
     $1 == "harness_manifest_version" && $2 == "1" { h=1 }
     $1 == "role" && $2 == "gerrit" { r=1 }
+    $1 == "bundle_name" && $2 == "gerrit-artifacts-bundle" { b=1 }
     $1 == "gerrit_version" && $2 == "3.13.6" { g=1 }
     $1 == "java_version" && $2 == "21" { j=1 }
     $1 == "ubuntu_release" && $2 == "24.04" { u=1 }
     $1 == "ubuntu_codename" && $2 == "noble" { n=1 }
-    $1 == "artifact_source" && $2 == "curated-bundle-factory" { a=1 }
-    $1 == "os_dependency_source" && $2 == "approved-internal-os-repos" { o=1 }
-    $1 == "public_internet_fallback" && $2 == "simulation-only" { p=1 }
-    $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
-    END { exit !(h && r && g && j && u && n && a && o && p && k) }
+    $1 == "war" && $2 == "gerrit-3.13.6.war" { w=1 }
+    $1 == "template_count" && $2 == "2" { t=1 }
+    END { exit !(h && r && b && g && j && u && n && w && t) }
   ' "$manifest" || die "Staged manifest does not match the Gerrit Version Baseline"
   assert_no_artifact_key_material "$GERRIT_STAGED_ARTIFACT_DIR"
 }
@@ -598,19 +597,24 @@ write_manifest() {
   cat >"$manifest" <<EOF
 harness_manifest_version=1
 role=gerrit
+bundle_name=$GERRIT_ARTIFACT_BUNDLE_NAME
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
 gerrit_version=3.13.6
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
-artifact_source=curated-bundle-factory
-os_dependency_source=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no
-external_gerrit_plugins=operator-managed
 war=gerrit-3.13.6.war
+template_count=2
 EOF
+}
+
+factory_download_log_path() {
+  local payload_dir bundle_dir preparing_dir
+  payload_dir="$GERRIT_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  printf '%s/%s.download.log\n' "$preparing_dir" "$GERRIT_ARTIFACT_BUNDLE_NAME"
 }
 
 package_artifact_bundle() {
@@ -623,15 +627,7 @@ package_artifact_bundle() {
   archive="$preparing_dir/$GERRIT_ARTIFACT_BUNDLE_NAME.tar.gz"
   checksum="$archive.sha256"
   rm -f "$archive" "$checksum"
-  rm -rf "$bundle_dir/checksums"
-  mkdir -p "$bundle_dir/checksums"
-  (
-    cd "$bundle_dir"
-    find . -type f ! -path './checksums/SHA256SUMS' -print0 |
-      sort -z |
-      xargs -0 sha256sum >checksums/SHA256SUMS
-  )
-  tar -C "$preparing_dir" -czf "$archive" "$GERRIT_ARTIFACT_BUNDLE_NAME"
+  tar -C "$bundle_dir" -czf "$archive" "$(basename "$payload_dir")"
   (cd "$preparing_dir" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
   chmod u+rw,go+r "$archive" "$checksum"
 }
@@ -649,7 +645,7 @@ prepare_artifact_bundle_workspace() {
 }
 
 prepare_real_gerrit_war() {
-  local war source
+  local war source download_log
   war="$GERRIT_ARTIFACT_OUTPUT_DIR/gerrit-3.13.6.war"
   source="${GERRIT_WAR_SOURCE:-}"
   if [ -n "$source" ]; then
@@ -657,12 +653,13 @@ prepare_real_gerrit_war() {
     cp "$source" "$war"
   elif [ "${GERRIT_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command wget
-    printf 'simulation-only public internet use: downloading Gerrit application artifact in bundle factory\n' >"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    download_log="$(factory_download_log_path)"
+    printf 'simulation-only public internet use: downloading Gerrit application artifact in bundle factory\n' >"$download_log"
     rm -f "$war"
     wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
       -O "$war" \
       "https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war" \
-      >>"$GERRIT_ARTIFACT_OUTPUT_DIR/source-boundary.log" 2>&1
+      >>"$download_log" 2>&1
   else
     printf 'BLOCKED: prepare-artifacts requires GERRIT_WAR_SOURCE or GERRIT_DOWNLOAD_ARTIFACTS=1 in the bundle factory; target hosts never download Gerrit application artifacts as fallback\n' >&2
     return 1
@@ -728,8 +725,6 @@ cmd_install() {
   verify_war_artifact "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war"
   install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war" 0644
   run_with_privilege "install -d -m 0755 -o $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -g $(shell_quote "$GERRIT_RUNTIME_GROUP") $(shell_quote "$GERRIT_SITE_PATH/plugins")"
-  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt" "$GERRIT_SITE_PATH/etc/artifact-manifest.txt" 0644
-  install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256" "$GERRIT_SITE_PATH/etc/artifact-checksums.sha256" 0644
   write_text_file_as_runtime "$GERRIT_SITE_PATH/state/install.status" "installed"
   printf 'status=pass command=install site=%s staged=%s\n' "$GERRIT_SITE_PATH" "$GERRIT_STAGED_ARTIFACT_DIR"
 }
@@ -1094,10 +1089,6 @@ check_installed_artifact_freshness() {
   local rendered_dir
   cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war" ||
     die "Installed Gerrit WAR does not match the staged Gerrit WAR input"
-  cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt" "$GERRIT_SITE_PATH/etc/artifact-manifest.txt" ||
-    die "Installed artifact manifest copy does not match the staged manifest input"
-  cmp -s "$GERRIT_STAGED_ARTIFACT_DIR/checksums.sha256" "$GERRIT_SITE_PATH/etc/artifact-checksums.sha256" ||
-    die "Installed artifact checksum copy does not match the staged checksum input"
 
   rendered_dir="$(mktemp -d)"
   register_cleanup_path "$rendered_dir"

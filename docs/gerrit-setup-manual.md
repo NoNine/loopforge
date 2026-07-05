@@ -146,9 +146,7 @@ Produced outputs:
   implementation with an explicit target project and REST-created reviewable
   config change. This role helper still does not perform that cross-role
   mutation.
-- `manifest.txt` records `artifact_source=curated-bundle-factory`,
-  `os_dependency_source=approved-internal-os-repos`,
-  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
+- `manifest.txt` records only compact artifact identity and inventory fields.
 
 Staged artifact paths:
 
@@ -201,7 +199,9 @@ mutation.
 Consumed inputs:
 
 - Reviewed Gerrit env file.
-- Extracted artifact bundle root, normally `/var/lib/loopforge/staging/gerrit-artifacts-bundle` in Docker simulation and target deployment. See `docs/artifact-bundle-contract.md`.
+- Extracted artifact payload root, normally `/var/lib/loopforge/staging/gerrit`
+  in Docker simulation and target deployment. See
+  `docs/artifact-bundle-contract.md`.
 - `manifest.txt` and `checksums.sha256`.
 
 Produced outputs:
@@ -209,8 +209,6 @@ Produced outputs:
 - Gerrit site tree under `GERRIT_SITE_PATH`.
 - `bin/gerrit.war`.
 - An empty `/srv/gerrit/plugins` directory for later operator-managed use.
-- `etc/artifact-manifest.txt`.
-- `etc/artifact-checksums.sha256`.
 - Install readiness marker under `state/install.status`.
 
 Mutation side effects:

@@ -20,7 +20,7 @@ supported_jenkins_ubuntu_release="24.04"
 supported_jenkins_ubuntu_codename="noble"
 readonly JENKINS_NATIVE_HOME="/var/lib/jenkins"
 readonly JENKINS_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/jenkins-artifacts-bundle/jenkins"
-readonly JENKINS_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins"
+readonly JENKINS_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins"
 readonly JENKINS_ARTIFACT_BUNDLE_NAME="jenkins-artifacts-bundle"
 
 usage() {
@@ -642,6 +642,14 @@ jenkins_plugin_manager_artifact() {
   printf '%s/jenkins-plugin-manager-%s.jar\n' "$JENKINS_ARTIFACT_OUTPUT_DIR" "$JENKINS_PLUGIN_MANAGER_VERSION"
 }
 
+factory_download_log_path() {
+  local payload_dir bundle_dir preparing_dir
+  payload_dir="$JENKINS_ARTIFACT_OUTPUT_DIR"
+  bundle_dir="$(dirname "$payload_dir")"
+  preparing_dir="$(dirname "$bundle_dir")"
+  printf '%s/%s.download.log\n' "$preparing_dir" "$JENKINS_ARTIFACT_BUNDLE_NAME"
+}
+
 write_accepted_plugin_seed() {
   local target spec
   target="${1:?target required}"
@@ -657,7 +665,7 @@ run_plugin_manager_resolve() {
   plugin_file="${1:?plugin file required}"
   report_file="${2:?report file required}"
   require_command java
-  printf 'simulation-only public internet use: resolving and downloading Jenkins plugin artifacts with dependencies\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  printf 'simulation-only public internet use: resolving and downloading Jenkins plugin artifacts with dependencies\n' >>"$(factory_download_log_path)"
   java -jar "$(jenkins_plugin_manager_artifact)" \
     --war "$(jenkins_war_artifact)" \
     --plugin-file "$plugin_file" \
@@ -734,7 +742,7 @@ prepare_jenkins_war() {
   elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command wget
     url="https://get.jenkins.io/war-stable/$JENKINS_VERSION/jenkins.war"
-    printf 'simulation-only public internet use: downloading Jenkins controller WAR\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    printf 'simulation-only public internet use: downloading Jenkins controller WAR\n' >>"$(factory_download_log_path)"
     wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
   else
     printf 'BLOCKED: prepare-artifacts requires JENKINS_WAR_SOURCE or JENKINS_DOWNLOAD_ARTIFACTS=1 in the bundle factory; target hosts never download Jenkins application artifacts as fallback\n' >&2
@@ -752,7 +760,7 @@ prepare_plugin_manager() {
   elif [ "${JENKINS_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command wget
     url="https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/$JENKINS_PLUGIN_MANAGER_VERSION/jenkins-plugin-manager-$JENKINS_PLUGIN_MANAGER_VERSION.jar"
-    printf 'simulation-only public internet use: downloading Jenkins Plugin Installation Manager artifact\n' >>"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+    printf 'simulation-only public internet use: downloading Jenkins Plugin Installation Manager artifact\n' >>"$(factory_download_log_path)"
     wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=120 -O "$dest" "$url"
   else
     printf 'BLOCKED: prepare-artifacts requires JENKINS_PLUGIN_MANAGER_SOURCE or JENKINS_DOWNLOAD_ARTIFACTS=1 in the bundle factory\n' >&2
@@ -858,17 +866,18 @@ verify_staged_artifacts() {
   awk -F= '
     $1 == "harness_manifest_version" && $2 == "1" { h=1 }
     $1 == "role" && $2 == "jenkins-controller" { r=1 }
+    $1 == "bundle_name" && $2 == "jenkins-artifacts-bundle" { b=1 }
     $1 == "gerrit_version" && $2 == "not-applicable" { g=1 }
     $1 == "jenkins_version" && $2 == "2.555.3" { jn=1 }
     $1 == "jenkins_plugin_manager_version" && $2 == "2.15.0" { pm=1 }
     $1 == "java_version" && $2 == "21" { j=1 }
     $1 == "ubuntu_release" && $2 == "24.04" { u=1 }
     $1 == "ubuntu_codename" && $2 == "noble" { n=1 }
-    $1 == "artifact_source" && $2 == "curated-bundle-factory" { a=1 }
-    $1 == "os_dependency_source" && $2 == "approved-internal-os-repos" { o=1 }
-    $1 == "public_internet_fallback" && $2 == "simulation-only" { p=1 }
-    $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
-    END { exit !(h && r && g && jn && pm && j && u && n && a && o && p && k) }
+    $1 == "war" && $2 == "jenkins-2.555.3.war" { w=1 }
+    $1 == "plugin_manager" && $2 == "jenkins-plugin-manager-2.15.0.jar" { m=1 }
+    $1 == "resolved_plugin_count" && $2 > 0 { pc=1 }
+    $1 == "template_count" && $2 == "2" { t=1 }
+    END { exit !(h && r && b && g && jn && pm && j && u && n && w && m && pc && t) }
   ' "$manifest" || die "Staged manifest does not match the Jenkins controller Version Baseline"
   assert_no_artifact_key_material "$JENKINS_STAGED_ARTIFACT_DIR"
 }
@@ -899,20 +908,17 @@ write_manifest() {
   cat >"$manifest" <<EOF
 harness_manifest_version=1
 role=jenkins-controller
+bundle_name=$JENKINS_ARTIFACT_BUNDLE_NAME
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
 gerrit_version=not-applicable
 jenkins_version=2.555.3
 jenkins_plugin_manager_version=2.15.0
-artifact_source=curated-bundle-factory
-os_dependency_source=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no
-direct_plugins=$JENKINS_PLUGIN_LIST
 resolved_plugin_count=$resolved_plugin_count
 war=jenkins-2.555.3.war
 plugin_manager=jenkins-plugin-manager-2.15.0.jar
+template_count=2
 EOF
 }
 
@@ -926,15 +932,7 @@ package_artifact_bundle() {
   archive="$preparing_dir/$JENKINS_ARTIFACT_BUNDLE_NAME.tar.gz"
   checksum="$archive.sha256"
   rm -f "$archive" "$checksum"
-  rm -rf "$bundle_dir/checksums"
-  mkdir -p "$bundle_dir/checksums"
-  (
-    cd "$bundle_dir"
-    find . -type f ! -path './checksums/SHA256SUMS' -print0 |
-      sort -z |
-      xargs -0 sha256sum >checksums/SHA256SUMS
-  )
-  tar -C "$preparing_dir" -czf "$archive" "$JENKINS_ARTIFACT_BUNDLE_NAME"
+  tar -C "$bundle_dir" -czf "$archive" "$(basename "$payload_dir")"
   (cd "$preparing_dir" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
   chmod u+rw,go+r "$archive" "$checksum"
 }
@@ -960,7 +958,7 @@ cmd_prepare_artifacts() {
   enforce_version_baseline
   validate_artifact_output_dir
   prepare_artifact_bundle_workspace
-  : >"$JENKINS_ARTIFACT_OUTPUT_DIR/source-boundary.log"
+  : >"$(factory_download_log_path)"
   prepare_jenkins_war
   prepare_plugin_manager
   prepare_plugins
@@ -1002,13 +1000,11 @@ cmd_install() {
     sleep 2
     run_with_privilege "kill -9 $pids 2>/dev/null || true"
   fi
-  run_with_privilege "rm -rf $(shell_quote "$JENKINS_HOME/war") $(shell_quote "$JENKINS_HOME/war-cache") $(shell_quote "$JENKINS_HOME/plugins") $(shell_quote "$JENKINS_HOME/templates") $(shell_quote "$JENKINS_HOME/state") $(shell_quote "$JENKINS_HOME/etc") $(shell_quote "$JENKINS_HOME/jcasc") $(shell_quote "$JENKINS_HOME/run")"
+  run_with_privilege "rm -rf $(shell_quote "$JENKINS_HOME/war") $(shell_quote "$JENKINS_HOME/war-cache") $(shell_quote "$JENKINS_HOME/plugins") $(shell_quote "$JENKINS_HOME/templates") $(shell_quote "$JENKINS_HOME/state") $(shell_quote "$JENKINS_HOME/etc") $(shell_quote "$JENKINS_HOME/jcasc") $(shell_quote "$JENKINS_HOME/run") $(shell_quote "$JENKINS_HOME/artifact-manifest.txt") $(shell_quote "$JENKINS_HOME/artifact-checksums.sha256")"
   prepare_jenkins_runtime_dirs
   install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war" 0644
   install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-plugin-manager-2.15.0.jar" "$JENKINS_HOME/war/jenkins-plugin-manager.jar" 0644
   copy_tree_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates" "$JENKINS_HOME/templates" 0755
-  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_HOME/artifact-manifest.txt" 0644
-  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_HOME/artifact-checksums.sha256" 0644
   write_text_file_as_runtime "$JENKINS_HOME/state/install.status" "installed"
   printf 'status=pass command=install home=%s staged=%s\n' "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR"
 }

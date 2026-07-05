@@ -14,7 +14,7 @@ dry_run=0
 assume_yes=0
 readonly JENKINS_AGENT_NATIVE_REMOTE_FS="/var/lib/jenkins-agent"
 readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"
-readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle/jenkins-agent"
+readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins-agent"
 readonly JENKINS_AGENT_ARTIFACT_BUNDLE_NAME="jenkins-agent-artifacts-bundle"
 
 usage() {
@@ -632,29 +632,20 @@ verify_staged_artifacts() {
   [ -f "$manifest" ] || die "Missing staged Jenkins agent manifest: $manifest"
   [ -f "$checksums" ] || die "Missing staged Jenkins agent checksums: $checksums"
   (cd "$JENKINS_AGENT_STAGED_ARTIFACT_DIR" && sha256sum -c checksums.sha256) >/dev/null
-  [ -f "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest" ] || die "Missing staged Jenkins agent package intent manifest: $JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest"
   awk -F= '
     $1 == "harness_manifest_version" && $2 == "1" { h=1 }
     $1 == "role" && $2 == "jenkins-agent" { r=1 }
+    $1 == "bundle_name" && $2 == "jenkins-agent-artifacts-bundle" { b=1 }
     $1 == "gerrit_version" && $2 == "not-applicable" { g=1 }
     $1 == "jenkins_version" && $2 == "not-applicable" { jn=1 }
     $1 == "jenkins_plugin_manager_version" && $2 == "not-applicable" { pm=1 }
     $1 == "java_version" && $2 == "21" { j=1 }
     $1 == "ubuntu_release" && $2 == "24.04" { u=1 }
     $1 == "ubuntu_codename" && $2 == "noble" { n=1 }
-    $1 == "artifact_source" && $2 == "curated-bundle-factory" { a=1 }
-    $1 == "public_internet_fallback" && $2 == "simulation-only" { p=1 }
-    $1 == "os_dependency_source" && $2 == "approved-internal-os-repos" { o=1 }
-    $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
-    END { exit !(h && r && g && jn && pm && j && u && n && a && p && o && k) }
+    $1 == "bootstrap" && $2 == "jenkins-agent-bootstrap.txt" { bs=1 }
+    $1 == "template_count" && $2 == "2" { t=1 }
+    END { exit !(h && r && b && g && jn && pm && j && u && n && bs && t) }
   ' "$manifest" || die "Staged manifest does not match the Jenkins agent Version Baseline"
-  awk -F= '
-    $1 == "packages" && $2 != "" { p=1 }
-    $1 == "source_boundary" && $2 == "approved-internal-os-repos" { s=1 }
-    $1 == "public_internet_fallback" && $2 == "simulation-only" { i=1 }
-    $1 == "bundle_contains_keys" && $2 == "no" { k=1 }
-    END { exit !(p && s && i && k) }
-  ' "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest" || die "Staged package intent manifest does not enforce the required internet fallback contract"
   assert_no_ssh_key_material "$JENKINS_AGENT_STAGED_ARTIFACT_DIR"
 }
 
@@ -688,20 +679,15 @@ write_manifest() {
   cat >"$manifest" <<EOF
 harness_manifest_version=1
 role=jenkins-agent
+bundle_name=$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
 gerrit_version=not-applicable
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
-artifact_source=curated-bundle-factory
-public_internet_fallback=simulation-only
-os_dependency_source=approved-internal-os-repos
-bundle_contains_keys=no
-os_dependencies=$JENKINS_AGENT_OS_DEPENDENCIES
-controller_plugin=$JENKINS_AGENT_CONTROLLER_PLUGIN
-controller_plugin_source=$JENKINS_AGENT_CONTROLLER_PLUGIN_SOURCE
 bootstrap=jenkins-agent-bootstrap.txt
+template_count=2
 EOF
 }
 
@@ -715,15 +701,7 @@ package_artifact_bundle() {
   archive="$preparing_dir/$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME.tar.gz"
   checksum="$archive.sha256"
   rm -f "$archive" "$checksum"
-  rm -rf "$bundle_dir/checksums"
-  mkdir -p "$bundle_dir/checksums"
-  (
-    cd "$bundle_dir"
-    find . -type f ! -path './checksums/SHA256SUMS' -print0 |
-      sort -z |
-      xargs -0 sha256sum >checksums/SHA256SUMS
-  )
-  tar -C "$preparing_dir" -czf "$archive" "$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME"
+  tar -C "$bundle_dir" -czf "$archive" "$(basename "$payload_dir")"
   (cd "$preparing_dir" && sha256sum "$(basename "$archive")" >"$(basename "$checksum")")
   chmod u+rw,go+r "$archive" "$checksum"
 }
@@ -749,11 +727,6 @@ cmd_prepare_artifacts() {
   prepare_artifact_bundle_workspace
   write_text_file "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/jenkins-agent-bootstrap.txt" \
     "Jenkins SSH agent bootstrap marker for Ubuntu 24.04 noble with OpenJDK 21."
-  write_text_file "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/package-intent.manifest" \
-    "packages=$JENKINS_AGENT_OS_DEPENDENCIES
-source_boundary=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no"
   cp "$repo_root/templates/jenkins-agent/agent-runtime-profile.env.template" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/templates/agent-runtime-profile.env.template"
   cp "$repo_root/templates/jenkins-agent/sshd-policy.conf.template" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/templates/sshd-policy.conf.template"
   write_manifest
@@ -766,7 +739,7 @@ bundle_contains_keys=no"
   )
   assert_no_ssh_key_material "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR"
   package_artifact_bundle
-  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s archive=%s archive_checksum=%s bundle_contains_keys=no\n' \
+  printf 'status=pass command=prepare-artifacts artifact_dir=%s manifest=%s checksums=%s archive=%s archive_checksum=%s\n' \
     "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/manifest.txt" "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR/checksums.sha256" \
     "$(dirname "$(dirname "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR")")/$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME.tar.gz" \
     "$(dirname "$(dirname "$JENKINS_AGENT_ARTIFACT_OUTPUT_DIR")")/$JENKINS_AGENT_ARTIFACT_BUNDLE_NAME.tar.gz.sha256"
@@ -782,10 +755,7 @@ cmd_install() {
   check_agent_runtime_account_readiness
   reset_agent_state_for_install
   install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644
-  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/package-intent.manifest" "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest" 0644
   copy_tree_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates" "$JENKINS_AGENT_STATE_DIR/templates"
-  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/manifest.txt" "$JENKINS_AGENT_STATE_DIR/artifact-manifest.txt" 0644
-  install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/checksums.sha256" "$JENKINS_AGENT_STATE_DIR/artifact-checksums.sha256" 0644
   write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/install.status" "installed"
   printf 'status=pass command=install state_dir=%s staged=%s\n' "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_STAGED_ARTIFACT_DIR"
 }
@@ -931,7 +901,6 @@ check_runtime_readiness() {
   [ -s "$JENKINS_AGENT_STATE_DIR/state/install.status" ] || die "Install marker missing"
   [ -s "$JENKINS_AGENT_STATE_DIR/state/runtime.status" ] || die "Runtime marker missing"
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" ] || die "Agent bootstrap marker is missing"
-  [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/package-intent.manifest" ] || die "Agent package intent manifest is missing"
   check_runtime_account
   check_remote_fs_ownership
   [ -f "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" ] || die "Target OS sshd pid marker is missing"

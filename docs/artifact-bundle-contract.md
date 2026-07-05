@@ -41,23 +41,19 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 - The archive pair and bundle tree live together in the preparing root, for
   example
   `/var/lib/loopforge/preparing/{gerrit-artifacts-bundle.tar.gz,gerrit-artifacts-bundle.tar.gz.sha256,gerrit-artifacts-bundle}`.
-- Each archive must contain a top-level directory matching the bundle name.
-- Each bundle must contain `checksums/SHA256SUMS` and a role payload directory.
+- Each archive extracts directly to one role payload directory: `gerrit/`,
+  `jenkins/`, or `jenkins-agent/`.
+- Each payload must contain exactly one compact `manifest.txt` and one
+  payload `checksums.sha256`.
 - The archive pair is the handoff artifact; extracted trees are disposable
   staging or target state, not the source of truth.
 
 ## Target Extraction
 
-- Gerrit extracted bundle root:
-  `/var/lib/loopforge/staging/gerrit-artifacts-bundle`
-- Jenkins controller extracted bundle root:
-  `/var/lib/loopforge/staging/jenkins-artifacts-bundle`
-- Jenkins agent extracted bundle root:
-  `/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle`
 - Helper-visible payload directories:
-  - `/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit`
-  - `/var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins`
-  - `/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle/jenkins-agent`
+  - `/var/lib/loopforge/staging/gerrit`
+  - `/var/lib/loopforge/staging/jenkins`
+  - `/var/lib/loopforge/staging/jenkins-agent`
 
 ## Helper Contract
 
@@ -77,7 +73,7 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
   execution-time secret inputs only. Product runtime config may persist
   required product settings after a role helper writes them.
 - `stage-artifacts` verifies the archive checksum, extracts to the target
-  extraction root, and verifies the bundle checksum files before service
+  staging root, and verifies the payload `checksums.sha256` before service
   mutation.
 - Target extraction uses helper-owned staging under `/var/lib/loopforge`; the
   staging root is created by the role helper, and transfer utilities may copy
@@ -112,8 +108,8 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 
 ## Bundle Contents Boundary
 
-- Bundles contain application artifacts, config/templates, manifests,
-  checksums, and package intent metadata where relevant.
+- Bundles contain application artifacts, config/templates, one compact
+  artifact manifest, and one payload checksum file.
 - Bundles must not contain SSH private keys, public-key handoff files,
   `authorized_keys`, generated integration keys, passwords, tokens, or LDAP
   bind secrets.
@@ -123,8 +119,8 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 ## Evidence And Failure Semantics
 
 - Passing evidence must show mode, role, archive checksum verification,
-  extracted bundle checksum verification, role payload checksum verification,
-  source-boundary metadata, and bounded log references.
+  payload checksum verification, source-boundary metadata where applicable,
+  and bounded log references.
 - Missing, stale, mismatched, or drifted manifests/checksums block comparable
   readiness instead of passing.
 - Simulation evidence must be labeled as simulation and must not imply

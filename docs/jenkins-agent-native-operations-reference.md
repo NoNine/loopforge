@@ -147,36 +147,26 @@ the helper.
 Run on the bundle-factory VM:
 
 ```bash
-mkdir -p ~/jenkins-agent-artifacts-bundle/{jenkins-agent,checksums}
+mkdir -p ~/jenkins-agent-artifacts-bundle/jenkins-agent
 cd ~/jenkins-agent-artifacts-bundle
 cat > jenkins-agent/manifest.txt <<'EOF'
 harness_manifest_version=1
 role=jenkins-agent
+bundle_name=jenkins-agent-artifacts-bundle
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
 gerrit_version=not-applicable
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
-artifact_source=curated-bundle-factory
-public_internet_fallback=simulation-only
-os_dependency_source=approved-internal-os-repos
-bundle_contains_keys=no
 bootstrap=jenkins-agent-bootstrap.txt
-EOF
-cat > jenkins-agent/package-intent.manifest <<'EOF'
-packages=ca-certificates,curl,git,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget
-source_boundary=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no
+template_count=2
 EOF
 printf 'Jenkins SSH agent bootstrap marker for Ubuntu 24.04 noble with OpenJDK 21.\n' \
   > jenkins-agent/jenkins-agent-bootstrap.txt
 (cd jenkins-agent && find . -type f ! -name checksums.sha256 -print0 \
   | sort -z | xargs -0 sha256sum > checksums.sha256)
-find . -type f ! -path './checksums/SHA256SUMS' -print0 \
-  | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
-tar -czf ~/jenkins-agent-artifacts-bundle.tar.gz -C ~ jenkins-agent-artifacts-bundle
+tar -czf ~/jenkins-agent-artifacts-bundle.tar.gz -C ~/jenkins-agent-artifacts-bundle jenkins-agent
 sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz > ~/jenkins-agent-artifacts-bundle.tar.gz.sha256
 ```
 
@@ -192,23 +182,32 @@ the payload under `/var/lib/loopforge/staging`, then configure the runtime
 account and SSH service:
 
 ```bash
-cd /home/ci-operator
-sha256sum -c /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz.sha256
+operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
+operator_group="${LOOPFORGE_OPERATOR_GROUP:-$operator_account}"
+operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
+[ -n "$operator_home" ] || {
+  printf 'missing operator account: %s\n' "$operator_account" >&2
+  exit 1
+}
 
-sudo bash -s <<'EOF'
+cd "$operator_home"
+sha256sum -c jenkins-agent-artifacts-bundle.tar.gz.sha256
+
+sudo bash -s "$operator_account" "$operator_group" "$operator_home" <<'EOF'
 set -euo pipefail
+operator_account="${1:?operator account required}"
+operator_group="${2:?operator group required}"
+operator_home="${3:?operator home required}"
 agent_user=jenkins-agent
 agent_uid=61030
 agent_gid=61030
 remote_fs=/var/lib/jenkins-agent
 staging=/var/lib/loopforge/staging
-install -d -m 0750 -o ci-operator -g ci-operator "$staging"
-rm -rf "$staging/jenkins-agent-artifacts-bundle"
-tar -xzf /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz -C "$staging"
-chown -R ci-operator:ci-operator "$staging/jenkins-agent-artifacts-bundle"
-cd "$staging/jenkins-agent-artifacts-bundle"
-sha256sum -c checksums/SHA256SUMS
-cd "$staging/jenkins-agent-artifacts-bundle/jenkins-agent"
+install -d -m 0750 -o "$operator_account" -g "$operator_group" "$staging"
+rm -rf "$staging/jenkins-agent"
+tar -xzf "$operator_home/jenkins-agent-artifacts-bundle.tar.gz" -C "$staging"
+chown -R "$operator_account:$operator_group" "$staging/jenkins-agent"
+cd "$staging/jenkins-agent"
 sha256sum -c checksums.sha256
 if ! getent group "${agent_user}" >/dev/null; then
   groupadd --gid "${agent_gid}" "${agent_user}"

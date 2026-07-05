@@ -481,9 +481,8 @@ Implementation notes:
   target mutation. `Verified` label and Jenkins integration access templates
   are cross-role integration artifacts and must not be staged by the Gerrit
   role helper.
-- Gerrit manifests must record `artifact_source=curated-bundle-factory`,
-  `os_dependency_source=approved-internal-os-repos`,
-  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
+- Gerrit manifests must record compact artifact identity and inventory fields
+  only; policy and source-boundary facts belong in docs, logs, and evidence.
 - Gerrit defaults to `docs/version-baseline.md`. Non-default Gerrit versions
   may be used only after a reviewed baseline update.
 - Gerrit target commands consume only staged artifacts from the bundle factory
@@ -521,7 +520,7 @@ simulation/docker/simulate.sh configure-role --role gerrit
 simulation/docker/simulate.sh validate-role --role gerrit
 find generated/simulation/docker/<run-id>/target/evidence/gerrit -type f -name '*gerrit*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/target/evidence/gerrit -type f -name '*gerrit*')
-rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/target/artifacts/exported/gerrit/manifest.txt generated/simulation/docker/<run-id>/target/artifacts/staging/gerrit/manifest.txt
+rg -n "bundle_name=gerrit-artifacts-bundle|war=gerrit-3.13.6.war" generated/simulation/docker/<run-id>/target/artifacts/exported/gerrit/manifest.txt generated/simulation/docker/<run-id>/target/artifacts/staging/gerrit/manifest.txt
 ! find generated/simulation/docker/<run-id>/target/artifacts/exported/gerrit generated/simulation/docker/<run-id>/target/artifacts/staging/gerrit -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "prepare-artifacts|collect-evidence" docs/gerrit-setup-manual.md scripts/gerrit-setup.sh
 ! scripts/gerrit-setup.sh --help | rg -n "configure-integration|prove-integration|configure-agent"
@@ -616,10 +615,9 @@ Implementation notes:
   Gerrit Trigger server, agent-node, disposable verification job, and
   trigger-verification env templates are cross-role integration artifacts and
   must not be staged by the controller role helper.
-- Jenkins controller manifests must record
-  `artifact_source=curated-bundle-factory`,
-  `os_dependency_source=approved-internal-os-repos`,
-  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
+- Jenkins controller manifests must record compact artifact identity and
+  inventory fields only; policy and source-boundary facts belong in docs, logs,
+  and evidence.
 - Target-side manifests and checksums must be verified in the Jenkins
   controller target before install, plugin installation, or JCasC
   configuration mutates Jenkins state. Credential setup, node setup, and
@@ -665,7 +663,7 @@ simulation/docker/simulate.sh configure-role --role jenkins-controller
 simulation/docker/simulate.sh validate-role --role jenkins-controller
 find generated/simulation/docker/<run-id>/target/evidence/jenkins-controller -type f -name '*jenkins-controller*' -print -quit | rg .
 ! rg -n "dummy|operation-plan-only|planned-checks-only|modeled" $(find generated/simulation/docker/<run-id>/target/evidence/jenkins-controller -type f -name '*jenkins-controller*')
-rg -n "bundle_contains_keys=no|os_dependency_source=approved-internal-os-repos|public_internet_fallback=simulation-only" generated/simulation/docker/<run-id>/target/artifacts/exported/jenkins-controller/manifest.txt generated/simulation/docker/<run-id>/target/artifacts/staging/jenkins-controller/manifest.txt
+rg -n "bundle_name=jenkins-artifacts-bundle|war=jenkins-2.555.3.war" generated/simulation/docker/<run-id>/target/artifacts/exported/jenkins-controller/manifest.txt generated/simulation/docker/<run-id>/target/artifacts/staging/jenkins-controller/manifest.txt
 ! find generated/simulation/docker/<run-id>/target/artifacts/exported/jenkins-controller generated/simulation/docker/<run-id>/target/artifacts/staging/jenkins-controller -type f \( -name '*.pub' -o -name 'authorized_keys' -o -name '*_ed25519' -o -name '*_rsa' -o -name 'id_ed25519' -o -name 'id_rsa' \) -print | rg .
 rg -n "JCasC|LDAP|Gerrit Trigger|prepare-artifacts|collect-evidence" docs/jenkins-controller-setup-manual.md scripts/jenkins-controller-setup.sh
 ! scripts/jenkins-controller-setup.sh --help | rg -n "generate-integration-key|generate-agent-key|configure-integration|configure-agent|validate-agent|prove-integration"
@@ -748,9 +746,9 @@ Implementation notes:
   not write Jenkins-to-agent public keys, private keys, `authorized_keys`, or
   generated key handoff files, and staged artifact verification must reject
   them before target mutation.
-- Jenkins agent manifests must record `artifact_source=curated-bundle-factory`,
-  `os_dependency_source=approved-internal-os-repos`,
-  `public_internet_fallback=simulation-only`, and `bundle_contains_keys=no`.
+- Jenkins agent manifests must record compact artifact identity and inventory
+  fields only; policy and source-boundary facts belong in docs, logs, and
+  evidence.
 - Target-side manifests and checksums must be verified in the Jenkins agent
   target before install or runtime configuration mutates the agent host.
 - The agent helper configures only the agent host runtime and SSH service

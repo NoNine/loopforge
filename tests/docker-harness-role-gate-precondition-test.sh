@@ -79,7 +79,7 @@ case "$*" in
             esac
             ;;
           *"sha256sum -c checksums.sha256"*)
-            printf 'missing_staged_artifacts manifest=/var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/manifest.txt\n'
+            printf 'missing_staged_artifacts manifest=/var/lib/loopforge/staging/gerrit/manifest.txt\n'
             exit 1
             ;;
           *"/workspace/scripts/"*)

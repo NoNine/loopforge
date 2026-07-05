@@ -125,10 +125,7 @@ Produced outputs:
 - `manifest.txt`.
 - `checksums.sha256`.
 - Agent bootstrap marker for the Docker harness role gate.
-- Package intent manifest describing the static OS package baseline without
-  creating an Ubuntu dependency bundle.
 - Runtime profile and SSH daemon policy templates.
-- Explicit bundle metadata proving the bundle contains no SSH key material.
 
 Staged artifact paths:
 
@@ -168,24 +165,23 @@ Installation consumes only staged bundle factory output. The target verifies
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
-- Extracted artifact bundle root, normally `/var/lib/loopforge/staging/jenkins-agent-artifacts-bundle` in Docker simulation and target deployment.
+- Extracted artifact payload root, normally
+  `/var/lib/loopforge/staging/jenkins-agent` in Docker simulation and target
+  deployment.
 - `manifest.txt` and `checksums.sha256`.
 
 Produced outputs:
 
 - Agent state tree under `JENKINS_AGENT_STATE_DIR`.
 - Installed bootstrap marker.
-- Installed package intent manifest.
 - Installed templates.
-- `artifact-manifest.txt` and `artifact-checksums.sha256`.
 - Install marker under `state/install.status`.
 
 Mutation side effects:
 
 - Resets helper-managed children under `JENKINS_AGENT_STATE_DIR` before
   installing staged output: `bootstrap/`, `templates/`, `state/`, `etc/`,
-  `run/`, `logs/`, `artifact-manifest.txt`, and
-  `artifact-checksums.sha256`.
+  `run/`, and `logs/`.
 - Preserves the configured `JENKINS_AGENT_STATE_DIR` and
   `JENKINS_AGENT_REMOTE_FS` roots.
 - Does not download Jenkins application artifacts on the target.

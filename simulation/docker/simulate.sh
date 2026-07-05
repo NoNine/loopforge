@@ -1504,15 +1504,12 @@ checksum_reference_for_evidence() {
             "$(container_bundle_factory_work_dir_for_role "$role")/checksums.sha256"
           ;;
         stage-artifacts)
-          printf '%s;%s/checksums/SHA256SUMS;%s/checksums.sha256\n' \
+          printf '%s;%s/checksums.sha256\n' \
             "$(exported_artifact_checksum_for_role "$role")" \
-            "$(target_bundle_dir_for_role "$role")" \
             "$(target_payload_dir_for_role "$role")"
           ;;
         configure-role|validate-role)
-          printf '%s/checksums/SHA256SUMS;%s/checksums.sha256\n' \
-            "$(target_bundle_dir_for_role "$role")" \
-            "$(target_payload_dir_for_role "$role")"
+          printf '%s/checksums.sha256\n' "$(target_payload_dir_for_role "$role")"
           ;;
         *)
           printf '%s/checksums.sha256\n' "$(target_payload_dir_for_role "$role")"
@@ -1603,17 +1600,16 @@ stage_payload_dir_for_role() {
 }
 
 target_bundle_dir_for_role() {
-  local role bundle
+  local role
   role="${1:?role required}"
-  bundle="$(bundle_name_for_role "$role")"
-  printf '/var/lib/loopforge/staging/%s\n' "$bundle"
+  printf '%s\n' "$(target_payload_dir_for_role "$role")"
 }
 
 target_payload_dir_for_role() {
   local role payload
   role="${1:?role required}"
   payload="$(bundle_payload_dir_for_role "$role")"
-  printf '%s/%s\n' "$(target_bundle_dir_for_role "$role")" "$payload"
+  printf '/var/lib/loopforge/staging/%s\n' "$payload"
 }
 
 ensure_gerrit_validation_key() {
@@ -1720,6 +1716,7 @@ render_container_role_env() {
   case "$role" in
     gerrit)
       sed -e 's|^GERRIT_SITE_PATH=.*|GERRIT_SITE_PATH="/srv/gerrit"|' \
+        -e 's|^GERRIT_STAGED_ARTIFACT_DIR=.*|GERRIT_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/gerrit"|' \
         -e 's|^GERRIT_EVIDENCE_DIR=.*|GERRIT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
         -e 's|^GERRIT_LOG_DIR=.*|GERRIT_LOG_DIR="/var/log/loopforge"|' \
         "$src" >"$host_env_file"
@@ -1728,6 +1725,7 @@ render_container_role_env() {
       ;;
     jenkins-controller)
       sed -e 's|^JENKINS_HOME=.*|JENKINS_HOME="/var/lib/jenkins"|' \
+        -e 's|^JENKINS_STAGED_ARTIFACT_DIR=.*|JENKINS_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/jenkins"|' \
         -e 's|^JENKINS_EVIDENCE_DIR=.*|JENKINS_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
         -e 's|^JENKINS_LOG_DIR=.*|JENKINS_LOG_DIR="/var/log/loopforge"|' \
         "$src" >"$host_env_file"
@@ -1739,6 +1737,7 @@ render_container_role_env() {
           "$src" >"$host_env_file"
       else
         sed -e 's|^JENKINS_AGENT_REMOTE_FS=.*|JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"|' \
+          -e 's|^JENKINS_AGENT_STAGED_ARTIFACT_DIR=.*|JENKINS_AGENT_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/jenkins-agent"|' \
           -e 's|^JENKINS_AGENT_EVIDENCE_DIR=.*|JENKINS_AGENT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
           -e 's|^JENKINS_AGENT_LOG_DIR=.*|JENKINS_AGENT_LOG_DIR="/var/log/loopforge"|' \
           "$src" >"$host_env_file"
@@ -1855,21 +1854,19 @@ stage_target_ssh_authorized_keys() {
 }
 
 copy_bundle_factory_artifacts_to_host() {
-  local role service log container_dir container_root container_archive container_checksum container_id
-  local archive checksum bundle payload
+  local role service log container_dir container_archive container_checksum container_id
+  local archive checksum payload
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
   container_dir="$(container_bundle_factory_work_dir_for_role "$role")"
-  container_root="$(container_bundle_factory_root_for_role "$role")"
   container_archive="$(container_prepared_artifact_archive_for_role "$role")"
   container_checksum="$(container_prepared_artifact_checksum_for_role "$role")"
   archive="$(exported_artifact_archive_for_role "$role")"
   checksum="$(exported_artifact_checksum_for_role "$role")"
-  bundle="$(bundle_name_for_role "$role")"
   payload="$(bundle_payload_dir_for_role "$role")"
   if ! compose exec -T "$service" sh -c \
-    "test -f $(shell_quote "$container_dir/manifest.txt") && test -f $(shell_quote "$container_dir/checksums.sha256") && cd $(shell_quote "$container_dir") && sha256sum -c checksums.sha256 && test -f $(shell_quote "$container_root/checksums/SHA256SUMS") && cd $(shell_quote "$container_root") && sha256sum -c checksums/SHA256SUMS && cd /var/lib/loopforge/preparing && sha256sum -c $(shell_quote "$(basename "$container_checksum")")" \
+    "test -f $(shell_quote "$container_dir/manifest.txt") && test -f $(shell_quote "$container_dir/checksums.sha256") && cd $(shell_quote "$container_dir") && sha256sum -c checksums.sha256 && cd /var/lib/loopforge/preparing && sha256sum -c $(shell_quote "$(basename "$container_checksum")")" \
     >>"$log" 2>&1; then
     return 1
   fi
@@ -1886,7 +1883,7 @@ copy_bundle_factory_artifacts_to_host() {
   if ! (cd "$HARNESS_EXPORTED_ARTIFACT_DIR" && sha256sum -c "$(basename "$checksum")") >>"$log" 2>&1; then
     return 1
   fi
-  tar -xOf "$archive" "$bundle/$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
+  tar -xOf "$archive" "$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
   if ! validate_role_baseline_manifest "$role" "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp" "$log"; then
     rm -f "$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
     return 1
@@ -2062,29 +2059,30 @@ validate_role_baseline_manifest() {
 
   validate_manifest_value "$role" "$manifest" "$log" "harness_manifest_version" "1" || return 1
   validate_manifest_value "$role" "$manifest" "$log" "role" "$role" || return 1
+  validate_manifest_value "$role" "$manifest" "$log" "bundle_name" "$(bundle_name_for_role "$role")" || return 1
   validate_manifest_value "$role" "$manifest" "$log" "ubuntu_release" "$HARNESS_UBUNTU_BASELINE_RELEASE" || return 1
   validate_manifest_value "$role" "$manifest" "$log" "ubuntu_codename" "$HARNESS_UBUNTU_BASELINE_CODENAME" || return 1
   validate_manifest_value "$role" "$manifest" "$log" "java_version" "$HARNESS_JAVA_BASELINE" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "artifact_source" "curated-bundle-factory" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "os_dependency_source" "approved-internal-os-repos" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "public_internet_fallback" "simulation-only" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "bundle_contains_keys" "no" || return 1
 
   case "$role" in
     gerrit)
       validate_manifest_value "$role" "$manifest" "$log" "gerrit_version" "$HARNESS_GERRIT_BASELINE" || return 1
       validate_manifest_value "$role" "$manifest" "$log" "jenkins_version" "not-applicable" || return 1
       validate_manifest_value "$role" "$manifest" "$log" "jenkins_plugin_manager_version" "not-applicable" || return 1
+      validate_manifest_value "$role" "$manifest" "$log" "war" "gerrit-$HARNESS_GERRIT_BASELINE.war" || return 1
       ;;
     jenkins-controller)
       validate_manifest_value "$role" "$manifest" "$log" "gerrit_version" "not-applicable" || return 1
       validate_manifest_value "$role" "$manifest" "$log" "jenkins_version" "$HARNESS_JENKINS_BASELINE" || return 1
       validate_manifest_value "$role" "$manifest" "$log" "jenkins_plugin_manager_version" "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE" || return 1
+      validate_manifest_value "$role" "$manifest" "$log" "war" "jenkins-$HARNESS_JENKINS_BASELINE.war" || return 1
+      validate_manifest_value "$role" "$manifest" "$log" "plugin_manager" "jenkins-plugin-manager-$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE.jar" || return 1
       ;;
     jenkins-agent)
       validate_manifest_value "$role" "$manifest" "$log" "gerrit_version" "not-applicable" || return 1
       validate_manifest_value "$role" "$manifest" "$log" "jenkins_version" "not-applicable" || return 1
       validate_manifest_value "$role" "$manifest" "$log" "jenkins_plugin_manager_version" "not-applicable" || return 1
+      validate_manifest_value "$role" "$manifest" "$log" "bootstrap" "jenkins-agent-bootstrap.txt" || return 1
       ;;
     *)
       die "Unknown role '$role'; expected gerrit, jenkins-controller, or jenkins-agent"
@@ -2095,11 +2093,12 @@ validate_role_baseline_manifest() {
 }
 
 validate_role_baseline_manifest_in_target() {
-  local role service manifest log gerrit_version jenkins_version plugin_manager_version script
+  local role service manifest log gerrit_version jenkins_version plugin_manager_version bundle script
   role="${1:?role required}"
   service="${2:?service required}"
   log="${3:?log required}"
   manifest="$(target_payload_dir_for_role "$role")/manifest.txt"
+  bundle="$(bundle_name_for_role "$role")"
   case "$role" in
     gerrit)
       gerrit_version="$HARNESS_GERRIT_BASELINE"
@@ -2123,12 +2122,13 @@ validate_role_baseline_manifest_in_target() {
   script='
 manifest="$1"
 role="$2"
-ubuntu_release="$3"
-ubuntu_codename="$4"
-java_version="$5"
-gerrit_version="$6"
-jenkins_version="$7"
-plugin_manager_version="$8"
+bundle_name="$3"
+ubuntu_release="$4"
+ubuntu_codename="$5"
+java_version="$6"
+gerrit_version="$7"
+jenkins_version="$8"
+plugin_manager_version="$9"
 test -f "$manifest" || {
   printf "baseline_drift role=%s field=manifest expected=present actual=missing manifest=%s\n" "$role" "$manifest"
   exit 1
@@ -2158,13 +2158,10 @@ expect_manifest_value() {
 }
 expect_manifest_value harness_manifest_version 1
 expect_manifest_value role "$role"
+expect_manifest_value bundle_name "$bundle_name"
 expect_manifest_value ubuntu_release "$ubuntu_release"
 expect_manifest_value ubuntu_codename "$ubuntu_codename"
 expect_manifest_value java_version "$java_version"
-expect_manifest_value artifact_source curated-bundle-factory
-expect_manifest_value os_dependency_source approved-internal-os-repos
-expect_manifest_value public_internet_fallback simulation-only
-expect_manifest_value bundle_contains_keys no
 expect_manifest_value gerrit_version "$gerrit_version"
 expect_manifest_value jenkins_version "$jenkins_version"
 expect_manifest_value jenkins_plugin_manager_version "$plugin_manager_version"
@@ -2172,6 +2169,7 @@ expect_manifest_value jenkins_plugin_manager_version "$plugin_manager_version"
   if ! compose exec -T "$service" sh -c "$script" sh \
     "$manifest" \
     "$role" \
+    "$bundle" \
     "$HARNESS_UBUNTU_BASELINE_RELEASE" \
     "$HARNESS_UBUNTU_BASELINE_CODENAME" \
     "$HARNESS_JAVA_BASELINE" \
@@ -2959,8 +2957,6 @@ tar --no-same-owner -xzf "$archive_name" -C "$staging_root"
 test -d "$target_bundle_dir"
 test -f "$target_payload_dir/manifest.txt"
 test -f "$target_payload_dir/checksums.sha256"
-cd "$target_bundle_dir"
-sha256sum -c checksums/SHA256SUMS
 cd "$target_payload_dir"
 sha256sum -c checksums.sha256
 '

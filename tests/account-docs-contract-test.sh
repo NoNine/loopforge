@@ -100,7 +100,7 @@ require_doc_text simulation/docker/README.md \
   'controller, or Jenkins agent runtime account.' \
   'Docker README must document operator account is not a product runtime owner'
 require_doc_text docs/directory-model.md \
-  'Host-side generated backing paths use the local host account that runs the simulation' \
+  'Host-side generated paths use the local host account that runs the simulation' \
   'Directory model must separate host generated ownership from target operator ownership'
 
 reject_doc_text simulation/docker/README.md \
@@ -113,6 +113,40 @@ require_doc_text docs/jenkins-agent-native-operations-reference.md \
 require_doc_text docs/jenkins-agent-native-operations-reference.md \
   'and fails clearly if either is missing or if the passwd HOME is not' \
   'Native agent reference must document helper missing-account behavior'
+require_doc_text docs/gerrit-native-operations-reference.md \
+  'operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
+  'Native Gerrit reference must use the reviewed operator account default'
+require_doc_text docs/gerrit-native-operations-reference.md \
+  'operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"' \
+  'Native Gerrit reference must derive the reviewed operator home'
+require_doc_text docs/jenkins-controller-native-operations-reference.md \
+  'operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
+  'Native Jenkins controller reference must use the reviewed operator account default'
+require_doc_text docs/jenkins-controller-native-operations-reference.md \
+  'operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"' \
+  'Native Jenkins controller reference must derive the reviewed operator home'
+require_doc_text docs/jenkins-agent-native-operations-reference.md \
+  'operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
+  'Native Jenkins agent reference must use the reviewed operator account default'
+require_doc_text docs/jenkins-agent-native-operations-reference.md \
+  'operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"' \
+  'Native Jenkins agent reference must derive the reviewed operator home'
+
+for native_reference in \
+  docs/gerrit-native-operations-reference.md \
+  docs/jenkins-controller-native-operations-reference.md \
+  docs/jenkins-agent-native-operations-reference.md; do
+  reject_doc_text "$native_reference" \
+    '/home/ci-operator' \
+    'Native target-deployment references must not hardcode the operator home'
+  reject_doc_text "$native_reference" \
+    '-o ci-operator -g ci-operator' \
+    'Native target-deployment references must not hardcode operator ownership'
+  reject_doc_text "$native_reference" \
+    'chown -R ci-operator:ci-operator' \
+    'Native target-deployment references must not hardcode recursive operator ownership'
+done
+
 require_doc_text docs/jenkins-agent-setup-manual.md \
   'The helper requires the configured local runtime account and group to already' \
   'Agent setup manual must document pre-existing runtime account requirement'

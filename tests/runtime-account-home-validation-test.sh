@@ -153,22 +153,18 @@ mkdir -p "$tmp_dir/agent-staged/templates"
 cat >"$tmp_dir/agent-staged/jenkins-agent-bootstrap.txt" <<'EOF'
 bootstrap
 EOF
-cat >"$tmp_dir/agent-staged/package-intent.manifest" <<'EOF'
-packages=none
-EOF
 cat >"$tmp_dir/agent-staged/manifest.txt" <<'EOF'
 harness_manifest_version=1
 role=jenkins-agent
+bundle_name=jenkins-agent-artifacts-bundle
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
 gerrit_version=not-applicable
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
-artifact_source=curated-bundle-factory
-public_internet_fallback=simulation-only
-os_dependency_source=approved-internal-os-repos
-bundle_contains_keys=no
+bootstrap=jenkins-agent-bootstrap.txt
+template_count=2
 EOF
 sha256sum "$tmp_dir/agent-staged/jenkins-agent-bootstrap.txt" >"$tmp_dir/agent-staged/checksums.sha256"
 cat >"$tmp_dir/jenkins-agent-install.env" <<EOF

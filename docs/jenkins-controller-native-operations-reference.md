@@ -133,7 +133,7 @@ Ask an administrator to perform or delegate these production-host tasks:
 - Confirm the local Jenkins runtime account and group exist on the Jenkins host.
 - Create and own `/var/lib/jenkins`, `/var/lib/jenkins/war`,
   `/var/lib/jenkins/plugins`, `/var/lib/jenkins/jcasc`, and any staged
-  `/var/lib/loopforge/staging/jenkins-artifacts-bundle` content as documented.
+  `/var/lib/loopforge/staging/jenkins` content as documented.
 - Create the Jenkins systemd service, reload systemd, and start, stop, restart,
   or enable Jenkins.
 - Run any `chown`, `chmod`, `apt`, `dpkg`, `systemctl`, or writes under `/etc`, `/opt`, or `/var/lib`.
@@ -190,7 +190,7 @@ https://updates.jenkins.io/download/plugins
 Run on the bundle-factory VM:
 
 ```bash
-mkdir -p ~/jenkins-artifacts-bundle/{jenkins/plugins,checksums,tools}
+mkdir -p ~/jenkins-artifacts-bundle/{jenkins/plugins,tools}
 cd ~/jenkins-artifacts-bundle/jenkins
 wget -O jenkins-2.555.3.war \
   https://get.jenkins.io/war-stable/2.555.3/jenkins.war
@@ -279,32 +279,26 @@ cd ~/jenkins-artifacts-bundle
 cat > jenkins/manifest.txt <<'EOF'
 harness_manifest_version=1
 role=jenkins-controller
+bundle_name=jenkins-artifacts-bundle
 ubuntu_release=24.04
 ubuntu_codename=noble
 java_version=21
 gerrit_version=not-applicable
 jenkins_version=2.555.3
 jenkins_plugin_manager_version=2.15.0
-artifact_source=curated-bundle-factory
-os_dependency_source=approved-internal-os-repos
-public_internet_fallback=simulation-only
-bundle_contains_keys=no
-direct_plugins=<accepted-direct-plugin-pins>
 resolved_plugin_count=<count-of-resolved-plugin-artifacts>
 war=jenkins-2.555.3.war
 plugin_manager=jenkins-plugin-manager-2.15.0.jar
+template_count=2
 EOF
 (cd jenkins && find . -type f ! -name checksums.sha256 -print0 \
   | sort -z | xargs -0 sha256sum > checksums.sha256)
-find . -type f ! -path './checksums/SHA256SUMS' -print0 \
-  | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
-tar -czf ~/jenkins-artifacts-bundle.tar.gz -C ~ jenkins-artifacts-bundle
+tar -czf ~/jenkins-artifacts-bundle.tar.gz -C ~/jenkins-artifacts-bundle jenkins
 sha256sum ~/jenkins-artifacts-bundle.tar.gz > ~/jenkins-artifacts-bundle.tar.gz.sha256
 ```
 
 The approved controller release unit is the artifact archive, its `.sha256`
-file, the internal `SHA256SUMS` file, payload `checksums.sha256`,
-`manifest.txt`, and the staged Jenkins WAR, Plugin Installation Manager, plugin
+file, and the staged Jenkins WAR, Plugin Installation Manager, plugin
 artifacts, and controller templates.
 
 #### 2.2.2 Install the Controller Artifact Bundle Manually
@@ -313,15 +307,21 @@ Transfer the artifact archive and `.sha256` file to the Jenkins host with
 approved media or an approved internal transfer path. Run on the Jenkins host:
 
 ```bash
-cd /home/ci-operator
+operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
+operator_group="${LOOPFORGE_OPERATOR_GROUP:-$operator_account}"
+operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
+[ -n "$operator_home" ] || {
+  printf 'missing operator account: %s\n' "$operator_account" >&2
+  exit 1
+}
+
+cd "$operator_home"
 sha256sum -c jenkins-artifacts-bundle.tar.gz.sha256
-sudo install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging
-sudo rm -rf /var/lib/loopforge/staging/jenkins-artifacts-bundle
+sudo install -d -m 0750 -o "$operator_account" -g "$operator_group" /var/lib/loopforge/staging
+sudo rm -rf /var/lib/loopforge/staging/jenkins
 sudo tar -xzf jenkins-artifacts-bundle.tar.gz -C /var/lib/loopforge/staging
-sudo chown -R ci-operator:ci-operator /var/lib/loopforge/staging/jenkins-artifacts-bundle
-cd /var/lib/loopforge/staging/jenkins-artifacts-bundle
-sha256sum -c checksums/SHA256SUMS
-cd /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins
+sudo chown -R "$operator_account:$operator_group" /var/lib/loopforge/staging/jenkins
+cd /var/lib/loopforge/staging/jenkins
 sha256sum -c checksums.sha256
 java -version
 ```
@@ -333,20 +333,18 @@ sudo systemctl stop jenkins || true
 sudo groupadd --gid 61020 jenkins || true
 sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --shell /bin/bash jenkins || true
 sudo install -d -o jenkins -g jenkins -m 0755 /var/lib/jenkins/war
-sudo cp /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/jenkins-2.555.3.war /var/lib/jenkins/war/jenkins.war
-sudo cp /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/jenkins-plugin-manager-2.15.0.jar /var/lib/jenkins/war/jenkins-plugin-manager.jar
+sudo cp /var/lib/loopforge/staging/jenkins/jenkins-2.555.3.war /var/lib/jenkins/war/jenkins.war
+sudo cp /var/lib/loopforge/staging/jenkins/jenkins-plugin-manager-2.15.0.jar /var/lib/jenkins/war/jenkins-plugin-manager.jar
 sudo install -d -o jenkins -g jenkins /var/lib/jenkins/plugins
-sudo cp /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
+sudo cp /var/lib/loopforge/staging/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
 sudo install -d -o jenkins -g jenkins /var/lib/jenkins/templates
-sudo cp -R /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/templates/. /var/lib/jenkins/templates/
-sudo install -m 0644 -o jenkins -g jenkins /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/manifest.txt /var/lib/jenkins/artifact-manifest.txt
-sudo install -m 0644 -o jenkins -g jenkins /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/checksums.sha256 /var/lib/jenkins/artifact-checksums.sha256
+sudo cp -R /var/lib/loopforge/staging/jenkins/templates/. /var/lib/jenkins/templates/
 sudo chown -R jenkins:jenkins /var/lib/jenkins/plugins
-sudo chown -R jenkins:jenkins /var/lib/jenkins/war /var/lib/jenkins/templates /var/lib/jenkins/artifact-manifest.txt /var/lib/jenkins/artifact-checksums.sha256
+sudo chown -R jenkins:jenkins /var/lib/jenkins/war /var/lib/jenkins/templates
 ```
 
 For artifact recovery, rerun only the artifact archive checksum, extraction,
-WAR, Plugin Installation Manager, template, checksum, and plugin copy commands.
+WAR, Plugin Installation Manager, template, and plugin copy commands.
 OS package recovery uses the approved internal Ubuntu/OS package repository
 path.
 
@@ -363,7 +361,7 @@ Verify:
 ```bash
 test -s /var/lib/jenkins/war/jenkins.war
 test -s /var/lib/jenkins/war/jenkins-plugin-manager.jar
-test -s /var/lib/jenkins/artifact-manifest.txt
+test -s /var/lib/jenkins/war/jenkins.war
 ```
 
 ### 3.2 Configure Jenkins Runtime
@@ -436,7 +434,7 @@ Install staged plugin artifacts:
 ```bash
 systemctl stop jenkins || true
 install -d -o jenkins -g jenkins /var/lib/jenkins/plugins
-cp /var/lib/loopforge/staging/jenkins-artifacts-bundle/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
+cp /var/lib/loopforge/staging/jenkins/plugins/*.{hpi,jpi} /var/lib/jenkins/plugins/ 2>/dev/null || true
 chown -R jenkins:jenkins /var/lib/jenkins/plugins
 systemctl start jenkins
 ```

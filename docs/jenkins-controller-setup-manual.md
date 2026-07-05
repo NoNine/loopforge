@@ -180,10 +180,7 @@ Produced outputs:
   verification job, or trigger-verification env templates are staged by the
   controller role helper. Those cross-role artifacts belong to the later
   shared integration workflow.
-- `manifest.txt` records `artifact_source=curated-bundle-factory`,
-  `os_dependency_source=approved-internal-os-repos`,
-  `public_internet_fallback=simulation-only`, `bundle_contains_keys=no`,
-  direct plugin pins, and resolved plugin count.
+- `manifest.txt` records only compact artifact identity and inventory fields.
 
 Staged artifact paths:
 
@@ -223,7 +220,8 @@ Installation consumes only staged bundle factory output. The target verifies
 Consumed inputs:
 
 - Reviewed Jenkins controller env file.
-- Extracted artifact bundle root, normally `/var/lib/loopforge/staging/jenkins-artifacts-bundle` in Docker simulation and target deployment.
+- Extracted artifact payload root, normally `/var/lib/loopforge/staging/jenkins`
+  in Docker simulation and target deployment.
 - `manifest.txt` and `checksums.sha256`.
 
 Produced outputs:
@@ -232,7 +230,6 @@ Produced outputs:
 - `war/jenkins.war`.
 - `war/jenkins-plugin-manager.jar`.
 - Staged templates under `templates/`.
-- `artifact-manifest.txt` and `artifact-checksums.sha256`.
 - Install marker under `state/install.status`.
 
 Mutation side effects:
