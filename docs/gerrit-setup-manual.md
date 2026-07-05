@@ -322,9 +322,9 @@ Gerrit permissions, global `Verified` label setup, trigger setup, validation,
 and integration evidence belong to `scripts/integration-setup.sh`.
 
 After Gerrit, Jenkins controller, and Jenkins agent role manuals are complete,
-use `docs/integration-setup-manual.md` for the shared helper workflow. That
-manual is the command authority for `configure-integration`,
-`validate-integration`, `prove-integration`, and `collect-evidence`.
+use `docs/integration-native-operations-reference.md` for manual
+target-deployment integration operations. Use
+`docs/integration-setup-manual.md` only for the shared helper workflow.
 
 Gerrit role-local setup must not mutate `All-Projects.git`, `All-Users.git`,
 Gerrit labels, Jenkins service groups, public keys, `stream-events` grants, or

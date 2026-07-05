@@ -42,8 +42,9 @@ Use this order when deciding where a product or process fact belongs:
    `docs/integration-setup-manual.md`.
 6. Native operation references own direct OS and application procedures:
    `docs/gerrit-native-operations-reference.md`,
-   `docs/jenkins-controller-native-operations-reference.md`, and
-   `docs/jenkins-agent-native-operations-reference.md`. These references must
+   `docs/jenkins-controller-native-operations-reference.md`,
+   `docs/jenkins-agent-native-operations-reference.md`, and
+   `docs/integration-native-operations-reference.md`. These references must
    remain free of repository helper command transcripts.
 7. Simulation docs own simulation realization details:
    `simulation/README.md`, `simulation/docker/README.md`,

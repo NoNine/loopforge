@@ -364,7 +364,7 @@ Do not carry these draft concepts into v1 as supported behavior:
 
 ## Maintained Native Operation References
 
-The current repository keeps three native-operation references as strong
+The current repository keeps four native-operation references as strong
 references for direct OS and application operations:
 
 | Native reference | Maintained with |
@@ -372,6 +372,7 @@ references for direct OS and application operations:
 | `docs/gerrit-native-operations-reference.md` | `docs/gerrit-setup-manual.md` and Step 7 behavior. |
 | `docs/jenkins-controller-native-operations-reference.md` | `docs/jenkins-controller-setup-manual.md` and Step 8 behavior. |
 | `docs/jenkins-agent-native-operations-reference.md` | `docs/jenkins-agent-setup-manual.md` and Step 9 behavior. |
+| `docs/integration-native-operations-reference.md` | `docs/integration-setup-manual.md` and shared integration behavior. |
 
 These documents must not contain repository helper commands, helper-equivalent
 tables, or `scripts/...` command references. When role manuals or helper

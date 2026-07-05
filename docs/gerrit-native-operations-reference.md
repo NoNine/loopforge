@@ -1,7 +1,8 @@
 # Gerrit Native Operations Reference
 
-This document is a native operations reference. It uses OS and
-application-native operations only, not repository automation commands.
+This document is the manual target-deployment native operations reference for
+Gerrit. It uses OS and application-native operations only, not repository
+automation commands.
 
 Repository v1 boundary: v1 is not a strict air-gapped installer and does not
 support installing OS dependencies from locally bundled Ubuntu packages. Target
@@ -18,8 +19,9 @@ integration operations after Gerrit role-local readiness is proven.
 
 Audience: production operators installing Gerrit on Ubuntu 24.04 LTS without Docker.
 
-Use this manual with `jenkins-controller-native-operations-reference.md` when
-validating the full Gerrit/Jenkins integration.
+Use this manual with `integration-native-operations-reference.md` after Gerrit
+role-local readiness is proven and the deployment is ready for shared
+Gerrit/Jenkins integration.
 
 Assumptions:
 
@@ -40,10 +42,10 @@ reviewed update rules.
 Production warning: direct HTTP service ports are documented because that is the selected deployment model. For production environments outside a trusted network, terminate TLS with a reverse proxy or enterprise load balancer before exposing Gerrit to users.
 
 Privilege warning: a production Gerrit install cannot be completed by an
-unprivileged user alone. Package installation, `/etc`, `/opt`, `/srv/gerrit`,
-file ownership, systemd units, service restarts, and protected secret files
-require delegated administrator privilege from the operator account. Root may
-own OS-reserved files, but root is not a Loopforge account, helper execution
+unprivileged user alone. Package installation, `/etc`, `/srv/gerrit`, file
+ownership, systemd units, service restarts, and protected secret files require
+delegated administrator privilege from the operator account. Root may own
+OS-reserved files, but root is not a Loopforge account, helper execution
 identity, runtime identity, or supported direct login identity.
 
 Manual authority: this manual is the reference procedure. It intentionally
@@ -119,9 +121,9 @@ Ask an administrator to perform or delegate these production-host tasks:
 
 - Install OS packages and Java dependencies.
 - Confirm the local Gerrit runtime account and group exist on the Gerrit host.
-- Create and own `/srv/gerrit`, `/srv/gerrit/plugins`, `/opt/gerrit`, and any
+- Create and own `/srv/gerrit`, `/srv/gerrit/bin`, `/srv/gerrit/plugins`, and any
   staged `/var/lib/loopforge/staging/gerrit-artifacts-bundle` content as documented.
-- Place `/opt/gerrit/gerrit.war`, initialize Gerrit as `gerrit`, and protect `/srv/gerrit/etc/secure.config`.
+- Place `/srv/gerrit/bin/gerrit.war`, initialize Gerrit as `gerrit`, and protect `/srv/gerrit/etc/secure.config`.
 - Create `/etc/systemd/system/gerrit.service`, reload systemd, and start, stop, restart, or enable Gerrit.
 - Run any `chown`, `chmod`, `apt`, `dpkg`, `systemctl`, or writes under `/etc`, `/opt`, or `/srv`.
 
@@ -176,11 +178,6 @@ cd ~/gerrit-artifacts-bundle/gerrit
 wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
   --continue -O gerrit-3.13.6.war \
   https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
-cat > plugins.seed.txt <<'EOF'
-events-log
-metrics-reporter-prometheus
-healthcheck
-EOF
 ```
 
 Download the selected Gerrit plugin jars on the bundle-factory VM:
@@ -230,12 +227,16 @@ awk 'NR > 1 { print $3 "  plugins/" $2 }' plugin-source-catalog.tsv \
   > plugin-checksums.expected
 sha256sum -c plugin-checksums.expected
 
+cat > plugin-artifacts.expected <<'EOF'
+events-log.jar
+healthcheck.jar
+metrics-reporter-prometheus.jar
+EOF
 find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
   | sort > plugin-artifacts.manifest
-sed 's/$/.jar/' plugins.seed.txt | sort > plugin-seed-jars.expected
-comm -23 plugin-seed-jars.expected plugin-artifacts.manifest \
+comm -23 plugin-artifacts.expected plugin-artifacts.manifest \
   > plugin-artifacts.missing
-comm -13 plugin-seed-jars.expected plugin-artifacts.manifest \
+comm -13 plugin-artifacts.expected plugin-artifacts.manifest \
   > plugin-artifacts.unexpected
 test ! -s plugin-artifacts.missing
 test ! -s plugin-artifacts.unexpected
@@ -266,8 +267,27 @@ Create manifests, checksums, and archive:
 
 ```bash
 cd ~/gerrit-artifacts-bundle
-printf 'bundle_kind=gerrit-artifacts\ngerrit_version=3.13.6\ngerrit_war=gerrit-3.13.6.war\nplugin_seed=plugins.seed.txt\nplugin_source_catalog=plugin-source-catalog.tsv\nplugin_artifacts=plugin-artifacts.manifest\nplugin_metadata=plugin-metadata.report\nplugin_checksums=plugin-checksums.sha256\n' \
-  > gerrit/release-unit.manifest
+cat > gerrit/manifest.txt <<'EOF'
+harness_manifest_version=1
+role=gerrit
+ubuntu_release=24.04
+ubuntu_codename=noble
+java_version=21
+gerrit_version=3.13.6
+jenkins_version=not-applicable
+jenkins_plugin_manager_version=not-applicable
+artifact_source=curated-bundle-factory
+os_dependency_source=approved-internal-os-repos
+public_internet_fallback=simulation-only
+bundle_contains_keys=no
+plugins=events-log,metrics-reporter-prometheus,healthcheck
+war=gerrit-3.13.6.war
+plugin_artifacts=plugin-artifacts.manifest
+plugin_metadata=plugin-metadata.report
+plugin_checksums=plugin-checksums.sha256
+EOF
+(cd gerrit && find . -type f ! -name checksums.sha256 -print0 \
+  | sort -z | xargs -0 sha256sum > checksums.sha256)
 find . -type f ! -path './checksums/SHA256SUMS' -print0 \
   | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
 tar -czf ~/gerrit-artifacts-bundle.tar.gz -C ~ gerrit-artifacts-bundle
@@ -275,10 +295,10 @@ sha256sum ~/gerrit-artifacts-bundle.tar.gz > ~/gerrit-artifacts-bundle.tar.gz.sh
 ```
 
 The approved Gerrit release unit is the combination of the artifact archive,
-its `.sha256` file, the internal `SHA256SUMS` file, `plugins.seed.txt`,
-`plugin-source-catalog.tsv`, `plugin-artifacts.manifest`,
-`plugin-metadata.report`, `plugin-checksums.sha256`, and
-`release-unit.manifest`.
+its `.sha256` file, the internal `SHA256SUMS` file, payload
+`checksums.sha256`, `manifest.txt`, `plugin-source-catalog.tsv`,
+`plugin-artifacts.manifest`, `plugin-metadata.report`, and
+`plugin-checksums.sha256`.
 
 #### 2.2.2 Install the Gerrit Artifact Bundle Manually
 
@@ -295,6 +315,7 @@ sudo chown -R ci-operator:ci-operator /var/lib/loopforge/staging/gerrit-artifact
 cd /var/lib/loopforge/staging/gerrit-artifacts-bundle
 sha256sum -c checksums/SHA256SUMS
 cd /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit
+sha256sum -c checksums.sha256
 sha256sum -c plugin-checksums.sha256
 find plugins -maxdepth 1 -type f -name '*.jar' -printf '%f\n' \
   | sort > /tmp/gerrit-plugin-artifacts.installed
@@ -309,13 +330,15 @@ sudo install -d -m 0750 /srv/gerrit
 sudo groupadd --gid 61010 gerrit || true
 sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit || true
 sudo chown gerrit:gerrit /srv/gerrit
-sudo install -d -o gerrit -g gerrit -m 0755 /opt/gerrit
-sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
-sudo chown gerrit:gerrit /opt/gerrit/gerrit.war
+sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/bin
+sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /srv/gerrit/bin/gerrit.war
+sudo chown gerrit:gerrit /srv/gerrit/bin/gerrit.war
 sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/plugins
 sudo cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugins/*.jar /srv/gerrit/plugins/ 2>/dev/null || true
 sudo chown gerrit:gerrit /srv/gerrit/plugins/*.jar 2>/dev/null || true
 sudo install -d -o gerrit -g gerrit -m 0750 /srv/gerrit/etc
+sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/manifest.txt /srv/gerrit/etc/artifact-manifest.txt
+sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/checksums.sha256 /srv/gerrit/etc/artifact-checksums.sha256
 sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-artifacts.manifest /srv/gerrit/etc/plugin-artifacts.manifest
 sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-metadata.report /srv/gerrit/etc/plugin-metadata.report
 sudo install -m 0644 /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/plugin-checksums.sha256 /srv/gerrit/etc/plugin-checksums.sha256
@@ -335,15 +358,15 @@ Run on the Gerrit host:
 getent passwd gerrit
 getent group gerrit
 install -d -o gerrit -g gerrit -m 0750 /srv/gerrit
-install -d -o gerrit -g gerrit -m 0755 /opt/gerrit
+install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/bin
 ```
 
 Place the Gerrit WAR from the staged bundle-factory artifact bundle. Target
 hosts must not download Gerrit application artifacts as fallback.
 
 ```bash
-cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /opt/gerrit/gerrit.war
-chown gerrit:gerrit /opt/gerrit/gerrit.war
+cp /var/lib/loopforge/staging/gerrit-artifacts-bundle/gerrit/gerrit-3.13.6.war /srv/gerrit/bin/gerrit.war
+chown gerrit:gerrit /srv/gerrit/bin/gerrit.war
 ```
 
 ### 3.2 Initialize Gerrit
@@ -351,7 +374,7 @@ chown gerrit:gerrit /opt/gerrit/gerrit.war
 Run initialization as the `gerrit` user:
 
 ```bash
-sudo -u gerrit java -jar /opt/gerrit/gerrit.war init -d /srv/gerrit
+sudo -u gerrit java -jar /srv/gerrit/bin/gerrit.war init -d /srv/gerrit
 ```
 
 Recommended answers:
@@ -534,8 +557,8 @@ Acceptance checks:
 - LDAP users can log in.
 - Gerrit SSH works on port `29418`.
 - Required plugins load successfully.
-- Jenkins integration prerequisites from Section 4 are deferred until the later
-  integration validation step.
+- Jenkins integration prerequisites from Section 4 are deferred to
+  `integration-native-operations-reference.md`.
 
 ## 6. Backup and Operations
 
@@ -568,6 +591,8 @@ Upgrade principles:
 
 - Jenkins controller native operations:
   `jenkins-controller-native-operations-reference.md`
+- Integration native operations:
+  `integration-native-operations-reference.md`
 - Gerrit downloads: https://www.gerritcodereview.com/
 - Gerrit support status: https://www.gerritcodereview.com/support.html
 - Gerrit install documentation: https://gerrit-review.googlesource.com/Documentation/install.html

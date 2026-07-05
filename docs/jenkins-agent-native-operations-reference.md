@@ -1,7 +1,8 @@
 # Jenkins Agent Native Operations Reference
 
-This document is a native operations reference. It uses OS and
-application-native operations only, not repository automation commands.
+This document is the manual target-deployment native operations reference for
+the Jenkins SSH build agent. It uses OS and application-native operations only,
+not repository automation commands.
 
 Repository v1 boundary: v1 is not a strict air-gapped installer and does not
 support installing OS dependencies from locally bundled Ubuntu packages. Target
@@ -19,10 +20,11 @@ Ubuntu 24.04 LTS without Docker.
 
 Use this manual with `jenkins-controller-native-operations-reference.md`. The
 Jenkins controller manual covers controller installation and controller-only
-configuration. Controller-side node registration, Gerrit integration, and
-Jenkins scheduling proof are later integration-step work. This manual covers
-the build server baseline, agent application artifacts, SSH access, recovery,
-and agent host-only validation.
+configuration. Use `integration-native-operations-reference.md` after
+agent-host readiness is proven. Controller-side node registration, Gerrit
+integration, and Jenkins scheduling proof are later integration-step work. This
+manual covers the build server baseline, agent application artifacts, SSH
+access, recovery, and agent host-only validation.
 
 Assumptions:
 
@@ -147,8 +149,31 @@ Run on the bundle-factory VM:
 ```bash
 mkdir -p ~/jenkins-agent-artifacts-bundle/{jenkins-agent,checksums}
 cd ~/jenkins-agent-artifacts-bundle
-printf 'bundle_kind=jenkins-agent-artifacts\nbootstrap=bundle-factory-owned\nbundle_contains_keys=no\n' \
-  > jenkins-agent/release-unit.manifest
+cat > jenkins-agent/manifest.txt <<'EOF'
+harness_manifest_version=1
+role=jenkins-agent
+ubuntu_release=24.04
+ubuntu_codename=noble
+java_version=21
+gerrit_version=not-applicable
+jenkins_version=not-applicable
+jenkins_plugin_manager_version=not-applicable
+artifact_source=curated-bundle-factory
+public_internet_fallback=simulation-only
+os_dependency_source=approved-internal-os-repos
+bundle_contains_keys=no
+bootstrap=jenkins-agent-bootstrap.txt
+EOF
+cat > jenkins-agent/package-intent.manifest <<'EOF'
+packages=ca-certificates,curl,git,openssh-server,openjdk-21-jre,rsync,tar,unzip,wget
+source_boundary=approved-internal-os-repos
+public_internet_fallback=simulation-only
+bundle_contains_keys=no
+EOF
+printf 'Jenkins SSH agent bootstrap marker for Ubuntu 24.04 noble with OpenJDK 21.\n' \
+  > jenkins-agent/jenkins-agent-bootstrap.txt
+(cd jenkins-agent && find . -type f ! -name checksums.sha256 -print0 \
+  | sort -z | xargs -0 sha256sum > checksums.sha256)
 find . -type f ! -path './checksums/SHA256SUMS' -print0 \
   | sort -z | xargs -0 sha256sum > checksums/SHA256SUMS
 tar -czf ~/jenkins-agent-artifacts-bundle.tar.gz -C ~ jenkins-agent-artifacts-bundle
@@ -162,10 +187,12 @@ host. The staged archive must not carry Gerrit, Jenkins, or agent SSH key
 material. Jenkins controller keypair generation and public-key installation are
 later integration-step work.
 
-Verify the artifact archive and internal checksums on the build server, then
-configure the runtime account and SSH service:
+Verify the artifact archive and internal checksums on the build server, stage
+the payload under `/var/lib/loopforge/staging`, then configure the runtime
+account and SSH service:
 
 ```bash
+cd /home/ci-operator
 sha256sum -c /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz.sha256
 
 sudo bash -s <<'EOF'
@@ -174,11 +201,15 @@ agent_user=jenkins-agent
 agent_uid=61030
 agent_gid=61030
 remote_fs=/var/lib/jenkins-agent
-workdir=$(mktemp -d)
-trap 'rm -rf "$workdir"' EXIT
-tar -xzf /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz -C "$workdir"
-cd "$workdir/jenkins-agent-artifacts-bundle"
+staging=/var/lib/loopforge/staging
+install -d -m 0750 -o ci-operator -g ci-operator "$staging"
+rm -rf "$staging/jenkins-agent-artifacts-bundle"
+tar -xzf /home/ci-operator/jenkins-agent-artifacts-bundle.tar.gz -C "$staging"
+chown -R ci-operator:ci-operator "$staging/jenkins-agent-artifacts-bundle"
+cd "$staging/jenkins-agent-artifacts-bundle"
 sha256sum -c checksums/SHA256SUMS
+cd "$staging/jenkins-agent-artifacts-bundle/jenkins-agent"
+sha256sum -c checksums.sha256
 if ! getent group "${agent_user}" >/dev/null; then
   groupadd --gid "${agent_gid}" "${agent_user}"
 fi
@@ -206,9 +237,10 @@ dedicated runtime account, remote filesystem ownership, the SSH daemon, staged
 artifacts, bounded logs, and role-local evidence.
 
 Later Jenkins-to-agent public-key authorization, Jenkins node registration,
-scheduling validation, and key rotation belong to the separate integration
-workflow, not this agent role-local native reference. Until that workflow is
-implemented, this native reference remains limited to agent host readiness.
+scheduling validation, and key rotation belong to
+`integration-native-operations-reference.md`, not this agent role-local native
+reference. Until that workflow is implemented, this native reference remains
+limited to agent host readiness.
 
 Credential custody remains fixed: the Jenkins controller owns the
 Jenkins-to-agent private key, and the agent host consumes only the matching
@@ -253,9 +285,10 @@ Acceptance checks:
 Record the agent host, SSH endpoint, runtime user, remote FS path, Jenkins
 node name, and scheduling labels with the later integration handoff.
 
-Jenkins-to-agent key rotation is a later shared integration workflow. It must
-preserve Jenkins-controller private-key custody and provide only the matching
-public key to the agent host.
+Jenkins-to-agent key rotation belongs to
+`integration-native-operations-reference.md`. It must preserve
+Jenkins-controller private-key custody and provide only the matching public key
+to the agent host.
 
 For package baseline changes, update the approved internal Ubuntu/OS package
 repository state and reinstall agent dependencies before repeating host-only
@@ -266,5 +299,7 @@ key, or SSH service recovery, reinstall only the agent artifact bundle.
 
 - Jenkins controller native operations:
   `jenkins-controller-native-operations-reference.md`
+- Integration native operations:
+  `integration-native-operations-reference.md`
 - Jenkins SSH Build Agents plugin: https://plugins.jenkins.io/ssh-slaves/
 - Jenkins distributed builds documentation: https://www.jenkins.io/doc/book/using/using-agents/

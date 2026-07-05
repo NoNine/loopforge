@@ -229,8 +229,8 @@ Mutation side effects:
 - Creates or updates the remote filesystem.
 - Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
   SSH reachability without claiming Jenkins controller scheduling.
-- Leaves `authorized_keys` creation and Jenkins public-key installation to the
-  later shared integration workflow.
+- Leaves `authorized_keys` creation and Jenkins public-key installation to
+  integration-native operations or the shared helper workflow.
 - Leaves the shared Jenkins integration group and shared storage path to
   `scripts/integration-setup.sh` with `examples/integration.env.example`.
 
@@ -243,7 +243,7 @@ scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> --yes configure-runtim
 Later integration key rules:
 
 - Jenkins-to-agent keypair generation and public-key transfer are performed
-  only during the later shared integration workflow.
+  only during integration-native operations or the shared helper workflow.
 - The transferred public-key material must be exactly one OpenSSH public-key
   line.
 - Private key, PEM block, token, and password material are rejected by the
@@ -295,9 +295,11 @@ Jenkins controller scope:
 - Real cross-role trigger execution and `Verified` voting are aggregated by
   the later shared integration step after role helpers are compliant.
 - After Gerrit, Jenkins controller, and Jenkins agent role manuals are
-  complete, use `docs/integration-setup-manual.md` for the shared
-  `scripts/integration-setup.sh` workflow. The agent manual remains limited to
-  agent host readiness and does not duplicate the cross-role command sequence.
+  complete, use `docs/integration-native-operations-reference.md` for manual
+  target-deployment integration operations. Use
+  `docs/integration-setup-manual.md` only for the shared helper workflow. The
+  agent manual remains limited to agent host readiness and does not duplicate
+  the cross-role command sequence.
 
 ## Phase 7: Evidence Collection
 
