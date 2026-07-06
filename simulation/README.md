@@ -62,6 +62,15 @@ generated/simulation/docker/<run-id>/
 Docker lifecycle and cleanup commands do not support arbitrary generated
 roots in v1. Use a distinct run ID to isolate separate runs.
 
+VM simulation writes reusable VM-set state and run-scoped output under the
+repo-local VM generated root. VM set state persists across runs until explicit
+destruction, while run-scoped output is tied to `HARNESS_RUN_ID`:
+
+```text
+generated/simulation/vm/vm-sets/<vm-set-id>/
+generated/simulation/vm/<run-id>/
+```
+
 Docker uses these subpath patterns:
 
 | Output kind | Run-scoped pattern |

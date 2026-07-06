@@ -1,15 +1,25 @@
 # VM Simulation
 
-VM simulation is the second planned simulation layer for the v1 Gerrit/Jenkins
-setup package. It will repeat the Docker-verified flow in a systemd-oriented,
-target-deployment environment after Docker behavior is stable.
+VM simulation is the second simulation layer for the v1 Gerrit/Jenkins setup
+package. It repeats the Docker-verified flow in a libvirt/KVM-backed,
+systemd-oriented VM environment. VM simulation is still `vm-simulation`
+evidence, not `target-deployment` evidence.
+
+The single VM entrypoint is:
+
+```bash
+simulation/vm/simulate.sh <command>
+simulation/vm/simulate.sh [--env FILE] <command>
+```
+
+`simulate.sh` owns VM provisioning, lifecycle commands, role-local gates, and
+cross-role integration orchestration. Do not add standalone VM phase scripts or
+a second VM verifier CLI.
 
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
-`simulation/README.md`. This file documents VM-specific command ownership and
-future-gate expectations.
-VM hostnames, browser URLs, SSH host strings, and LDAP endpoint identities
-follow `docs/endpoint-identity.md`.
+`simulation/README.md`. VM hostnames, browser URLs, SSH host strings, and LDAP
+endpoint identities follow `docs/endpoint-identity.md`.
 
 VM simulation may use simulation-owned fake LDAP bind passwords for its own
 LDAP VM, matching Docker simulation. Those values must be labeled as test
@@ -19,62 +29,228 @@ The bundle factory VM runs role helper `prepare-artifacts` commands. It is an
 environment, not a public API, and there is no standalone
 `bundle-factory-helper.sh`.
 
-## VM Checkpoint Owners
+## Command Reference
 
-| Checkpoint | Planned VM owner |
-| --- | --- |
-| Preflight | `simulation/vm/vm-verify.sh check --preflight-only` or `simulation/vm/vm-verify.sh full --preflight-only`. |
-| Input rendering | `simulation/vm/vm-verify.sh bootstrap`. |
-| Artifact preparation | `simulation/vm/vm-verify.sh prepare-artifacts`. |
-| Artifact staging | `simulation/vm/vm-verify.sh stage-artifacts`. |
-| Service configuration | `simulation/vm/vm-verify.sh configure`. |
-| Readiness checks | `simulation/vm/vm-verify.sh check` plus `scripts/integration-setup.sh validate-integration` when VM support exists. |
-| End-to-end execution | `simulation/vm/vm-verify.sh execute` or `simulation/vm/vm-verify.sh full` orchestrating the shared integration helper. |
-| Evidence audit | `simulation/vm/vm-verify.sh audit` and integration-local evidence from `scripts/integration-setup.sh collect-evidence`. |
+This section owns VM command behavior. The command-to-checkpoint mapping is
+summarized in `docs/lifecycle-contract.md`.
 
-Do not add standalone VM phase scripts such as `simulation/vm/check.sh`. VM
-commands should stay subcommands of the owning verifier script.
-
-## Planned vm-verify.sh Command Reference
-
-The VM verifier is future work. Its command surface should mirror the shared
-checkpoint contract while preserving VM-specific systemd and host-boundary
-behavior.
+Composite commands:
 
 | Command | Purpose |
 | --- | --- |
-| `bootstrap` | Render VM run inputs, resolve VM inventory/configuration, and write redacted run records. |
-| `prepare-artifacts` | Run role artifact preparation in the bundle factory VM and produce manifests/checksums. |
-| `stage-artifacts` | Stage prepared artifacts from the bundle factory VM to service VMs and verify manifests/checksums before mutation. |
-| `configure` | Configure service VMs, systemd units, accounts, directories, and role-local runtime state. |
-| `check` | Validate VM readiness, including role-local services and shared integration validation when VM support exists. |
-| `execute` | Run the end-to-end trigger proof after readiness passes. |
-| `full` | Orchestrate the complete VM flow from bootstrap through end-to-end proof. |
-| `audit` | Collect and summarize VM evidence, log references, redaction status, manifests, and checksum proof. |
+| `run [--env FILE]` | Runs the normal VM simulation workflow for the selected run and VM set. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, `destroy`, or `audit-state`. |
+| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
+
+Phase and lifecycle commands:
+
+| Command | Purpose |
+| --- | --- |
+| `preflight [--env FILE]` | Validates required local tooling, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
+| `init-run [--env FILE]` | Loads the bootstrap env file, resolves `LOOPFORGE_VM_SET_ID` and `HARNESS_RUN_ID`, copies selected env inputs into private run-scoped runtime inputs, writes rendered/runtime env files, and records VM inventory expectations. Terminal output is a short `init-run: ok run-id=... vm-set=...` summary. |
+| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, and VM harness prerequisites, before Loopforge artifact staging, role configuration, or integration setup. |
+| `up [--env FILE]` | Starts the selected VM set, waits for VM boot, SSH reachability, stable host fingerprints, and cloud-init completion. It does not run role or integration configuration. |
+| `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, and VM simulation login accounts, and prints a short status summary. |
+| `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
+| `stage-artifacts [--env FILE] [--role ROLE]` | Transfers prepared artifact archives from the bundle factory VM to the target VM, verifies archive manifests and checksums on the target side, and stages them under the helper-visible staging path before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
+| `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all VM roles when `--role` is omitted, against target VMs and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `validate-role [--env FILE] [--role ROLE]` | Runs one role-local validation phase, or all VM roles when `--role` is omitted, against target VMs and records evidence. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server through `scripts/integration-setup.sh`. Success prints a short `configure-integration: ok` summary. |
+| `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
+| `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
+| `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, and records reboot evidence. It does not rerun configuration or validation phases implicitly. |
+| `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected VM set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
+| `down [--env FILE]` | Gracefully shuts down selected VM set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. A hard libvirt stop is a bounded recovery fallback, not the normal path. |
+| `clean [--env FILE]` | Restores the selected VM set to its clean baseline snapshot and deletes only mutable generated runtime data for the selected run. It preserves exported artifacts, evidence, and logs. It does not delete VMs. |
+| `destroy [--env FILE]` | Permanently removes the selected simulation-owned VM set after validating ownership metadata. It undefines domains, removes owned storage, snapshots, seed media, and VM networks, and is the only VM command that deletes VM resources. |
+
+`ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`. `--all`
+for `reboot` includes those service VMs and dependency VMs needed for the
+selected run.
+
+VM commands that mutate host, libvirt, VM, guest OS, Jenkins, or Gerrit state
+require explicit operator approval and must describe expected side effects
+before mutation. Read-only commands such as `preflight`, `status`, and
+`audit-state` must not repair or mutate selected VM resources.
+
+## VM Set And Run Identity
+
+VM simulation has two identities:
+
+| Identity | Purpose |
+| --- | --- |
+| `LOOPFORGE_VM_SET_ID` | Names the reusable libvirt/KVM VM set. If omitted, the harness uses `default`. |
+| `HARNESS_RUN_ID` | Names one simulation run, including rendered inputs, logs, evidence, and retained review output. |
+
+The default experience behaves like a single active VM set. Most local runs can
+omit `LOOPFORGE_VM_SET_ID` and use the implicit `default` set. Advanced runs
+may select separate VM sets for parallel experiments or CI isolation.
+
+Every VM-mutating command prints and records the selected VM set. Every run
+artifact, log, and evidence record prints and records the selected run ID. VM
+simulation evidence records both `vm_set_id` and `run_id`.
+
+## Input Model
+
+If `--env FILE` is omitted, the harness uses the committed VM example env file
+defined by the VM harness. Copy committed examples outside the examples tree
+before using real operator values.
+
+The harness env file must identify role and integration env inputs using the
+same role boundaries as Docker simulation. During `init-run`, the selected
+harness, role, and integration env files are copied to the run-scoped
+`host/runtime-inputs/` directory with mode `0600`. Later lifecycle and cleanup
+commands load the private runtime config and verify run and VM-set markers
+before operating.
+
+The redacted public record is written for inspection. Private runtime env
+files retain lifecycle values and point at the runtime input copies.
+
+## Libvirt/KVM Lifecycle
+
+VM simulation maps Loopforge commands onto libvirt/KVM state deliberately:
+
+| Loopforge command | Libvirt/KVM lifecycle meaning |
+| --- | --- |
+| `create` | Define the reusable VM set, create owned networks/storage/seed media, boot only as needed for base initialization, and capture the clean baseline snapshot. |
+| `up` | Start defined VM domains and wait for control-plane readiness. |
+| `reboot` | Reboot guests from inside the OS to prove machine reboot behavior. |
+| `down` | Gracefully shut down running domains while retaining definitions, disks, and snapshots. |
+| `clean` | Revert the selected VM set to the baseline snapshot and clean mutable run state. |
+| `destroy` | Undefine selected VM domains and remove owned storage, snapshots, seed media, and networks. |
+
+Libvirt `destroy` is a hard power-off operation, not VM deletion. VM deletion
+belongs only to the Loopforge `destroy` command, which uses libvirt undefine
+and storage/network removal after validating selected VM-set ownership.
+
+`clean` is destructive to guest disk changes made after the baseline snapshot,
+but it must not remove the reusable VM set. The baseline snapshot is captured
+after OS, cloud-init, target OS control-plane readiness, SSH host-key capture,
+and VM harness prerequisites. It is captured before Loopforge artifacts are
+staged, product services are configured, integration keys are created, or
+verification changes are made.
+
+## Simulation Accounts
+
+VM targets use the account model from `docs/account-model.md`. The operator
+account is a local OS account and uses `ci-operator` as the default example.
+It is not a Gerrit or Jenkins product account.
+
+Privileged VM operations are delegated from the operator account only when
+needed for narrow OS work, such as package installation, protected path
+creation, service management, ownership changes, guest reboot, or controlled
+shutdown. Root is not a Loopforge account, helper execution identity, runtime
+identity, or supported direct login identity.
+
+Product runtime accounts own and run product services. Gerrit, Jenkins
+controller, and Jenkins agent runtime homes remain native target paths, not
+harness-owned payload paths.
 
 ## Output Locations
 
-VM-generated runtime output is not committed. The shared output convention is
-canonical in `simulation/README.md`.
+VM-generated runtime output is not committed. VM simulation uses generated
+repo-local roots for reusable VM-set state and run-scoped output:
 
-| Output kind | VM run-scoped pattern |
+```text
+generated/simulation/vm/vm-sets/<vm-set-id>/
+generated/simulation/vm/<run-id>/
+```
+
+VM set state persists across runs until `destroy`. Run-scoped output is tied
+to `HARNESS_RUN_ID` and may be cleaned or retained independently.
+
+| Output kind | VM generated pattern |
 | --- | --- |
-| State | `simulation/state/vm/<run-id>/` |
-| Staged artifacts | `simulation/staging/vm/<run-id>/<environment>/` |
-| Evidence | `simulation/evidence/vm/<run-id>/` |
-| Bounded logs | `logs/vm/<run-id>/` |
+| VM set registry and ownership metadata | `generated/simulation/vm/vm-sets/<vm-set-id>/` |
+| Libvirt XML, seed metadata, and baseline snapshot records | `generated/simulation/vm/vm-sets/<vm-set-id>/libvirt/` |
+| Host-contributed run inputs | `generated/simulation/vm/<run-id>/host/` |
+| Private runtime input copies | `generated/simulation/vm/<run-id>/host/runtime-inputs/` |
+| Harness evidence | `generated/simulation/vm/<run-id>/host/evidence/harness/` |
+| Harness bounded logs | `generated/simulation/vm/<run-id>/host/logs/harness/` |
+| Integration evidence and logs | `generated/simulation/vm/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
+| Exported artifacts | `generated/simulation/vm/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
+| Staged artifact records | `generated/simulation/vm/<run-id>/target/artifacts/staging/<role>/` |
+| Target role evidence | `generated/simulation/vm/<run-id>/target/evidence/<role>/` |
+| Target role bounded logs | `generated/simulation/vm/<run-id>/target/logs/<role>/` |
 
-`<environment>` is one of `bundle-factory`, `ldap`, `gerrit`,
-`jenkins-controller`, or `jenkins-agent`. These paths are generated runtime
-output and should be treated as ignored or generated by future VM steps.
+`<vm-set-id>` defaults to `default` when `LOOPFORGE_VM_SET_ID` is omitted.
+`<run-id>` is a unique run identifier, such as a UTC timestamp plus a short
+label.
 
-## Verification Scope
+These paths are generated runtime output unless a file in the tree states
+otherwise. Keep them ignored or documented as generated when created by
+simulation steps.
 
-The VM layer is a later follow-up gate, not a prerequisite for early Docker
-milestones or current default acceptance. It is documented now so the future
-VM verifier can mirror the Docker-proven flow without changing the account,
-version, or source-boundary model.
+## Cleanup And Destruction
 
-The VM scaffold should reference the same shared integration surface used by
-Docker and fail closed for cross-role SSH, trigger, validation, verification,
-and integration evidence until VM support exists.
+`down`, `clean`, and `destroy` are deliberately separate:
+
+- `down` stops selected VM domains and preserves VM state.
+- `clean` rolls back the selected VM set to the clean baseline snapshot and
+  removes mutable generated state for the selected run. It preserves exported
+  artifacts, evidence, and bounded logs.
+- `destroy` permanently deletes the selected simulation-owned VM set and its
+  owned libvirt resources.
+
+`clean` validates the selected run marker, selected VM set marker, and
+baseline snapshot records before rollback. It must fail clearly rather than
+roll back an unowned or mismatched VM set. `destroy` performs the same
+ownership validation before deleting domains, disks, snapshots, seed media, or
+networks.
+
+## State Consistency And Recovery
+
+The selected VM set is consistent only when generated VM-set metadata and
+libvirt resources agree:
+
+- The VM set marker exists under
+  `generated/simulation/vm/vm-sets/<vm-set-id>/`.
+- Expected libvirt domains, networks, storage volumes, and baseline snapshots
+  exist and carry the selected ownership identity.
+- The generated run marker exists under `generated/simulation/vm/<run-id>/`.
+- Rendered runtime config exists and fingerprints match the run marker.
+- Runtime input copies exist for the harness, Gerrit, Jenkins controller,
+  Jenkins agent, and integration env files.
+- VM SSH host fingerprints match the rendered inventory or are recorded as a
+  deliberate first-use capture before mutation.
+
+If generated state, VM-set metadata, snapshots, or libvirt resources are
+inconsistent, lifecycle phases fail clearly instead of recreating state or
+rerunning earlier phases. Recover with the explicit `down`, `clean`, or
+`destroy` command for the selected VM set and run.
+
+Typical flow:
+
+```bash
+simulation/vm/simulate.sh --env FILE init-run
+simulation/vm/simulate.sh --env FILE create
+simulation/vm/simulate.sh --env FILE up
+simulation/vm/simulate.sh --env FILE prepare-artifacts
+simulation/vm/simulate.sh --env FILE stage-artifacts
+simulation/vm/simulate.sh --env FILE configure-role
+simulation/vm/simulate.sh --env FILE validate-role
+simulation/vm/simulate.sh --env FILE configure-integration
+simulation/vm/simulate.sh --env FILE validate-integration
+simulation/vm/simulate.sh --env FILE prove-integration
+simulation/vm/simulate.sh --env FILE reboot --all
+simulation/vm/simulate.sh --env FILE validate-role
+simulation/vm/simulate.sh --env FILE validate-integration
+simulation/vm/simulate.sh --env FILE down
+simulation/vm/simulate.sh --env FILE clean
+```
+
+Use `destroy` only when the reusable VM set should be permanently removed.
+
+## Integration Boundary
+
+Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,
+integration validation, trigger verification, and integration evidence use
+`scripts/integration-setup.sh`.
+
+`validate-integration` and `prove-integration` must fail or report blocked
+rather than claim VM readiness when real integration proof is unavailable.
+Forbidden synthetic success markers in role or integration logs are treated as
+failures.
+
+Public internet fallback on target hosts is simulation-only and applies only
+to Ubuntu/OS dependency installation. It is not a fallback for target-host
+application artifact downloads, and v1 is not a strict air-gapped installer.
