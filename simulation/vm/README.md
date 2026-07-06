@@ -14,7 +14,7 @@ simulation/vm/simulate.sh [--env FILE] <command>
 
 `simulate.sh` owns VM provisioning, lifecycle commands, role-local gates, and
 cross-role integration orchestration. Do not add standalone VM phase scripts or
-a second VM verifier CLI.
+a second VM simulation CLI.
 
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
@@ -131,9 +131,27 @@ verification changes are made.
 
 ## Simulation Accounts
 
-VM targets use the account model from `docs/account-model.md`. The operator
-account is a local OS account and uses `ci-operator` as the default example.
-It is not a Gerrit or Jenkins product account.
+The shared simulation account contract is defined in `simulation/README.md`.
+VM provisioning realizes that contract with product runtime accounts and native
+homes: `gerrit` owns `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and
+`jenkins-agent` owns `/var/lib/jenkins-agent`.
+
+VM simulation uses the account model's example numeric IDs by default unless a
+reviewed VM config overrides them: `ci-operator` uses UID/GID `61000`,
+`gerrit` uses `61010`, `jenkins` uses `61020`, and `jenkins-agent` uses
+`61030`. These IDs are VM simulation defaults, not host account mappings.
+
+VM simulation models Jenkins shared storage as a VM-set-owned NFS-backed
+shared storage resource. It is simulation infrastructure, not a Jenkins
+runtime home and not a sixth product role. The Jenkins controller and Jenkins
+agent VMs mount it at `JENKINS_SHARED_STORAGE_PATH`, normally
+`/mnt/jenkins-shared`, before `configure-integration`. That integration phase
+applies the shared `jenkins-share` group, setgid group-writable permissions,
+and read/write proof.
+
+VM provisioning also creates the default example target-local `ci-operator`
+account. This target-local `ci-operator` OS account has passwordless sudo for
+simulation orchestration and privileged helper operations.
 
 Privileged VM operations are delegated from the operator account only when
 needed for narrow OS work, such as package installation, protected path
@@ -141,9 +159,26 @@ creation, service management, ownership changes, guest reboot, or controlled
 shutdown. Root is not a Loopforge account, helper execution identity, runtime
 identity, or supported direct login identity.
 
-Product runtime accounts own and run product services. Gerrit, Jenkins
-controller, and Jenkins agent runtime homes remain native target paths, not
-harness-owned payload paths.
+Use `simulate.sh status --env FILE` after `up` to inspect the selected running
+VM simulation. The status command prints the run ID, VM set ID, browser URLs,
+SSH endpoints, and seeded VM simulation human login accounts. The Jenkins
+Gerrit integration account is created later as a Gerrit service account by the
+shared integration step, not seeded as an LDAP password user.
+
+Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
+environment as the target-local `ci-operator` through SSH from the host. The
+command uses the rendered `INTEGRATION_*_TARGET_SSH_*` values and the
+run-scoped target SSH key and known-hosts file:
+
+```bash
+simulation/vm/simulate.sh ssh --role gerrit
+simulation/vm/simulate.sh ssh --role jenkins-controller
+simulation/vm/simulate.sh ssh --role jenkins-agent
+```
+
+This command intentionally uses the target OS control-plane SSH interface. It
+does not use libvirt console access and it is separate from Gerrit's service
+SSH on port `29418`.
 
 ## Output Locations
 

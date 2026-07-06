@@ -88,26 +88,31 @@ All lifecycle and cleanup commands use the repo-local
 
 ## Simulation Accounts
 
-The Docker target image includes product runtime accounts with native homes:
-`gerrit` owns `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and
-`jenkins-agent` owns `/var/lib/jenkins-agent`. These are separate from
-application admin, integration, LDAP bind, and test accounts.
-The image realizes the account model's example numeric IDs: `ci-operator`
-uses UID/GID `61000`, `gerrit` uses `61010`, `jenkins` uses `61020`, and
+The shared simulation account contract is defined in `simulation/README.md`.
+The Docker target image realizes that contract with product runtime accounts
+and native homes: `gerrit` owns `/srv/gerrit`, `jenkins` owns
+`/var/lib/jenkins`, and `jenkins-agent` owns `/var/lib/jenkins-agent`.
+
+The image realizes the account model's example numeric IDs: `ci-operator` uses
+UID/GID `61000`, `gerrit` uses `61010`, `jenkins` uses `61020`, and
 `jenkins-agent` uses `61030`. These IDs are Docker simulation defaults, not
 host account mappings.
+
+Docker realizes Jenkins shared storage by bind-mounting one run-local
+`target/shared-jenkins-storage` directory into both the Jenkins controller and
+Jenkins agent containers at `JENKINS_SHARED_STORAGE_PATH`, normally
+`/mnt/jenkins-shared`. `configure-integration` applies the shared
+`jenkins-share` group, setgid group-writable permissions, and read/write proof
+inside those containers.
 
 The Docker target image also includes the default example target-local
 `ci-operator` account. This target-local `ci-operator` OS account has
 passwordless sudo for simulation orchestration and privileged helper
-operations. The operator account does not own `/srv/gerrit`,
-`/var/lib/jenkins`, or `/var/lib/jenkins-agent` and is not a Gerrit, Jenkins
-controller, or Jenkins agent runtime account. The harness may use
-container-internal delegated privilege for protected OS operations, but root
-is not a Loopforge account, helper execution identity, runtime identity, or
-supported login identity.
-The local host account that invokes `simulate.sh` may have any site-local name
-and is not renamed, mapped, or required to be `ci-operator`.
+operations. The harness may use container-internal delegated privilege for
+protected OS operations, but root is not a Loopforge account, helper execution
+identity, runtime identity, or supported login identity. The local host account
+that invokes `simulate.sh` may have any site-local name and is not renamed,
+mapped, or required to be `ci-operator`.
 
 Use `simulate.sh status --env FILE` after `up` to inspect the selected
 running simulation. The status command prints the run ID, Compose project,
@@ -156,72 +161,29 @@ generated/simulation/docker/<run-id>/
 
 Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
-layout.
+layout. Shared simulation contracts for input custody, helper-visible paths,
+artifact staging, LDAP secret handling, retained outputs, and integration key
+custody live in `simulation/README.md`, `docs/artifact-bundle-contract.md`,
+and `docs/directory-model.md`.
 
-The Docker harness does the simulation work it must do: create generated run
-directories, provide required product and LDAP bind-mount sources, retain
-reviewed input copies, orchestrate containers, and perform explicitly labeled
-Docker `cp` waivers. Role helpers still perform lifecycle work inside
-helper-visible paths, including creation of `/var/lib/loopforge` and
-`/var/log/loopforge`, artifact preparation, target-local mutation,
-validation, and evidence collection.
+Docker realizes those contracts with container lifecycle, generated bind-mount
+sources, and explicitly labeled Docker `cp` waivers:
 
-Docker simulation uses a simulation-owned fake LDAP bind password for the
-local LDAP container's read-only user. The default example value is not a real
-organization secret and must not be replaced with one. The harness redacts
-that value from rendered summaries, runtime input copies, helper env files,
-logs, evidence, and artifact bundles, then injects it only into helper command
-environments for commands that need LDAP proof or product runtime
-configuration. Product runtime config files may still persist
-product-required LDAP settings after the relevant role helper writes them.
-
-`prepare-artifacts` writes role artifacts and packs the archive pair inside the
-bundle-factory preparing root, then the harness collector exports those files to
-`target/artifacts/exported/<bundle>.tar.gz` plus `.sha256`.
-`stage-artifacts` consumes those archives through an explicit Docker
-simulation-only `docker cp` waiver, then extracts and verifies them inside the
-target container under `/var/lib/loopforge/staging` before helper validation.
-Docker target containers do not bind-mount host staging directories onto the
-helper-visible bundle paths.
-
-Bundle-factory and target helper state are helper-visible at
-`/var/lib/loopforge`, and helper logs are helper-visible at
-`/var/log/loopforge`. Those roots are not Docker bind mounts in the role
-containers. Successful artifacts leave the bundle factory through the explicit
-export step. Full reviewed helper env files remain in operator input custody
-under `host/runtime-inputs/`, then Docker simulation copies them to
-`/home/ci-operator/loopforge-inputs` with a labeled `docker cp` input waiver
-before helper execution. They are not copied into `/var/lib/loopforge` and the
-LDAP bind password value is still injected only at command execution time.
-The run-scoped target SSH public key is staged the same way as Docker
-simulation control-plane input and then installed as the target-local
-`ci-operator` `authorized_keys` file during `up`. The private key remains only
-under host-side `host/target-ssh/`.
-
-Active target role evidence and log directories are helper-owned output inside
-the container. The host collector copies bounded evidence and logs out with a
-labeled Docker `cp` collector waiver. Role helpers own role-local lifecycle
-creation, cleanup, validation, and evidence writes under `/var/lib/loopforge`
-and `/var/log/loopforge`. Host-owned copies exist only under generated host
-review locations, such as harness evidence/log directories and clean backup
-snapshots.
-
-Target operations still install or update product-owned paths such as
-`/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
-`$JENKINS_HOME/.ssh/known_hosts`, and agent `authorized_keys`.
-
-Transient target-local files under `/tmp` are acceptable when they stage
-payloads for normal target APIs or runtime installation, for example Gerrit
-REST JSON bodies, public-key handoff, or installing Jenkins `known_hosts`.
-They must not be used to bypass expected access to reviewed helper inputs or
-helper-owned state.
-
-The host collector may read generated evidence, logs, and exported artifacts
-and may clean up the selected run root. Jenkins-owned private keys under
-integration keys are the deliberate exception: the Jenkins controller owns the
-Jenkins-to-Gerrit and Jenkins-to-agent private keys, while generated Groovy
-scripts, status files, evidence, and public-key metadata remain harness
-sideband state.
+- Role helper roots `/var/lib/loopforge` and `/var/log/loopforge` are not
+  Docker bind mounts in role containers.
+- `prepare-artifacts` exports bundle archive pairs from the bundle factory to
+  `target/artifacts/exported/` through the harness collector.
+- `stage-artifacts` copies archive pairs into target containers with a Docker
+  simulation-only `docker cp` waiver, then extracts and verifies them under
+  `/var/lib/loopforge/staging`.
+- Full reviewed helper env files remain under `host/runtime-inputs/`; Docker
+  copies them to `/home/ci-operator/loopforge-inputs` with a labeled Docker
+  `cp` input waiver before helper execution.
+- The run-scoped target SSH public key is staged as Docker control-plane input
+  and installed as the target-local `ci-operator` `authorized_keys` file during
+  `up`; the private key remains only under `host/target-ssh/`.
+- The host collector copies bounded evidence and logs from containers with a
+  labeled Docker `cp` collector waiver.
 
 ## Cleanup Contract
 
@@ -230,16 +192,13 @@ teardown and retains generated output for review. Docker bind mounts can leave
 host files owned by container users, and Compose does not delete those
 bind-mounted directories, so `clean` is the explicit housekeeping command.
 
-`clean` verifies the selected run marker and operates only under the canonical
-repo-local generated run root. It backs up retained outputs from
-`target/artifacts/exported/`, `host/evidence/`, `host/logs/`,
-`target/evidence/`, and `target/logs/` to
-`host/retained-output-backups/<timestamp>/`, then clears the active retained
-output directories for later run reuse. Backup snapshots are host-owned
-review artifacts; active target outputs are not converted to host ownership in
-place. It removes mutable generated runtime data: host rendered inputs and
-target SSH material, `target/helper-state/`,
-`target/product-homes/`, `target/artifacts/staging/`, `target/ldap/`, and
+`clean` follows the shared retained-output contract from
+`docs/directory-model.md`. It verifies the selected run marker and operates
+only under the canonical repo-local generated run root. It backs up retained
+outputs, clears active retained output directories for later run reuse, and
+removes Docker mutable generated runtime data: host rendered inputs and target
+SSH material, `target/helper-state/`, `target/product-homes/`,
+`target/artifacts/staging/`, `target/ldap/`, and
 `target/shared-jenkins-storage/`. `target/helper-state/` is retained only for
 host-orchestrated integration helper state, not role helper roots. If the host
 user cannot remove container-owned files, `clean` may use a one-shot cleanup
@@ -251,8 +210,9 @@ and retained-output backup ownership.
 
 ## State Consistency And Recovery
 
-Docker state is selected by the harness env and run configuration. The
-selected Compose project identifies these expected service containers:
+Docker state follows the shared run-consistency contract from
+`simulation/README.md` and adds Compose and bind-mount checks. The selected
+Compose project identifies these expected service containers:
 
 - `bundle-factory`
 - `ldap`
@@ -261,17 +221,10 @@ selected Compose project identifies these expected service containers:
 - `jenkins-agent-target`
 
 Containers exist when any expected service container for the selected Compose
-project exists, whether it is running or stopped. A selected generated run is
-consistent only when the core run state exists and matches the selected run:
+project exists, whether it is running or stopped. Docker consistency additionally
+requires these Docker-specific generated paths and bind sources:
 
 - The canonical run root exists under `generated/simulation/docker/<run-id>/`.
-- The generated run marker exists.
-- `host/rendered/harness.env` exists.
-- `host/rendered/harness.runtime.env` exists.
-- The runtime env fingerprint matches the generated run marker.
-- `host/runtime-inputs/` exists.
-- Runtime input copies exist for the harness, Gerrit, Jenkins controller,
-  Jenkins agent, and integration env files.
 - Helper env files under `host/runtime-inputs/helper-envs/` exist for phases
   that need them.
 - Expected generated bind source directories exist before container lifecycle
@@ -335,15 +288,15 @@ run. Normal lifecycle phases keep the cheap runtime-config check only.
 
 ## Integration Boundary
 
-Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,
-integration validation, trigger verification, and integration evidence use
-`scripts/integration-setup.sh`.
+The shared integration boundary is defined in `simulation/README.md` and
+`docs/lifecycle-contract.md`. Docker orchestrates that shared helper through
+the Docker target SSH inventory and generated Docker run state.
 
 `validate-integration` and `prove-integration` must fail or report blocked
 rather than claim Docker readiness when real integration proof is unavailable.
 Forbidden synthetic success markers in role or integration logs are treated as
 failures.
 
-Public internet fallback on target hosts is simulation-only and applies only
-to Ubuntu/OS dependency installation. It is not a fallback for target-host
-application artifact downloads, and v1 is not a strict air-gapped installer.
+Source-boundary rules, including simulation-only public internet fallback for
+target-host Ubuntu/OS dependency installation, are shared in
+`simulation/README.md`.

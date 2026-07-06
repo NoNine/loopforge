@@ -73,7 +73,7 @@ Helper-owned paths are execution state, not Gerrit or Jenkins service homes.
 these roots and practical child paths during reviewed lifecycle commands,
 including bundle-factory `prepare-artifacts` and target workspace
 preparation. Simulation harnesses do not pre-create, bind-mount, or
-recursively repair container-visible Loopforge roots for role helpers. The
+recursively repair helper-visible Loopforge roots for role helpers. The
 general utility boundary is defined in `docs/system-model.md`: helpers are
 self-contained where practical, and harnesses do only the environment work
 they must do.
@@ -89,6 +89,22 @@ they must do.
 Public internet fallback on target hosts is not a supported product behavior.
 When simulation records public fallback for Ubuntu or OS dependencies, the
 path, log, and evidence labels must say `simulation-only`.
+
+## Retained Simulation Output
+
+Simulation cleanup preserves review output: exported artifact archives,
+evidence, and bounded logs. When a cleanup command clears active retained
+output directories for later run reuse, it first backs those outputs up to a
+host-owned retained-output snapshot such as
+`host/retained-output-backups/<timestamp>/` inside the selected generated run
+root.
+
+Backup snapshots are review artifacts. Cleanup must not convert active
+target-dominated outputs into host-owned outputs in place; it may copy them
+into retained host-owned review locations before clearing active runtime
+directories. Layer-specific cleanup may remove mutable generated state, stop
+containers, roll back VM snapshots, or delete selected-run scratch, but it must
+not silently discard retained evidence, logs, or exported artifacts.
 
 ## Artifact Extraction Paths
 

@@ -103,7 +103,7 @@ Every command surface uses one owning script plus a subcommand:
 - Role helpers use `scripts/<role>-setup.sh <command>`.
 - Cross-role integration uses `scripts/integration-setup.sh <command>`.
 - Docker simulation uses `simulation/docker/simulate.sh <command>`.
-- VM simulation uses `simulation/vm/vm-verify.sh <command>`.
+- VM simulation uses `simulation/vm/simulate.sh <command>`.
 
 Do not add standalone role phase scripts such as `scripts/preflight.sh`, Docker
 phase scripts such as `simulation/docker/check.sh`, or VM phase scripts such as
@@ -249,15 +249,21 @@ VM simulation should expose:
 
 | Command | Behavior intent |
 | --- | --- |
-| `simulation/vm/vm-verify.sh create` | Create or identify clean VM environments when explicitly approved. |
-| `simulation/vm/vm-verify.sh bootstrap` | Prepare role env values and prerequisite state before service configuration. |
-| `simulation/vm/vm-verify.sh prepare-artifacts` | Run role helper artifact preparation on the bundle factory VM and retain manifests, checksums, and simulation-only source labels. |
-| `simulation/vm/vm-verify.sh stage-artifacts` | Transfer prepared artifacts from the bundle factory VM to service VMs and verify target-side manifests and checksums. |
-| `simulation/vm/vm-verify.sh configure` | Configure LDAP, Gerrit, Jenkins controller, and Jenkins agent according to the reviewed flow. |
-| `simulation/vm/vm-verify.sh check` | Validate host tooling, env values, SSH reachability, target addresses, service state, local OS runtime accounts, LDAP, endpoints, Gerrit/Jenkins integration, and agent readiness. |
-| `simulation/vm/vm-verify.sh execute` | Run role helpers and the shared integration helper in order. |
-| `simulation/vm/vm-verify.sh audit` | Collect retained evidence, checksums, summaries, and bounded log references. |
-| `simulation/vm/vm-verify.sh full` | Run the approved end-to-end VM verification sequence. |
+| `simulation/vm/simulate.sh create` | Provision the reusable libvirt/KVM VM set and capture the baseline snapshot when explicitly approved. |
+| `simulation/vm/simulate.sh init-run` | Render run inputs, private runtime copies, run markers, and selected VM-set metadata. |
+| `simulation/vm/simulate.sh up` | Start the selected VM set and wait for control-plane readiness. |
+| `simulation/vm/simulate.sh prepare-artifacts` | Run role helper artifact preparation on the bundle factory VM and retain manifests, checksums, and simulation-only source labels. |
+| `simulation/vm/simulate.sh stage-artifacts` | Transfer prepared artifacts from the bundle factory VM to service VMs and verify target-side manifests and checksums. |
+| `simulation/vm/simulate.sh configure-role` | Configure one or all service VMs through role-local helpers. |
+| `simulation/vm/simulate.sh validate-role` | Validate one or all service VMs through role-local helpers. |
+| `simulation/vm/simulate.sh configure-integration` | Configure shared Gerrit/Jenkins integration through the shared integration helper. |
+| `simulation/vm/simulate.sh validate-integration` | Run passive cross-role readiness validation. |
+| `simulation/vm/simulate.sh prove-integration` | Run the active end-to-end trigger proof after matching validation passed. |
+| `simulation/vm/simulate.sh reboot` | Reboot selected guest VMs and record reboot evidence. |
+| `simulation/vm/simulate.sh audit-state` | Inspect selected VM-set and run-state consistency without mutation. |
+| `simulation/vm/simulate.sh down` | Stop selected VMs while retaining disks, snapshots, generated state, and review output. |
+| `simulation/vm/simulate.sh clean` | Roll back the selected VM set to baseline and clean mutable selected-run state. |
+| `simulation/vm/simulate.sh destroy` | Permanently remove selected simulation-owned VM resources after ownership validation. |
 
 VM simulation behavior notes:
 

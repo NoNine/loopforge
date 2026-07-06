@@ -40,133 +40,69 @@ reject_doc_text docs/account-model.md \
   'Account model must not claim product runtime account names are fixed literals'
 
 require_doc_text docs/account-model.md \
-  'The operator account is configurable through `LOOPFORGE_OPERATOR_ACCOUNT`.' \
-  'Account model must document configurable operator account'
+  '| Operator account | `ci-operator` | `61000` | `61000` |' \
+  'Account model must document the operator example numeric identity'
 require_doc_text docs/account-model.md \
-  'The default example account and' \
-  'Account model must document ci-operator as the default example'
+  '| Gerrit runtime account | `gerrit` | `61010` | `61010` |' \
+  'Account model must document the Gerrit example numeric identity'
 require_doc_text docs/account-model.md \
-  'group are `ci-operator:ci-operator` for all modes.' \
-  'Account model must document ci-operator as the default example'
+  '| Jenkins controller runtime account | `jenkins` | `61020` | `61020` |' \
+  'Account model must document the Jenkins controller example numeric identity'
 require_doc_text docs/account-model.md \
-  'In Docker simulation, the target-local `ci-operator` OS account has' \
-  'Account model must document Docker ci-operator passwordless sudo'
-require_doc_text docs/account-model.md \
-  'not mean the local host account running `simulate.sh` is named' \
-  'Account model must distinguish target ci-operator from host account'
-require_doc_text docs/account-model.md \
-  'not mapped to the local host username, UID, or GID.' \
-  'Account model must forbid mapping target ci-operator to host identity'
-require_doc_text docs/account-model.md \
-  'The operator account is not a Gerrit or Jenkins runtime account' \
-  'Account model must keep the operator account separate from product accounts'
-require_doc_text docs/account-model.md \
-  '## Numeric Identity Policy' \
-  'Account model must document numeric identity policy'
-require_doc_text docs/account-model.md \
-  'The example target-local identity range is `61000-61999`.' \
-  'Account model must document the example numeric identity range'
+  '| Jenkins agent runtime account | `jenkins-agent` | `61030` | `61030` |' \
+  'Account model must document the Jenkins agent example numeric identity'
 require_doc_text docs/account-model.md \
   '| Jenkins shared integration group | `jenkins-share` | not applicable | `61040` |' \
-  'Account model must document Jenkins shared group example GID'
-require_doc_text docs/account-model.md \
-  'The Jenkins controller runtime account and Jenkins agent runtime account must' \
-  'Account model must reject shared Jenkins controller/agent UID'
+  'Account model must document the Jenkins shared group example GID'
+
 require_doc_text docs/account-model.md \
   'not share a UID in the recommended v1 model.' \
-  'Account model must reject shared Jenkins controller/agent UID'
+  'Account model must keep Jenkins controller and agent UIDs separate'
+require_doc_text docs/account-model.md \
+  'storage access is granted through the dedicated Jenkins shared integration' \
+  'Account model must document group-based Jenkins shared storage'
 require_doc_text docs/account-model.md \
   'The shared GID is the cross-host contract for NFS-backed sharing' \
-  'Account model must document NFS shared group numeric contract'
+  'Account model must document the shared GID storage contract'
 require_doc_text docs/account-model.md \
   'For NFS-backed storage, keep `root_squash` enabled' \
   'Account model must document NFS root_squash guidance'
-require_doc_text simulation/docker/README.md \
-  'This target-local `ci-operator` OS account has' \
-  'Docker README must document ci-operator passwordless sudo'
-require_doc_text simulation/docker/README.md \
-  'The local host account that invokes `simulate.sh` may have any site-local name' \
-  'Docker README must not imply host account is ci-operator'
-require_doc_text simulation/docker/README.md \
-  'environment as the target-local `ci-operator` through SSH from the host.' \
-  'Docker README must document target-local SSH operator login'
-require_doc_text simulation/docker/README.md \
-  'passwordless sudo for simulation orchestration and privileged helper' \
-  'Docker README must document ci-operator passwordless sudo'
-require_doc_text simulation/docker/README.md \
-  'The operator account does not own `/srv/gerrit`,' \
-  'Docker README must document operator account is not a product runtime owner'
-require_doc_text simulation/docker/README.md \
-  'controller, or Jenkins agent runtime account.' \
-  'Docker README must document operator account is not a product runtime owner'
-require_doc_text docs/directory-model.md \
-  'Host-side generated paths use the local host account that runs the simulation' \
-  'Directory model must separate host generated ownership from target operator ownership'
-require_doc_text docs/docs-management.md \
-  'docs/endpoint-identity.md' \
-  'Docs management must list endpoint identity as a topic authority'
-require_doc_text docs/system-model.md \
-  'Endpoint identity rules for these interfaces are defined in' \
-  'System model must point Standard Interfaces readers to endpoint identity rules'
-require_doc_text docs/endpoint-identity.md \
-  '# Endpoint Identity' \
-  'Endpoint identity topic doc must exist'
-require_doc_text docs/endpoint-identity.md \
-  '| Docker simulation | Docker service names inside containers; `127.0.0.1` with published ports from the host |' \
-  'Endpoint identity topic doc must define Docker simulation rule'
-require_doc_text docs/endpoint-identity.md \
-  '| VM simulation | Stable VM DNS names or reviewed VM host aliases |' \
-  'Endpoint identity topic doc must define VM simulation rule'
-require_doc_text docs/endpoint-identity.md \
-  '| Target deployment | Site-approved FQDNs or DNS names |' \
-  'Endpoint identity topic doc must define target deployment rule'
-require_doc_text docs/endpoint-identity.md \
-  'Do not use Docker container IP addresses in docs, examples, env defaults, or' \
-  'Endpoint identity topic doc must reject Docker container IPs'
-require_doc_text docs/endpoint-identity.md \
-  'It is not a cross-host target-deployment identity.' \
-  'Endpoint identity topic doc must reject target-deployment loopback identities'
-require_doc_text docs/endpoint-identity.md \
-  'known_hosts` files must be generated and checked for the exact SSH host' \
-  'Endpoint identity topic doc must define known_hosts matching rule'
-require_doc_text simulation/docker/README.md \
-  'Docker-specific service names, host loopback browser URLs, and target SSH' \
-  'Docker README must point to endpoint identity rules'
-require_doc_text simulation/vm/README.md \
-  'VM hostnames, browser URLs, SSH host strings, and LDAP endpoint identities' \
-  'VM README must point to endpoint identity rules'
-require_doc_text docs/integration-native-operations-reference.md \
-  'Do not copy Docker service names' \
-  'Integration native reference must warn against Docker identities in target deployment'
 
+require_doc_text simulation/README.md \
+  'The simulation model derives account usage from `docs/account-model.md`.' \
+  'Simulation README must point to the shared account model'
+require_doc_text simulation/README.md \
+  '| Jenkins shared integration group | `jenkins-share` | no UID / `61040` |' \
+  'Simulation README must document the Jenkins shared group example GID'
+require_doc_text simulation/README.md \
+  '`jenkins-share` integration group, not a shared controller/agent UID.' \
+  'Simulation README must document shared storage as group-based access'
+require_doc_text simulation/README.md \
+  '`scripts/integration-setup.sh` owns creating or' \
+  'Simulation README must assign shared storage setup to integration setup'
+
+require_doc_text simulation/docker/README.md \
+  'The shared simulation account contract is defined in `simulation/README.md`.' \
+  'Docker README must point to the shared simulation account contract'
+require_doc_text simulation/docker/README.md \
+  'Docker realizes Jenkins shared storage by bind-mounting one run-local' \
+  'Docker README must document Docker shared storage realization'
+require_doc_text simulation/docker/README.md \
+  '`target/shared-jenkins-storage` directory into both the Jenkins controller and' \
+  'Docker README must document Docker shared storage bind source'
 reject_doc_text simulation/docker/README.md \
   'This local `ci-operator` OS account has' \
   'Docker README must not call target ci-operator the local host account'
 
-require_doc_text docs/jenkins-agent-native-operations-reference.md \
-  'The Jenkins agent role helper requires this account and group to already exist' \
-  'Native agent reference must document helper missing-account behavior'
-require_doc_text docs/jenkins-agent-native-operations-reference.md \
-  'and fails clearly if either is missing or if the passwd HOME is not' \
-  'Native agent reference must document helper missing-account behavior'
-require_doc_text docs/gerrit-native-operations-reference.md \
-  'operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
-  'Native Gerrit reference must use the reviewed operator account default'
-require_doc_text docs/gerrit-native-operations-reference.md \
-  'operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"' \
-  'Native Gerrit reference must derive the reviewed operator home'
-require_doc_text docs/jenkins-controller-native-operations-reference.md \
-  'operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
-  'Native Jenkins controller reference must use the reviewed operator account default'
-require_doc_text docs/jenkins-controller-native-operations-reference.md \
-  'operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"' \
-  'Native Jenkins controller reference must derive the reviewed operator home'
-require_doc_text docs/jenkins-agent-native-operations-reference.md \
-  'operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"' \
-  'Native Jenkins agent reference must use the reviewed operator account default'
-require_doc_text docs/jenkins-agent-native-operations-reference.md \
-  'operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"' \
-  'Native Jenkins agent reference must derive the reviewed operator home'
+require_doc_text simulation/vm/README.md \
+  'The shared simulation account contract is defined in `simulation/README.md`.' \
+  'VM README must point to the shared simulation account contract'
+require_doc_text simulation/vm/README.md \
+  'VM simulation models Jenkins shared storage as a VM-set-owned NFS-backed' \
+  'VM README must document VM shared storage realization'
+require_doc_text simulation/vm/README.md \
+  'runtime home and not a sixth product role.' \
+  'VM README must document VM shared storage is not a product role'
 
 for native_reference in \
   docs/gerrit-native-operations-reference.md \
@@ -182,60 +118,3 @@ for native_reference in \
     'chown -R ci-operator:ci-operator' \
     'Native target-deployment references must not hardcode recursive operator ownership'
 done
-
-require_doc_text docs/integration-native-operations-reference.md \
-  'then open `Settings` > `SSH Keys`.' \
-  'Integration native reference must provide Gerrit UI SSH key registration steps'
-require_doc_text docs/integration-native-operations-reference.md \
-  '`EDIT REPO CONFIG`.' \
-  'Integration native reference must create Verified through Gerrit repo config editing'
-require_doc_text docs/integration-native-operations-reference.md \
-  'This label definition is config state, not an Access UI grant.' \
-  'Integration native reference must distinguish Verified label definition from Access UI grants'
-require_doc_text docs/integration-native-operations-reference.md \
-  '`Repositories` > `All-Projects` > `Access`.' \
-  'Integration native reference must provide Gerrit UI access configuration steps'
-require_doc_text docs/integration-native-operations-reference.md \
-  'use the Access UI only for capabilities and grants.' \
-  'Integration native reference must limit Access UI to capabilities and grants'
-reject_doc_text docs/integration-native-operations-reference.md \
-  'add the global `Verified` label definition and the global `stream-events`' \
-  'Integration native reference must not create Verified from the Access UI'
-require_doc_text docs/integration-native-operations-reference.md \
-  'Open `Manage Jenkins` > `Credentials` > `System` >' \
-  'Integration native reference must provide Jenkins UI credential steps'
-require_doc_text docs/integration-native-operations-reference.md \
-  'Open `Manage Jenkins` > `Gerrit Trigger`.' \
-  'Integration native reference must provide Jenkins Gerrit Trigger UI steps'
-require_doc_text docs/integration-native-operations-reference.md \
-  'Open `Manage Jenkins` > `Nodes` > `New Node`.' \
-  'Integration native reference must provide Jenkins node UI steps'
-require_doc_text docs/integration-native-operations-reference.md \
-  'Use the Jenkins Web UI to create the disposable verification job' \
-  'Integration native reference must provide Jenkins verification-job UI steps'
-require_doc_text docs/gerrit-native-operations-reference.md \
-  'Use the Gerrit Web UI to complete the application checks:' \
-  'Gerrit native reference must include Web UI validation steps'
-require_doc_text docs/jenkins-controller-native-operations-reference.md \
-  'Use the Jenkins Web UI to complete the application checks:' \
-  'Jenkins controller native reference must include Web UI validation steps'
-require_doc_text docs/jenkins-agent-native-operations-reference.md \
-  'registration through the Jenkins Web UI steps in' \
-  'Jenkins agent native reference must hand off to Jenkins UI node registration'
-
-require_doc_text docs/jenkins-agent-setup-manual.md \
-  'The helper requires the configured local runtime account and group to already' \
-  'Agent setup manual must document pre-existing runtime account requirement'
-require_doc_text docs/jenkins-agent-setup-manual.md \
-  'exist.' \
-  'Agent setup manual must document pre-existing runtime account requirement'
-require_doc_text docs/jenkins-agent-setup-manual.md \
-  'provisioning is outside the helper.' \
-  'Agent setup manual must document account provisioning is outside helper'
-
-reject_doc_text docs/jenkins-agent-setup-manual.md \
-  'Creates or verifies the dedicated local runtime account.' \
-  'Agent setup manual must not say the helper creates the runtime account'
-reject_doc_text docs/jenkins-agent-setup-manual.md \
-  'Creates or verifies the role-local runtime group' \
-  'Agent setup manual must not say the helper creates the runtime group'

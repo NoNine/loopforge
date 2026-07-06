@@ -62,10 +62,10 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
   the release archive pair in the bundle-factory workspace.
 - Role helpers own practical child directory creation. The environment or
   simulation harness only provides prerequisites the helper cannot reasonably
-  provide itself, such as generated run roots, container lifecycle, or explicit
-  file transfer waivers. Docker simulation must not create container-visible
-  `/var/lib/loopforge` or `/var/log/loopforge` role-helper roots. See
-  `docs/system-model.md` for the general helper-versus-harness boundary.
+  provide itself, such as generated run roots, environment lifecycle, or
+  explicit file transfer waivers. Simulation harnesses must not create
+  helper-visible `/var/lib/loopforge` or `/var/log/loopforge` role-helper roots.
+  See `docs/system-model.md` for the general helper-versus-harness boundary.
 - LDAP bind passwords must not be written to artifact bundles, rendered helper
   env files, runtime env files, or harness-created secret files. Docker and VM
   simulation may use labeled simulation-owned fake LDAP bind passwords for
@@ -87,6 +87,10 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 - Docker and VM simulation may back these paths with generated host
   directories, container copies, or VM transfer paths, but helper-visible
   paths stay product-like and the lifecycle checks remain required.
+- Successful artifacts leave the bundle factory only through the layer's
+  explicit artifact export or transfer step. Target environments consume
+  archive pairs through a labeled transfer waiver, then extract and verify
+  payloads inside helper-visible target staging before role helpers use them.
 
 ## Mode Parity
 

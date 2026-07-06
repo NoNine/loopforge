@@ -128,7 +128,7 @@ SSH, Jenkins-to-agent SSH, Gerrit Trigger configuration, agent scheduling,
 trigger delivery, `Verified` voting, shared Jenkins controller/agent storage,
 and Gerrit ACL reviewed-workflow planning. These records are not substitutes
 for role-local readiness records and are not the final evidence package. They
-are additional inputs consumed by Docker/VM verifiers and by global
+are additional inputs consumed by Docker/VM simulation utilities and by global
 aggregation.
 
 `examples/integration.env.example` is the single reviewed source for the
@@ -163,7 +163,7 @@ real Gerrit review when none occurred.
 
 - Role-local records from Gerrit, Jenkins controller, and Jenkins agent.
 - Docker harness records.
-- VM verifier records.
+- VM simulation utility records.
 - End-to-end integration records when present.
 
 The helper writes a final evidence package containing:

@@ -63,7 +63,7 @@ manifest and checksum on the target before any target mutation.
 
 `docs/version-baseline.md` owns the default v1 version baseline and update
 rules. Implementation steps below must keep helpers, Docker harnesses, Docker
-simulation, VM verifier scaffolds, future real VM verification, tests, and
+simulation, VM simulation scaffolds, future real VM verification, tests, and
 evidence expectations aligned with that baseline.
 
 ## Evidence Contract
@@ -197,7 +197,7 @@ Implementation notes:
   meanings for simulation layers.
 - `simulation/docker/README.md` owns Docker simulation command behavior and
   Docker-specific generated paths.
-- `simulation/vm/README.md` owns VM simulation and future VM verifier command
+- `simulation/vm/README.md` owns VM simulation and future VM command
   behavior.
 - The simulation docs must derive account usage from `docs/account-model.md`
   and mode terminology from `docs/system-model.md`.
@@ -828,8 +828,8 @@ Implementation notes:
 - Role-local `collect-evidence` commands from Steps 7, 8, and 9 must emit
   records that conform to `docs/validation-and-evidence.md`.
 - `scripts/collect-evidence.sh` validates and aggregates role-local records,
-  Docker/VM verifier records, and end-to-end integration records into the final
-  evidence package.
+  Docker/VM simulation utility records, and end-to-end integration records into
+  the final evidence package.
 - Do not store secrets in evidence.
 - Do not stream verbose Docker, Jenkins, Gerrit, package-manager, SSH, VM, or
   verification logs into normal command output.
@@ -847,8 +847,8 @@ Acceptance criteria:
 - Global evidence collection can be run after role-specific validation and after
   full integration validation.
 - Global evidence collection consumes role-local evidence from Gerrit, Jenkins
-  controller, and Jenkins agent helpers, plus Docker/VM verifier evidence when
-  present.
+  controller, and Jenkins agent helpers, plus Docker/VM simulation utility
+  evidence when present.
 - Evidence summaries follow `docs/validation-and-evidence.md` and omit or
   redact secret-looking values.
 
@@ -979,9 +979,10 @@ Step 12 is not a real VM implementation. VM infrastructure is not available by
 default, so this step creates only the non-mutating verifier scaffold needed to
 document and gate future VM work.
 
-Use the VM simulation behavior summarized in `docs/references/reference-digest.md` as the
-future command contract, but do not claim that real VM provisioning,
-configuration, or end-to-end verification is implemented in this step.
+Use the VM simulation behavior summarized in
+`docs/references/reference-digest.md` as the future command contract, but do
+not claim that real VM provisioning, configuration, or end-to-end verification
+is implemented in this step.
 
 Create scaffold assets under `simulation/vm/` after Docker verification is
 stable.
@@ -989,22 +990,32 @@ stable.
 Expected command surface:
 
 ```text
-simulation/vm/vm-verify.sh create
-simulation/vm/vm-verify.sh bootstrap
-simulation/vm/vm-verify.sh prepare-artifacts
-simulation/vm/vm-verify.sh stage-artifacts
-simulation/vm/vm-verify.sh configure
-simulation/vm/vm-verify.sh check
-simulation/vm/vm-verify.sh execute
-simulation/vm/vm-verify.sh audit
-simulation/vm/vm-verify.sh full
+simulation/vm/simulate.sh run
+simulation/vm/simulate.sh preflight
+simulation/vm/simulate.sh init-run
+simulation/vm/simulate.sh create
+simulation/vm/simulate.sh up
+simulation/vm/simulate.sh status
+simulation/vm/simulate.sh ssh
+simulation/vm/simulate.sh prepare-artifacts
+simulation/vm/simulate.sh stage-artifacts
+simulation/vm/simulate.sh configure-role
+simulation/vm/simulate.sh validate-role
+simulation/vm/simulate.sh configure-integration
+simulation/vm/simulate.sh validate-integration
+simulation/vm/simulate.sh prove-integration
+simulation/vm/simulate.sh reboot
+simulation/vm/simulate.sh audit-state
+simulation/vm/simulate.sh down
+simulation/vm/simulate.sh clean
+simulation/vm/simulate.sh destroy
 ```
 
 Implementation notes:
 
 - The scaffold must implement command dispatch, `--help`, env parsing,
-  `--preflight-only`, approval guardrails, bounded-log references, and evidence
-  record structure.
+  `preflight`, approval guardrails, bounded-log references, and evidence record
+  structure.
 - The scaffold must parse and report Version Baseline inputs. It must not claim
   VM readiness or comparable verification when requested VM inputs differ from
   the baseline.
@@ -1038,10 +1049,9 @@ Implementation notes:
 Verification:
 
 ```bash
-bash -n simulation/vm/vm-verify.sh
-simulation/vm/vm-verify.sh --help
-simulation/vm/vm-verify.sh check --preflight-only --env simulation/vm/example.env
-simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
+bash -n simulation/vm/simulate.sh
+simulation/vm/simulate.sh --help
+simulation/vm/simulate.sh preflight --env simulation/vm/example.env
 ```
 
 Acceptance criteria:
@@ -1093,7 +1103,7 @@ Run final acceptance in this order:
 3. Docker simulation preflight and setup phases through `simulate.sh`.
 4. Docker full verification through `simulate.sh`.
 5. Global evidence aggregation.
-6. VM scaffold preflight-only checks.
+6. VM scaffold preflight checks.
 7. Real VM implementation and verification from Step 15 is skipped for the
    current default plan.
 
@@ -1126,9 +1136,8 @@ scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes prove-integration
 scripts/collect-evidence.sh
 simulation/docker/simulate.sh down
-simulation/vm/vm-verify.sh --help
-simulation/vm/vm-verify.sh check --preflight-only --env simulation/vm/example.env
-simulation/vm/vm-verify.sh full --preflight-only --env simulation/vm/example.env
+simulation/vm/simulate.sh --help
+simulation/vm/simulate.sh preflight --env simulation/vm/example.env
 ```
 
 Final acceptance criteria:
