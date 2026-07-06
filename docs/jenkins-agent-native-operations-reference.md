@@ -241,6 +241,12 @@ scheduling validation, and key rotation belong to
 reference. Until that workflow is implemented, this native reference remains
 limited to agent host readiness.
 
+When the shared integration workflow begins, perform Jenkins-side node
+registration through the Jenkins Web UI steps in
+`integration-native-operations-reference.md`. This agent reference only prepares
+the build server OS, OpenSSH service, runtime account, remote filesystem, and
+artifact staging needed by that later UI operation.
+
 Credential custody remains fixed: the Jenkins controller owns the
 Jenkins-to-agent private key, and the agent host consumes only the matching
 public key. Agent evidence may record public-key fingerprints, accounts,

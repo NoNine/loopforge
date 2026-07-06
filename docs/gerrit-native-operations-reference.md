@@ -476,6 +476,18 @@ Acceptance checks:
 - Jenkins integration prerequisites from Section 4 are deferred to
   `integration-native-operations-reference.md`.
 
+Use the Gerrit Web UI to complete the application checks:
+
+1. Browse to `GERRIT_CANONICAL_WEB_URL`.
+2. Sign in with the reviewed Gerrit administrator account.
+3. Open the user menu > `Settings` and confirm the administrator account is a
+   real Gerrit account, not only an LDAP directory entry.
+4. Open `Browse` > `Repositories` and confirm `All-Projects` is visible.
+5. Open `Browse` > `Groups` or the installed UI's equivalent group page and
+   confirm the reviewed administrator group is visible.
+6. Sign out and sign in as the reviewed test user if one is required for later
+   integration proof.
+
 ## 6. Backup and Operations
 
 Back up:

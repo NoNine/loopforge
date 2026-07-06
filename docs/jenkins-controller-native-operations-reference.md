@@ -545,12 +545,24 @@ If not using JCasC:
    cat /var/lib/jenkins/secrets/initialAdminPassword
    ```
 
-3. Install the recommended plugins plus Gerrit integration plugins.
-4. Configure LDAP under `Manage Jenkins` > `Security`.
-5. Configure authorization with `matrix-auth` or `role-strategy`.
-6. Defer the `jenkins-gerrit` Gerrit integration account SSH key until
+3. Install the recommended plugins plus the reviewed Gerrit integration
+   plugins from `Manage Jenkins` > `Plugins`.
+4. Open `Manage Jenkins` > `Security`, select LDAP as the security realm, and
+   enter the reviewed LDAP URL, user search base, group search base, manager DN,
+   and bind secret according to site policy.
+5. Configure authorization with `matrix-auth` or `role-strategy` from the same
+   `Security` page, granting administrator access only to the reviewed Jenkins
+   administrator group.
+6. Open `Manage Jenkins` > `System` and set the Jenkins URL to the reviewed
+   browser URL users enter, normally `JENKINS_URL`.
+7. Open `Manage Jenkins` > `Nodes` > built-in node or `Configure System`,
+   depending on the installed UI, and keep the built-in node executor count at
+   zero.
+8. Open `Manage Jenkins` > `Plugins` > `Installed plugins` and confirm the
+   required plugins are enabled without load errors.
+9. Defer the `jenkins-gerrit` Gerrit integration account SSH key until
    integration-native operations.
-7. Defer Gerrit Trigger configuration until integration-native operations.
+10. Defer Gerrit Trigger configuration until integration-native operations.
 
 ## 5. Shared Integration Handoff
 
@@ -604,6 +616,17 @@ Acceptance checks:
 - Do not accept rendered Gerrit Trigger config, keypairs, node registration,
   scheduling records, or trigger/vote proof as controller-only validation
   evidence.
+
+Use the Jenkins Web UI to complete the application checks:
+
+1. Browse to `JENKINS_URL` and sign in as the reviewed Jenkins administrator.
+2. Open `Manage Jenkins` and confirm no administrative monitor reports a plugin
+   load failure for required plugins.
+3. Open `Manage Jenkins` > `Security` and confirm LDAP and authorization
+   settings match the reviewed values without exposing bind secrets in
+   evidence.
+4. Open `Manage Jenkins` > `Nodes` and confirm the built-in node has zero
+   executors.
 
 ## 7. Backup and Operations
 

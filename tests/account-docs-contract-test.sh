@@ -147,6 +147,46 @@ for native_reference in \
     'Native target-deployment references must not hardcode recursive operator ownership'
 done
 
+require_doc_text docs/integration-native-operations-reference.md \
+  'then open `Settings` > `SSH Keys`.' \
+  'Integration native reference must provide Gerrit UI SSH key registration steps'
+require_doc_text docs/integration-native-operations-reference.md \
+  '`EDIT REPO CONFIG`.' \
+  'Integration native reference must create Verified through Gerrit repo config editing'
+require_doc_text docs/integration-native-operations-reference.md \
+  'This label definition is config state, not an Access UI grant.' \
+  'Integration native reference must distinguish Verified label definition from Access UI grants'
+require_doc_text docs/integration-native-operations-reference.md \
+  '`Repositories` > `All-Projects` > `Access`.' \
+  'Integration native reference must provide Gerrit UI access configuration steps'
+require_doc_text docs/integration-native-operations-reference.md \
+  'use the Access UI only for capabilities and grants.' \
+  'Integration native reference must limit Access UI to capabilities and grants'
+reject_doc_text docs/integration-native-operations-reference.md \
+  'add the global `Verified` label definition and the global `stream-events`' \
+  'Integration native reference must not create Verified from the Access UI'
+require_doc_text docs/integration-native-operations-reference.md \
+  'Open `Manage Jenkins` > `Credentials` > `System` >' \
+  'Integration native reference must provide Jenkins UI credential steps'
+require_doc_text docs/integration-native-operations-reference.md \
+  'Open `Manage Jenkins` > `Gerrit Trigger`.' \
+  'Integration native reference must provide Jenkins Gerrit Trigger UI steps'
+require_doc_text docs/integration-native-operations-reference.md \
+  'Open `Manage Jenkins` > `Nodes` > `New Node`.' \
+  'Integration native reference must provide Jenkins node UI steps'
+require_doc_text docs/integration-native-operations-reference.md \
+  'Use the Jenkins Web UI to create the disposable verification job' \
+  'Integration native reference must provide Jenkins verification-job UI steps'
+require_doc_text docs/gerrit-native-operations-reference.md \
+  'Use the Gerrit Web UI to complete the application checks:' \
+  'Gerrit native reference must include Web UI validation steps'
+require_doc_text docs/jenkins-controller-native-operations-reference.md \
+  'Use the Jenkins Web UI to complete the application checks:' \
+  'Jenkins controller native reference must include Web UI validation steps'
+require_doc_text docs/jenkins-agent-native-operations-reference.md \
+  'registration through the Jenkins Web UI steps in' \
+  'Jenkins agent native reference must hand off to Jenkins UI node registration'
+
 require_doc_text docs/jenkins-agent-setup-manual.md \
   'The helper requires the configured local runtime account and group to already' \
   'Agent setup manual must document pre-existing runtime account requirement'
