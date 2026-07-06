@@ -22,6 +22,29 @@ Both layers use the same five-machine topology:
 | Jenkins controller | Container | VM | Runs Jenkins, LDAP/JCasC configuration, Gerrit Trigger, and agent registration. |
 | Jenkins agent | Container | VM | Runs SSH build jobs scheduled by Jenkins. |
 
+## Harness Implementation Direction
+
+Docker and VM simulation use separate public CLIs:
+`simulation/docker/simulate.sh` and `simulation/vm/simulate.sh`. Do not
+replace them with a single backend-dispatching entrypoint.
+
+Shared implementation support belongs under `simulation/lib/` when code is
+extracted. Extract only backend-neutral mechanics there: role parsing, env
+loading, runtime input custody, command summaries, quoting helpers, artifact
+manifest/checksum helpers, evidence helpers, and lifecycle marker utilities.
+
+Layer lifecycle and transport stay local to each harness until real VM code
+proves a stable boundary. Docker-specific Compose, container, bind-mount,
+`docker cp`, loopback-port, and cleanup behavior belongs in the Docker
+harness. VM-specific libvirt/KVM domains, VM sets, snapshots, guest reboot,
+guest SSH readiness, NFS-backed shared storage, and `create`/`clean`/`destroy`
+behavior belongs in the VM harness.
+
+Do not introduce a Docker/VM backend abstraction before the VM harness has
+enough implementation to prove a durable interface. Prefer small shared
+support libraries first; if repeated backend-shaped code remains after the VM
+harness is working, promote only that proven boundary.
+
 ## Simulation Accounts
 
 The simulation model derives account usage from `docs/account-model.md`. It

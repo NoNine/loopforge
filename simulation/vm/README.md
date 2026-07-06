@@ -16,6 +16,15 @@ simulation/vm/simulate.sh [--env FILE] <command>
 cross-role integration orchestration. Do not add standalone VM phase scripts or
 a second VM simulation CLI.
 
+VM simulation should be implemented above shared support helpers from
+`simulation/lib/` when those helpers exist. Shared helpers cover common
+mechanics only; VM lifecycle and transport stay in the VM harness. VM-specific
+libvirt/KVM domains, VM sets, snapshots, guest reboot, guest SSH readiness,
+NFS-backed shared storage, and `create`/`clean`/`destroy` behavior must not
+copy Docker backend assumptions such as Compose project names, Docker service
+names, Docker bind-mount checks, loopback port ownership, or Docker transfer
+waivers.
+
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
 `simulation/README.md`. VM hostnames, browser URLs, SSH host strings, and LDAP

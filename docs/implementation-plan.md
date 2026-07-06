@@ -63,8 +63,8 @@ manifest and checksum on the target before any target mutation.
 
 `docs/version-baseline.md` owns the default v1 version baseline and update
 rules. Implementation steps below must keep helpers, Docker harnesses, Docker
-simulation, VM simulation scaffolds, future real VM verification, tests, and
-evidence expectations aligned with that baseline.
+simulation, shared simulation libraries, VM simulation, tests, and evidence
+expectations aligned with that baseline.
 
 ## Evidence Contract
 
@@ -973,19 +973,58 @@ Acceptance criteria:
   required runtime outcomes and must include proof from the real Gerrit,
   Jenkins controller, and Jenkins agent services.
 
-## Step 12: Add VM Verification Scaffold
+## Step 12: Extract Shared Simulation Support Library
 
-Step 12 is not a real VM implementation. VM infrastructure is not available by
-default, so this step creates only the non-mutating verifier scaffold needed to
-document and gate future VM work.
+Extract backend-neutral simulation support before adding real VM behavior.
+This step implements the accepted shared-library direction without creating a
+generic Docker/VM backend abstraction.
 
-Use the VM simulation behavior summarized in
-`docs/references/reference-digest.md` as the future command contract, but do
-not claim that real VM provisioning, configuration, or end-to-end verification
-is implemented in this step.
+Create shared support under `simulation/lib/` for common mechanics that are
+already proven by Docker simulation and needed by VM simulation:
 
-Create scaffold assets under `simulation/vm/` after Docker verification is
-stable.
+- command summaries, failures, timestamps, and quoting helpers;
+- role names, role parsing, and role-to-helper mapping;
+- env loading, repo-relative path resolution, and runtime input custody;
+- generated run markers and lifecycle marker helpers;
+- artifact bundle naming, manifest parsing, checksum validation, and staged
+  artifact checks;
+- evidence writing helpers and bounded log path helpers.
+
+Implementation notes:
+
+- Keep `simulation/docker/simulate.sh` and `simulation/vm/simulate.sh` as the
+  public CLIs. Do not replace them with a backend-dispatching entrypoint.
+- Move only backend-neutral code into `simulation/lib/`. Docker-specific
+  Compose selection, container lifecycle, bind-mount validation, `docker cp`
+  waivers, loopback ports, target SSH staging, and cleanup stay in the Docker
+  harness.
+- Update Docker simulation to source the shared helpers with no behavior
+  change. Existing Docker tests must continue to pass.
+- Do not introduce an abstract backend API in this step. Promote a backend
+  boundary only later if repeated real VM code proves that interface.
+
+Verification:
+
+```bash
+bash -n simulation/docker/simulate.sh simulation/lib/*.sh
+simulation/docker/simulate.sh --help
+simulation/docker/simulate.sh preflight
+tests/account-docs-contract-test.sh
+git diff --check
+```
+
+Acceptance criteria:
+
+- Docker simulation command behavior and terminal summaries are unchanged.
+- Shared helpers contain only backend-neutral support code.
+- Docker lifecycle, transport, mount, port, and cleanup behavior remains
+  Docker-local.
+- The repository has a clear support-library base for the VM harness.
+
+## Step 13: Implement VM Simulation Harness
+
+Implement real VM simulation under `simulation/vm/` on top of the shared
+support library from Step 12. Do not add a separate scaffold milestone.
 
 Expected command surface:
 
@@ -1013,61 +1052,75 @@ simulation/vm/simulate.sh destroy
 
 Implementation notes:
 
-- The scaffold must implement command dispatch, `--help`, env parsing,
-  `preflight`, approval guardrails, bounded-log references, and evidence record
-  structure.
-- The scaffold must parse and report Version Baseline inputs. It must not claim
-  VM readiness or comparable verification when requested VM inputs differ from
-  the baseline.
-- Non-preflight commands that would create VMs, transfer files, mutate remote
-  hosts, configure services, or run verification must exit nonzero with a clear
-  blocked or unsupported status unless real VM infrastructure support is added
-  in the future Step 15.
-- The future real VM model should use separate bundle factory, LDAP, Gerrit,
-  Jenkins controller, and Jenkins agent VMs.
-- Future VM `prepare-artifacts` will run role helper artifact preparation on
-  the bundle factory VM and record manifests, checksums, and any
-  `simulation-only` internet-use labels.
-- Future VM `stage-artifacts` will transfer prepared artifacts to service VMs
-  and verify manifests and checksums on each target VM before install or
-  configuration.
-- VM verification must use the Step 10 evidence model for scaffold,
-  target-deployment, or simulation mode labels.
-- VM verification must use the same reviewed baseline as the Docker harness
-  and Docker simulation.
-- The future VM model is target-deployment validation, not strict air-gap
-  verification.
-- The VM scaffold must reference `scripts/integration-setup.sh` as the future
-  cross-role SSH, trigger, validation, verification, and integration-evidence
-  surface. It must fail closed until VM support exists.
-- Remove or rename reference workflow concepts that imply supported offline
-  Ubuntu dependency bundles.
-- VM commands that mutate remote or host state require explicit operator
-  approval and must describe expected side effects. In Step 12 they must not
-  perform those mutations by default.
+- Use separate bundle factory, LDAP, Gerrit, Jenkins controller, and Jenkins
+  agent VMs.
+- Implement reusable VM set identity, run identity, ownership metadata, and
+  generated output paths as documented in `simulation/vm/README.md`.
+- Implement `create`, `up`, `reboot`, `down`, `clean`, and `destroy` with
+  libvirt/KVM semantics. `clean` rolls back to the baseline snapshot and does
+  not delete VMs; `destroy` is the only command that removes VM resources.
+- Capture the baseline snapshot after OS, cloud-init, SSH readiness, host-key
+  capture, and VM harness prerequisites, before Loopforge artifact staging or
+  service configuration.
+- Implement VM-set-owned NFS-backed Jenkins shared storage and mount it into
+  controller and agent VMs at `JENKINS_SHARED_STORAGE_PATH`.
+- Run `prepare-artifacts` on the bundle factory VM, stage prepared archives to
+  service VMs, and verify target-side manifests and checksums before mutation.
+- Run role helpers only for role-local lifecycle and call
+  `scripts/integration-setup.sh` for cross-role integration setup,
+  validation, proof, and evidence.
+- Use target OS SSH as the operator account for helper execution, staging,
+  validation, evidence collection, and interactive `ssh --role`.
+- Keep libvirt/KVM lifecycle, VM snapshots, guest SSH readiness, NFS-backed
+  storage, reboot behavior, and VM destruction local to the VM harness.
+- Do not copy Docker assumptions such as Compose project names, Docker service
+  names, bind-mount checks, loopback port ownership, Docker `cp` waivers, or
+  Docker cleanup recovery.
+- VM commands that mutate host, libvirt, guest OS, Gerrit, Jenkins, or Jenkins
+  agent state require explicit operator approval and must describe expected
+  side effects.
+- VM verification must use the Step 10 evidence model, record Version Baseline
+  values, and fail or block when the selected VM versions drift from the
+  reviewed baseline.
 
 Verification:
 
 ```bash
-bash -n simulation/vm/simulate.sh
+bash -n simulation/vm/simulate.sh simulation/lib/*.sh
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/example.env
+simulation/vm/simulate.sh --env simulation/vm/example.env init-run
+simulation/vm/simulate.sh --env simulation/vm/example.env create
+simulation/vm/simulate.sh --env simulation/vm/example.env up
+simulation/vm/simulate.sh --env simulation/vm/example.env prepare-artifacts
+simulation/vm/simulate.sh --env simulation/vm/example.env stage-artifacts
+simulation/vm/simulate.sh --env simulation/vm/example.env configure-role
+simulation/vm/simulate.sh --env simulation/vm/example.env validate-role
+simulation/vm/simulate.sh --env simulation/vm/example.env configure-integration
+simulation/vm/simulate.sh --env simulation/vm/example.env validate-integration
+simulation/vm/simulate.sh --env simulation/vm/example.env prove-integration
+simulation/vm/simulate.sh --env simulation/vm/example.env reboot --all
+simulation/vm/simulate.sh --env simulation/vm/example.env down
+simulation/vm/simulate.sh --env simulation/vm/example.env clean
 ```
 
 Acceptance criteria:
 
-- VM preflight can validate local host tooling, env shape, approval flags, and
-  target address syntax without mutating host or remote state.
-- The scaffold makes real VM lifecycle commands visible but blocks them with
-  clear nonzero statuses when real VM infrastructure support is absent.
-- Evidence labels the mode as VM scaffold/preflight and does not imply that VM
-  artifact preparation, service configuration, or end-to-end verification ran.
-- VM scaffold evidence records the requested Version Baseline values and blocks
-  non-matching VM verification inputs.
-- Real VM artifact preparation, staging, configuration, and full verification
-  are deferred to Step 15 and skipped in the current default plan.
+- VM simulation provisions or verifies the five-VM topology and records both
+  VM set identity and run identity in evidence.
+- Artifact preparation, staging, role configuration, role validation, shared
+  integration setup, cross-role validation, and end-to-end proof run against
+  real VMs instead of modeled success.
+- Reboot proof exercises guest OS reboot behavior and verifies service
+  readiness after return.
+- Cleanup rolls back mutable VM state without deleting reusable VMs, and
+  destruction removes only simulation-owned VM resources after ownership
+  validation.
+- Evidence labels the mode as VM simulation and does not imply
+  target-deployment acceptance unless a separate target-deployment review says
+  so.
 
-## Step 13: Add Cross-Repository Boundary Checks
+## Step 14: Add Cross-Repository Boundary Checks
 
 Add a lightweight verification check that prevents old reference language from
 re-entering v1 docs and helper command surfaces.
@@ -1094,7 +1147,7 @@ Acceptance criteria:
 - Simulation-only fallback is visibly labeled in docs, logs, and summaries.
 - No helper exposes supported offline Ubuntu dependency bundle workflows.
 
-## Step 14: Final End-To-End Acceptance
+## Step 15: Final End-To-End Acceptance
 
 Run final acceptance in this order:
 
@@ -1103,9 +1156,8 @@ Run final acceptance in this order:
 3. Docker simulation preflight and setup phases through `simulate.sh`.
 4. Docker full verification through `simulate.sh`.
 5. Global evidence aggregation.
-6. VM scaffold preflight checks.
-7. Real VM implementation and verification from Step 15 is skipped for the
-   current default plan.
+6. Shared simulation library checks from Step 12.
+7. VM simulation checks from Step 13 when VM implementation is in scope.
 
 Retained rendered inputs, prepared artifacts, staged artifacts, and harness
 state may be reused only when manifests and checksums verify against the current
@@ -1140,6 +1192,11 @@ simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/example.env
 ```
 
+When Step 13 is in scope for the release, also run the VM lifecycle through
+`prove-integration`, `reboot --all`, `down`, and `clean` in an approved VM
+environment. When Step 13 is not in scope, final acceptance must say it was
+skipped and must not claim VM readiness or VM end-to-end verification.
+
 Final acceptance criteria:
 
 - A new operator can follow the docs without repo history.
@@ -1151,45 +1208,9 @@ Final acceptance criteria:
 - Validation artifacts are produced and retained for review.
 - The package does not claim strict air-gapped support in v1.
 - The package does not support offline Ubuntu dependency bundles in v1.
-- Step 12 VM scaffold checks pass without claiming real VM implementation or
-  real VM end-to-end verification.
-- Step 15 real VM implementation and verification is documented as skipped for
-  now.
-
-## Step 15: Future Real VM Implementation And Verification
-
-Step 15 is future work and must be skipped in the current default plan. It
-exists to preserve the intended target-deployment VM verification path without
-claiming that the repository implements it now.
-
-When explicitly scheduled later, Step 15 should implement the real VM behavior
-behind the Step 12 scaffold:
-
-- Provision or identify separate bundle factory, LDAP, Gerrit, Jenkins
-  controller, and Jenkins agent VMs.
-- Verify that every VM matches the Version Baseline before artifact
-  preparation, staging, service configuration, or end-to-end verification.
-- Run role helper artifact preparation on the bundle factory VM.
-- Stage prepared artifacts to service VMs and verify target-side manifests and
-  checksums before service mutation.
-- Configure LDAP, Gerrit, Jenkins controller, and Jenkins agent with
-  systemd-oriented service behavior.
-- Run readiness checks for host tooling, env values, SSH reachability, target
-  addresses, service state, runtime accounts, LDAP, endpoints,
-  Gerrit/Jenkins integration, and agent readiness.
-- Run the Docker-proven Gerrit Trigger, Jenkins scheduling, agent execution,
-  and `Verified +1` vote flow.
-- Collect and aggregate target-deployment or VM simulation evidence using the
-  Step 10 evidence model.
-- Record the Version Baseline in VM evidence and fail or block the run when the
-  VM version combination differs.
-
-Skip rule:
-
-- Do not run Step 15 as part of current default acceptance.
-- Do not claim real VM implementation, real VM readiness, or real VM
-  end-to-end verification until Step 15 is explicitly implemented and run in an
-  approved VM environment.
+- Step 12 shared library extraction preserves Docker behavior.
+- Step 13 VM simulation either passes in an approved VM environment or is
+  explicitly documented as out of scope without claiming VM readiness.
 
 ## Commit Strategy
 
@@ -1206,10 +1227,10 @@ Keep commits small and logical:
 9. Add Jenkins agent manual/helper/templates.
 10. Add validation and evidence collection.
 11. Add Docker simulation.
-12. Add VM verification scaffold.
-13. Add boundary checks.
-14. Add final acceptance docs.
-15. Document future real VM implementation.
+12. Extract shared simulation support library.
+13. Implement VM simulation harness.
+14. Add boundary checks.
+15. Add final acceptance docs.
 
 Use standard Git-style commit messages with concise imperative subjects, for
 example:

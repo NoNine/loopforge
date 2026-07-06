@@ -12,6 +12,13 @@ simulation/docker/simulate.sh [--env FILE] <command>
 orchestration. Do not add standalone Docker phase scripts or a second Docker
 verifier CLI.
 
+Docker simulation is the executable reference harness. It may source shared
+support helpers from `simulation/lib/` after they exist, but that extraction
+must preserve Docker command behavior. Docker-specific Compose selection,
+container lifecycle, bind-mount validation, `docker cp` waivers, loopback
+browser ports, target SSH staging, and cleanup behavior remain Docker harness
+responsibilities rather than generic backend hooks.
+
 Lifecycle checkpoint semantics are defined in `docs/lifecycle-contract.md`.
 Docker generated-state and stale-container behavior is defined in this
 document.

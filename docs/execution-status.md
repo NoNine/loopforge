@@ -18,12 +18,12 @@ transcripts here.
 ## Current State
 
 - Branch: `0616`
-- Current HEAD: `bcbf97e`
+- Current HEAD: `5335577`
 - Current implementation stage: Step 11 is accepted. Accepted follow-ups cover
   Jenkins shared integration storage, dynamic Docker browser ports, and Jenkins
   plugin workflow rework.
-- Next authorized work state: continue only from Step 12 or another follow-up
-  explicitly authorized by the user.
+- Next authorized work state: continue from Step 12, extract shared simulation
+  support library, or another follow-up explicitly authorized by the user.
 - Ledger policy: this file is mutable execution state and remains unstaged
   unless the user explicitly requests a ledger snapshot commit.
 - Active guardrail: do not run another end-to-end Docker simulation until the
@@ -206,33 +206,36 @@ transcripts here.
 - Notes: Clarified role readiness language toward real service/runtime checks
   and away from ambiguous observable/model-only proof wording.
 
-### Step 12: Add VM Verification Scaffold
+### Step 12: Extract Shared Simulation Support Library
+
+- Status: Pending
+- Commit: none
+- Verification: none
+- Notes: Extract backend-neutral helpers under `simulation/lib/` while keeping
+  Docker and VM as separate `simulate.sh` CLIs.
+
+### Step 13: Implement VM Simulation Harness
+
+- Status: Pending
+- Commit: none
+- Verification: none
+- Notes: Build real VM simulation on the shared support library. There is no
+  separate VM scaffold step.
+
+### Step 14: Add Boundary Checks
 
 - Status: Pending
 - Commit: none
 - Verification: none
 - Notes: Future pending step.
 
-### Step 13: Add Boundary Checks
+### Step 15: Add Final Acceptance Docs
 
 - Status: Pending
 - Commit: none
 - Verification: none
-- Notes: Future pending step.
-
-### Step 14: Add Final Acceptance Docs
-
-- Status: Pending
-- Commit: none
-- Verification: none
-- Notes: Future pending step.
-
-### Step 15: Future Real VM Implementation And Verification
-
-- Status: Skipped
-- Commit: none
-- Verification: none
-- Notes: Future real VM implementation and verification only.
+- Notes: Future pending step. VM simulation is included only when Step 13 is in
+  scope; otherwise final acceptance must not claim VM readiness.
 
 ## Resume Instructions
 
