@@ -8,6 +8,8 @@ The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
 `simulation/README.md`. This file documents VM-specific command ownership and
 future-gate expectations.
+VM hostnames, browser URLs, SSH host strings, and LDAP endpoint identities
+follow `docs/endpoint-identity.md`.
 
 VM simulation may use simulation-owned fake LDAP bind passwords for its own
 LDAP VM, matching Docker simulation. Those values must be labeled as test

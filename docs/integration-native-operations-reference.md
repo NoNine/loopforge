@@ -38,6 +38,10 @@ automation-equivalent command tables to this document.
 
 Record these values before shared integration:
 
+Choose hostnames, URLs, SSH host strings, and LDAP endpoint identities according
+to `docs/endpoint-identity.md`. Do not copy Docker service names or Docker
+loopback URLs into target-deployment inventory.
+
 | Item | Value |
 | --- | --- |
 | Gerrit URL | `GERRIT_CANONICAL_WEB_URL` |

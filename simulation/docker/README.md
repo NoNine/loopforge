@@ -20,6 +20,8 @@ The shared Docker target image is a simulation superset. It combines
 role-runtime packages, helper-script packages, and Docker harness packages; it
 is not authority for native target-host baselines. See
 `docs/package-requirements.md` for the package classification.
+Docker-specific service names, host loopback browser URLs, and target SSH
+inventory values follow `docs/endpoint-identity.md`.
 
 ## Command Reference
 

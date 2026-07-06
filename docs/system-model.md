@@ -243,6 +243,9 @@ prefer these interfaces over deployment-specific internals.
 | LDAP URL | Gerrit and Jenkins LDAP bind/search checks and LDAP-backed login assumptions. |
 | Jenkins controller to agent SSH | Runtime build-agent connection used by Jenkins to schedule and execute jobs. |
 
+Endpoint identity rules for these interfaces are defined in
+`docs/endpoint-identity.md`.
+
 `scripts/integration-setup.sh` should use SSH as the common OS/control-plane
 interface across containers, VMs, and real hosts. It should not use Docker as
 its target communication surface. Docker simulation may use Docker APIs to

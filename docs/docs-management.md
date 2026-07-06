@@ -30,7 +30,9 @@ Use this order when deciding where a product or process fact belongs:
    `docs/version-baseline.md` for default component versions,
    `docs/package-requirements.md` for host and package prerequisites,
    `docs/artifact-bundle-contract.md` for artifact contents and source
-   boundaries, `docs/validation-and-evidence.md` for evidence and redaction,
+   boundaries, `docs/endpoint-identity.md` for hostnames, URLs, SSH host
+   strings, and LDAP endpoint identity,
+   `docs/validation-and-evidence.md` for evidence and redaction,
    `docs/gerrit-trigger-integration.md` for Gerrit Trigger and `Verified`
    behavior, and `docs/ci-model.md` for external product CI configuration
    ownership and generated Jenkins job modeling.

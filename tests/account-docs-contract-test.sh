@@ -102,6 +102,42 @@ require_doc_text simulation/docker/README.md \
 require_doc_text docs/directory-model.md \
   'Host-side generated paths use the local host account that runs the simulation' \
   'Directory model must separate host generated ownership from target operator ownership'
+require_doc_text docs/docs-management.md \
+  'docs/endpoint-identity.md' \
+  'Docs management must list endpoint identity as a topic authority'
+require_doc_text docs/system-model.md \
+  'Endpoint identity rules for these interfaces are defined in' \
+  'System model must point Standard Interfaces readers to endpoint identity rules'
+require_doc_text docs/endpoint-identity.md \
+  '# Endpoint Identity' \
+  'Endpoint identity topic doc must exist'
+require_doc_text docs/endpoint-identity.md \
+  '| Docker simulation | Docker service names inside containers; `127.0.0.1` with published ports from the host |' \
+  'Endpoint identity topic doc must define Docker simulation rule'
+require_doc_text docs/endpoint-identity.md \
+  '| VM simulation | Stable VM DNS names or reviewed VM host aliases |' \
+  'Endpoint identity topic doc must define VM simulation rule'
+require_doc_text docs/endpoint-identity.md \
+  '| Target deployment | Site-approved FQDNs or DNS names |' \
+  'Endpoint identity topic doc must define target deployment rule'
+require_doc_text docs/endpoint-identity.md \
+  'Do not use Docker container IP addresses in docs, examples, env defaults, or' \
+  'Endpoint identity topic doc must reject Docker container IPs'
+require_doc_text docs/endpoint-identity.md \
+  'It is not a cross-host target-deployment identity.' \
+  'Endpoint identity topic doc must reject target-deployment loopback identities'
+require_doc_text docs/endpoint-identity.md \
+  'known_hosts` files must be generated and checked for the exact SSH host' \
+  'Endpoint identity topic doc must define known_hosts matching rule'
+require_doc_text simulation/docker/README.md \
+  'Docker-specific service names, host loopback browser URLs, and target SSH' \
+  'Docker README must point to endpoint identity rules'
+require_doc_text simulation/vm/README.md \
+  'VM hostnames, browser URLs, SSH host strings, and LDAP endpoint identities' \
+  'VM README must point to endpoint identity rules'
+require_doc_text docs/integration-native-operations-reference.md \
+  'Do not copy Docker service names' \
+  'Integration native reference must warn against Docker identities in target deployment'
 
 reject_doc_text simulation/docker/README.md \
   'This local `ci-operator` OS account has' \
