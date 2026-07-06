@@ -4,11 +4,19 @@ set -euo pipefail
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
+simulation_lib_dir="$repo_root/simulation/lib"
+. "$simulation_lib_dir/common.sh"
+. "$simulation_lib_dir/quote.sh"
+. "$simulation_lib_dir/roles.sh"
+. "$simulation_lib_dir/artifacts.sh"
+. "$simulation_lib_dir/env.sh"
+. "$simulation_lib_dir/state.sh"
+. "$simulation_lib_dir/logs.sh"
+. "$simulation_lib_dir/evidence.sh"
 docker_dir="$script_dir"
 compose_file="$docker_dir/compose.yaml"
 docker_env_example="$docker_dir/examples/docker.env.example"
 integration_helper="${HARNESS_TEST_INTEGRATION_HELPER:-$repo_root/scripts/integration-setup.sh}"
-roles=(gerrit jenkins-controller jenkins-agent)
 services=(bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target)
 
 usage() {
@@ -46,39 +54,6 @@ The harness is the Docker simulation CLI. It owns strict role and cross-role
 integration phases. Public internet fallback on target hosts is
 simulation-only.
 USAGE
-}
-
-die() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
-}
-
-print_command_summary() {
-  local command_name role message
-  command_name="${1:?command required}"
-  role="${2-}"
-  message="${3:?message required}"
-  if [ -n "$role" ]; then
-    printf '%s[%s]: %s\n' "$command_name" "$role" "$message"
-  else
-    printf '%s: %s\n' "$command_name" "$message"
-  fi
-}
-
-print_command_failure() {
-  local command_name role message log evidence
-  command_name="${1:?command required}"
-  role="${2-}"
-  message="${3:?message required}"
-  log="${4-}"
-  evidence="${5-}"
-  print_command_summary "$command_name" "$role" "$message"
-  [ -n "$log" ] && printf 'log=%s\n' "$log"
-  [ -n "$evidence" ] && printf 'evidence=%s\n' "$evidence"
 }
 
 validate_compose_name() {
@@ -283,114 +258,68 @@ validate_canonical_run_root() {
   done
 }
 
-sha256_file() {
-  sha256sum "$1" | awk '{print $1}'
-}
-
-runtime_env_fingerprint() {
-  sha256_file "$HARNESS_RUNTIME_ENV"
-}
-
-marker_value() {
-  local file key
-  file="${1:?file required}"
-  key="${2:?key required}"
-  awk -F= -v key="$key" '$1 == key { print substr($0, length(key) + 2); found = 1; exit } END { exit !found }' "$file"
-}
-
 write_run_marker() {
-  local fingerprint
-  fingerprint="$(runtime_env_fingerprint)"
-  cat >"$HARNESS_RUN_MARKER" <<EOF
-mode=$HARNESS_MODE
-run_id=$HARNESS_RUN_ID
-project_name=$HARNESS_PROJECT_NAME
-repo_root=$repo_root
-generated_run_dir=$HARNESS_GENERATED_RUN_DIR
-runtime_env_fingerprint=$fingerprint
-EOF
-  chmod 0600 "$HARNESS_RUN_MARKER"
+  write_runtime_marker \
+    "$HARNESS_RUN_MARKER" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$repo_root" \
+    "$HARNESS_GENERATED_RUN_DIR" \
+    "$HARNESS_RUNTIME_ENV"
 }
 
 verify_run_marker() {
-  local marker fingerprint
+  local marker
   marker="${HARNESS_RUN_MARKER:-$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env}"
   validate_canonical_run_root
-  [ -f "$marker" ] || die "Missing Docker harness run marker: $marker"
-  [ "$(marker_value "$marker" mode)" = "$HARNESS_MODE" ] ||
-    die "Run marker mode does not match selected runtime config"
-  [ "$(marker_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] ||
-    die "Run marker run ID does not match selected runtime config"
-  [ "$(marker_value "$marker" project_name)" = "$HARNESS_PROJECT_NAME" ] ||
-    die "Run marker project name does not match selected runtime config"
-  [ "$(marker_value "$marker" repo_root)" = "$repo_root" ] ||
-    die "Run marker repo root does not match this checkout"
-  [ "$(marker_value "$marker" generated_run_dir)" = "$HARNESS_GENERATED_RUN_DIR" ] ||
-    die "Run marker generated run dir does not match selected runtime config"
-  fingerprint="$(runtime_env_fingerprint)"
-  [ "$(marker_value "$marker" runtime_env_fingerprint)" = "$fingerprint" ] ||
-    die "Run marker runtime env fingerprint does not match selected runtime config"
-}
-
-require_generated_state_file() {
-  local label file
-  label="${1:?label required}"
-  file="${2:?file required}"
-  [ -f "$file" ] || die "Inconsistent Docker generated state: missing $label: $file"
-  [ -r "$file" ] || die "Inconsistent Docker generated state: unreadable $label: $file"
-}
-
-require_generated_state_dir() {
-  local label dir
-  label="${1:?label required}"
-  dir="${2:?dir required}"
-  [ -d "$dir" ] || die "Inconsistent Docker generated state: missing $label: $dir"
-  [ ! -L "$dir" ] || die "Inconsistent Docker generated state: $label must not be a symlink: $dir"
+  verify_runtime_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$repo_root" \
+    "$HARNESS_GENERATED_RUN_DIR" \
+    "$HARNESS_RUNTIME_ENV" \
+    "Docker harness run marker"
 }
 
 validate_core_generated_state() {
-  local role service
+  local role service state_name
+  state_name="Docker generated state"
   validate_canonical_run_root
-  require_generated_state_file "rendered harness env" "$HARNESS_RENDERED_ENV"
-  require_generated_state_file "runtime harness env" "$HARNESS_RUNTIME_ENV"
-  require_generated_state_file "artifact manifest contract" "$HARNESS_BASELINE_CONTRACT"
-  require_generated_state_dir "runtime input directory" "$HARNESS_RUNTIME_INPUT_DIR"
-  require_generated_state_file "runtime input harness env" "$HARNESS_RUNTIME_INPUT_DIR/harness.env"
-  require_generated_state_file "runtime input Gerrit env" "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
-  require_generated_state_file "runtime input Jenkins controller env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
-  require_generated_state_file "runtime input Jenkins agent env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
-  require_generated_state_file "runtime input integration env" "$HARNESS_RUNTIME_INPUT_DIR/integration.env"
-  require_generated_state_file "bundle factory Gerrit helper env" "$(host_gerrit_bundle_factory_env_file)"
-  require_generated_state_file "bundle factory Jenkins controller helper env" "$(host_jenkins_controller_bundle_factory_env_file)"
-  require_generated_state_file "bundle factory Jenkins agent helper env" "$(host_container_env_file_for_role jenkins-agent bundle-factory)"
+  require_generated_state_file "$state_name" "rendered harness env" "$HARNESS_RENDERED_ENV"
+  require_generated_state_file "$state_name" "runtime harness env" "$HARNESS_RUNTIME_ENV"
+  require_generated_state_file "$state_name" "artifact manifest contract" "$HARNESS_BASELINE_CONTRACT"
+  require_generated_state_dir "$state_name" "runtime input directory" "$HARNESS_RUNTIME_INPUT_DIR"
+  require_generated_state_file "$state_name" "runtime input harness env" "$HARNESS_RUNTIME_INPUT_DIR/harness.env"
+  require_generated_state_file "$state_name" "runtime input Gerrit env" "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+  require_generated_state_file "$state_name" "runtime input Jenkins controller env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
+  require_generated_state_file "$state_name" "runtime input Jenkins agent env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
+  require_generated_state_file "$state_name" "runtime input integration env" "$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+  require_generated_state_file "$state_name" "bundle factory Gerrit helper env" "$(host_gerrit_bundle_factory_env_file)"
+  require_generated_state_file "$state_name" "bundle factory Jenkins controller helper env" "$(host_jenkins_controller_bundle_factory_env_file)"
+  require_generated_state_file "$state_name" "bundle factory Jenkins agent helper env" "$(host_container_env_file_for_role jenkins-agent bundle-factory)"
   for role in "${roles[@]}"; do
     service="$(service_for_role "$role")"
-    require_generated_state_file "$role target helper env" "$(host_container_env_file_for_role "$role" "$service")"
+    require_generated_state_file "$state_name" "$role target helper env" "$(host_container_env_file_for_role "$role" "$service")"
   done
-  require_generated_state_dir "host contribution directory" "$HARNESS_HOST_DIR"
-  require_generated_state_dir "target contribution directory" "$HARNESS_TARGET_DIR"
-  require_generated_state_dir "product home directory" "$HARNESS_PRODUCT_HOME_DIR"
-  require_generated_state_dir "staging directory" "$HARNESS_STAGING_DIR"
-  require_generated_state_dir "exported artifact directory" "$HARNESS_EXPORTED_ARTIFACT_DIR"
-  require_generated_state_dir "evidence directory" "$HARNESS_EVIDENCE_DIR"
-  require_generated_state_dir "log directory" "$HARNESS_LOG_DIR"
-  require_generated_state_dir "bundle factory operator input source" "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR"
-  require_generated_state_dir "LDAP data bind source" "$HARNESS_LDAP_DATA_DIR"
-  require_generated_state_dir "LDAP config bind source" "$HARNESS_LDAP_CONFIG_DIR"
-  require_generated_state_dir "Gerrit product home bind source" "$HARNESS_PRODUCT_HOME_DIR/gerrit"
-  require_generated_state_dir "Jenkins controller product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller"
-  require_generated_state_dir "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
-  require_generated_state_dir "shared Jenkins storage bind source" "$HARNESS_SHARED_JENKINS_STORAGE_DIR"
-  require_generated_state_dir "target SSH state" "$HARNESS_TARGET_SSH_DIR"
-  require_generated_state_file "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-}
-
-timestamp_utc() {
-  date -u +%Y%m%dT%H%M%SZ
-}
-
-iso_timestamp_utc() {
-  date -u +%Y-%m-%dT%H:%M:%SZ
+  require_generated_state_dir "$state_name" "host contribution directory" "$HARNESS_HOST_DIR"
+  require_generated_state_dir "$state_name" "target contribution directory" "$HARNESS_TARGET_DIR"
+  require_generated_state_dir "$state_name" "product home directory" "$HARNESS_PRODUCT_HOME_DIR"
+  require_generated_state_dir "$state_name" "staging directory" "$HARNESS_STAGING_DIR"
+  require_generated_state_dir "$state_name" "exported artifact directory" "$HARNESS_EXPORTED_ARTIFACT_DIR"
+  require_generated_state_dir "$state_name" "evidence directory" "$HARNESS_EVIDENCE_DIR"
+  require_generated_state_dir "$state_name" "log directory" "$HARNESS_LOG_DIR"
+  require_generated_state_dir "$state_name" "bundle factory operator input source" "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR"
+  require_generated_state_dir "$state_name" "LDAP data bind source" "$HARNESS_LDAP_DATA_DIR"
+  require_generated_state_dir "$state_name" "LDAP config bind source" "$HARNESS_LDAP_CONFIG_DIR"
+  require_generated_state_dir "$state_name" "Gerrit product home bind source" "$HARNESS_PRODUCT_HOME_DIR/gerrit"
+  require_generated_state_dir "$state_name" "Jenkins controller product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller"
+  require_generated_state_dir "$state_name" "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
+  require_generated_state_dir "$state_name" "shared Jenkins storage bind source" "$HARNESS_SHARED_JENKINS_STORAGE_DIR"
+  require_generated_state_dir "$state_name" "target SSH state" "$HARNESS_TARGET_SSH_DIR"
+  require_generated_state_file "$state_name" "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
 }
 
 HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
@@ -543,21 +472,8 @@ export HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
 compose_kind=""
 compose_cmd=()
 
-require_readable_file() {
-  local name file
-  name="${1:?name required}"
-  file="${2:?file required}"
-  [ -f "$file" ] || die "$name does not exist: $file"
-  [ -r "$file" ] || die "$name is not readable: $file"
-}
-
 resolve_repo_relative_path() {
-  local path
-  path="${1:?path required}"
-  case "$path" in
-    /*) printf '%s\n' "$path" ;;
-    *) printf '%s/%s\n' "$repo_root" "$path" ;;
-  esac
+  resolve_base_relative_path "$repo_root" "${1:?path required}"
 }
 
 normalize_operator_env_paths() {
@@ -617,10 +533,7 @@ load_env_file() {
   HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
   HARNESS_JENKINS_AGENT_ENV_FILE="$repo_root/examples/jenkins-agent.env.example"
-  set -a
-  # shellcheck disable=SC1090
-  . "$file"
-  set +a
+  source_env_file "Harness env file" "$file"
   normalize_operator_env_paths
   if [ -n "$HARNESS_RUN_ID_OPERATOR_SET" ]; then
     HARNESS_RUN_ID="$HARNESS_RUN_ID_OPERATOR_VALUE"
@@ -673,10 +586,7 @@ load_rendered_config_if_present() {
   local runtime
   runtime="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
   [ -f "$runtime" ] || return 1
-  set -a
-  # shellcheck disable=SC1090
-  . "$runtime"
-  set +a
+  source_env_file "Docker harness runtime config" "$runtime"
   reapply_operator_overrides
   reject_custom_output_paths
   apply_canonical_output_paths
@@ -717,11 +627,12 @@ runtime_config_valid() {
 }
 
 generated_runtime_state_present() {
-  [ -e "$HARNESS_RUN_MARKER" ] ||
-    [ -e "$HARNESS_RENDERED_ENV" ] ||
-    [ -e "$HARNESS_RUNTIME_ENV" ] ||
-    [ -e "$HARNESS_RUNTIME_INPUT_DIR" ] ||
-    [ -e "$HARNESS_HOST_DIR/rendered" ]
+  any_path_exists \
+    "$HARNESS_RUN_MARKER" \
+    "$HARNESS_RENDERED_ENV" \
+    "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
+    "$HARNESS_HOST_DIR/rendered"
 }
 
 verify_selected_container_mounts() {
@@ -733,11 +644,7 @@ bootstrap_harness_env() {
 }
 
 load_harness_integration_env() {
-  require_readable_file "Integration env file for Docker harness shared storage" "$HARNESS_INTEGRATION_ENV_FILE"
-  set -a
-  # shellcheck disable=SC1090
-  . "$HARNESS_INTEGRATION_ENV_FILE"
-  set +a
+  source_env_file "Integration env file for Docker harness shared storage" "$HARNESS_INTEGRATION_ENV_FILE"
   HARNESS_JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
   validate_shared_storage_path "HARNESS_JENKINS_SHARED_STORAGE_PATH" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
   export HARNESS_JENKINS_SHARED_STORAGE_PATH
@@ -760,35 +667,16 @@ ensure_target_ssh_keypair() {
   fi
 }
 
-set_env_file_value() {
-  local file name value tmp
-  file="${1:?env file required}"
-  name="${2:?env name required}"
-  value="${3-}"
-  tmp="$(mktemp "${file}.XXXXXX")"
-  grep -v "^$name=" "$file" >"$tmp" || true
-  printf '%s=%s\n' "$name" "$(shell_quote "$value")" >>"$tmp"
-  chmod 0600 "$tmp"
-  mv -- "$tmp" "$file"
-}
-
-copy_runtime_env_inputs_to() {
-  local dest_dir
-  dest_dir="${1:?destination required}"
-  mkdir -p "$dest_dir"
-  umask 077
-  sed '/^HARNESS_LDAP_BIND_PASSWORD=/d' "$HARNESS_ENV_FILE" >"$dest_dir/harness.env"
-  cp -- "$HARNESS_GERRIT_ENV_FILE" "$dest_dir/gerrit.env"
-  cp -- "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$dest_dir/jenkins-controller.env"
-  cp -- "$HARNESS_JENKINS_AGENT_ENV_FILE" "$dest_dir/jenkins-agent.env"
-  cp -- "$HARNESS_INTEGRATION_ENV_FILE" "$dest_dir/integration.env"
-  chmod 0600 "$dest_dir/"*.env
-}
-
 copy_runtime_env_inputs() {
   HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
   rm -rf "$HARNESS_RUNTIME_INPUT_DIR"
-  copy_runtime_env_inputs_to "$HARNESS_RUNTIME_INPUT_DIR"
+  copy_simulation_runtime_env_inputs \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
+    "$HARNESS_ENV_FILE" \
+    "$HARNESS_GERRIT_ENV_FILE" \
+    "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" \
+    "$HARNESS_JENKINS_AGENT_ENV_FILE" \
+    "$HARNESS_INTEGRATION_ENV_FILE"
   HARNESS_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/harness.env"
   HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
@@ -1126,11 +1014,9 @@ bounded_log_dir_for_name() {
 }
 
 bounded_log_path() {
-  local name dir
+  local name
   name="${1:?log name required}"
-  dir="$(bounded_log_dir_for_name "$name")"
-  mkdir -p "$dir"
-  printf '%s/%s-%s.log' "$dir" "$name" "$(timestamp_utc)"
+  bounded_log_path_in_dir "$(bounded_log_dir_for_name "$name")" "$name"
 }
 
 validate_tcp_port_value() {
@@ -1300,72 +1186,6 @@ service_for_role() {
   esac
 }
 
-helper_for_role() {
-  case "${1:-}" in
-    gerrit) printf '%s\n' scripts/gerrit-setup.sh ;;
-    jenkins-controller) printf '%s\n' scripts/jenkins-controller-setup.sh ;;
-    jenkins-agent) printf '%s\n' scripts/jenkins-agent-setup.sh ;;
-    *) die "Unknown role '${1:-}'; expected gerrit, jenkins-controller, or jenkins-agent" ;;
-  esac
-}
-
-parse_role() {
-  local role=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --role)
-        [ "$#" -ge 2 ] || die "--role requires a value"
-        role="$2"
-        shift 2
-        ;;
-      --role=*)
-        role="${1#--role=}"
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        die "Unknown option for role-scoped command: $1"
-        ;;
-    esac
-  done
-
-  [ -n "$role" ] || die "Missing --role; expected gerrit, jenkins-controller, or jenkins-agent"
-  service_for_role "$role" >/dev/null
-  printf '%s\n' "$role"
-}
-
-parse_optional_role() {
-  local role=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --role)
-        [ "$#" -ge 2 ] || die "--role requires a value"
-        role="$2"
-        shift 2
-        ;;
-      --role=*)
-        role="${1#--role=}"
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        die "Unknown option for role command: $1"
-        ;;
-    esac
-  done
-
-  if [ -n "$role" ]; then
-    service_for_role "$role" >/dev/null
-  fi
-  printf '%s\n' "$role"
-}
-
 test_stub_role_command() {
   local command_name role
   command_name="${1:?command required}"
@@ -1419,19 +1239,6 @@ run_all_roles() {
     unset rc
   done
   return "$first_rc"
-}
-
-json_quote() {
-  local value
-  value="${1-}"
-  require_command python3
-  python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$value"
-}
-
-shell_quote() {
-  local value
-  value="${1-}"
-  printf '%q' "$value"
 }
 
 owned_directory_command() {
@@ -1520,96 +1327,6 @@ checksum_reference_for_evidence() {
       printf '%s\n' "not-applicable"
       ;;
   esac
-}
-
-bundle_name_for_role() {
-  local role
-  role="${1:?role required}"
-  case "$role" in
-    gerrit) printf '%s\n' "gerrit-artifacts-bundle" ;;
-    jenkins-controller) printf '%s\n' "jenkins-artifacts-bundle" ;;
-    jenkins-agent) printf '%s\n' "jenkins-agent-artifacts-bundle" ;;
-    *) die "Unknown role for artifact bundle: $role" ;;
-  esac
-}
-
-bundle_payload_dir_for_role() {
-  local role
-  role="${1:?role required}"
-  case "$role" in
-    gerrit) printf '%s\n' "gerrit" ;;
-    jenkins-controller) printf '%s\n' "jenkins" ;;
-    jenkins-agent) printf '%s\n' "jenkins-agent" ;;
-    *) die "Unknown role for artifact payload: $role" ;;
-  esac
-}
-
-container_bundle_factory_work_dir_for_role() {
-  local role bundle payload
-  role="${1:?role required}"
-  bundle="$(bundle_name_for_role "$role")"
-  payload="$(bundle_payload_dir_for_role "$role")"
-  printf '/var/lib/loopforge/preparing/%s/%s\n' "$bundle" "$payload"
-}
-
-container_bundle_factory_root_for_role() {
-  local role bundle
-  role="${1:?role required}"
-  bundle="$(bundle_name_for_role "$role")"
-  printf '/var/lib/loopforge/preparing/%s\n' "$bundle"
-}
-
-container_prepared_artifact_archive_for_role() {
-  local role bundle
-  role="${1:?role required}"
-  bundle="$(bundle_name_for_role "$role")"
-  printf '/var/lib/loopforge/preparing/%s.tar.gz\n' "$bundle"
-}
-
-container_prepared_artifact_checksum_for_role() {
-  local role
-  role="${1:?role required}"
-  printf '%s.sha256\n' "$(container_prepared_artifact_archive_for_role "$role")"
-}
-
-exported_artifact_archive_for_role() {
-  local role bundle
-  role="${1:?role required}"
-  bundle="$(bundle_name_for_role "$role")"
-  printf '%s/%s.tar.gz\n' "$HARNESS_EXPORTED_ARTIFACT_DIR" "$bundle"
-}
-
-exported_artifact_checksum_for_role() {
-  local role
-  role="${1:?role required}"
-  printf '%s.sha256\n' "$(exported_artifact_archive_for_role "$role")"
-}
-
-stage_bundle_dir_for_role() {
-  local role bundle
-  role="${1:?role required}"
-  bundle="$(bundle_name_for_role "$role")"
-  printf '%s/%s/%s\n' "$HARNESS_STAGING_DIR" "$role" "$bundle"
-}
-
-stage_payload_dir_for_role() {
-  local role payload
-  role="${1:?role required}"
-  payload="$(bundle_payload_dir_for_role "$role")"
-  printf '%s/%s\n' "$(stage_bundle_dir_for_role "$role")" "$payload"
-}
-
-target_bundle_dir_for_role() {
-  local role
-  role="${1:?role required}"
-  printf '%s\n' "$(target_payload_dir_for_role "$role")"
-}
-
-target_payload_dir_for_role() {
-  local role payload
-  role="${1:?role required}"
-  payload="$(bundle_payload_dir_for_role "$role")"
-  printf '/var/lib/loopforge/staging/%s\n' "$payload"
 }
 
 ensure_gerrit_validation_key() {
@@ -1880,7 +1597,7 @@ copy_bundle_factory_artifacts_to_host() {
   if ! docker cp "$container_id:$container_checksum" "$checksum" >>"$log" 2>&1; then
     return 1
   fi
-  if ! (cd "$HARNESS_EXPORTED_ARTIFACT_DIR" && sha256sum -c "$(basename "$checksum")") >>"$log" 2>&1; then
+  if ! verify_checksum_file_in_dir "$checksum" "$HARNESS_EXPORTED_ARTIFACT_DIR" "$log"; then
     return 1
   fi
   tar -xOf "$archive" "$payload/manifest.txt" >"$HARNESS_EXPORTED_ARTIFACT_DIR/.manifest-$role.tmp"
@@ -1983,66 +1700,6 @@ require_jenkins_controller_bundle_factory_env() {
     "Rendered Jenkins controller bundle factory env file; run init-run first" \
     "$(host_jenkins_controller_bundle_factory_env_file)"
   jenkins_controller_bundle_factory_env_file
-}
-
-manifest_get() {
-  local key manifest
-  key="${1:?key required}"
-  manifest="${2:?manifest required}"
-  awk -F= -v key="$key" '
-    $1 == key {
-      print substr($0, length(key) + 2)
-      found = 1
-      exit
-    }
-    END {
-      if (!found) {
-        exit 1
-      }
-    }
-  ' "$manifest"
-}
-
-env_file_value() {
-  local file key
-  file="${1:?file required}"
-  key="${2:?key required}"
-  awk -F= -v key="$key" '
-    $1 == key {
-      value = substr($0, length(key) + 2)
-      gsub(/^"/, "", value)
-      gsub(/"$/, "", value)
-      print value
-      found = 1
-      exit
-    }
-    END {
-      if (!found) {
-        exit 1
-      }
-    }
-  ' "$file"
-}
-
-validate_manifest_value() {
-  local role manifest log key expected actual
-  role="${1:?role required}"
-  manifest="${2:?manifest required}"
-  log="${3:?log required}"
-  key="${4:?key required}"
-  expected="${5:?expected required}"
-
-  if ! actual="$(manifest_get "$key" "$manifest")"; then
-    printf 'baseline_drift role=%s field=%s expected=%s actual=<missing> manifest=%s\n' \
-      "$role" "$key" "$expected" "$manifest" >>"$log"
-    return 1
-  fi
-
-  if [ "$actual" != "$expected" ]; then
-    printf 'baseline_drift role=%s field=%s expected=%s actual=%s manifest=%s\n' \
-      "$role" "$key" "$expected" "$actual" "$manifest" >>"$log"
-    return 1
-  fi
 }
 
 validate_role_baseline_manifest() {
@@ -2235,7 +1892,7 @@ write_evidence() {
   else
     ensure_dirs
   fi
-  file="$(evidence_dir_for_record "$checkpoint" "$role")/${checkpoint}-${role}-$(timestamp_utc).json"
+  file="$(evidence_record_path "$(evidence_dir_for_record "$checkpoint" "$role")" "$checkpoint" "$role")"
   mkdir -p "$(dirname "$file")"
   manifest_ref="$(manifest_reference_for_evidence "$checkpoint" "$role")"
   checksum_ref="$(checksum_reference_for_evidence "$checkpoint" "$role")"
@@ -2921,7 +2578,7 @@ cmd_stage_artifacts() {
   [ -f "$checksum" ] || die "Missing exported artifact archive checksum for $role: $checksum"
 
   : >"$log"
-  if ! (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$checksum")") >>"$log" 2>&1; then
+  if ! verify_checksum_file_in_dir "$checksum" "$(dirname "$archive")" "$log"; then
     evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Exported artifact archive checksum verification failed")"
     print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
     return 1
@@ -3323,32 +2980,27 @@ integration_validate_marker_path() {
 }
 
 write_integration_validate_marker() {
-  local marker fingerprint
+  local marker
   marker="$(integration_validate_marker_path)"
-  fingerprint="$(runtime_env_fingerprint)"
-  mkdir -p "$(dirname "$marker")"
-  cat >"$marker" <<EOF
-mode=$HARNESS_MODE
-run_id=$HARNESS_RUN_ID
-project_name=$HARNESS_PROJECT_NAME
-runtime_env_fingerprint=$fingerprint
-EOF
-  chmod 0600 "$marker"
+  write_checkpoint_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$HARNESS_RUNTIME_ENV"
 }
 
 prove_integration_validate_marker() {
-  local marker fingerprint
+  local marker
   marker="$(integration_validate_marker_path)"
   [ -f "$marker" ] || die "Missing successful validate-integration marker; run validate-integration first"
-  [ "$(marker_value "$marker" mode)" = "$HARNESS_MODE" ] ||
-    die "Validate-integration marker mode does not match selected runtime config"
-  [ "$(marker_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] ||
-    die "Validate-integration marker run ID does not match selected runtime config"
-  [ "$(marker_value "$marker" project_name)" = "$HARNESS_PROJECT_NAME" ] ||
-    die "Validate-integration marker project name does not match selected runtime config"
-  fingerprint="$(runtime_env_fingerprint)"
-  [ "$(marker_value "$marker" runtime_env_fingerprint)" = "$fingerprint" ] ||
-    die "Validate-integration marker runtime env fingerprint does not match selected runtime config"
+  verify_checkpoint_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$HARNESS_RUNTIME_ENV" \
+    "Validate-integration marker"
 }
 
 cmd_configure_integration() {
