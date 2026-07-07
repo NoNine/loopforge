@@ -103,6 +103,15 @@ require_doc_text docs/package-requirements.md \
 require_doc_text docs/package-requirements.md \
   'NFS utilities for shared Jenkins storage' \
   'Package requirements must document VM shared-storage tooling'
+require_doc_text docs/package-requirements.md \
+  '| VM LDAP guest | `slapd` for the simulation-owned LDAP service' \
+  'Package requirements must document the VM LDAP guest service package'
+require_doc_text docs/package-requirements.md \
+  '`ldap-utils` for LDAP bind/search readiness and seed proof' \
+  'Package requirements must document VM LDAP proof tooling'
+require_doc_text docs/package-requirements.md \
+  'VM LDAP guest service' \
+  'Package requirements evidence map must include VM LDAP guest service'
 
 require_doc_text docs/validation-and-evidence.md \
   'VM simulation evidence must identify the selected `vm_set_id` and `run_id`' \
@@ -116,6 +125,15 @@ require_doc_text docs/validation-and-evidence.md \
 require_doc_text docs/validation-and-evidence.md \
   'NFS-backed Jenkins shared storage' \
   'Evidence contract must require VM shared storage proof'
+require_doc_text docs/validation-and-evidence.md \
+  'VM LDAP evidence must record LDAP service readiness' \
+  'Evidence contract must require VM LDAP service readiness evidence'
+require_doc_text docs/validation-and-evidence.md \
+  'seeded account/group' \
+  'Evidence contract must require VM LDAP seeded account and group evidence'
+require_doc_text docs/validation-and-evidence.md \
+  'bind/search proof' \
+  'Evidence contract must require VM LDAP bind/search evidence'
 require_doc_text docs/validation-and-evidence.md \
   'must not imply `target-deployment` acceptance' \
   'Evidence contract must keep VM evidence separate from target deployment'
@@ -139,10 +157,46 @@ require_doc_text simulation/README.md \
 require_doc_text simulation/README.md \
   'near target deployment' \
   'Shared simulation README must define VM as near target deployment'
+require_doc_text simulation/README.md \
+  'realize LDAP as a simulation-owned directory' \
+  'Shared simulation README must require real simulation LDAP behavior'
+require_doc_text simulation/README.md \
+  'They must not satisfy LDAP readiness' \
+  'Shared simulation README must reject modeled LDAP readiness'
+require_doc_text simulation/README.md \
+  '| `gerrit-admin` | LDAP user | `admin-password` | Gerrit administrator login. |' \
+  'Shared simulation README must document the seeded Gerrit admin account'
+require_doc_text simulation/README.md \
+  '| `jenkins-admin` | LDAP user | `admin-password` | Jenkins administrator login. |' \
+  'Shared simulation README must document the seeded Jenkins admin account'
+require_doc_text simulation/README.md \
+  '| `test-user` | LDAP user | `test-password` | Disposable Gerrit login and change workflow user. |' \
+  'Shared simulation README must document the seeded test account'
+require_doc_text simulation/README.md \
+  '| `readonly` / `cn=readonly,dc=example,dc=test` | LDAP bind account | `readonly-password` | Read-only Gerrit and Jenkins directory search account. |' \
+  'Shared simulation README must document the seeded LDAP bind account'
 
 require_doc_text simulation/vm/README.md \
   'The VM layer uses the shared topology, account model, version baseline, source' \
   'VM README must point to shared simulation authorities'
+require_doc_text simulation/vm/README.md \
+  'The LDAP VM must run a real LDAP service' \
+  'VM README must require a real LDAP service on the LDAP VM'
+require_doc_text simulation/vm/README.md \
+  'simulation-owned directory with the entries defined in `simulation/README.md`' \
+  'VM README must point seeded LDAP users and groups to the shared simulation README'
+require_doc_text simulation/vm/README.md \
+  'before the clean baseline snapshot is captured' \
+  'VM README must require LDAP seeding before baseline'
+require_doc_text simulation/vm/README.md \
+  'service readiness, seeded entry presence, and LDAP' \
+  'VM README must require LDAP service and seed verification'
+require_doc_text simulation/vm/README.md \
+  '`simulation/vm/ldap/50-harness-seed.ldif`' \
+  'VM README must document the VM LDAP seed source'
+require_doc_text simulation/vm/README.md \
+  'LDAP endpoint is reachable from the Gerrit and Jenkins controller VMs' \
+  'VM README must require LDAP reachability from consuming VMs'
 require_doc_text simulation/vm/README.md \
   '`simulation/lib/`' \
   'VM README must point implementation at shared simulation helpers'
@@ -177,6 +231,9 @@ require_doc_text simulation/vm/README.md \
   '`create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set' \
   'VM README must document create behavior'
 require_doc_text simulation/vm/README.md \
+  'LDAP service readiness, and LDAP seed verification' \
+  'VM README must place LDAP readiness before baseline snapshot capture'
+require_doc_text simulation/vm/README.md \
   '`reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS' \
   'VM README must document reboot behavior'
 require_doc_text simulation/vm/README.md \
@@ -198,3 +255,25 @@ reject_doc_text simulation/vm/README.md \
 reject_doc_text simulation/vm/README.md \
   'Docker service names such as `gerrit-target`' \
   'VM README must not use Docker service names as VM endpoint identities'
+
+require_doc_text docs/implementation-plan.md \
+  'The LDAP VM must run a real LDAP service' \
+  'Step 13 plan must require a real LDAP service on the LDAP VM'
+require_doc_text docs/implementation-plan.md \
+  'Seed the simulation directory with the entries defined in' \
+  'Step 13 plan must point seeded LDAP users and groups to the shared simulation README'
+require_doc_text docs/implementation-plan.md \
+  'consume real organization LDAP secrets in VM' \
+  'Step 13 plan must preserve the VM LDAP simulation secret boundary'
+require_doc_text docs/implementation-plan.md \
+  'LDAP service readiness, and LDAP seed' \
+  'Step 13 plan must place LDAP readiness before the baseline snapshot'
+require_doc_text docs/implementation-plan.md \
+  'Verify LDAP bind/search on the LDAP VM' \
+  'Step 13 plan must require LDAP bind/search validation'
+require_doc_text docs/implementation-plan.md \
+  'endpoint reachability from Gerrit and Jenkins controller VMs before role' \
+  'Step 13 plan must require LDAP reachability from consuming VMs'
+require_doc_text docs/implementation-plan.md \
+  'Evidence must label LDAP as simulation/test LDAP' \
+  'Step 13 plan must require VM LDAP evidence labeling'

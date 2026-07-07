@@ -53,11 +53,8 @@ systemd environment file. That ownership is an OS custody detail and does not
 make root a Loopforge account, login identity, helper execution identity, or
 runtime identity.
 
-In Docker simulation, the target-local `ci-operator` OS account has
-passwordless sudo for simulation orchestration and privileged helper
-operations. Logging into a Docker target environment as `ci-operator` does
-not mean the local host account running `simulate.sh` is named
-`ci-operator`.
+Simulation-specific realizations of the operator account, seeded LDAP accounts,
+and fake test credentials are documented in `simulation/README.md`.
 
 ## Numeric Identity Policy
 
@@ -155,13 +152,10 @@ is directory lookup, and it must not grant application administration,
 runtime ownership, or Gerrit voting rights.
 
 The operator account runs orchestration, SSH access, helper commands, and
-evidence collection in all modes. It is never `root`. In Docker simulation,
-the default example target-local `ci-operator` account has passwordless sudo
-for orchestration and privileged helper operations. The Docker target
-`ci-operator` identity is not mapped to the local host username, UID, or GID.
-Keeping it separate makes operator control-plane access distinct from product
-accounts and prevents evidence collection access from being treated as Gerrit
-or Jenkins authority.
+evidence collection in all modes. It is never `root`. Keeping it separate makes
+operator control-plane access distinct from product accounts and prevents
+evidence collection access from being treated as Gerrit or Jenkins authority.
+Simulation-specific operator behavior is documented in `simulation/README.md`.
 
 ## Credential Custody
 

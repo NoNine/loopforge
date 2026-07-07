@@ -53,35 +53,13 @@ harness is working, promote only that proven boundary.
 
 ## Simulation Accounts
 
-The simulation model derives account usage from `docs/account-model.md`. It
-does not introduce a separate account taxonomy. Docker and VM simulation use
-the account model's example target-local numeric identities by default:
+The simulation model derives account roles and numeric identity policy from
+`docs/account-model.md`. It does not introduce a separate account taxonomy.
+Docker and VM simulation use the account model's example target-local names and
+numeric identities by default unless a layer-specific configuration overrides
+them.
 
-| Account | Example name | Example UID/GID |
-| --- | --- | --- |
-| Operator account | `ci-operator` | `61000` |
-| Gerrit runtime account | `gerrit` | `61010` |
-| Jenkins controller runtime account | `jenkins` | `61020` |
-| Jenkins agent runtime account | `jenkins-agent` | `61030` |
-| Jenkins shared integration group | `jenkins-share` | no UID / `61040` |
-
-The operator account is a local OS account on simulated targets and uses
-`ci-operator` as the default example. It is not a Gerrit or Jenkins product
-account, application admin account, integration account, LDAP bind account, or
-test user account. Product runtime accounts own and run their services:
-`gerrit` owns `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and
-`jenkins-agent` owns `/var/lib/jenkins-agent`.
-
-Jenkins controller and agent shared storage uses the separate
-`jenkins-share` integration group, not a shared controller/agent UID.
-`examples/integration.env.example` owns the default shared group name, GID,
-and shared storage path. `scripts/integration-setup.sh` owns creating or
-validating that group on both Jenkins targets, adding the controller and agent
-runtime accounts to it, setting setgid group-writable storage permissions, and
-recording read/write proof. Role-local helpers do not own shared storage
-setup.
-
-Simulation targets provide a target-local `ci-operator` account with
+Simulation targets provide a target-local `ci-operator` operator account with
 passwordless sudo for simulation orchestration and privileged helper
 operations. Privileged operations are still delegated privilege from the
 operator account for narrow OS work; root is not a Loopforge account, helper
@@ -89,8 +67,30 @@ execution identity, runtime identity, or supported direct login identity. The
 local host account that invokes a simulation `simulate.sh` may have any
 site-local name and is not renamed, mapped, or required to be `ci-operator`.
 
-Docker and VM `status` commands may print seeded human login accounts for
-their simulation LDAP and product environments. The Jenkins Gerrit integration
+Product runtime accounts own and run their simulated services: `gerrit` owns
+`/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and `jenkins-agent` owns
+`/var/lib/jenkins-agent`. Jenkins controller and agent shared storage uses the
+separate `jenkins-share` integration group from
+`examples/integration.env.example`, not a shared controller/agent UID.
+
+Simulation LDAP seeds these human-style login accounts and groups for test
+use only:
+
+| Seeded entry | Type | Default credential | Purpose |
+| --- | --- | --- | --- |
+| `gerrit-admin` | LDAP user | `admin-password` | Gerrit administrator login. |
+| `jenkins-admin` | LDAP user | `admin-password` | Jenkins administrator login. |
+| `test-user` | LDAP user | `test-password` | Disposable Gerrit login and change workflow user. |
+| `gerrit-admins` | LDAP group | none | Gerrit administrator group for seeded simulation users. |
+| `jenkins-admins` | LDAP group | none | Jenkins administrator group for seeded simulation users. |
+| `readonly` / `cn=readonly,dc=example,dc=test` | LDAP bind account | `readonly-password` | Read-only Gerrit and Jenkins directory search account. |
+
+These credentials are simulation-owned fake test values. They must stay labeled
+as simulation-only test credentials and must not be replaced with real
+organization LDAP secrets.
+
+Docker and VM `status` commands may print the seeded login accounts for their
+simulation LDAP and product environments. The Jenkins Gerrit integration
 account is different: it is created or validated later as a Gerrit service
 account by the shared integration step, not seeded as an LDAP password user.
 
@@ -217,6 +217,10 @@ copies, helper env files, logs, evidence, and artifact bundles, then inject
 them only into helper command environments for commands that need LDAP proof or
 product runtime configuration. Product runtime config files may still persist
 product-required LDAP settings after the relevant role helper writes them.
+
+Both simulation layers must realize LDAP as a simulation-owned directory
+service with real bind/search behavior. They must not satisfy LDAP readiness
+with modeled success or with real organization LDAP secrets.
 
 ## Harness And Helper Boundary
 

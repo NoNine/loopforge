@@ -182,7 +182,7 @@ generated/simulation/vm/<run-id>/
 | --- | --- | --- | --- |
 | `vm-sets/<vm-set-id>/` | VM-set registry root | Host-dominated | Ownership marker, selected VM set identity, and reusable resource records |
 | `vm-sets/<vm-set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Domain, network, storage, volume, seed media, and baseline snapshot records |
-| `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata |
+| `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
 | `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
 | `vm-sets/<vm-set-id>/shared-jenkins-storage/` | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | VM-set dominated | VM-set-owned Jenkins shared storage backing for controller and agent VMs |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, and manifest contract |

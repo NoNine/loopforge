@@ -34,6 +34,21 @@ VM simulation may use simulation-owned fake LDAP bind passwords for its own
 LDAP VM, matching Docker simulation. Those values must be labeled as test
 credentials and must not be replaced with real organization LDAP secrets.
 
+The LDAP VM must run a real LDAP service. VM provisioning seeds the
+simulation-owned directory with the entries defined in `simulation/README.md`
+before the clean baseline snapshot is captured. The harness must prove LDAP
+service readiness, seeded entry presence, and LDAP bind/search behavior with
+simulation-owned test credentials only.
+The committed VM seed source is `simulation/vm/ldap/50-harness-seed.ldif`;
+the harness renders it into VM-set seed media before applying it inside the
+LDAP VM.
+
+Gerrit and Jenkins controller role envs use the VM LDAP endpoint identity from
+the rendered VM inventory. Before role configuration, the harness verifies the
+LDAP endpoint is reachable from the Gerrit and Jenkins controller VMs. Missing
+or drifted seeded LDAP assumptions fail or block VM readiness; the VM harness
+must not model LDAP success without runtime evidence.
+
 The bundle factory VM runs role helper `prepare-artifacts` commands. It is an
 environment, not a public API, and there is no standalone
 `bundle-factory-helper.sh`.
@@ -75,7 +90,7 @@ Phase and lifecycle commands:
 | --- | --- |
 | `preflight [--env FILE]` | Validates required local tooling, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Loads the bootstrap env file, resolves `LOOPFORGE_VM_SET_ID` and `HARNESS_RUN_ID`, copies selected env inputs into private run-scoped runtime inputs, writes rendered/runtime env files, and records VM inventory expectations. Terminal output is a short `init-run: ok run-id=... vm-set=...` summary. |
-| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, and VM harness prerequisites, before Loopforge artifact staging, role configuration, or integration setup. |
+| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, VM harness prerequisites, LDAP service readiness, and LDAP seed verification, before Loopforge artifact staging, role configuration, or integration setup. |
 | `up [--env FILE]` | Starts the selected VM set, waits for VM boot, SSH reachability, stable host fingerprints, and cloud-init completion. It does not run role or integration configuration. |
 | `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, and VM simulation login accounts, and prints a short status summary. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
@@ -153,21 +168,16 @@ and storage/network removal after validating selected VM-set ownership.
 `clean` is destructive to guest disk changes made after the baseline snapshot,
 but it must not remove the reusable VM set. The baseline snapshot is captured
 after OS, cloud-init, target OS control-plane readiness, SSH host-key capture,
-and VM harness prerequisites. It is captured before Loopforge artifacts are
-staged, product services are configured, integration keys are created, or
-verification changes are made.
+VM harness prerequisites, LDAP service readiness, and LDAP seed verification.
+It is captured before Loopforge artifacts are staged, product services are
+configured, integration keys are created, or verification changes are made.
 
 ## Simulation Accounts
 
-The shared simulation account contract is defined in `simulation/README.md`.
-VM provisioning realizes that contract with product runtime accounts and native
-homes: `gerrit` owns `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and
-`jenkins-agent` owns `/var/lib/jenkins-agent`.
-
-VM simulation uses the account model's example numeric IDs by default unless a
-reviewed VM config overrides them: `ci-operator` uses UID/GID `61000`,
-`gerrit` uses `61010`, `jenkins` uses `61020`, and `jenkins-agent` uses
-`61030`. These IDs are VM simulation defaults, not host account mappings.
+The shared simulation account contract, including seeded LDAP login accounts,
+is defined in `simulation/README.md`. VM provisioning realizes that contract
+with the default simulation operator and product runtime accounts unless a
+reviewed VM config overrides them.
 
 VM simulation models Jenkins shared storage as a VM-set-owned NFS-backed
 shared storage resource. It is simulation infrastructure, not a Jenkins
@@ -177,10 +187,6 @@ agent VMs mount it at `JENKINS_SHARED_STORAGE_PATH`, normally
 applies the shared `jenkins-share` group, setgid group-writable permissions,
 and read/write proof.
 
-VM provisioning also creates the default example target-local `ci-operator`
-account. This target-local `ci-operator` OS account has passwordless sudo for
-simulation orchestration and privileged helper operations.
-
 Privileged VM operations are delegated from the operator account only when
 needed for narrow OS work, such as package installation, protected path
 creation, service management, ownership changes, guest reboot, or controlled
@@ -189,9 +195,7 @@ identity, or supported direct login identity.
 
 Use `simulate.sh status --env FILE` after `up` to inspect the selected running
 VM simulation. The status command prints the run ID, VM set ID, browser URLs,
-SSH endpoints, and seeded VM simulation human login accounts. The Jenkins
-Gerrit integration account is created later as a Gerrit service account by the
-shared integration step, not seeded as an LDAP password user.
+SSH endpoints, and seeded VM simulation login accounts.
 
 Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The

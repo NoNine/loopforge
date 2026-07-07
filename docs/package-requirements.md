@@ -20,7 +20,7 @@ installation is simulation-only.
 | Mode | Minimum host prerequisites | Notes |
 | --- | --- | --- |
 | `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
-| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, NFS utilities for shared Jenkins storage, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. |
+| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, NFS utilities for shared Jenkins storage, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. LDAP service packages such as `slapd` and proof tools such as `ldap-utils` are guest VM dependencies, not control-node host prerequisites. |
 | `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
 
 ## Package Matrix
@@ -33,6 +33,7 @@ installation is simulation-only.
 | Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
 | Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
 | VM simulation host | None: not a product target runtime | `python3`, SSH client tools, and checksum/archive tooling used by the harness | libvirt/KVM tooling such as `virsh`, image or install tooling, cloud-init or seed media tooling, and NFS utilities for VM-set-owned shared Jenkins storage | VM tooling provisions and inspects simulation-owned VMs; it is not a native target package baseline. |
+| VM LDAP guest | `slapd` for the simulation-owned LDAP service | `ldap-utils` for LDAP bind/search readiness and seed proof | Simulation-owned LDAP seed data and test credentials | Applies only to the LDAP VM in `vm-simulation`; native target deployment uses approved target-owned LDAP instead. |
 
 ## Layer Rules
 
@@ -69,6 +70,7 @@ document owns the layered rationale.
 | Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
 | Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
 | VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, SSH client tools, and NFS utilities when shared storage is used. |
+| VM LDAP guest service | `simulation/vm/README.md` documents the real LDAP service and seeded directory contract; VM evidence proves service readiness, seeded entries, and bind/search behavior. |
 | Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
 
 ## Docker Removal Candidates

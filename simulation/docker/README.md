@@ -95,15 +95,9 @@ All lifecycle and cleanup commands use the repo-local
 
 ## Simulation Accounts
 
-The shared simulation account contract is defined in `simulation/README.md`.
-The Docker target image realizes that contract with product runtime accounts
-and native homes: `gerrit` owns `/srv/gerrit`, `jenkins` owns
-`/var/lib/jenkins`, and `jenkins-agent` owns `/var/lib/jenkins-agent`.
-
-The image realizes the account model's example numeric IDs: `ci-operator` uses
-UID/GID `61000`, `gerrit` uses `61010`, `jenkins` uses `61020`, and
-`jenkins-agent` uses `61030`. These IDs are Docker simulation defaults, not
-host account mappings.
+The shared simulation account contract, including seeded LDAP login accounts,
+is defined in `simulation/README.md`. The Docker target image realizes that
+contract with the default simulation operator and product runtime accounts.
 
 Docker realizes Jenkins shared storage by bind-mounting one run-local
 `target/shared-jenkins-storage` directory into both the Jenkins controller and
@@ -112,22 +106,11 @@ Jenkins agent containers at `JENKINS_SHARED_STORAGE_PATH`, normally
 `jenkins-share` group, setgid group-writable permissions, and read/write proof
 inside those containers.
 
-The Docker target image also includes the default example target-local
-`ci-operator` account. This target-local `ci-operator` OS account has
-passwordless sudo for simulation orchestration and privileged helper
-operations. The harness may use container-internal delegated privilege for
-protected OS operations, but root is not a Loopforge account, helper execution
-identity, runtime identity, or supported login identity. The local host account
-that invokes `simulate.sh` may have any site-local name and is not renamed,
-mapped, or required to be `ci-operator`.
-
 Use `simulate.sh status --env FILE` after `up` to inspect the selected
 running simulation. The status command prints the run ID, Compose project,
-live browser URLs, and seeded Docker simulation human login accounts. The
-Jenkins Gerrit integration account is created later as a Gerrit service
-account by the shared integration step, not seeded as an LDAP password user.
-It is read-only and fails when the selected run's containers are not running,
-so it does not rely on stale port data from rendered config files.
+live browser URLs, and seeded Docker simulation login accounts. It is read-only
+and fails when the selected run's containers are not running, so it does not
+rely on stale port data from rendered config files.
 
 Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The

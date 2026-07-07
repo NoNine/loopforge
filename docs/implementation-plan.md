@@ -1103,6 +1103,10 @@ Implementation notes:
 
 - Use separate bundle factory, LDAP, Gerrit, Jenkins controller, and Jenkins
   agent VMs.
+- The LDAP VM must run a real LDAP service, not only exist as an empty VM.
+  Seed the simulation directory with the entries defined in
+  `simulation/README.md`. Use simulation-owned test credentials only; never
+  consume real organization LDAP secrets in VM simulation.
 - Keep `simulation/vm/simulate.sh` as the public VM simulation CLI and thin
   command dispatcher where practical.
 - Put VM-local implementation groups under `simulation/vm/lib/*.sh`.
@@ -1117,10 +1121,16 @@ Implementation notes:
   libvirt/KVM semantics. `clean` rolls back to the baseline snapshot and does
   not delete VMs; `destroy` is the only command that removes VM resources.
 - Capture the baseline snapshot after OS, cloud-init, SSH readiness, host-key
-  capture, and VM harness prerequisites, before Loopforge artifact staging or
-  service configuration.
+  capture, VM harness prerequisites, LDAP service readiness, and LDAP seed
+  verification, before Loopforge artifact staging or Gerrit/Jenkins service
+  configuration.
 - Implement VM-set-owned NFS-backed Jenkins shared storage and mount it into
   controller and agent VMs at `JENKINS_SHARED_STORAGE_PATH`.
+- Render Gerrit and Jenkins controller role envs to use the VM LDAP endpoint
+  identity from VM inventory. Verify LDAP bind/search on the LDAP VM and LDAP
+  endpoint reachability from Gerrit and Jenkins controller VMs before role
+  configuration. Fail or block VM readiness if seeded LDAP assumptions are
+  missing or drifted.
 - Run `prepare-artifacts` on the bundle factory VM, stage prepared archives to
   service VMs, and verify target-side manifests and checksums before mutation.
 - Run role helpers only for role-local lifecycle and call
@@ -1148,12 +1158,17 @@ Implementation notes:
 - VM verification must use the Step 10 evidence model, record Version Baseline
   values, and fail or block when the selected VM versions drift from the
   reviewed baseline.
+- VM evidence must record LDAP service readiness, seeded account/group
+  presence, bind/search proof, LDAP endpoint identity, and redaction status.
+  Evidence must label LDAP as simulation/test LDAP and must not include LDAP
+  passwords or bind secrets.
 
 Verification:
 
 ```bash
 tests/vm-docs-contract-test.sh
 tests/vm-harness-layout-test.sh
+tests/vm-harness-ldap-seed-test.sh
 bash -n simulation/vm/simulate.sh simulation/lib/*.sh
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/example.env
@@ -1176,6 +1191,9 @@ Acceptance criteria:
 
 - VM simulation provisions or verifies the five-VM topology and records both
   VM set identity and run identity in evidence.
+- The LDAP VM runs a real seeded LDAP service, proves bind/search behavior,
+  and exposes the reviewed VM LDAP endpoint to Gerrit and Jenkins controller
+  role configuration.
 - Artifact preparation, staging, role configuration, role validation, shared
   integration setup, cross-role validation, and end-to-end proof run against
   real VMs instead of modeled success.

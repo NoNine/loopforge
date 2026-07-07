@@ -145,6 +145,9 @@ for every VM harness checkpoint. Harness records should include relevant
 libvirt domain names, VM hostnames or reviewed aliases, baseline snapshot
 records, VM-set ownership metadata, generated run marker references, guest SSH
 readiness, and cloud-init or seed readiness where applicable.
+VM LDAP evidence must record LDAP service readiness, seeded account/group
+presence, bind/search proof, LDAP endpoint identity, simulation/test LDAP
+labeling, and redaction status without LDAP passwords or bind secrets.
 `reboot` evidence must record the selected VM targets, delegated
 operator-account reboot path, SSH return, and post-reboot readiness checks. VM shared storage
 evidence must prove the VM-set-owned NFS-backed Jenkins shared storage path is
