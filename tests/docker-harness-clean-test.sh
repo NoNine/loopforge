@@ -3,6 +3,7 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+docker_harness_sources=("$repo_root/simulation/docker/simulate.sh" "$repo_root/simulation/docker/lib/"*.sh)
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="clean-test-$$"
@@ -138,7 +139,7 @@ grep -Fq 'role-log' "$backup_dir/target/logs/gerrit/file"
   printf 'clean should clear active target evidence contents\n' >&2
   exit 1
 }
-if grep -Fq 'chown -R "$uid:$gid" "$path"' "$repo_root/simulation/docker/simulate.sh"; then
+if grep -Fq 'chown -R "$uid:$gid" "$path"' "${docker_harness_sources[@]}"; then
   printf 'clean must not normalize retained output ownership in place\n' >&2
   exit 1
 fi

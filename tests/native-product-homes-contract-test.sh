@@ -3,6 +3,7 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+docker_harness_sources=("$repo_root/simulation/docker/simulate.sh" "$repo_root/simulation/docker/lib/"*.sh)
 
 require_pattern() {
   local file pattern message
@@ -26,6 +27,26 @@ reject_pattern() {
   fi
 }
 
+require_docker_harness_pattern() {
+  local pattern message
+  pattern="${1:?pattern required}"
+  message="${2:?message required}"
+  if ! grep -Fq -- "$pattern" "${docker_harness_sources[@]}"; then
+    printf '%s\n' "$message" >&2
+    exit 1
+  fi
+}
+
+reject_docker_harness_pattern() {
+  local pattern message
+  pattern="${1:?pattern required}"
+  message="${2:?message required}"
+  if grep -Fq -- "$pattern" "${docker_harness_sources[@]}"; then
+    printf '%s\n' "$message" >&2
+    exit 1
+  fi
+}
+
 require_pattern scripts/gerrit-setup.sh \
   'GERRIT_SITE_PATH="${GERRIT_SITE_PATH:-$GERRIT_NATIVE_SITE_PATH}"' \
   'Gerrit helper must default GERRIT_SITE_PATH to /srv/gerrit'
@@ -42,25 +63,25 @@ require_pattern scripts/integration-setup.sh \
   'JENKINS_HOME="${JENKINS_HOME:-/var/lib/jenkins}"' \
   'Integration helper must default JENKINS_HOME to /var/lib/jenkins'
 
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_TARGET_DIR/product-homes}"' \
   'Docker harness must default product-home backing outside HARNESS_STATE_DIR'
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   'HARNESS_TARGET_DIR="${HARNESS_TARGET_DIR:-$HARNESS_GENERATED_RUN_DIR/target}"' \
   'Docker harness must group target-dominated generated output under target/'
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   'export HARNESS_PRODUCT_HOME_DIR' \
   'Docker harness must export HARNESS_PRODUCT_HOME_DIR for Compose'
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   '/srv/gerrit' \
   'Docker harness must recognize Gerrit native product-home evidence references'
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   '/var/lib/jenkins' \
   'Docker harness must recognize Jenkins controller native product-home evidence references'
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   '/var/lib/jenkins-agent' \
   'Docker harness must recognize Jenkins agent native product-home evidence references'
-require_pattern simulation/docker/simulate.sh \
+require_docker_harness_pattern \
   'set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"' \
   'Docker init-run must set Gerrit canonical web URL to the browser-visible loopback URL'
 require_pattern scripts/gerrit-setup.sh \
@@ -72,16 +93,16 @@ require_pattern scripts/jenkins-controller-setup.sh \
 require_pattern scripts/jenkins-agent-setup.sh \
   '"service_log_reference": $q_service_log' \
   'Jenkins agent evidence must record runtime service log as metadata'
-reject_pattern simulation/docker/simulate.sh \
+reject_docker_harness_pattern \
   'host_product' \
   'Docker harness must not normalize product-home logs as bounded log references'
-reject_pattern simulation/docker/simulate.sh \
+reject_docker_harness_pattern \
   'product_prefix' \
   'Docker harness must not treat product-home paths as bounded log prefixes'
-reject_pattern simulation/docker/simulate.sh \
+reject_docker_harness_pattern \
   'copy_product_home_log_reference' \
   'Docker harness must not use temporary product-home log copies to bypass access'
-reject_pattern simulation/docker/simulate.sh \
+reject_docker_harness_pattern \
   '$HARNESS_LOG_DIR/product-home/$role' \
   'Docker harness must not relocate product-home bounded log references to snapshots'
 require_pattern scripts/jenkins-controller-setup.sh \

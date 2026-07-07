@@ -3,6 +3,7 @@
 set -euo pipefail
 
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+docker_harness_sources=("$repo_root/simulation/docker/simulate.sh" "$repo_root/simulation/docker/lib/"*.sh)
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
@@ -175,12 +176,12 @@ do
   }
 done
 
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env' "$repo_root/simulation/docker/simulate.sh"
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/jenkins-controller-bundle-factory.env' "$repo_root/simulation/docker/simulate.sh"
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/%s.env' "$repo_root/simulation/docker/simulate.sh"
-grep -Fq -- '/home/ci-operator/loopforge-inputs/%s.env' "$repo_root/simulation/docker/simulate.sh"
-grep -Fq -- 'transfer_mode=docker-cp-input-waiver' "$repo_root/simulation/docker/simulate.sh"
-if grep -Fq -- '/var/lib/loopforge/rendered' "$repo_root/simulation/docker/simulate.sh"; then
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env' "${docker_harness_sources[@]}"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/jenkins-controller-bundle-factory.env' "${docker_harness_sources[@]}"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/%s.env' "${docker_harness_sources[@]}"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/%s.env' "${docker_harness_sources[@]}"
+grep -Fq -- 'transfer_mode=docker-cp-input-waiver' "${docker_harness_sources[@]}"
+if grep -Fq -- '/var/lib/loopforge/rendered' "${docker_harness_sources[@]}"; then
   printf 'Docker harness must not stage helper env files under Loopforge rendered state\n' >&2
   exit 1
 fi
