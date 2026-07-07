@@ -720,7 +720,6 @@ prepare_artifact_bundle_workspace() {
 
 cmd_prepare_artifacts() {
   load_env normal
-  apply_env_defaults
   require_command sha256sum
   validate_os_dependencies
   validate_artifact_output_dir

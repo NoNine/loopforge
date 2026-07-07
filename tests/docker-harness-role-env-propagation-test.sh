@@ -104,12 +104,28 @@ cp "$repo_root/examples/jenkins-controller.env.example" "$tmp_dir/jenkins-contro
 cp "$repo_root/examples/jenkins-agent.env.example" "$tmp_dir/jenkins-agent.env"
 cat >>"$tmp_dir/gerrit.env" <<'EOF'
 GERRIT_SENTINEL=original
+GERRIT_SITE_PATH="/custom/gerrit-site"
+GERRIT_ARTIFACT_OUTPUT_DIR="/custom/preparing/gerrit-artifacts-bundle/gerrit"
+GERRIT_STAGED_ARTIFACT_DIR="/custom/staging/gerrit"
+GERRIT_EVIDENCE_DIR="/custom/evidence/gerrit"
+GERRIT_LOG_DIR="/custom/logs/gerrit"
 EOF
 cat >>"$tmp_dir/jenkins-controller.env" <<'EOF'
 JENKINS_CONTROLLER_SENTINEL=original
+JENKINS_HOME="/custom/jenkins-home"
+JENKINS_STAGED_ARTIFACT_DIR="/custom/staging/jenkins"
+JENKINS_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-artifacts-bundle/jenkins"
+JENKINS_EVIDENCE_DIR="/custom/evidence/jenkins"
+JENKINS_LOG_DIR="/custom/logs/jenkins"
 EOF
 cat >>"$tmp_dir/jenkins-agent.env" <<'EOF'
 JENKINS_AGENT_SENTINEL=original
+JENKINS_AGENT_REMOTE_FS="/custom/jenkins-agent-home"
+JENKINS_AGENT_STATE_DIR="/custom/jenkins-agent-state"
+JENKINS_AGENT_STAGED_ARTIFACT_DIR="/custom/staging/jenkins-agent"
+JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"
+JENKINS_AGENT_EVIDENCE_DIR="/custom/evidence/jenkins-agent"
+JENKINS_AGENT_LOG_DIR="/custom/logs/jenkins-agent"
 EOF
 cat >>"$tmp_dir/harness.env" <<EOF
 HARNESS_RUN_ID=$run_id
@@ -189,26 +205,35 @@ fi
 grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/gerrit.env"
 grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/jenkins-controller.env"
 grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$runtime_dir/jenkins-agent.env"
-grep -Fq 'GERRIT_DOWNLOAD_ARTIFACTS="1"' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
-grep -Fq 'GERRIT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
-grep -Fq 'JENKINS_DOWNLOAD_ARTIFACTS="1"' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
-grep -Fq 'JENKINS_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/jenkins-artifacts-bundle/jenkins"' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
-grep -Fq 'JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"' "$runtime_dir/helper-envs/bundle-factory/jenkins-agent.env"
+grep -Fq 'GERRIT_DOWNLOAD_ARTIFACTS=1' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
+grep -Fq 'GERRIT_ARTIFACT_OUTPUT_DIR="/custom/preparing/gerrit-artifacts-bundle/gerrit"' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
+if grep -R -Fq 'GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR' \
+  "$repo_root/examples" \
+  "$repo_root/scripts" \
+  "$repo_root/simulation/docker/lib"
+then
+  printf 'GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR must not remain in examples, scripts, or Docker rendering\n' >&2
+  exit 1
+fi
+grep -Fq 'JENKINS_DOWNLOAD_ARTIFACTS=1' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
+grep -Fq 'JENKINS_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-artifacts-bundle/jenkins"' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
+grep -Fq 'JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"' "$runtime_dir/helper-envs/bundle-factory/jenkins-agent.env"
 grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
 grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
 grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'GERRIT_SITE_PATH="/srv/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'GERRIT_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'GERRIT_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'GERRIT_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'JENKINS_HOME="/var/lib/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/var/lib/loopforge/evidence"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_LOG_DIR="/var/log/loopforge"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'GERRIT_SITE_PATH="/custom/gerrit-site"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'GERRIT_STAGED_ARTIFACT_DIR="/custom/staging/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'GERRIT_EVIDENCE_DIR="/custom/evidence/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'GERRIT_LOG_DIR="/custom/logs/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
+grep -Fq 'JENKINS_HOME="/custom/jenkins-home"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_STAGED_ARTIFACT_DIR="/custom/staging/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_EVIDENCE_DIR="/custom/evidence/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_LOG_DIR="/custom/logs/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_REMOTE_FS="/custom/jenkins-agent-home"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_STATE_DIR="/custom/jenkins-agent-state"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_STAGED_ARTIFACT_DIR="/custom/staging/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/custom/evidence/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_LOG_DIR="/custom/logs/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=' "$runtime_dir"; then
   printf 'Runtime input/helper env files must not store the LDAP bind password\n' >&2
   exit 1

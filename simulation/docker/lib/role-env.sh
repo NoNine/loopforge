@@ -101,40 +101,11 @@ render_container_role_env() {
   container_env_file="$(container_env_file_for_role "$role" "$service")"
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   mkdir -p "$(dirname "$host_env_file")"
-  case "$role" in
-    gerrit)
-      sed -e 's|^GERRIT_SITE_PATH=.*|GERRIT_SITE_PATH="/srv/gerrit"|' \
-        -e 's|^GERRIT_STAGED_ARTIFACT_DIR=.*|GERRIT_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/gerrit"|' \
-        -e 's|^GERRIT_EVIDENCE_DIR=.*|GERRIT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
-        -e 's|^GERRIT_LOG_DIR=.*|GERRIT_LOG_DIR="/var/log/loopforge"|' \
-        "$src" >"$host_env_file"
-      canonical_web_url="http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"
-      set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"
-      ;;
-    jenkins-controller)
-      sed -e 's|^JENKINS_HOME=.*|JENKINS_HOME="/var/lib/jenkins"|' \
-        -e 's|^JENKINS_STAGED_ARTIFACT_DIR=.*|JENKINS_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/jenkins"|' \
-        -e 's|^JENKINS_EVIDENCE_DIR=.*|JENKINS_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
-        -e 's|^JENKINS_LOG_DIR=.*|JENKINS_LOG_DIR="/var/log/loopforge"|' \
-        "$src" >"$host_env_file"
-      ;;
-    jenkins-agent)
-      if [ "$service" = "bundle-factory" ]; then
-        sed \
-          -e 's|^JENKINS_AGENT_ARTIFACT_OUTPUT_DIR=.*|JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"|' \
-          "$src" >"$host_env_file"
-      else
-        sed -e 's|^JENKINS_AGENT_REMOTE_FS=.*|JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"|' \
-          -e 's|^JENKINS_AGENT_STAGED_ARTIFACT_DIR=.*|JENKINS_AGENT_STAGED_ARTIFACT_DIR="/var/lib/loopforge/staging/jenkins-agent"|' \
-          -e 's|^JENKINS_AGENT_EVIDENCE_DIR=.*|JENKINS_AGENT_EVIDENCE_DIR="/var/lib/loopforge/evidence"|' \
-          -e 's|^JENKINS_AGENT_LOG_DIR=.*|JENKINS_AGENT_LOG_DIR="/var/log/loopforge"|' \
-          "$src" >"$host_env_file"
-      fi
-      ;;
-    *)
-      cp -- "$src" "$host_env_file"
-      ;;
-  esac
+  cp -- "$src" "$host_env_file"
+  if [ "$role" = "gerrit" ]; then
+    canonical_web_url="http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"
+    set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"
+  fi
   chmod 0600 "$host_env_file"
   printf '%s\n' "$container_env_file"
 }
@@ -146,11 +117,8 @@ render_gerrit_bundle_factory_env() {
   src="$(source_env_file_for_role gerrit)"
   require_readable_file "Harness gerrit env file" "$src"
   mkdir -p "$(dirname "$host_env_file")"
-  sed \
-    -e 's|^GERRIT_DOWNLOAD_ARTIFACTS=.*|GERRIT_DOWNLOAD_ARTIFACTS="1"|' \
-    -e 's|^GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR=.*|GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"|' \
-    -e 's|^GERRIT_ARTIFACT_OUTPUT_DIR=.*|GERRIT_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit"|' \
-    "$src" >"$host_env_file"
+  cp -- "$src" "$host_env_file"
+  set_env_file_value "$host_env_file" GERRIT_DOWNLOAD_ARTIFACTS "1"
   chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
 }
@@ -162,10 +130,8 @@ render_jenkins_controller_bundle_factory_env() {
   src="$(source_env_file_for_role jenkins-controller)"
   require_readable_file "Harness jenkins-controller env file" "$src"
   mkdir -p "$(dirname "$host_env_file")"
-  sed \
-    -e 's|^JENKINS_DOWNLOAD_ARTIFACTS=.*|JENKINS_DOWNLOAD_ARTIFACTS="1"|' \
-    -e 's|^JENKINS_ARTIFACT_OUTPUT_DIR=.*|JENKINS_ARTIFACT_OUTPUT_DIR="/var/lib/loopforge/preparing/jenkins-artifacts-bundle/jenkins"|' \
-    "$src" >"$host_env_file"
+  cp -- "$src" "$host_env_file"
+  set_env_file_value "$host_env_file" JENKINS_DOWNLOAD_ARTIFACTS "1"
   chmod 0600 "$host_env_file"
   printf '%s\n' "$env_file"
 }

@@ -951,7 +951,6 @@ prepare_artifact_bundle_workspace() {
 
 cmd_prepare_artifacts() {
   load_env normal
-  apply_env_defaults
   require_command sha256sum
   require_command unzip
   validate_accepted_direct_plugins

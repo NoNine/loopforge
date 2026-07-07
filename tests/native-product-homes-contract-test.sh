@@ -297,6 +297,12 @@ reject_pattern scripts/integration-setup.sh \
 reject_pattern scripts/gerrit-setup.sh \
   'GERRIT_SITE_PATH="/harness/target/helper-state/site"' \
   'Gerrit Docker override must not force product site under /harness/state'
+reject_pattern scripts/gerrit-setup.sh \
+  'GERRIT_ARTIFACT_OUTPUT_DIR="$GERRIT_BUNDLE_FACTORY_WORK_DIR"' \
+  'Gerrit helper must not rewrite artifact output from simulation context'
+reject_pattern scripts/gerrit-setup.sh \
+  'GERRIT_STAGED_ARTIFACT_DIR="$GERRIT_STAGED_BUNDLE_PAYLOAD_DIR"' \
+  'Gerrit helper must not rewrite staged artifact input from simulation context'
 reject_pattern scripts/jenkins-controller-setup.sh \
   'JENKINS_HOME="${JENKINS_HOME:-/harness/target/helper-state/jenkins-home}"' \
   'Jenkins helper must not default product home under /harness/state'
