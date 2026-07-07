@@ -1073,7 +1073,17 @@ Acceptance criteria:
 ## Step 13: Implement VM Simulation Harness
 
 Implement real VM simulation under `simulation/vm/` on top of the shared
-support library from Step 12. Do not add a separate scaffold milestone.
+support library from Step 12. Do not add a separate numbered scaffold step.
+
+Implement this step milestone by milestone using the sequence in
+`simulation/vm/design.md`: M1 harness skeleton and read-only run state through
+M8 integration proof and composite `run`. These milestones are internal
+implementation slices, not separate product roadmap steps.
+
+The public command contract remains the full VM command surface below, but
+commands become complete only when their milestone is reached. Earlier
+milestones may implement partial read-only behavior or fail clearly with a
+blocked or not-implemented summary.
 
 Expected command surface:
 
@@ -1112,6 +1122,13 @@ Implementation notes:
 - Put VM-local implementation groups under `simulation/vm/lib/*.sh`.
   Candidate groups are libvirt/KVM lifecycle, VM inventory, SSH transport,
   artifact staging, evidence, generated state, and command implementations.
+- Follow the folded initial module layout and split triggers documented in
+  `simulation/vm/design.md`.
+- Start with M1: CLI dispatch, runtime input custody, generated run paths,
+  run markers, partial read-only `status`, and partial read-only
+  `audit-state`. M1 must not create, modify, or delete libvirt resources.
+- Defer composite `run` until M8, after individual lifecycle commands are
+  credible.
 - VM implementation may source backend-neutral helpers from `simulation/lib/`
   and VM-local helpers from `simulation/vm/lib/`. It must not source or depend
   on Docker harness internals under `simulation/docker/lib/`.
@@ -1152,6 +1169,13 @@ Implementation notes:
 - Do not copy Docker assumptions such as Compose project names, Docker service
   names, bind-mount checks, loopback port ownership, Docker `cp` waivers, or
   Docker cleanup recovery.
+- The current development host cannot provide KVM and cannot directly reach VMs
+  created on a remote KVM-capable machine. Real libvirt/KVM lifecycle
+  verification must run from an approved SSH-accessible remote KVM control
+  node; VM SSH, product HTTP/SSH, libvirt, NFS, and guest verification commands
+  must execute there or be reviewed through bounded logs and evidence copied
+  back here. Remote KVM host setup is external operator infrastructure, not
+  part of LoopForge.
 - VM commands that mutate host, libvirt, guest OS, Gerrit, Jenkins, or Jenkins
   agent state require explicit operator approval and must describe expected
   side effects.
@@ -1165,11 +1189,46 @@ Implementation notes:
 
 Verification:
 
+Verification is milestone-scoped. For each milestone, run syntax checks,
+focused tests added for that milestone, docs contract checks, and the VM
+commands that are in scope for that milestone.
+
+M1 verification:
+
+```bash
+tests/vm-docs-contract-test.sh
+tests/vm-harness-layout-test.sh
+bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh
+simulation/vm/simulate.sh --help
+simulation/vm/simulate.sh preflight --env simulation/vm/example.env
+simulation/vm/simulate.sh --env simulation/vm/example.env init-run
+simulation/vm/simulate.sh --env simulation/vm/example.env status
+simulation/vm/simulate.sh --env simulation/vm/example.env audit-state
+git diff --check
+```
+
+M2-M8 verification remains milestone-scoped. M3 and later lifecycle checks
+require an approved KVM-capable VM environment. Remote VM, libvirt, or guest
+mutation requires explicit approval for the specific target and action.
+
+| Milestone | Additional verification beyond earlier milestones |
+| --- | --- |
+| M2 | Re-run M1 syntax, docs, layout, `preflight`, and `audit-state` checks with libvirt preflight and VM-set ownership validation enabled. |
+| M3 | Run `create`, `up`, `status`, `ssh --role ROLE`, and `down`; verify target OS SSH as `ci-operator` for each service role without Loopforge role mutation. |
+| M4 | Run `clean`, `destroy`, and `audit-state`; verify baseline rollback and destruction require selected VM-set ownership metadata. |
+| M5 | Add `tests/vm-harness-ldap-seed-test.sh`; verify LDAP readiness, seeded entries, bind/search proof, and endpoint reachability from Gerrit and Jenkins controller VMs. |
+| M6 | Run `prepare-artifacts` and `stage-artifacts`; verify target-side manifests and checksums under `/var/lib/loopforge/staging/<role>`. |
+| M7 | Run `configure-role`, `validate-role`, `reboot --all`, and `validate-role` again; verify role evidence and post-reboot service readiness. |
+| M8 | Run `configure-integration`, `validate-integration`, `prove-integration`, and `run`; verify proof requires a matching validation marker. |
+
+Full Step 13 acceptance still requires the complete VM lifecycle in an
+approved VM environment:
+
 ```bash
 tests/vm-docs-contract-test.sh
 tests/vm-harness-layout-test.sh
 tests/vm-harness-ldap-seed-test.sh
-bash -n simulation/vm/simulate.sh simulation/lib/*.sh
+bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/example.env
 simulation/vm/simulate.sh --env simulation/vm/example.env init-run
@@ -1185,6 +1244,7 @@ simulation/vm/simulate.sh --env simulation/vm/example.env prove-integration
 simulation/vm/simulate.sh --env simulation/vm/example.env reboot --all
 simulation/vm/simulate.sh --env simulation/vm/example.env down
 simulation/vm/simulate.sh --env simulation/vm/example.env clean
+git diff --check
 ```
 
 Acceptance criteria:

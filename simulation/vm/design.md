@@ -1,0 +1,235 @@
+# VM Simulation Harness Design
+
+This document records the internal design and implementation contracts for the
+VM simulation harness. `simulation/vm/README.md` owns the public VM simulation
+command contract; this file owns the harness module structure and internal
+implementation boundaries.
+
+The design intent is to keep VM simulation near target deployment after the
+clean baseline snapshot while avoiding premature abstraction. VM simulation may
+share backend-neutral mechanics with Docker simulation, but VM lifecycle,
+transport, libvirt/KVM resources, snapshots, seed media, guest SSH readiness,
+and VM-set cleanup remain VM-local until implementation proves a smaller
+durable shared boundary.
+
+## Design Direction
+
+VM simulation intentionally does not mirror the Docker harness structure when
+Docker structure reflects Compose, container, bind-mount, loopback-port, or
+Docker transfer assumptions.
+
+The VM harness has three implementation layers:
+
+1. VM infrastructure: libvirt/KVM domains, networks, storage, seed media,
+   snapshots, VM-set ownership, start/stop, cleanup, and destruction.
+2. Target control plane: target OS SSH as the operator account, known-hosts
+   handling, readiness checks, bounded remote execution, file transfer, and
+   delegated privilege when needed for narrow OS work.
+3. Loopforge lifecycle: artifact preparation and staging, role helper
+   execution, integration setup, validation, proof, evidence, and markers.
+
+After the clean baseline snapshot is captured, lifecycle checkpoint work must
+use target-like interfaces and helper-visible paths. Host-side VM
+infrastructure mechanisms remain available for VM lifecycle management, but
+they must not complete Loopforge role or integration checkpoints.
+
+## Initial Module Layout
+
+The VM harness should start with a folded module layout. The folded structure
+keeps important ownership boundaries visible without scattering early
+implementation across many tiny files.
+
+```text
+simulation/vm/
+  simulate.sh
+  lib/
+    config.sh
+    paths.sh
+    state.sh
+    libvirt.sh
+    ssh.sh
+    lifecycle.sh
+    artifacts.sh
+    roles.sh
+    integration.sh
+```
+
+`simulate.sh` is the public entrypoint. It should stay thin: parse CLI
+arguments, load shared and VM-local modules, install common traps, and dispatch
+to command functions. It should not contain lifecycle implementation bodies.
+
+`config.sh` owns VM harness configuration, defaults, env selection, VM-set and
+run identity resolution, and rendered endpoint values that are not large
+enough to justify a separate inventory module.
+
+`paths.sh` owns generated path contracts for run-scoped output and reusable
+VM-set state:
+
+```text
+generated/simulation/vm/<run-id>/
+generated/simulation/vm/vm-sets/<vm-set-id>/
+```
+
+Other modules should ask `paths.sh` for generated locations instead of
+reassembling path contracts.
+
+`state.sh` owns run markers, VM-set markers, ownership metadata, consistency
+checks, checkpoint marker verification, and the first read-only audit checks.
+
+`libvirt.sh` owns low-level VM infrastructure operations: domains, networks,
+storage, seed media, baseline snapshot capture, rollback, graceful shutdown,
+and VM-set destruction primitives. It must not run role helpers or complete
+Loopforge lifecycle checkpoints through host-side guest mutation.
+
+`ssh.sh` owns target OS control-plane access: SSH as the target-local operator
+account, known-hosts capture and verification, remote command execution,
+remote readiness checks, and SSH file transfer. Artifact transfer to service
+VMs should use this module rather than a separate early transport abstraction.
+
+`lifecycle.sh` owns command orchestration for VM lifecycle commands such as
+`run`, `create`, `up`, `status`, `reboot`, `down`, `clean`, `destroy`, and
+`audit-state`. It coordinates other modules but should keep low-level libvirt,
+SSH, role helper, and integration details delegated.
+
+`artifacts.sh` owns VM artifact flow: running role helper
+`prepare-artifacts` commands in the bundle factory VM, retaining host-side
+export review copies, transferring archives to target VMs through SSH, and
+verifying target-side manifests and checksums under
+`/var/lib/loopforge/staging/<role>` before service mutation.
+
+`roles.sh` owns role-local helper phases over target OS SSH, including
+`configure-role` and `validate-role`. It should not know libvirt lifecycle
+details.
+
+`integration.sh` owns calls to `scripts/integration-setup.sh` for
+`configure-integration`, `validate-integration`, and `prove-integration`. It
+must enforce matching validation markers before active proof and must fail or
+report blocked rather than creating synthetic success markers.
+
+## Folded Boundaries
+
+The initial layout intentionally folds several conceptual modules into broader
+files:
+
+| Conceptual module | Initial location | Split trigger |
+| --- | --- | --- |
+| `vm_set.sh` | `state.sh` | VM-set ownership and consistency checks become large enough to obscure run marker handling. |
+| `inventory.sh` | `config.sh` or `paths.sh` | Endpoint rendering and identity checks become reused across many commands. |
+| `seed_media.sh` | `libvirt.sh` | Seed rendering, cloud-init, or LDIF handling becomes substantial. |
+| `snapshots.sh` | `libvirt.sh` | Baseline capture and rollback require enough checks to obscure libvirt primitives. |
+| `ldap.sh` | `lifecycle.sh` during `create` | LDAP seed verification and bind/search proof become a substantial verifier. |
+| `nfs.sh` | `lifecycle.sh` or `integration.sh` | NFS setup and shared-storage proof need independent lifecycle handling. |
+| `transfer.sh` | `ssh.sh` | Non-SSH VM transfer mechanisms become necessary and approved. |
+| `status.sh` | `lifecycle.sh` | Status grows into a substantial read-only reporting surface. |
+| `clean.sh` | `lifecycle.sh` | Cleanup and destruction orchestration becomes too large for lifecycle command flow. |
+| `audit.sh` | `state.sh` or `lifecycle.sh` | Audit becomes a first-class report with many independent checks. |
+
+Splits should be driven by implementation pressure, not by matching a
+preselected file list.
+
+## Shared Helper Boundary
+
+Backend-neutral mechanics may live under `simulation/lib/`:
+
+- role parsing and role iteration
+- env loading and required variable checks
+- runtime input custody helpers
+- bounded log setup
+- evidence record helpers
+- marker read/write/verify helpers
+- redaction helpers
+- artifact manifest and checksum helpers
+- shell quoting and compact command summaries
+
+VM-specific behavior must remain under `simulation/vm/`:
+
+- libvirt/KVM domain, network, storage, and snapshot operations
+- VM-set ownership and generated VM-set metadata
+- seed media and cloud-init base provisioning
+- guest boot, reboot, shutdown, and SSH readiness
+- target OS SSH command execution and file transfer
+- NFS-backed shared storage realization
+- VM cleanup, rollback, and destruction behavior
+
+Do not introduce a Docker/VM backend abstraction until the VM harness has
+enough implementation to prove a stable interface. Prefer small shared support
+helpers first.
+
+## Implementation Milestones
+
+VM simulation should be implemented milestone by milestone. Each milestone
+should leave the harness in a reviewable state with compact terminal output,
+bounded logs, generated evidence where applicable, and no hidden cleanup or
+destruction side effects.
+
+Composite `run` should be implemented only after the individual lifecycle
+commands are credible. Early milestones should prefer explicit command
+execution so failures expose the exact boundary that is not ready.
+
+| Milestone | Commands | Main modules | Acceptance shape |
+| --- | --- | --- | --- |
+| M1 Harness skeleton and read-only run state | `preflight`, `init-run`, partial `status`, partial `audit-state` | `simulate.sh`, `config.sh`, `paths.sh`, `state.sh`, shared `simulation/lib/*` | CLI dispatch works, env inputs are copied to private runtime inputs, the run marker exists, compact summaries print, and no VM or libvirt mutation occurs. |
+| M2 VM-set ownership and libvirt preflight | `preflight`, `audit-state` | `state.sh`, `libvirt.sh`, `lifecycle.sh` | Local tooling and libvirt access are checked read-only, the VM-set metadata contract is defined, and inconsistent state fails clearly. |
+| M3 Create/up/down with SSH-ready base VMs | `create`, `up`, `down`, `status`, `ssh` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, `config.sh` | The VM set can be created, started, reached over target OS SSH as `ci-operator`, inspected, and shut down without Loopforge role mutation. |
+| M4 Baseline snapshot, clean rollback, and destroy | `create`, `clean`, `destroy`, `audit-state` | `libvirt.sh`, `state.sh`, `lifecycle.sh` | The baseline snapshot is captured before Loopforge mutation, `clean` rolls back the selected owned VM set, and `destroy` deletes only validated simulation-owned resources. |
+| M5 LDAP seed and real bind/search proof | `create`, `up`, `status`, `audit-state` | `libvirt.sh`, `lifecycle.sh`, folded LDAP logic | The LDAP VM runs a real service, seed entries from `simulation/vm/ldap/50-harness-seed.ldif` exist, and bind/search proof uses simulation-owned credentials. |
+| M6 Artifact prepare/stage over target-like paths | `prepare-artifacts`, `stage-artifacts` | `artifacts.sh`, `ssh.sh`, `paths.sh` | The bundle factory runs helper artifact preparation, host review copies are retained, service VMs receive artifacts through SSH, and target-side checksums verify under `/var/lib/loopforge/staging/<role>`. |
+| M7 Role configure/validate phases | `configure-role`, `validate-role`, `reboot` | `roles.sh`, `ssh.sh`, `lifecycle.sh` | Role helpers run over target OS SSH, role evidence is captured, and reboot proves services survive guest OS restart without implicit reconfiguration. |
+| M8 Integration validate/prove and composite run | `configure-integration`, `validate-integration`, `prove-integration`, `run` | `integration.sh`, `lifecycle.sh`, `ssh.sh` | Shared integration setup runs through `scripts/integration-setup.sh`, proof requires a matching validation marker, and `run` performs the normal workflow without cleanup or destruction. |
+
+M1 is the first implementation unit. It creates the VM CLI skeleton, initial
+folded modules, read-only command dispatch, runtime input custody, generated
+run paths, and run marker handling. It must not create, modify, or delete
+libvirt resources.
+
+M3 and M5 are the highest-risk early milestones. M3 proves that the VM control
+plane is real and stable. M5 proves that LDAP readiness is not modeled.
+
+## Post-Baseline Rules
+
+After `create` captures the clean baseline snapshot, lifecycle checkpoints
+must use target-like interfaces and paths:
+
+- target OS SSH as the operator account
+- SSH file transfer
+- role helpers
+- `scripts/integration-setup.sh`
+- product APIs
+- runtime accounts
+- target-side checksum verification
+- `/var/lib/loopforge/staging/<role>`
+
+The VM harness must not use the following mechanisms to complete post-baseline
+Loopforge lifecycle checkpoints:
+
+- libvirt console access
+- direct guest disk or image edits
+- post-baseline cloud-init
+- host-side injection into guest helper or product paths
+- generated target sideband staging
+- modeled success without runtime evidence
+- synthetic role or integration success markers
+
+Host-side libvirt/KVM operations remain valid for VM infrastructure commands
+such as `up`, `down`, `clean`, and `destroy`, subject to ownership checks and
+operator approval requirements.
+
+## Review Checks
+
+When changing VM harness implementation, reviewers should check that:
+
+- public command behavior remains documented in `simulation/vm/README.md`
+- internal module boundaries remain consistent with this file
+- generated VM-set state and run-scoped output stay separate
+- mutating VM commands validate VM-set ownership before acting
+- post-baseline role and integration work uses target OS SSH and
+  helper-visible paths
+- LDAP readiness is proven with simulation-owned bind/search evidence
+- application artifacts are prepared only in the bundle factory and verified
+  target-side before mutation
+- public internet fallback remains simulation-only and limited to Ubuntu/OS
+  dependency installation
+- root is not introduced as a Loopforge account, helper execution identity,
+  runtime identity, or direct login identity
+- evidence, logs, terminal summaries, and generated records remain bounded and
+  redacted

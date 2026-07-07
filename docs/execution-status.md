@@ -18,12 +18,11 @@ transcripts here.
 ## Current State
 
 - Branch: `0616`
-- Current HEAD: `5335577`
-- Current implementation stage: Step 11 is accepted. Accepted follow-ups cover
-  Jenkins shared integration storage, dynamic Docker browser ports, and Jenkins
-  plugin workflow rework.
-- Next authorized work state: continue from Step 12, extract shared simulation
-  support library, or another follow-up explicitly authorized by the user.
+- Current HEAD: `758b409`
+- Current implementation stage: Step 13 VM simulation harness implementation is
+  in progress at M1.
+- Next authorized work state: implement Step 13 M1, or another follow-up
+  explicitly authorized by the user.
 - Ledger policy: this file is mutable execution state and remains unstaged
   unless the user explicitly requests a ledger snapshot commit.
 - Active guardrail: do not run another end-to-end Docker simulation until the
@@ -208,19 +207,44 @@ transcripts here.
 
 ### Step 12: Extract Shared Simulation Support Library
 
-- Status: Pending
-- Commit: none
-- Verification: none
-- Notes: Extract backend-neutral helpers under `simulation/lib/` while keeping
-  Docker and VM as separate `simulate.sh` CLIs.
+- Status: Accepted
+- Commit: `9e2d1f5`
+- Verification: `logs/step12-shared-lib-focused-20260706234903.log`
+- Notes: Extracted backend-neutral helpers under `simulation/lib/` while
+  keeping Docker and VM as separate `simulate.sh` CLIs. Docker lifecycle,
+  transport, mount, port, cleanup, and Docker evidence schema stay local to the
+  Docker harness.
+
+### Step 12 Follow-Up: Modularize Docker Harness Internals
+
+- Status: Accepted
+- Commit: `b786066`
+- Verification: `logs/docker-modularization-focused-20260707104938.log`
+- Notes: Docker-local maintainability follow-up. Keep
+  `simulation/docker/simulate.sh` as the public CLI, move Docker-specific
+  implementation groups into `simulation/docker/lib/*.sh`, preserve behavior,
+  and do not introduce a Docker/VM backend abstraction.
+
+### Pre-Step-13 VM Harness Authority Docs
+
+- Status: Accepted
+- Commit: `758b409`
+- Verification: `logs/vm-authority-docs-20260707124158.log`
+- Notes: Documented VM command lifecycle mapping, VM backing directories,
+  libvirt/KVM host prerequisites, VM endpoint realization, VM evidence
+  obligations, reboot proof, snapshot rollback, destroy semantics, and the
+  docs contract guard for Step 13 implementation.
 
 ### Step 13: Implement VM Simulation Harness
 
-- Status: Pending
+- Status: In progress, M1
 - Commit: none
 - Verification: none
-- Notes: Build real VM simulation on the shared support library. There is no
-  separate VM scaffold step.
+- Notes: Implement Step 13 using the milestone sequence in
+  `simulation/vm/design.md`. Current scope is M1: CLI skeleton, runtime input
+  custody, generated run paths, run marker handling, and read-only
+  `preflight`, `init-run`, `status`, and `audit-state`. M1 must not mutate
+  libvirt or VM resources.
 
 ### Step 14: Add Boundary Checks
 

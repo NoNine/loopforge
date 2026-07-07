@@ -16,6 +16,9 @@ simulation/vm/simulate.sh [--env FILE] <command>
 cross-role integration orchestration. Do not add standalone VM phase scripts or
 a second VM simulation CLI.
 
+Internal harness module structure and implementation contracts are documented
+in `simulation/vm/design.md`.
+
 VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
 mechanics only; VM lifecycle and transport stay in the VM harness. VM-specific
