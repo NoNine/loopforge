@@ -108,32 +108,33 @@ transcript. Operator manuals own exact commands and role-specific procedure.
   acceptance for Gerrit SSH, event streaming, Jenkins agent scheduling, REST
   vote posting, and Gerrit review state.
 
-## Docker Command Mapping
+## Simulation Command Relationship
 
-`simulation/docker/README.md` owns the Docker command reference. This table
-maps Docker commands to lifecycle checkpoints.
+`simulation/README.md` owns shared simulation command semantics.
+`simulation/docker/README.md` and `simulation/vm/README.md` own the concrete
+command references for their layers.
 
-| Docker command | Lifecycle checkpoint |
-| --- | --- |
-| `preflight` | Pre-input prerequisite check; no target mutation. |
-| `init-run` | Input review/rendering for the selected Docker run. |
-| `up` | Simulation infrastructure startup for the selected rendered run. |
-| `status` | Read-only inspection of running simulation state. |
-| `prepare-artifacts` | Artifact preparation through role helpers in the bundle factory. |
-| `stage-artifacts` | Artifact staging plus target-side manifest/checksum verification. |
-| `configure-role` | Role-local setup for one or all roles. |
-| `validate-role` | Role-local validation for one or all roles. |
-| `configure-integration` | Shared integration setup. |
-| `validate-integration` | Cross-role validation. |
-| `prove-integration` | End-to-end trigger verification. |
-| `audit-state` | Read-only Docker generated-state and bind-mount inspection. |
-| `down` | Container teardown while retaining generated review state. |
-| `clean` | Explicit Docker housekeeping of mutable generated runtime state. |
+Commands that perform checkpoint work must preserve the checkpoint semantics
+defined here: input review, artifact preparation, artifact staging,
+role-local setup, role-local validation, shared integration setup, cross-role
+validation, end-to-end trigger verification, and evidence audit.
 
-`down` and `clean` are the only Docker phases allowed to recover from stale
-existing containers. Other phases must report inconsistent state and stop.
-`simulation/docker/README.md` owns the detailed Docker generated-state,
-stale-container, and cleanup rules.
+Simulation lifecycle and convenience commands such as `up`, `create`,
+`status`, `ssh`, `audit-state`, `reboot`, `down`, `clean`, and `destroy` are
+outside the checkpoint progression unless a layer README explicitly ties one
+of them to a checkpoint. These commands must not silently rerun earlier
+phases or claim checkpoint success without checkpoint evidence.
+
+For Docker simulation, `down` and `clean` are the only commands allowed to
+recover from stale existing containers. Other commands must report
+inconsistent state and stop. `simulation/docker/README.md` owns the detailed
+Docker generated-state, stale-container, and cleanup rules.
+
+For VM simulation, `down`, `clean`, and `destroy` are the only commands
+allowed to recover from inconsistent VM lifecycle state. Other commands must
+report inconsistent state and stop. `clean` must preserve review artifacts
+and must not delete the reusable VM set. Only `destroy` removes
+simulation-owned VM resources.
 
 ## Evidence Obligations
 

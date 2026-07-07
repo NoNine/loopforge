@@ -1103,6 +1103,14 @@ Implementation notes:
 
 - Use separate bundle factory, LDAP, Gerrit, Jenkins controller, and Jenkins
   agent VMs.
+- Keep `simulation/vm/simulate.sh` as the public VM simulation CLI and thin
+  command dispatcher where practical.
+- Put VM-local implementation groups under `simulation/vm/lib/*.sh`.
+  Candidate groups are libvirt/KVM lifecycle, VM inventory, SSH transport,
+  artifact staging, evidence, generated state, and command implementations.
+- VM implementation may source backend-neutral helpers from `simulation/lib/`
+  and VM-local helpers from `simulation/vm/lib/`. It must not source or depend
+  on Docker harness internals under `simulation/docker/lib/`.
 - Implement reusable VM set identity, run identity, ownership metadata, and
   generated output paths as documented in `simulation/vm/README.md`.
 - Implement `create`, `up`, `reboot`, `down`, `clean`, and `destroy` with
@@ -1120,8 +1128,17 @@ Implementation notes:
   validation, proof, and evidence.
 - Use target OS SSH as the operator account for helper execution, staging,
   validation, evidence collection, and interactive `ssh --role`.
+- After the clean baseline snapshot, implement checkpoint work through
+  target-like interfaces and paths: target OS SSH, SSH file transfer, role
+  helpers, `scripts/integration-setup.sh`, product APIs, runtime accounts,
+  target-side checksum verification, and `/var/lib/loopforge/staging/<role>`.
 - Keep libvirt/KVM lifecycle, VM snapshots, guest SSH readiness, NFS-backed
   storage, reboot behavior, and VM destruction local to the VM harness.
+- Limit VM-specific shortcuts to infrastructure lifecycle and baseline
+  management. Do not use libvirt console access, direct guest disk or image
+  edits, post-baseline cloud-init, host-side injection into guest
+  helper/product paths, or generated target sideband staging to complete
+  checkpoint work.
 - Do not copy Docker assumptions such as Compose project names, Docker service
   names, bind-mount checks, loopback port ownership, Docker `cp` waivers, or
   Docker cleanup recovery.
@@ -1135,6 +1152,8 @@ Implementation notes:
 Verification:
 
 ```bash
+tests/vm-docs-contract-test.sh
+tests/vm-harness-layout-test.sh
 bash -n simulation/vm/simulate.sh simulation/lib/*.sh
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/example.env

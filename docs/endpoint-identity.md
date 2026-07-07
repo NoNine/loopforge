@@ -39,6 +39,9 @@ policy.
 - Do not copy Docker service names such as `gerrit-target`,
   `jenkins-controller-target`, `jenkins-agent-target`, or `ldap` into
   `target-deployment` inventory.
+- VM inventory must not use Docker service names or Docker published loopback
+  ports unless an explicit VM port-forwarding design is documented for that
+  run.
 - Use `127.0.0.1` only for Docker published host ports or an explicit VM port
   forward. It is not a cross-host target-deployment identity.
 - Prefer stable DNS names or FQDNs for VM simulation and target deployment.

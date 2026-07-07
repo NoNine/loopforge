@@ -20,7 +20,7 @@ installation is simulation-only.
 | Mode | Minimum host prerequisites | Notes |
 | --- | --- | --- |
 | `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
-| `vm-simulation` | Linux host with VM tooling available, Python 3.9+, SSH client access to the VM host, enough disk space for VM images, `generated/`, and `logs/` | Planned VM harness host prerequisites; keep VM-specific details in the VM simulation docs. |
+| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, NFS utilities for shared Jenkins storage, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. |
 | `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
 
 ## Package Matrix
@@ -32,6 +32,7 @@ installation is simulation-only.
 | Jenkins agent target | `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access. Workload-specific build tools are out of scope. |
 | Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
 | Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
+| VM simulation host | None: not a product target runtime | `python3`, SSH client tools, and checksum/archive tooling used by the harness | libvirt/KVM tooling such as `virsh`, image or install tooling, cloud-init or seed media tooling, and NFS utilities for VM-set-owned shared Jenkins storage | VM tooling provisions and inspects simulation-owned VMs; it is not a native target package baseline. |
 
 ## Layer Rules
 
@@ -67,6 +68,7 @@ document owns the layered rationale.
 | Docker `procps` layer | `simulation/docker/simulate.sh` and Gerrit helper runtime checks use `ps` to inspect service processes inside slim containers. |
 | Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
 | Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
+| VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, SSH client tools, and NFS utilities when shared storage is used. |
 | Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
 
 ## Docker Removal Candidates

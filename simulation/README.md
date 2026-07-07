@@ -40,6 +40,12 @@ harness. VM-specific libvirt/KVM domains, VM sets, snapshots, guest reboot,
 guest SSH readiness, NFS-backed shared storage, and `create`/`clean`/`destroy`
 behavior belongs in the VM harness.
 
+Docker simulation may use explicit simulation-only waivers where containers
+cannot naturally model target hosts. VM simulation is expected to be stricter:
+libvirt/KVM provides the lab infrastructure, but lifecycle checkpoint work
+should remain near target deployment and use target-like interfaces rather
+than inheriting Docker shortcuts.
+
 Do not introduce a Docker/VM backend abstraction before the VM harness has
 enough implementation to prove a durable interface. Prefer small shared
 support libraries first; if repeated backend-shaped code remains after the VM

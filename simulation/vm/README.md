@@ -38,6 +38,25 @@ The bundle factory VM runs role helper `prepare-artifacts` commands. It is an
 environment, not a public API, and there is no standalone
 `bundle-factory-helper.sh`.
 
+## Near-Target Lifecycle Boundary
+
+VM simulation is expected to be near target deployment for lifecycle
+checkpoint execution. VM-specific mechanisms are allowed for VM
+infrastructure work: libvirt/KVM provisioning, seed media or cloud-init base
+OS bootstrap before the clean baseline snapshot, baseline snapshot
+capture/rollback, VM start/stop/destruction, VM-set ownership inspection, and
+VM-set-owned NFS setup.
+
+After the clean baseline snapshot, checkpoint work must use target-like
+interfaces and paths: target OS SSH as `ci-operator`, SSH file transfer, role
+helpers, `scripts/integration-setup.sh`, product APIs, runtime accounts,
+target-side checksum verification, and `/var/lib/loopforge/staging/<role>`.
+
+VM simulation must not use libvirt console access, direct guest disk or image
+edits, post-baseline cloud-init, host-side injection into guest helper or
+product paths, generated target sideband staging, or modeled success without
+runtime evidence to complete lifecycle checkpoints.
+
 ## Command Reference
 
 This section owns VM command behavior. The command-to-checkpoint mapping is
@@ -211,10 +230,14 @@ to `HARNESS_RUN_ID` and may be cleaned or retained independently.
 | Harness evidence | `generated/simulation/vm/<run-id>/host/evidence/harness/` |
 | Harness bounded logs | `generated/simulation/vm/<run-id>/host/logs/harness/` |
 | Integration evidence and logs | `generated/simulation/vm/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
-| Exported artifacts | `generated/simulation/vm/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
-| Staged artifact records | `generated/simulation/vm/<run-id>/target/artifacts/staging/<role>/` |
+| Exported artifact review copies | `generated/simulation/vm/<run-id>/host/artifacts/exported/<bundle>.tar.gz` |
 | Target role evidence | `generated/simulation/vm/<run-id>/target/evidence/<role>/` |
 | Target role bounded logs | `generated/simulation/vm/<run-id>/target/logs/<role>/` |
+
+Artifact staging to service VMs uses target OS SSH into the guest-local
+canonical path `/var/lib/loopforge/staging/<role>/`. The generated run tree may
+retain host-owned exported artifact review copies, but it must not model VM
+target transfer through `target/artifacts/staging/`.
 
 `<vm-set-id>` defaults to `default` when `LOOPFORGE_VM_SET_ID` is omitted.
 `<run-id>` is a unique run identifier, such as a UTC timestamp plus a short

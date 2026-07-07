@@ -140,6 +140,19 @@ Docker simulation evidence must prove the shared path is mounted into both
 Jenkins containers by writing a file as the controller runtime account and
 reading it as the agent runtime account.
 
+VM simulation evidence must identify the selected `vm_set_id` and `run_id`
+for every VM harness checkpoint. Harness records should include relevant
+libvirt domain names, VM hostnames or reviewed aliases, baseline snapshot
+records, VM-set ownership metadata, generated run marker references, guest SSH
+readiness, and cloud-init or seed readiness where applicable.
+`reboot` evidence must record the selected VM targets, delegated
+operator-account reboot path, SSH return, and post-reboot readiness checks. VM shared storage
+evidence must prove the VM-set-owned NFS-backed Jenkins shared storage path is
+mounted into both the Jenkins controller and Jenkins agent VMs and that
+controller and agent runtime accounts can perform the required read/write
+proof. VM records must use `vm-simulation` and `simulation-only` labels and
+must not imply `target-deployment` acceptance.
+
 ACL planning records must include:
 
 - `target_project`

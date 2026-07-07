@@ -169,5 +169,46 @@ removes mutable generated runtime data under `host/` and `target/` for the
 selected run root. `clean` must not convert active target-owned outputs into
 host-owned outputs in place.
 
+## VM Simulation Backing
+
+VM simulation separates reusable VM-set state from run-scoped output:
+
+```text
+generated/simulation/vm/vm-sets/<vm-set-id>/
+generated/simulation/vm/<run-id>/
+```
+
+| VM path | Canonical or VM-visible path | Content dominance | Purpose |
+| --- | --- | --- | --- |
+| `vm-sets/<vm-set-id>/` | VM-set registry root | Host-dominated | Ownership marker, selected VM set identity, and reusable resource records |
+| `vm-sets/<vm-set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Domain, network, storage, volume, seed media, and baseline snapshot records |
+| `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata |
+| `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
+| `vm-sets/<vm-set-id>/shared-jenkins-storage/` | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | VM-set dominated | VM-set-owned Jenkins shared storage backing for controller and agent VMs |
+| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, and manifest contract |
+| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, normally written with mode `0600` |
+| `host/target-ssh/` | Host-side target SSH material | Host-dominated | Target OS SSH identity and known-hosts material for VM control-plane access |
+| `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence |
+| `host/logs/harness/` | Harness bounded log output | Host-dominated | VM harness command logs |
+| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence |
+| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs |
+| `host/artifacts/exported/` | Operator-facing artifact review copies | Host-dominated | Exported bundle archives and checksums copied back for review; not a target transfer path |
+| `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Backups of retained outputs before active dirs are cleared |
+| `target/evidence/<role>/` | `/var/lib/loopforge/evidence` on one target VM | Target-dominated | Retained role-local VM simulation evidence |
+| `target/logs/<role>/` | `/var/log/loopforge` on one target VM | Target-dominated | Retained role-local bounded VM simulation logs |
+
+VM artifact staging uses target OS SSH to copy reviewed bundle archives into
+the guest-local canonical staging path `/var/lib/loopforge/staging/<role>/`.
+The VM generated run tree may keep host-owned artifact review copies, but it
+must not model transfer with a generated `target/artifacts/staging/` sideband.
+
+VM-set state persists across runs until `destroy`. Run-scoped output belongs
+to one `HARNESS_RUN_ID` and may be cleaned independently. `clean` rolls the
+selected VM set back to the clean baseline snapshot and removes mutable
+selected-run state, while preserving exported artifacts, evidence, bounded
+logs, and retained-output backups. `destroy` is the only command that removes
+simulation-owned VM domains, disks, snapshots, seed media, networks, or
+VM-set-owned shared storage after ownership validation.
+
 Evidence produced from Docker or VM simulation must be labeled as simulation
 evidence and must not imply `target-deployment` acceptance.
