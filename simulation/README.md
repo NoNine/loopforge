@@ -199,6 +199,13 @@ Layers may add simulation-specific lifecycle commands, such as VM `create`,
 `reboot`, or `destroy`, but unsupported or unavailable proof must fail closed
 or report blocked rather than produce synthetic success.
 
+## Terminal Output Convention
+
+`simulation/terminal-output.md` owns shared simulation terminal presentation
+conventions, including compact command summaries and Docker/VM `status`
+previews. Layer README files own concrete command behavior for their
+entrypoints.
+
 ## Input And Secret Handling
 
 Simulation harnesses copy selected harness, role, and integration input files

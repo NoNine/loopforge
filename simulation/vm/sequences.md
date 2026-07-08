@@ -69,6 +69,7 @@ sequenceDiagram
   LC->>SSH: vm_ssh_wait_cloud_init(all VMs)
   LC->>SSH: vm_ssh_capture_known_hosts()
   LC->>LV: vm_libvirt_verify_guest_baseline()
+  LC->>SSH: vm_ssh_run(service VMs, verify role OS dependency baselines)
   LC->>SSH: vm_ssh_run(ldap, verify LDAP seed and bind/search)
   LC->>LV: vm_libvirt_capture_baseline()
   LC-->>CLI: compact create summary

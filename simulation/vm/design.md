@@ -317,7 +317,8 @@ VM-specific behavior must remain under `simulation/vm/`:
 
 - libvirt/KVM domain, network, storage, and snapshot operations
 - VM-set ownership and generated VM-set metadata
-- seed media and cloud-init base provisioning
+- seed media, cloud-init base provisioning, and role OS dependency baseline
+  fulfillment
 - guest boot, reboot, shutdown, and SSH readiness
 - target OS SSH command execution and file transfer
 - NFS-backed shared storage realization
@@ -343,8 +344,8 @@ execution so failures expose the exact boundary that is not ready.
 | M1 Harness skeleton and read-only run state | `preflight`, `init-run`, partial `status`, partial `audit-state` | `simulate.sh`, `config.sh`, `paths.sh`, `state.sh`, shared `simulation/lib/*` | CLI dispatch works, env inputs are copied to private runtime inputs, the run marker exists, compact summaries print, and no VM or libvirt mutation occurs. |
 | M2 VM-set ownership and libvirt preflight | `preflight`, `audit-state` | `state.sh`, `libvirt.sh`, `lifecycle.sh` | Local tooling and libvirt access are checked read-only, the VM-set metadata contract is defined, and inconsistent state fails clearly. |
 | M3 Create/up/down with SSH-ready base VMs | `create`, `up`, `down`, `status`, `ssh` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, `config.sh` | The VM set can be created, started, reached over target OS SSH as `ci-operator`, inspected, and shut down without Loopforge role mutation. |
-| M4 Baseline snapshot, clean rollback, and destroy | `create`, `clean`, `destroy`, `audit-state` | `libvirt.sh`, `state.sh`, `lifecycle.sh` | The baseline snapshot is captured before Loopforge mutation, `clean` rolls back the selected owned VM set, and `destroy` deletes only validated simulation-owned resources. |
-| M5 LDAP seed and real bind/search proof | `create`, `up`, `status`, `audit-state` | `libvirt.sh`, `lifecycle.sh`, folded LDAP logic | The LDAP VM runs a real service, seed entries from `simulation/vm/ldap/50-harness-seed.ldif` exist, and bind/search proof uses simulation-owned credentials. |
+| M4 Baseline prerequisites: role OS dependencies and LDAP proof | `create`, `up`, `status`, `audit-state` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, folded LDAP logic | VM provisioning satisfies role target OS dependency baselines, the LDAP VM runs a real service, seed entries from `simulation/vm/ldap/50-harness-seed.ldif` exist, bind/search proof uses simulation-owned credentials, and Gerrit/Jenkins controller VMs can reach LDAP. |
+| M5 Baseline snapshot, clean rollback, and destroy | `create`, `clean`, `destroy`, `audit-state` | `libvirt.sh`, `state.sh`, `lifecycle.sh` | The baseline snapshot is captured after M4 prerequisites and before Loopforge mutation, `clean` rolls back the selected owned VM set, and `destroy` deletes only validated simulation-owned resources. |
 | M6 Artifact prepare/stage over target-like paths | `prepare-artifacts`, `stage-artifacts` | `artifacts.sh`, `ssh.sh`, `paths.sh` | The bundle factory runs helper artifact preparation, host review copies are retained, service VMs receive artifacts through SSH, and target-side checksums verify under `/var/lib/loopforge/staging/<role>`. |
 | M7 Role configure/validate phases | `configure-role`, `validate-role`, `reboot` | `roles.sh`, `ssh.sh`, `lifecycle.sh` | Role helpers run over target OS SSH, role evidence is captured, and reboot proves services survive guest OS restart without implicit reconfiguration. |
 | M8 Integration validate/prove and composite run | `configure-integration`, `validate-integration`, `prove-integration`, `run` | `integration.sh`, `lifecycle.sh`, `ssh.sh` | Shared integration setup runs through `scripts/integration-setup.sh`, proof requires a matching validation marker, and `run` performs the normal workflow without cleanup or destruction. |
@@ -354,8 +355,9 @@ folded modules, read-only command dispatch, runtime input custody, generated
 run paths, and run marker handling. It must not create, modify, or delete
 libvirt resources.
 
-M3 and M5 are the highest-risk early milestones. M3 proves that the VM control
-plane is real and stable. M5 proves that LDAP readiness is not modeled.
+M3 and M4 are the highest-risk early milestones. M3 proves that the VM control
+plane is real and stable. M4 proves that role OS dependency readiness and LDAP
+readiness are not modeled.
 
 ## M3 Provisioning Decision
 
@@ -372,9 +374,11 @@ golden-image custody for the reusable VM-set ownership model, and ISO/net
 install remains too slow and broad for the M3 control-plane milestone.
 
 The Ubuntu cloud image is VM host infrastructure input, not a Loopforge
-application artifact. Cloud-init is allowed for base OS bootstrap before the
-clean baseline boundary; later role and integration checkpoints must not use
-post-baseline cloud-init.
+application artifact. Cloud-init is allowed for base OS bootstrap and role OS
+dependency fulfillment before the clean baseline boundary; later role and
+integration checkpoints must not use post-baseline cloud-init. Role helpers
+validate OS dependency expectations after the baseline snapshot; they do not
+install Ubuntu/OS dependencies.
 
 ## Post-Baseline Rules
 
@@ -419,7 +423,7 @@ When changing VM harness implementation, reviewers should check that:
 - application artifacts are prepared only in the bundle factory and verified
   target-side before mutation
 - public internet fallback remains simulation-only and limited to Ubuntu/OS
-  dependency installation
+  dependency installation during VM baseline provisioning
 - root is not introduced as a Loopforge account, helper execution identity,
   runtime identity, or direct login identity
 - evidence, logs, terminal summaries, and generated records remain bounded and

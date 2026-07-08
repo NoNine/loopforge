@@ -20,7 +20,7 @@ installation is simulation-only.
 | Mode | Minimum host prerequisites | Notes |
 | --- | --- | --- |
 | `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
-| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, NFS utilities for shared Jenkins storage, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. LDAP service packages such as `slapd` and proof tools such as `ldap-utils` are guest VM dependencies, not control-node host prerequisites. |
+| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, NFS utilities for shared Jenkins storage, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. VM provisioning satisfies role target OS dependency baselines before the clean baseline snapshot. LDAP service packages such as `slapd` and proof tools such as `ldap-utils` are guest VM dependencies, not control-node host prerequisites. |
 | `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
 
 ## Package Matrix
@@ -42,6 +42,11 @@ installation is simulation-only.
 | Product/runtime | Packages required for the role service to run. | Native role install command and this document. |
 | Helper-script | Packages required because Loopforge helper scripts validate, stage, configure, or collect evidence. | Helper defaults, env examples, setup manuals, and this document. |
 | Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker README and this document. |
+
+VM simulation realizes role target OS dependency baselines during VM
+provisioning before the clean baseline snapshot. Role helpers validate those
+package and command expectations later; they do not install Ubuntu/OS
+dependencies.
 
 ## Native Target Install Baselines
 

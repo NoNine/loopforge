@@ -65,6 +65,10 @@ OS bootstrap before the clean baseline snapshot, baseline snapshot
 capture/rollback, VM start/stop/destruction, VM-set ownership inspection, and
 VM-set-owned NFS setup.
 
+VM provisioning must satisfy the role target OS dependency baselines before
+the clean baseline snapshot is captured. Role helpers validate those package
+and command expectations later; they do not install Ubuntu/OS dependencies.
+
 After the clean baseline snapshot, checkpoint work must use target-like
 interfaces and paths: target OS SSH as `ci-operator`, SSH file transfer, role
 helpers, `scripts/integration-setup.sh`, product APIs, runtime accounts,
@@ -93,7 +97,7 @@ Phase and lifecycle commands:
 | --- | --- |
 | `preflight [--env FILE]` | Validates required local tooling, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Loads the bootstrap env file, resolves `LOOPFORGE_VM_SET_ID` and `HARNESS_RUN_ID`, copies selected env inputs into private run-scoped runtime inputs, writes rendered/runtime env files, and records VM inventory expectations. Terminal output is a short `init-run: ok run-id=... vm-set=...` summary. |
-| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, VM harness prerequisites, LDAP service readiness, and LDAP seed verification, before Loopforge artifact staging, role configuration, or integration setup. |
+| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, role OS dependency baselines, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, VM harness prerequisites, role OS dependency fulfillment, LDAP service readiness, and LDAP seed verification, before Loopforge artifact staging, role configuration, or integration setup. |
 | `up [--env FILE]` | Starts the selected VM set, waits for VM boot, SSH reachability, stable host fingerprints, and cloud-init completion. It does not run role or integration configuration. |
 | `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, and VM simulation login accounts, and prints a short status summary. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
@@ -177,9 +181,10 @@ and storage/network removal after validating selected VM-set ownership.
 `clean` is destructive to guest disk changes made after the baseline snapshot,
 but it must not remove the reusable VM set. The baseline snapshot is captured
 after OS, cloud-init, target OS control-plane readiness, SSH host-key capture,
-VM harness prerequisites, LDAP service readiness, and LDAP seed verification.
-It is captured before Loopforge artifacts are staged, product services are
-configured, integration keys are created, or verification changes are made.
+VM harness prerequisites, role OS dependency fulfillment, LDAP service
+readiness, and LDAP seed verification. It is captured before Loopforge
+artifacts are staged, product services are configured, integration keys are
+created, or verification changes are made.
 
 M3 provisioning uses Cloud Image Clone. The VM harness consumes a local Ubuntu
 Noble cloud image such as `noble-server-cloudimg-amd64.img`, creates
@@ -187,8 +192,9 @@ per-machine qcow2 disks for the selected VM set, renders cloud-init seed
 media, imports the domains into libvirt, and proves target OS SSH as the
 simulation operator account. The cloud image is an operator-provided VM host
 input and is not a Loopforge artifact. Cloud-init is limited to base OS
-bootstrap before the clean baseline boundary; later lifecycle checkpoints must
-use target OS SSH and helper-visible paths.
+bootstrap and role OS dependency fulfillment before the clean baseline
+boundary; later lifecycle checkpoints must use target OS SSH and
+helper-visible paths.
 
 ## Simulation Accounts
 

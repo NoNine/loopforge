@@ -112,6 +112,12 @@ require_doc_text docs/package-requirements.md \
 require_doc_text docs/package-requirements.md \
   'VM LDAP guest service' \
   'Package requirements evidence map must include VM LDAP guest service'
+require_doc_text docs/package-requirements.md \
+  'VM simulation realizes role target OS dependency baselines during VM' \
+  'Package requirements must place VM role OS dependencies in provisioning'
+require_doc_text docs/package-requirements.md \
+  'they do not install Ubuntu/OS' \
+  'Package requirements must keep role helpers out of OS dependency installation'
 
 require_doc_text docs/validation-and-evidence.md \
   'VM simulation evidence must identify the selected `vm_set_id` and `run_id`' \
@@ -175,6 +181,48 @@ require_doc_text simulation/README.md \
 require_doc_text simulation/README.md \
   '| `readonly` / `cn=readonly,dc=example,dc=test` | LDAP bind account | `readonly-password` | Read-only Gerrit and Jenkins directory search account. |' \
   'Shared simulation README must document the seeded LDAP bind account'
+require_doc_text simulation/README.md \
+  '## Terminal Output Convention' \
+  'Shared simulation README must document the terminal output convention'
+require_doc_text simulation/README.md \
+  '`simulation/terminal-output.md` owns shared simulation terminal presentation' \
+  'Shared simulation README must point terminal convention to the companion doc'
+require_doc_text simulation/terminal-output.md \
+  '# Simulation Terminal Output' \
+  'Terminal output companion doc must exist'
+require_doc_text simulation/terminal-output.md \
+  'Routine command success should use compact summary lines' \
+  'Terminal output companion doc must define compact command summaries'
+require_doc_text simulation/terminal-output.md \
+  'Commands must not claim success when proof is missing.' \
+  'Terminal output companion doc must require honest command states'
+require_doc_text simulation/terminal-output.md \
+  'Failure summaries should start with a compact reason' \
+  'Terminal output companion doc must define compact failure summaries'
+require_doc_text simulation/terminal-output.md \
+  'The `status` command is an operator-facing summary, not an audit report.' \
+  'Terminal output companion doc must keep status operator-facing'
+require_doc_text simulation/terminal-output.md \
+  'Layers must not force identical fields when their access models' \
+  'Terminal output companion doc must allow layer-specific status fields'
+require_doc_text simulation/terminal-output.md \
+  'uses the shared `Login accounts` table convention' \
+  'Terminal output companion doc must document the login accounts table convention'
+require_doc_text simulation/terminal-output.md \
+  'integration service accounts as password-backed login accounts' \
+  'Terminal output companion doc must prohibit password-backed integration accounts in status'
+require_doc_text simulation/terminal-output.md \
+  '## Summary Preview' \
+  'Terminal output companion doc must include command summary previews'
+require_doc_text simulation/terminal-output.md \
+  '## Docker Preview' \
+  'Terminal output companion doc must include a Docker preview'
+require_doc_text simulation/terminal-output.md \
+  '## VM Preview' \
+  'Terminal output companion doc must include a VM preview'
+require_doc_text simulation/terminal-output.md \
+  'not print raw libvirt URIs, VM resource marker values, domain dumps, Docker' \
+  'Terminal output companion doc must keep backend internals out of normal output'
 
 require_doc_text simulation/vm/README.md \
   'The VM layer uses the shared topology, account model, version baseline, source' \
@@ -207,6 +255,12 @@ require_doc_text simulation/vm/README.md \
   'VM simulation is expected to be near target deployment for lifecycle' \
   'VM README must require near-target checkpoint execution'
 require_doc_text simulation/vm/README.md \
+  'VM provisioning must satisfy the role target OS dependency baselines before' \
+  'VM README must place role OS dependencies before baseline snapshot'
+require_doc_text simulation/vm/README.md \
+  'they do not install Ubuntu/OS dependencies' \
+  'VM README must keep role helpers out of OS dependency installation'
+require_doc_text simulation/vm/README.md \
   'checkpoint work must use target-like' \
   'VM README must require target-like checkpoint interfaces'
 require_doc_text simulation/vm/README.md \
@@ -233,6 +287,9 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'LDAP service readiness, and LDAP seed verification' \
   'VM README must place LDAP readiness before baseline snapshot capture'
+require_doc_text simulation/vm/README.md \
+  'role OS dependency fulfillment, LDAP service' \
+  'VM README must place role OS dependency fulfillment before baseline snapshot capture'
 require_doc_text simulation/vm/README.md \
   '`reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS' \
   'VM README must document reboot behavior'
@@ -274,3 +331,18 @@ require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
   'libvirt preflight and VM-set ownership validation enabled' \
   'Step 13 plan must preserve M2 libvirt preflight and VM-set ownership validation scope'
+require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+  '| M4 | Add `tests/vm-harness-ldap-seed-test.sh`; verify role OS dependency baseline readiness' \
+  'Step 13 M4 must prove role OS dependencies and LDAP before baseline snapshot'
+require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+  '| M5 | Run `clean`, `destroy`, and `audit-state`; verify rollback' \
+  'Step 13 M5 must perform clean/destroy after baseline prerequisites'
+require_doc_text simulation/vm/design.md \
+  '| M4 Baseline prerequisites: role OS dependencies and LDAP proof |' \
+  'VM design M4 must own baseline prerequisites'
+require_doc_text simulation/vm/design.md \
+  '| M5 Baseline snapshot, clean rollback, and destroy |' \
+  'VM design M5 must own baseline snapshot rollback and destroy'
+require_doc_text simulation/vm/sequences.md \
+  'verify role OS dependency baselines' \
+  'VM create sequence must verify role OS dependency baselines before snapshot'
