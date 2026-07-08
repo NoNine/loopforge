@@ -3,16 +3,10 @@
 This repository contains the Gerrit/Jenkins setup package described in
 `docs/prd.md`.
 
-Keep the v1 product boundary clear:
-
-- v1 is not a strict air-gapped installer.
-- v1 does not support offline Ubuntu dependency bundles.
-- Public internet fallback on target hosts is simulation-only and must be
-  labeled as such in docs, logs, and verification summaries.
-- `root` is forbidden as a Loopforge account or direct login identity. When
-  privileged target operations are unavoidable, document them as delegated
-  privilege from the operator account; root-owned OS custody is not a
-  Loopforge account role.
+Use `docs/docs-management.md` to resolve documentation authority before
+changing product, process, or implementation facts. Use
+`docs/implementation-plan.md` for implementation sequencing and
+`docs/execution-status.md` for mutable resume state.
 
 ## Interaction Rules
 
@@ -129,26 +123,19 @@ Never modify a remote machine, VM, container host, Jenkins controller or agent,
 Gerrit host, or SSH-accessible verification machine without explicit user
 approval for that specific target and action.
 
-Remote actions that require explicit approval include:
+Remote mutation that requires explicit approval includes changes to:
 
-- Installing, upgrading, removing, or reconfiguring packages.
-- Editing, creating, deleting, moving, or changing ownership or permissions of
-  remote files.
-- Running `sudo` actions or changing users, groups, SSH keys, or credentials.
-- Starting, stopping, restarting, enabling, disabling, or reloading services.
-- Creating, deleting, restoring, snapshotting, resizing, rebooting, or shutting
-  down VMs.
-- Running Docker or Compose lifecycle commands, pruning resources, changing
-  Docker networks, mounting the Docker socket, or running privileged
-  containers.
-- Changing Jenkins or Gerrit configuration, plugins, credentials, jobs, queues,
-  agents, permissions, or triggering builds that affect external state.
-- Changing firewall rules, routes, proxies, DNS, TLS certificates, or exposed
-  service bindings.
-- Deleting logs, workspaces, artifacts, caches, databases, queues, or test
-  results.
-- Running destructive cleanup, load tests, stress tests, or verification that
-  may leave persistent side effects.
+- packages, files, users, groups, permissions, credentials, SSH keys, or
+  delegated-privilege actions;
+- services, VMs, containers, Docker or Compose lifecycle, networks, storage,
+  snapshots, reboots, or shutdowns;
+- Jenkins or Gerrit configuration, plugins, credentials, jobs, queues, agents,
+  permissions, or triggered builds;
+- firewall rules, routes, proxies, DNS, TLS certificates, or exposed service
+  bindings;
+- logs, workspaces, artifacts, caches, databases, queues, test results, or any
+  destructive cleanup, load test, stress test, or verification that may leave
+  persistent side effects.
 
 Prefer read-only checks and documented dry runs before requesting approval for
 remote mutation. State the expected side effects before asking for approval.

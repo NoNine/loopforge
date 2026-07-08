@@ -79,6 +79,41 @@ second implementation plan. If a completed step changes product behavior,
 update the relevant authority document and then record only the resume or audit
 fact in the ledger.
 
+## Implementation Plan And Companion Docs
+
+`docs/implementation-plan.md` is the roadmap for sequencing, scope,
+verification, and acceptance. It must not become a second authority document,
+a resume ledger, or the durable home for subsystem design details.
+
+Completed steps in the implementation plan should be compressed to historical
+sequencing context once their behavior is accepted. Current product behavior
+belongs in the stable authority docs, scripts, templates, simulations, and
+tests. Mutable status, verification logs, blockers, waivers, and next-work
+facts belong in `docs/execution-status.md`.
+
+Create or update a task-local companion doc when an implementation step needs
+durable design detail that would otherwise bloat the roadmap, such as module
+boundaries, milestone slices, state machines, command sequences,
+cross-subsystem contracts, or failure-mode rules. The implementer should add
+the companion doc before or alongside the complex implementation; reviewers
+should ask for one when roadmap text starts accumulating subsystem design.
+
+Companion docs should live with the scope they describe:
+
+- Product or process truth belongs in the stable authority docs.
+- Public behavior belongs in the owning public docs.
+- Internal implementation design belongs near the implementation it describes.
+- Mutable status, verification logs, blockers, waivers, and next-work facts
+  belong in the execution ledger.
+- Decision rationale belongs in the narrowest stable document that owns the
+  decision; create a dedicated decision record only when no existing authority
+  or companion doc fits cleanly.
+
+The implementation plan should point to companion docs with "read this before
+implementing" guidance. Companion docs do not replace the authority layer, and
+they must link to or narrowly apply authority facts instead of redefining
+product behavior.
+
 ## AI Agent Workflow
 
 Before changing docs, an agent should:

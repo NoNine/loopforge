@@ -3,9 +3,11 @@
 ## Purpose
 
 This document is the active implementation roadmap for building the v1
-Gerrit/Jenkins setup package described in `docs/prd.md`. It is not the stable
-product authority; use `docs/docs-management.md` to resolve the owning
-authority for current product facts.
+Gerrit/Jenkins setup package described in `docs/prd.md`. It records sequence,
+scope, verification, and acceptance criteria. It is not the stable product
+authority and must not become a second authority document; use
+`docs/docs-management.md` to resolve the owning authority for current product
+facts.
 
 The behavior digest is `docs/references/reference-digest.md`. That digest
 summarizes the known-working draft repository behavior without allowing
@@ -13,25 +15,42 @@ implementation agents to copy code, docs, templates, scripts, config files,
 command bodies, or verbatim implementation from
 `/home/ubuntu/ai-assisted/gerrit-jenkins`.
 
-Implementation agents must use `docs/references/reference-digest.md`,
-`docs/prd.md`, the role native-operations references, and this plan as their
-reference set. Do not open or copy from the draft repository unless a human
-explicitly approves a new reference review.
+Implementation agents must apply `docs/docs-management.md` before changing
+docs or implementation. Use this plan for sequencing and task scope, then read
+the owning authority document and any task-local companion documents named by
+the relevant authority or step. Do not open or copy from the draft repository
+unless a human explicitly approves a new reference review.
 
-The draft behavior was originally framed around air-gapped installation. This
-package must adapt the behavior to the v1 boundary:
-
-- v1 is not a strict air-gapped installer.
-- v1 does not support offline Ubuntu dependency bundles.
-- Public internet fallback for target-host Ubuntu/OS dependency installation is
-  simulation-only and must be labeled that way in docs, logs, and verification
-  summaries.
+The implementation must preserve the v1 product boundary defined by
+`docs/prd.md`. Use `docs/docs-management.md` to identify the owning authority
+for product, process, simulation, and implementation facts instead of
+redefining those facts in this roadmap.
 
 The implementation should proceed in verifiable steps. Each step below must
 leave the repository in a reviewable state and include a direct verification
 command or checklist.
 
+## Using This Plan
+
+This plan is intentionally subordinate to the authority docs. When a step and
+an authority doc conflict, update the stale text in the same logical change
+instead of preserving contradictory guidance.
+
+- Use `docs/docs-management.md` as the single general authority-order
+  reference; do not restate that order in individual steps.
+- Treat each step's implementation notes as roadmap guidance. They may name
+  companion docs for task-local implementation context, but those companion
+  docs do not replace the authority layer.
+- Completed steps are historical sequencing context. Current behavior belongs
+  in the stable docs, scripts, templates, simulations, and tests.
+- Future or active steps may carry more implementation detail, but product
+  facts should still be added to the proper authority document before or
+  alongside implementation.
+
 ## Functional Command Contract
+
+This section is an implementation acceptance gate. Durable lifecycle
+semantics remain in `docs/lifecycle-contract.md`.
 
 Every advertised helper or verifier command must be functional for its
 lifecycle phase before the step that introduces it can be accepted.
@@ -1075,10 +1094,15 @@ Acceptance criteria:
 Implement real VM simulation under `simulation/vm/` on top of the shared
 support library from Step 12. Do not add a separate numbered scaffold step.
 
-Implement this step milestone by milestone using the sequence in
-`simulation/vm/design.md`: M1 harness skeleton and read-only run state through
-M8 integration proof and composite `run`. These milestones are internal
-implementation slices, not separate product roadmap steps.
+For VM harness work, apply `docs/docs-management.md` first. The task-local
+companion documents are `simulation/README.md` for shared simulation behavior,
+`simulation/vm/README.md` for public VM command behavior,
+`simulation/vm/design.md` for internal module and milestone structure, and
+`simulation/vm/sequences.md` for command flow. Implement this step milestone
+by milestone using the sequence in `simulation/vm/design.md`: M1 harness
+skeleton and read-only run state through M8 integration proof and composite
+`run`. These milestones are internal implementation slices, not separate
+product roadmap steps.
 
 The public command contract remains the full VM command surface below, but
 commands become complete only when their milestone is reached. Earlier
