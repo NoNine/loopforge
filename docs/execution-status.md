@@ -19,9 +19,9 @@ transcripts here.
 
 - Branch: `0616`
 - Current HEAD: `758b409`
-- Current implementation stage: Step 13 VM simulation harness implementation is
-  in progress at M1.
-- Next authorized work state: implement Step 13 M1, or another follow-up
+- Current implementation stage: Step 13 VM simulation harness implementation
+  completed M1 and is ready for M2.
+- Next authorized work state: implement Step 13 M2, or another follow-up
   explicitly authorized by the user.
 - Ledger policy: this file is mutable execution state and remains unstaged
   unless the user explicitly requests a ledger snapshot commit.
@@ -237,14 +237,13 @@ transcripts here.
 
 ### Step 13: Implement VM Simulation Harness
 
-- Status: In progress, M1
+- Status: In progress, M1 complete; M2 next
 - Commit: none
-- Verification: none
-- Notes: Implement Step 13 using the milestone sequence in
-  `simulation/vm/design.md`. Current scope is M1: CLI skeleton, runtime input
-  custody, generated run paths, run marker handling, and read-only
-  `preflight`, `init-run`, `status`, and `audit-state`. M1 must not mutate
-  libvirt or VM resources.
+- Verification: `logs/step13-m1-verification-20260708171720.log`
+- Notes: M1 added the VM CLI skeleton, runtime input custody, canonical
+  generated run paths, run marker handling, read-only `preflight`,
+  `init-run`, `status`, and `audit-state`, plus fail-closed summaries for
+  later lifecycle commands. M1 does not mutate libvirt or VM resources.
 
 ### Step 14: Add Boundary Checks
 

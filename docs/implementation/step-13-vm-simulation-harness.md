@@ -27,26 +27,20 @@ docs are:
 
 ## Environment Constraint
 
-M1 is local and non-mutating. The current development host cannot provide KVM
-and cannot directly reach VMs created on a remote KVM-capable machine. Real
-libvirt/KVM lifecycle verification must run from an approved SSH-accessible
-remote KVM control node; VM SSH, product HTTP/SSH, libvirt, NFS, and guest
-verification commands must execute there or be reviewed through bounded logs
-and evidence copied back here. Remote KVM host setup is external operator
-infrastructure, not part of LoopForge. Remote VM, libvirt, or guest mutation
-requires explicit approval for the specific target and action.
+Local-only milestones must not mutate VM, libvirt, host, guest, Gerrit,
+Jenkins, or Jenkins agent resources. Real libvirt/KVM lifecycle verification
+must run from an approved SSH-accessible remote KVM control node; VM SSH,
+product HTTP/SSH, libvirt, NFS, and guest verification commands must execute
+there or be reviewed through bounded logs and evidence copied back here.
+Remote KVM host setup is external operator infrastructure, not part of
+LoopForge. Remote VM, libvirt, or guest mutation requires explicit approval
+for the specific target and action.
 
-## Current Milestone
+## Milestone State
 
-M1 is the current implementation scope:
-
-- CLI dispatch and help for the VM command surface.
-- Runtime input custody and run-scoped generated paths.
-- Run marker handling.
-- Read-only `preflight`, `init-run`, partial `status`, and partial
-  `audit-state`.
-- Clear blocked or not-implemented summaries for later milestone commands.
-- No VM, libvirt, host, guest, Gerrit, Jenkins, or Jenkins agent mutation.
+Use `simulation/vm/design.md` for the durable M1-M8 milestone sequence. Use
+`docs/execution-status.md` for the current milestone, completed milestone
+state, verification logs, blockers, guardrails, and next authorized work.
 
 ## Verification
 
@@ -59,6 +53,7 @@ M1 verification:
 ```bash
 tests/vm-docs-contract-test.sh
 tests/vm-harness-layout-test.sh
+tests/vm-harness-status-output-test.sh
 bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/example.env

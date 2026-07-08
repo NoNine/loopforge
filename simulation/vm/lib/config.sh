@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+
+vm_dir="$script_dir"
+vm_env_example="$vm_dir/example.env"
+VM_HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
+VM_LOOPFORGE_VM_SET_ID_OPERATOR_SET="${LOOPFORGE_VM_SET_ID+x}"
+VM_HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
+VM_HARNESS_RUN_ID_OPERATOR_VALUE="${HARNESS_RUN_ID-}"
+VM_LOOPFORGE_VM_SET_ID_OPERATOR_VALUE="${LOOPFORGE_VM_SET_ID-}"
+VM_HARNESS_PROJECT_NAME_OPERATOR_VALUE="${HARNESS_PROJECT_NAME-}"
+
+vm_output_path_vars=(
+  HARNESS_GENERATED_RUN_DIR
+  HARNESS_VM_SET_DIR
+  HARNESS_HOST_DIR
+  HARNESS_TARGET_DIR
+  HARNESS_RENDERED_DIR
+  HARNESS_RUNTIME_INPUT_DIR
+  HARNESS_RENDERED_ENV
+  HARNESS_RUNTIME_ENV
+  HARNESS_VM_INVENTORY_FILE
+  HARNESS_MANIFEST_CONTRACT
+  HARNESS_RUN_MARKER
+  HARNESS_VM_SET_MARKER
+  HARNESS_EVIDENCE_DIR
+  HARNESS_LOG_DIR
+  HARNESS_INTEGRATION_EVIDENCE_DIR
+  HARNESS_INTEGRATION_LOG_DIR
+  HARNESS_EXPORTED_ARTIFACT_DIR
+  HARNESS_RETAINED_OUTPUT_BACKUP_DIR
+  HARNESS_TARGET_SSH_DIR
+  HARNESS_GERRIT_EVIDENCE_DIR
+  HARNESS_GERRIT_LOG_DIR
+  HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR
+  HARNESS_JENKINS_CONTROLLER_LOG_DIR
+  HARNESS_JENKINS_AGENT_EVIDENCE_DIR
+  HARNESS_JENKINS_AGENT_LOG_DIR
+)
+
+vm_unset_output_paths() {
+  local name
+  for name in "${vm_output_path_vars[@]}"; do
+    unset "$name"
+  done
+  unset HARNESS_TARGET_SSH_IDENTITY_FILE HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
+}
+
+vm_reject_output_path_overrides() {
+  local name value
+  for name in "${vm_output_path_vars[@]}"; do
+    eval "value=\${$name-}"
+    [ -z "$value" ] ||
+      die "VM harness output paths are fixed under generated/simulation/vm/ for v1; unset $name"
+  done
+}
+
+vm_validate_identifier() {
+  local name value
+  name="${1:?name required}"
+  value="${2:?value required}"
+  case "$value" in
+    ''|.|..|*/*|*' '*|*[!A-Za-z0-9_.-]*)
+      die "$name may contain only letters, digits, dots, underscores, and dashes"
+      ;;
+  esac
+}
+
+vm_resolve_repo_path() {
+  resolve_base_relative_path "$repo_root" "${1:?path required}"
+}
+
+vm_config_normalize_input_paths() {
+  HARNESS_ENV_FILE="$(vm_resolve_repo_path "$HARNESS_ENV_FILE")"
+  HARNESS_GERRIT_ENV_FILE="$(vm_resolve_repo_path "$HARNESS_GERRIT_ENV_FILE")"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$(vm_resolve_repo_path "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$(vm_resolve_repo_path "$HARNESS_JENKINS_AGENT_ENV_FILE")"
+  HARNESS_INTEGRATION_ENV_FILE="$(vm_resolve_repo_path "$HARNESS_INTEGRATION_ENV_FILE")"
+  export HARNESS_ENV_FILE HARNESS_GERRIT_ENV_FILE
+  export HARNESS_JENKINS_CONTROLLER_ENV_FILE HARNESS_JENKINS_AGENT_ENV_FILE
+  export HARNESS_INTEGRATION_ENV_FILE
+}
+
+vm_config_load() {
+  local file
+  file="${1:-$vm_env_example}"
+  file="$(vm_resolve_repo_path "$file")"
+  require_readable_file "VM harness env file" "$file"
+
+  vm_reject_output_path_overrides
+  vm_unset_output_paths
+  HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$repo_root/examples/jenkins-agent.env.example"
+  HARNESS_INTEGRATION_ENV_FILE="$repo_root/examples/integration.env.example"
+  source_env_file "VM harness env file" "$file"
+
+  vm_reject_output_path_overrides
+  if [ -n "$VM_HARNESS_RUN_ID_OPERATOR_SET" ]; then
+    HARNESS_RUN_ID="$VM_HARNESS_RUN_ID_OPERATOR_VALUE"
+  fi
+  if [ -n "$VM_LOOPFORGE_VM_SET_ID_OPERATOR_SET" ]; then
+    LOOPFORGE_VM_SET_ID="$VM_LOOPFORGE_VM_SET_ID_OPERATOR_VALUE"
+  fi
+  if [ -n "$VM_HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
+    HARNESS_PROJECT_NAME="$VM_HARNESS_PROJECT_NAME_OPERATOR_VALUE"
+  fi
+  HARNESS_ENV_FILE="$file"
+  HARNESS_MODE="${HARNESS_MODE:-vm-simulation}"
+  [ "$HARNESS_MODE" = "vm-simulation" ] ||
+    die "HARNESS_MODE must be vm-simulation for the VM harness"
+  HARNESS_RUN_ID="${HARNESS_RUN_ID:-manual}"
+  LOOPFORGE_VM_SET_ID="${LOOPFORGE_VM_SET_ID:-default}"
+  HARNESS_PROJECT_NAME="${HARNESS_PROJECT_NAME:-loopforge-vm-$HARNESS_RUN_ID-$LOOPFORGE_VM_SET_ID}"
+  HARNESS_UBUNTU_BASELINE_VERSION="${HARNESS_UBUNTU_BASELINE_VERSION:-24.04.4}"
+  HARNESS_UBUNTU_BASELINE_RELEASE="${HARNESS_UBUNTU_BASELINE_RELEASE:-24.04}"
+  HARNESS_UBUNTU_BASELINE_CODENAME="${HARNESS_UBUNTU_BASELINE_CODENAME:-noble}"
+  HARNESS_JAVA_BASELINE="${HARNESS_JAVA_BASELINE:-21}"
+  HARNESS_GERRIT_BASELINE="${HARNESS_GERRIT_BASELINE:-3.13.6}"
+  HARNESS_JENKINS_BASELINE="${HARNESS_JENKINS_BASELINE:-2.555.3}"
+  HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE="${HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE:-2.15.0}"
+  HARNESS_LDAP_DOMAIN="${HARNESS_LDAP_DOMAIN:-example.test}"
+  HARNESS_LDAP_BASE_DN="${HARNESS_LDAP_BASE_DN:-dc=example,dc=test}"
+  HARNESS_LDAP_BIND_USER="${HARNESS_LDAP_BIND_USER:-readonly}"
+  HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-password}"
+  HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL="${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL:-simulation-only}"
+
+  vm_validate_identifier HARNESS_RUN_ID "$HARNESS_RUN_ID"
+  vm_validate_identifier LOOPFORGE_VM_SET_ID "$LOOPFORGE_VM_SET_ID"
+  vm_validate_identifier HARNESS_PROJECT_NAME "$HARNESS_PROJECT_NAME"
+  vm_config_normalize_input_paths
+  vm_paths_apply_canonical
+  export HARNESS_MODE HARNESS_RUN_ID LOOPFORGE_VM_SET_ID HARNESS_PROJECT_NAME
+  export HARNESS_UBUNTU_BASELINE_VERSION HARNESS_UBUNTU_BASELINE_RELEASE
+  export HARNESS_UBUNTU_BASELINE_CODENAME HARNESS_JAVA_BASELINE
+  export HARNESS_GERRIT_BASELINE HARNESS_JENKINS_BASELINE
+  export HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE
+  export HARNESS_LDAP_DOMAIN HARNESS_LDAP_BASE_DN
+  export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD
+  export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
+}
+
+vm_config_load_runtime() {
+  vm_config_load "$HARNESS_ENV_FILE"
+  [ -f "$HARNESS_RUNTIME_ENV" ] ||
+    die "Missing VM harness runtime config: run init-run first"
+  source_env_file "VM harness runtime config" "$HARNESS_RUNTIME_ENV"
+  vm_validate_identifier HARNESS_RUN_ID "$HARNESS_RUN_ID"
+  vm_validate_identifier LOOPFORGE_VM_SET_ID "$LOOPFORGE_VM_SET_ID"
+  vm_paths_apply_canonical
+  vm_state_verify_run_marker
+  vm_state_validate_core
+}
+
+vm_config_runtime_valid() {
+  (
+    vm_config_load "$HARNESS_ENV_FILE" &&
+      [ -f "$HARNESS_RUNTIME_ENV" ] &&
+      source_env_file "VM harness runtime config" "$HARNESS_RUNTIME_ENV" &&
+      vm_paths_apply_canonical &&
+      vm_state_verify_run_marker &&
+      vm_state_validate_core
+  ) >/dev/null 2>&1
+}
+
+vm_config_validate_init_inputs() {
+  require_readable_file "HARNESS_ENV_FILE" "$HARNESS_ENV_FILE"
+  require_readable_file "HARNESS_GERRIT_ENV_FILE" "$HARNESS_GERRIT_ENV_FILE"
+  require_readable_file "HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
+  require_readable_file "HARNESS_JENKINS_AGENT_ENV_FILE" "$HARNESS_JENKINS_AGENT_ENV_FILE"
+  require_readable_file "HARNESS_INTEGRATION_ENV_FILE" "$HARNESS_INTEGRATION_ENV_FILE"
+}
+
+vm_config_ensure_m1_dirs() {
+  mkdir -p \
+    "$HARNESS_RENDERED_DIR" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
+    "$HARNESS_EVIDENCE_DIR" \
+    "$HARNESS_LOG_DIR" \
+    "$HARNESS_INTEGRATION_EVIDENCE_DIR" \
+    "$HARNESS_INTEGRATION_LOG_DIR" \
+    "$HARNESS_EXPORTED_ARTIFACT_DIR" \
+    "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR" \
+    "$HARNESS_TARGET_SSH_DIR" \
+    "$HARNESS_GERRIT_EVIDENCE_DIR" \
+    "$HARNESS_GERRIT_LOG_DIR" \
+    "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" \
+    "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" \
+    "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" \
+    "$HARNESS_JENKINS_AGENT_LOG_DIR"
+  chmod 0700 "$HARNESS_TARGET_SSH_DIR"
+}
+
+vm_config_copy_runtime_inputs() {
+  rm -rf "$HARNESS_RUNTIME_INPUT_DIR"
+  copy_simulation_runtime_env_inputs \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
+    "$HARNESS_ENV_FILE" \
+    "$HARNESS_GERRIT_ENV_FILE" \
+    "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" \
+    "$HARNESS_JENKINS_AGENT_ENV_FILE" \
+    "$HARNESS_INTEGRATION_ENV_FILE"
+  HARNESS_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/harness.env"
+  HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
+  HARNESS_INTEGRATION_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_GERRIT_ENV_FILE "$HARNESS_GERRIT_ENV_FILE"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_JENKINS_AGENT_ENV_FILE"
+  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_INTEGRATION_ENV_FILE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_HOST_DIR/state/integration"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_INTEGRATION_LOG_DIR"
+  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_INTEGRATION_EVIDENCE_DIR"
+  export HARNESS_ENV_FILE HARNESS_GERRIT_ENV_FILE
+  export HARNESS_JENKINS_CONTROLLER_ENV_FILE HARNESS_JENKINS_AGENT_ENV_FILE
+  export HARNESS_INTEGRATION_ENV_FILE
+}
+
+vm_config_write_inventory() {
+  cat >"$HARNESS_VM_INVENTORY_FILE" <<EOF
+HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
+LOOPFORGE_VM_SET_ID=$(shell_quote "$LOOPFORGE_VM_SET_ID")
+VM_BUNDLE_FACTORY_STATUS=pending-m3
+VM_LDAP_STATUS=pending-m5
+VM_GERRIT_STATUS=pending-m3
+VM_JENKINS_CONTROLLER_STATUS=pending-m3
+VM_JENKINS_AGENT_STATUS=pending-m3
+VM_GERRIT_BROWSER_URL=pending-up
+VM_JENKINS_BROWSER_URL=pending-up
+EOF
+  chmod 0600 "$HARNESS_VM_INVENTORY_FILE"
+}
+
+vm_config_write_manifest_contract() {
+  cat >"$HARNESS_MANIFEST_CONTRACT" <<EOF
+# Required artifact manifest contract for VM harness role gates.
+# M1 records the baseline values that later milestones must prove.
+
+[common]
+harness_manifest_version=1
+role=<gerrit|jenkins-controller|jenkins-agent>
+ubuntu_release=$HARNESS_UBUNTU_BASELINE_RELEASE
+ubuntu_codename=$HARNESS_UBUNTU_BASELINE_CODENAME
+java_version=$HARNESS_JAVA_BASELINE
+
+[gerrit]
+gerrit_version=$HARNESS_GERRIT_BASELINE
+jenkins_version=not-applicable
+jenkins_plugin_manager_version=not-applicable
+
+[jenkins-controller]
+gerrit_version=not-applicable
+jenkins_version=$HARNESS_JENKINS_BASELINE
+jenkins_plugin_manager_version=$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE
+
+[jenkins-agent]
+gerrit_version=not-applicable
+jenkins_version=not-applicable
+jenkins_plugin_manager_version=not-applicable
+EOF
+  chmod 0600 "$HARNESS_MANIFEST_CONTRACT"
+}
+
+vm_config_write_rendered_env() {
+  cat >"$HARNESS_RENDERED_ENV" <<EOF
+HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
+LOOPFORGE_VM_SET_ID=$(shell_quote "$LOOPFORGE_VM_SET_ID")
+HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
+HARNESS_UBUNTU_BASELINE_VERSION=$(shell_quote "$HARNESS_UBUNTU_BASELINE_VERSION")
+HARNESS_UBUNTU_BASELINE_RELEASE=$(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
+HARNESS_UBUNTU_BASELINE_CODENAME=$(shell_quote "$HARNESS_UBUNTU_BASELINE_CODENAME")
+HARNESS_JAVA_BASELINE=$(shell_quote "$HARNESS_JAVA_BASELINE")
+HARNESS_GERRIT_BASELINE=$(shell_quote "$HARNESS_GERRIT_BASELINE")
+HARNESS_JENKINS_BASELINE=$(shell_quote "$HARNESS_JENKINS_BASELINE")
+HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE=$(shell_quote "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE")
+HARNESS_LDAP_DOMAIN=$(shell_quote "$HARNESS_LDAP_DOMAIN")
+HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
+HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
+HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
+HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
+HARNESS_VM_SET_DIR=$(shell_quote "$HARNESS_VM_SET_DIR")
+HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
+HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
+HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_VM_INVENTORY_FILE=$(shell_quote "$HARNESS_VM_INVENTORY_FILE")
+public_internet_fallback=simulation-only
+EOF
+  chmod 0600 "$HARNESS_RENDERED_ENV"
+}
+
+vm_config_write_runtime_env() {
+  umask 077
+  cat >"$HARNESS_RUNTIME_ENV" <<EOF
+HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
+HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
+LOOPFORGE_VM_SET_ID=$(shell_quote "$LOOPFORGE_VM_SET_ID")
+HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
+HARNESS_UBUNTU_BASELINE_VERSION=$(shell_quote "$HARNESS_UBUNTU_BASELINE_VERSION")
+HARNESS_UBUNTU_BASELINE_RELEASE=$(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
+HARNESS_UBUNTU_BASELINE_CODENAME=$(shell_quote "$HARNESS_UBUNTU_BASELINE_CODENAME")
+HARNESS_JAVA_BASELINE=$(shell_quote "$HARNESS_JAVA_BASELINE")
+HARNESS_GERRIT_BASELINE=$(shell_quote "$HARNESS_GERRIT_BASELINE")
+HARNESS_JENKINS_BASELINE=$(shell_quote "$HARNESS_JENKINS_BASELINE")
+HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE=$(shell_quote "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE")
+HARNESS_LDAP_DOMAIN=$(shell_quote "$HARNESS_LDAP_DOMAIN")
+HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
+HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
+HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
+HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+HARNESS_GERRIT_ENV_FILE=$(shell_quote "$HARNESS_GERRIT_ENV_FILE")
+HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
+HARNESS_JENKINS_AGENT_ENV_FILE=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
+HARNESS_INTEGRATION_ENV_FILE=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
+HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
+HARNESS_VM_SET_DIR=$(shell_quote "$HARNESS_VM_SET_DIR")
+HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
+HARNESS_TARGET_DIR=$(shell_quote "$HARNESS_TARGET_DIR")
+HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
+HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
+HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_VM_INVENTORY_FILE=$(shell_quote "$HARNESS_VM_INVENTORY_FILE")
+HARNESS_MANIFEST_CONTRACT=$(shell_quote "$HARNESS_MANIFEST_CONTRACT")
+HARNESS_RUN_MARKER=$(shell_quote "$HARNESS_RUN_MARKER")
+HARNESS_VM_SET_MARKER=$(shell_quote "$HARNESS_VM_SET_MARKER")
+HARNESS_EVIDENCE_DIR=$(shell_quote "$HARNESS_EVIDENCE_DIR")
+HARNESS_LOG_DIR=$(shell_quote "$HARNESS_LOG_DIR")
+HARNESS_INTEGRATION_EVIDENCE_DIR=$(shell_quote "$HARNESS_INTEGRATION_EVIDENCE_DIR")
+HARNESS_INTEGRATION_LOG_DIR=$(shell_quote "$HARNESS_INTEGRATION_LOG_DIR")
+HARNESS_EXPORTED_ARTIFACT_DIR=$(shell_quote "$HARNESS_EXPORTED_ARTIFACT_DIR")
+HARNESS_RETAINED_OUTPUT_BACKUP_DIR=$(shell_quote "$HARNESS_RETAINED_OUTPUT_BACKUP_DIR")
+HARNESS_TARGET_SSH_DIR=$(shell_quote "$HARNESS_TARGET_SSH_DIR")
+HARNESS_TARGET_SSH_IDENTITY_FILE=$(shell_quote "$HARNESS_TARGET_SSH_IDENTITY_FILE")
+HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE=$(shell_quote "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE")
+public_internet_fallback=simulation-only
+EOF
+  chmod 0600 "$HARNESS_RUNTIME_ENV"
+}
+
+vm_config_init_run() {
+  vm_config_load "$HARNESS_ENV_FILE"
+  vm_config_validate_init_inputs
+  vm_config_ensure_m1_dirs
+  vm_config_copy_runtime_inputs
+  vm_config_write_inventory
+  vm_config_write_manifest_contract
+  vm_config_write_rendered_env
+  vm_config_write_runtime_env
+  vm_state_write_run_marker
+}

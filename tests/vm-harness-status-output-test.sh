@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+tmp_dir="$(mktemp -d)"
+run_id="vm-status-output-$$"
+vm_set_id="status-output-$$"
+generated_root="$repo_root/generated/simulation/vm"
+trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id"' EXIT
+
+env_file="$tmp_dir/harness.env"
+status_out="$tmp_dir/status.out"
+
+sed \
+  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$run_id/" \
+  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$vm_set_id/" \
+  "$repo_root/simulation/vm/example.env" >"$env_file"
+
+"$repo_root/simulation/vm/simulate.sh" --env "$env_file" init-run >/dev/null
+"$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$status_out"
+
+grep -Fq 'Login accounts' "$status_out"
+grep -Fq 'System              Username        Password              Purpose' "$status_out"
+grep -Fq 'Gerrit              gerrit-admin    admin-password        Gerrit admin user' "$status_out"
+grep -Fq 'Jenkins             jenkins-admin   admin-password        Jenkins admin user' "$status_out"
+grep -Fq 'Gerrit              test-user       test-password         Test/change workflow user' "$status_out"
