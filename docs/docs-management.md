@@ -81,9 +81,10 @@ fact in the ledger.
 
 ## Implementation Plan And Companion Docs
 
-`docs/implementation-plan.md` is the roadmap for sequencing, scope,
-verification, and acceptance. It must not become a second authority document,
-a resume ledger, or the durable home for subsystem design details.
+`docs/implementation-plan.md` is the roadmap index for sequencing, scope,
+verification, and acceptance. Detailed per-step plans may live under
+`docs/implementation/`. Implementation plans must not become second authority
+documents, resume ledgers, or the durable home for product facts.
 
 Completed steps in the implementation plan should be compressed to historical
 sequencing context once their behavior is accepted. Current product behavior
@@ -128,9 +129,10 @@ Before changing docs, an agent should:
 5. Preserve bounded log handling, evidence redaction, and v1 product boundary
    language.
 
-For implementation tasks, agents should also read `docs/implementation-plan.md`
-and `docs/execution-status.md` to understand accepted work and active
-guardrails. Those files do not replace the authorities listed above.
+For implementation tasks, agents should also read `docs/implementation-plan.md`,
+the relevant per-step plan under `docs/implementation/` when one exists, and
+`docs/execution-status.md` to understand sequencing and active guardrails.
+Those files do not replace the authorities listed above.
 
 When an authority document names implementation, design, sequence, schema, or
 contract companion documents for a specific task area, agents must read those
