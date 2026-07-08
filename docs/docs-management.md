@@ -97,6 +97,12 @@ For implementation tasks, agents should also read `docs/implementation-plan.md`
 and `docs/execution-status.md` to understand accepted work and active
 guardrails. Those files do not replace the authorities listed above.
 
+When an authority document names implementation, design, sequence, schema, or
+contract companion documents for a specific task area, agents must read those
+companion documents before editing code, tests, helpers, or consumer docs in
+that area. Companion documents do not replace the authority layer; they provide
+the task-local implementation context needed to apply it correctly.
+
 ## Review Checklist
 
 Use this checklist for documentation changes:

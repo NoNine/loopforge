@@ -12,6 +12,9 @@ transport, libvirt/KVM resources, snapshots, seed media, guest SSH readiness,
 and VM-set cleanup remain VM-local until implementation proves a smaller
 durable shared boundary.
 
+Per-command internal sequence diagrams are documented in
+`simulation/vm/sequences.md`.
+
 ## Design Direction
 
 VM simulation intentionally does not mirror the Docker harness structure when
@@ -77,9 +80,10 @@ reassembling path contracts.
 checks, checkpoint marker verification, and the first read-only audit checks.
 
 `libvirt.sh` owns low-level VM infrastructure operations: domains, networks,
-storage, seed media, baseline snapshot capture, rollback, graceful shutdown,
-and VM-set destruction primitives. It must not run role helpers or complete
-Loopforge lifecycle checkpoints through host-side guest mutation.
+storage, seed media, guest baseline preparation, baseline snapshot capture,
+rollback, graceful shutdown, and VM-set destruction primitives. It must not run
+role helpers or complete Loopforge lifecycle checkpoints through host-side
+guest mutation.
 
 `ssh.sh` owns target OS control-plane access: SSH as the target-local operator
 account, known-hosts capture and verification, remote command execution,
@@ -87,9 +91,9 @@ remote readiness checks, and SSH file transfer. Artifact transfer to service
 VMs should use this module rather than a separate early transport abstraction.
 
 `lifecycle.sh` owns command orchestration for VM lifecycle commands such as
-`run`, `create`, `up`, `status`, `reboot`, `down`, `clean`, `destroy`, and
-`audit-state`. It coordinates other modules but should keep low-level libvirt,
-SSH, role helper, and integration details delegated.
+`run`, `create`, `up`, `status`, `ssh`, `reboot`, `down`, `clean`, `destroy`,
+and `audit-state`. It coordinates other modules but should keep low-level
+libvirt, SSH, role helper, and integration details delegated.
 
 `artifacts.sh` owns VM artifact flow: running role helper
 `prepare-artifacts` commands in the bundle factory VM, retaining host-side
@@ -105,6 +109,174 @@ details.
 `configure-integration`, `validate-integration`, and `prove-integration`. It
 must enforce matching validation markers before active proof and must fail or
 report blocked rather than creating synthetic success markers.
+
+## Module Relationships
+
+The VM harness module layout is a layered shell API. Command-shaped entrypoints
+belong in `lifecycle.sh`; other modules expose capability-shaped APIs. Lower
+layers must not call higher layers.
+
+```mermaid
+flowchart TD
+  CLI[simulate.sh]
+
+  subgraph CommandLayer[Command layer]
+    LC[lifecycle.sh]
+  end
+
+  subgraph LifecycleCapabilities[Lifecycle capabilities]
+    ART[artifacts.sh]
+    ROLE[roles.sh]
+    INT[integration.sh]
+  end
+
+  subgraph Infrastructure[Infrastructure]
+    LV[libvirt.sh]
+    SSH[ssh.sh]
+  end
+
+  subgraph Foundation[Foundation]
+    CFG[config.sh]
+    PATH[paths.sh]
+    ST[state.sh]
+  end
+
+  CLI --> LC
+  LC --> ART
+  LC --> ROLE
+  LC --> INT
+  LC --> LV
+  LC --> SSH
+  LC --> ST
+  LC --> CFG
+
+  ART --> SSH
+  ART --> ST
+  ART --> CFG
+
+  ROLE --> SSH
+  ROLE --> ST
+  ROLE --> CFG
+
+  INT --> SSH
+  INT --> ST
+  INT --> CFG
+
+  LV --> ST
+  LV --> CFG
+  LV --> PATH
+
+  SSH --> CFG
+  SSH --> ST
+
+  ST --> CFG
+  ST --> PATH
+  CFG --> PATH
+```
+
+Forbidden dependency directions include:
+
+- `libvirt.sh` to `artifacts.sh`, `roles.sh`, or `integration.sh`
+- `ssh.sh` to `lifecycle.sh`
+- `state.sh` to `lifecycle.sh`
+- `config.sh` to `lifecycle.sh`
+
+## Lifecycle State Model
+
+The harness should fail clearly when a command is run before its prerequisite
+state exists. Cleanup and destruction commands are explicit lifecycle actions,
+not implicit recovery inside normal workflow commands.
+
+```mermaid
+stateDiagram-v2
+  [*] --> NoRun
+
+  NoRun --> RunInitialized: init-run
+  RunInitialized --> VMSetCreated: create
+  VMSetCreated --> Running: up
+  Running --> ArtifactsPrepared: prepare-artifacts
+  ArtifactsPrepared --> ArtifactsStaged: stage-artifacts
+  ArtifactsStaged --> RolesConfigured: configure-role
+  RolesConfigured --> RolesValidated: validate-role
+  RolesValidated --> IntegrationConfigured: configure-integration
+  IntegrationConfigured --> IntegrationValidated: validate-integration
+  IntegrationValidated --> IntegrationProven: prove-integration
+
+  Running --> Stopped: down
+  IntegrationProven --> Stopped: down
+
+  VMSetCreated --> BaselineRestored: clean
+  Running --> BaselineRestored: clean
+  Stopped --> BaselineRestored: clean
+
+  VMSetCreated --> Destroyed: destroy
+  Stopped --> Destroyed: destroy
+  BaselineRestored --> Destroyed: destroy
+
+  Running --> Running: reboot
+  RolesValidated --> RolesValidated: reboot + validate-role
+```
+
+`prove-integration` must require a matching `validate-integration` marker for
+the same run. `run` is a composite over normal workflow commands only; it must
+not call `down`, `clean`, `destroy`, or `audit-state`.
+
+## Post-Baseline Boundary Diagram
+
+After baseline capture, lifecycle checkpoint work must pass through target-like
+interfaces. Host-side VM infrastructure remains valid for VM lifecycle
+management, but it must not complete role or integration checkpoints.
+
+```mermaid
+flowchart LR
+  subgraph HostInfrastructure[Host VM infrastructure]
+    LV[libvirt/KVM]
+    SNAP[baseline snapshot]
+    SEED[seed media before baseline]
+  end
+
+  subgraph TargetLike[Post-baseline lifecycle path]
+    SSH[target OS SSH as ci-operator]
+    COPY[SSH file transfer]
+    HELPERS[role helpers]
+    INTSH[scripts/integration-setup.sh]
+    API[product APIs]
+    STAGE["/var/lib/loopforge/staging/&lt;role&gt;"]
+  end
+
+  LV --> SNAP
+  SEED --> SNAP
+
+  SNAP --> SSH
+  SSH --> COPY
+  COPY --> STAGE
+  SSH --> HELPERS
+  SSH --> INTSH
+  HELPERS --> API
+  INTSH --> API
+
+  LV -. forbidden for checkpoint completion .-> STAGE
+  SEED -. forbidden after baseline .-> HELPERS
+```
+
+## Public Module API
+
+Public module functions use a `vm_` prefix. Module-private helpers should use a
+`__vm_` prefix or remain local to the file. `simulate.sh` should call command
+functions, not low-level implementation helpers.
+
+| Module | Public API shape | Owns |
+| --- | --- | --- |
+| `simulate.sh` | command dispatch only | CLI parsing, module loading, and command routing |
+| `lifecycle.sh` | `vm_cmd_*` | command choreography and composite workflow |
+| `config.sh` | `vm_config_*` | env files, defaults, selected identities, and rendered endpoint values |
+| `paths.sh` | `vm_path_*` | generated run and VM-set path contracts |
+| `state.sh` | `vm_state_*` | run markers, VM-set markers, ownership, checkpoint markers, and audit checks |
+| `libvirt.sh` | `vm_libvirt_*` | VM infrastructure primitives, guest baseline preparation, seed media, snapshots, and VM-set lifecycle |
+| `ssh.sh` | `vm_ssh_*` | target OS SSH, known-hosts, readiness, remote command execution, and transfer |
+| `artifacts.sh` | `vm_artifacts_*` | bundle-factory preparation and target-side artifact staging |
+| `roles.sh` | `vm_roles_*` | role-local `configure-role` and `validate-role` helper phases |
+| `integration.sh` | `vm_integration_*` | integration setup, validation, proof, and validation marker enforcement |
 
 ## Folded Boundaries
 

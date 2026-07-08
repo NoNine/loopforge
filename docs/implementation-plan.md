@@ -1137,6 +1137,9 @@ Implementation notes:
 - Implement `create`, `up`, `reboot`, `down`, `clean`, and `destroy` with
   libvirt/KVM semantics. `clean` rolls back to the baseline snapshot and does
   not delete VMs; `destroy` is the only command that removes VM resources.
+- Install VM guest OS dependencies during `create` as part of pre-baseline
+  guest preparation, before role configuration, artifact staging, or
+  integration setup.
 - Capture the baseline snapshot after OS, cloud-init, SSH readiness, host-key
   capture, VM harness prerequisites, LDAP service readiness, and LDAP seed
   verification, before Loopforge artifact staging or Gerrit/Jenkins service
