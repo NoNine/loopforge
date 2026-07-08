@@ -257,23 +257,17 @@ reject_doc_text simulation/vm/README.md \
   'VM README must not use Docker service names as VM endpoint identities'
 
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'The LDAP VM must run a real LDAP service' \
-  'Step 13 plan must require a real LDAP service on the LDAP VM'
+  'simulation/vm/README.md` for the public VM command contract' \
+  'Step 13 plan must point public VM behavior to the VM README'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'Seed the simulation directory with the entries defined in' \
-  'Step 13 plan must point seeded LDAP users and groups to the shared simulation README'
+  'simulation/vm/design.md` for module boundaries and milestone sequence' \
+  'Step 13 plan must point internal VM design to the VM design doc'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'consume real organization LDAP secrets in VM' \
-  'Step 13 plan must preserve the VM LDAP simulation secret boundary'
+  'simulation/vm/sequences.md` for command flow' \
+  'Step 13 plan must point VM command flow to the sequence companion doc'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'LDAP service readiness, and LDAP seed' \
-  'Step 13 plan must place LDAP readiness before the baseline snapshot'
+  'M1 is the current implementation scope' \
+  'Step 13 plan must preserve current M1 scope'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'Verify LDAP bind/search on the LDAP VM' \
-  'Step 13 plan must require LDAP bind/search validation'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'endpoint reachability from Gerrit and Jenkins controller VMs before role' \
-  'Step 13 plan must require LDAP reachability from consuming VMs'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'Evidence must label LDAP as simulation/test LDAP' \
-  'Step 13 plan must require VM LDAP evidence labeling'
+  'No VM, libvirt, host, guest, Gerrit, Jenkins, or Jenkins agent mutation' \
+  'Step 13 M1 plan must preserve non-mutating scope'
