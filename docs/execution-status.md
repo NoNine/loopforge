@@ -20,8 +20,8 @@ transcripts here.
 - Branch: `0616`
 - Current HEAD: `758b409`
 - Current implementation stage: Step 13 VM simulation harness implementation
-  completed M1 and is ready for M2.
-- Next authorized work state: implement Step 13 M2, or another follow-up
+  completed M2 and is ready for M3.
+- Next authorized work state: implement Step 13 M3, or another follow-up
   explicitly authorized by the user.
 - Ledger policy: this file is mutable execution state and remains unstaged
   unless the user explicitly requests a ledger snapshot commit.
@@ -237,13 +237,25 @@ transcripts here.
 
 ### Step 13: Implement VM Simulation Harness
 
-- Status: In progress, M1 complete; M2 next
+- Status: In progress, M2 complete; M3 next
 - Commit: none
-- Verification: `logs/step13-m1-verification-20260708171720.log`
+- Verification: `logs/step13-m1-verification-20260708171720.log`;
+  `logs/step13-m2-local-focused-20260708194208.log`;
+  `logs/step13-m2-remote-verification-20260708194524.log`;
+  `logs/step13-m2-remote-verification-20260708194526.log`;
+  `logs/step13-m2-summary-followup-final-local-20260708200756.log`;
+  `logs/step13-m2-summary-followup-remote-verification-20260708200831.log`;
+  `logs/step13-m2-summary-followup-remote-verification-20260708200833.log`
 - Notes: M1 added the VM CLI skeleton, runtime input custody, canonical
   generated run paths, run marker handling, read-only `preflight`,
   `init-run`, `status`, and `audit-state`, plus fail-closed summaries for
-  later lifecycle commands. M1 does not mutate libvirt or VM resources.
+  later lifecycle commands. M2 added read-only libvirt/KVM preflight,
+  VM-set ownership marker validation, and inconsistent-state failure checks.
+  M2 was verified on the approved KVM control node
+  `ssh -p 42729 localhost` using `/data/gerrit-jenkins-vms/loopforge-step13-m2`
+  without mutating VM or libvirt resources. A follow-up aligned M2 terminal
+  summaries with the Docker harness shape and corrected verification order so
+  `preflight` runs before `init-run`.
 
 ### Step 14: Add Boundary Checks
 

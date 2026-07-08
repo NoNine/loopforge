@@ -55,8 +55,15 @@ vm_cmd_blocked_m1() {
   return 2
 }
 
+vm_cmd_preflight_readonly_checks() {
+  libvirt_summary="$(vm_libvirt_preflight_readonly)" || return 1
+  vm_set_summary="$(vm_state_validate_vm_set_ownership_readonly)" || return 1
+  printf '%s\n' "$libvirt_summary"
+  printf '%s\n' "$vm_set_summary"
+}
+
 vm_cmd_preflight() {
-  local evidence
+  local evidence log libvirt_summary vm_set_summary
   vm_config_load "$HARNESS_ENV_FILE"
   vm_config_ensure_m1_dirs
   require_command python3
@@ -68,26 +75,34 @@ vm_cmd_preflight() {
   [ -f "$vm_dir/sequences.md" ] || die "Missing VM command sequence doc"
   [ -x "$repo_root/scripts/integration-setup.sh" ] ||
     die "Missing executable integration helper: $repo_root/scripts/integration-setup.sh"
-  vm_libvirt_preflight_readonly >/dev/null
-  evidence="$(vm_write_harness_evidence preflight pass "simulate.sh preflight" "not-applicable" "M1 static wiring passed; libvirt/KVM mutation and ownership checks are deferred to M2")"
-  print_command_summary preflight "" "ok mode=$HARNESS_MODE run-id=$HARNESS_RUN_ID vm-set=$LOOPFORGE_VM_SET_ID libvirt=deferred-m2 evidence=$(basename "$evidence")"
+  log="$(vm_path_bounded_log preflight)"
+  vm_cmd_preflight_readonly_checks >"$log" 2>&1 || {
+    evidence="$(vm_write_harness_evidence preflight fail "simulate.sh preflight" "$log" "M2 read-only libvirt/KVM preflight or VM-set ownership validation failed")"
+    print_command_failure preflight "" "failed reason=libvirt-or-vm-set-preflight" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence preflight pass "simulate.sh preflight" "$log" "M2 read-only static wiring, libvirt/KVM preflight, and VM-set ownership validation passed")"
+  print_command_summary preflight "" "ok mode=$HARNESS_MODE libvirt=ok"
 }
 
 vm_cmd_init_run() {
   local evidence
   vm_config_init_run
   evidence="$(vm_write_harness_evidence init-run pass "simulate.sh init-run" "not-applicable" "Copied runtime inputs, wrote rendered/runtime config, and recorded the M1 run marker")"
-  print_command_summary init-run "" "ok run-id=$HARNESS_RUN_ID vm-set=$LOOPFORGE_VM_SET_ID evidence=$(basename "$evidence")"
+  print_command_summary init-run "" "ok run-id=$HARNESS_RUN_ID"
 }
 
 vm_cmd_status() {
+  local libvirt_status vm_set_status
   vm_config_load_runtime
+  libvirt_status="$(vm_libvirt_status_readonly)"
+  vm_set_status="$(vm_state_validate_vm_set_ownership_readonly)"
   printf 'status: initialized\n\n'
   printf 'Run\n'
   printf '  %-13s %s\n' 'Run ID' "$HARNESS_RUN_ID"
   printf '  %-13s %s\n' 'VM set' "$LOOPFORGE_VM_SET_ID"
-  printf '  %-13s %s\n' 'VM state' 'not-created-m1'
-  printf '  %-13s %s\n' 'Libvirt' 'deferred-m2'
+  printf '  %-13s %s\n' 'VM state' "$vm_set_status"
+  printf '  %-13s %s\n' 'Libvirt' "$libvirt_status"
   printf '\n'
   printf 'Interfaces\n'
   printf '  %-13s %s\n' 'Gerrit URL' 'pending-up'
@@ -103,14 +118,22 @@ vm_cmd_status() {
 }
 
 vm_cmd_audit_state() {
-  local evidence summary libvirt_status ssh_status
+  local evidence log summary libvirt_status ssh_status vm_set_status
   vm_config_load_runtime
   vm_state_audit_readonly
   summary="$(vm_state_read_summary)"
   libvirt_status="$(vm_libvirt_status_readonly)"
+  vm_set_status="$(vm_state_validate_vm_set_ownership_readonly)"
   ssh_status="$(vm_ssh_status_readonly)"
-  evidence="$(vm_write_harness_evidence audit-state pass "simulate.sh audit-state" "not-applicable" "M1 read-only generated state audit passed; libvirt resources are not created in M1")"
-  print_command_summary audit-state "" "ok $summary $libvirt_status $ssh_status evidence=$(basename "$evidence")"
+  log="$(vm_path_bounded_log audit-state)"
+  {
+    printf '%s\n' "$summary"
+    printf '%s\n' "$libvirt_status"
+    printf '%s\n' "$vm_set_status"
+    printf '%s\n' "$ssh_status"
+  } >"$log" 2>&1
+  evidence="$(vm_write_harness_evidence audit-state pass "simulate.sh audit-state" "$log" "M2 read-only generated state, VM-set ownership, and libvirt resource audit passed")"
+  print_command_summary audit-state "" "ok"
 }
 
 vm_cmd_run() {

@@ -58,4 +58,6 @@ for file in "${vm_impl_files[@]}"; do
     'VM harness implementation must not edit guest disks or images for checkpoint work'
   reject_in_file "$file" 'cloud-init[^[:cntrl:]]*(stage-artifacts|configure-role|validate-role|configure-integration|validate-integration|prove-integration)' \
     'VM harness implementation must not use post-baseline cloud-init for checkpoint work'
+  reject_in_file "$file" 'print_command_failure[^[:cntrl:]]*basename[[:space:]]+"?\$\(?(log|evidence)' \
+    'VM harness failure summaries must print full log and evidence paths'
 done

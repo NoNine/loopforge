@@ -11,6 +11,28 @@ trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_s
 
 env_file="$tmp_dir/harness.env"
 status_out="$tmp_dir/status.out"
+stub_bin="$tmp_dir/bin"
+mkdir -p "$stub_bin"
+
+cat >"$stub_bin/virsh" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "-c" ]; then
+  shift 2
+fi
+case "${1:-}" in
+  uri)
+    printf 'qemu:///system\n'
+    ;;
+  list|net-list|pool-list)
+    printf '\n'
+    ;;
+  *)
+    printf 'unexpected virsh command: %s\n' "$*" >&2
+    exit 1
+    ;;
+esac
+STUB
+chmod +x "$stub_bin/virsh"
 
 sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$run_id/" \
@@ -18,8 +40,10 @@ sed \
   "$repo_root/simulation/vm/example.env" >"$env_file"
 
 "$repo_root/simulation/vm/simulate.sh" --env "$env_file" init-run >/dev/null
-"$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$status_out"
+PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$status_out"
 
+grep -Fq 'VM state      vm-set=absent vm-resources=absent' "$status_out"
+grep -Fq 'Libvirt       libvirt-uri=qemu:///system vm-resources=absent' "$status_out"
 grep -Fq 'Login accounts' "$status_out"
 grep -Fq 'System              Username        Password              Purpose' "$status_out"
 grep -Fq 'Gerrit              gerrit-admin    admin-password        Gerrit admin user' "$status_out"

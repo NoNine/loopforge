@@ -118,6 +118,12 @@ require explicit operator approval and must describe expected side effects
 before mutation. Read-only commands such as `preflight`, `status`, and
 `audit-state` must not repair or mutate selected VM resources.
 
+Failure summaries that include `log=` or `evidence=` print full generated
+paths so operators can inspect the referenced files directly. VM evidence
+records also store full generated bounded-log paths rather than basenames.
+Success summaries stay compact and omit log and evidence paths unless a
+command's public contract says otherwise.
+
 ## VM Set And Run Identity
 
 VM simulation has two identities:

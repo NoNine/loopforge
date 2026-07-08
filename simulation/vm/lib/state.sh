@@ -23,6 +23,76 @@ vm_state_verify_run_marker() {
     "VM harness run marker"
 }
 
+vm_state_expected_vm_set_marker_value() {
+  local key
+  key="${1:?key required}"
+  vm_libvirt_marker_values
+  case "$key" in
+    mode) printf '%s\n' "$HARNESS_MODE" ;;
+    vm_set_id) printf '%s\n' "$LOOPFORGE_VM_SET_ID" ;;
+    project_name) printf '%s\n' "$HARNESS_PROJECT_NAME" ;;
+    repo_root) printf '%s\n' "$repo_root" ;;
+    vm_set_dir) printf '%s\n' "$HARNESS_VM_SET_DIR" ;;
+    libvirt_uri) printf '%s\n' "$VM_SET_MARKER_LIBVIRT_URI" ;;
+    domain_prefix) printf '%s\n' "$VM_SET_MARKER_DOMAIN_PREFIX" ;;
+    network_name) printf '%s\n' "$VM_SET_MARKER_NETWORK_NAME" ;;
+    storage_pool_name) printf '%s\n' "$VM_SET_MARKER_STORAGE_POOL_NAME" ;;
+    seed_pool_name) printf '%s\n' "$VM_SET_MARKER_SEED_POOL_NAME" ;;
+    baseline_snapshot_name) printf '%s\n' "$VM_SET_MARKER_BASELINE_SNAPSHOT_NAME" ;;
+    ownership_schema_version) printf '%s\n' "$VM_SET_MARKER_SCHEMA_VERSION" ;;
+    *) die "Unknown VM-set marker key: $key" ;;
+  esac
+}
+
+vm_state_verify_vm_set_marker_key() {
+  local key expected actual
+  key="${1:?key required}"
+  expected="$(vm_state_expected_vm_set_marker_value "$key")"
+  actual="$(marker_value "$HARNESS_VM_SET_MARKER" "$key")" ||
+    die "VM-set marker missing $key: $HARNESS_VM_SET_MARKER"
+  [ "$actual" = "$expected" ] ||
+    die "VM-set marker $key does not match selected runtime config"
+}
+
+vm_state_verify_vm_set_marker() {
+  local key
+  [ -f "$HARNESS_VM_SET_MARKER" ] ||
+    die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
+  for key in \
+    mode \
+    vm_set_id \
+    project_name \
+    repo_root \
+    vm_set_dir \
+    libvirt_uri \
+    domain_prefix \
+    network_name \
+    storage_pool_name \
+    seed_pool_name \
+    baseline_snapshot_name \
+    ownership_schema_version
+  do
+    vm_state_verify_vm_set_marker_key "$key"
+  done
+}
+
+vm_state_validate_vm_set_ownership_readonly() {
+  local resources_status
+  resources_status="$(vm_libvirt_selected_resource_status)"
+  if [ -f "$HARNESS_VM_SET_MARKER" ]; then
+    vm_state_verify_vm_set_marker
+    printf 'vm-set=owned vm-resources=%s\n' "$resources_status"
+    return 0
+  fi
+  if [ -d "$HARNESS_VM_SET_DIR" ]; then
+    die "Inconsistent VM-set state: missing VM-set marker: $HARNESS_VM_SET_MARKER"
+  fi
+  if [ "$resources_status" = "present" ]; then
+    die "Inconsistent VM-set state: selected libvirt resources exist without generated ownership metadata"
+  fi
+  printf 'vm-set=absent vm-resources=%s\n' "$resources_status"
+}
+
 vm_state_validate_core() {
   local state_name role
   state_name="VM generated state"
@@ -64,4 +134,5 @@ vm_state_read_summary() {
 vm_state_audit_readonly() {
   vm_state_validate_core
   vm_state_verify_run_marker
+  vm_state_validate_vm_set_ownership_readonly >/dev/null
 }

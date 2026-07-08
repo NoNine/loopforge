@@ -266,8 +266,11 @@ require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
   'simulation/vm/sequences.md` for command flow' \
   'Step 13 plan must point VM command flow to the sequence companion doc'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'M1 is the current implementation scope' \
-  'Step 13 plan must preserve current M1 scope'
+  'M2-M8 verification remains milestone-scoped' \
+  'Step 13 plan must preserve milestone-scoped verification'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'No VM, libvirt, host, guest, Gerrit, Jenkins, or Jenkins agent mutation' \
-  'Step 13 M1 plan must preserve non-mutating scope'
+  'Local-only milestones must not mutate VM, libvirt, host, guest, Gerrit,' \
+  'Step 13 plan must preserve local-only non-mutating scope'
+require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+  'libvirt preflight and VM-set ownership validation enabled' \
+  'Step 13 plan must preserve M2 libvirt preflight and VM-set ownership validation scope'

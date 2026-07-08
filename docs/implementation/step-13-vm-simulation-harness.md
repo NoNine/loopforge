@@ -69,7 +69,7 @@ mutation requires explicit approval for the specific target and action.
 
 | Milestone | Additional verification beyond earlier milestones |
 | --- | --- |
-| M2 | Re-run M1 checks with libvirt preflight and VM-set ownership validation enabled. |
+| M2 | Add `tests/vm-harness-terminal-summary-test.sh`; re-run M1 checks with libvirt preflight and VM-set ownership validation enabled. |
 | M3 | Run `create`, `up`, `status`, `ssh --role ROLE`, and `down`; verify target OS SSH access without role mutation. |
 | M4 | Run `clean`, `destroy`, and `audit-state`; verify rollback and destruction ownership checks. |
 | M5 | Add `tests/vm-harness-ldap-seed-test.sh`; verify LDAP readiness, seed, bind/search, and consumer reachability. |
