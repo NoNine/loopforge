@@ -25,6 +25,9 @@ case "${1:-}" in
   list|net-list|pool-list)
     printf '\n'
     ;;
+  domstate)
+    exit 1
+    ;;
   *)
     printf 'unexpected virsh command: %s\n' "$*" >&2
     exit 1
@@ -70,4 +73,8 @@ PATH="$stub_bin:$PATH" \
 grep -Fq 'status: initialized' "$tmp_dir/status.out"
 grep -Fq "Run ID        $run_id" "$tmp_dir/status.out"
 grep -Fq "VM set        $vm_set_id" "$tmp_dir/status.out"
+grep -Fq "Project       loopforge-vm-$run_id-$vm_set_id" "$tmp_dir/status.out"
+grep -Fq 'Target SSH' "$tmp_dir/status.out"
 grep -Fq 'Login accounts' "$tmp_dir/status.out"
+! grep -Fq 'VM state' "$tmp_dir/status.out"
+! grep -Fq 'Libvirt' "$tmp_dir/status.out"

@@ -237,7 +237,8 @@ transcripts here.
 
 ### Step 13: Implement VM Simulation Harness
 
-- Status: In progress, M2 complete; M3 next
+- Status: In progress, M3 implemented locally; remote M3 validation pending
+  explicit approval
 - Commit: none
 - Verification: `logs/step13-m1-verification-20260708171720.log`;
   `logs/step13-m2-local-focused-20260708194208.log`;
@@ -245,7 +246,8 @@ transcripts here.
   `logs/step13-m2-remote-verification-20260708194526.log`;
   `logs/step13-m2-summary-followup-final-local-20260708200756.log`;
   `logs/step13-m2-summary-followup-remote-verification-20260708200831.log`;
-  `logs/step13-m2-summary-followup-remote-verification-20260708200833.log`
+  `logs/step13-m2-summary-followup-remote-verification-20260708200833.log`;
+  `logs/step13-m3-local-focused-20260708212448.log`
 - Notes: M1 added the VM CLI skeleton, runtime input custody, canonical
   generated run paths, run marker handling, read-only `preflight`,
   `init-run`, `status`, and `audit-state`, plus fail-closed summaries for
@@ -255,7 +257,11 @@ transcripts here.
   `ssh -p 42729 localhost` using `/data/gerrit-jenkins-vms/loopforge-step13-m2`
   without mutating VM or libvirt resources. A follow-up aligned M2 terminal
   summaries with the Docker harness shape and corrected verification order so
-  `preflight` runs before `init-run`.
+  `preflight` runs before `init-run`. M3 documents Cloud Image Clone as the
+  selected provisioning design, adds local implementation for `create`, `up`,
+  `status`, `ssh --role ROLE`, and `down`, and verifies those paths with
+  local stubs only. Real KVM `create`, `up`, target SSH, and `down`
+  validation remains pending because it mutates the remote KVM control node.
 
 ### Step 14: Add Boundary Checks
 

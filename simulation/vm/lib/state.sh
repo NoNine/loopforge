@@ -11,6 +11,34 @@ vm_state_write_run_marker() {
     "$HARNESS_RUNTIME_ENV"
 }
 
+vm_state_write_vm_set_marker() {
+  mkdir -p "$HARNESS_VM_SET_DIR"
+  vm_libvirt_marker_values
+  cat >"$HARNESS_VM_SET_MARKER" <<EOF
+mode=$HARNESS_MODE
+vm_set_id=$LOOPFORGE_VM_SET_ID
+project_name=$HARNESS_PROJECT_NAME
+repo_root=$repo_root
+vm_set_dir=$HARNESS_VM_SET_DIR
+libvirt_uri=$VM_SET_MARKER_LIBVIRT_URI
+domain_prefix=$VM_SET_MARKER_DOMAIN_PREFIX
+network_name=$VM_SET_MARKER_NETWORK_NAME
+storage_pool_name=$VM_SET_MARKER_STORAGE_POOL_NAME
+seed_pool_name=$VM_SET_MARKER_SEED_POOL_NAME
+baseline_snapshot_name=$VM_SET_MARKER_BASELINE_SNAPSHOT_NAME
+ownership_schema_version=$VM_SET_MARKER_SCHEMA_VERSION
+EOF
+  chmod 0600 "$HARNESS_VM_SET_MARKER"
+}
+
+vm_state_write_or_verify_vm_set_marker() {
+  if [ -f "$HARNESS_VM_SET_MARKER" ]; then
+    vm_state_verify_vm_set_marker
+  else
+    vm_state_write_vm_set_marker
+  fi
+}
+
 vm_state_verify_run_marker() {
   verify_runtime_marker \
     "$HARNESS_RUN_MARKER" \
@@ -121,6 +149,11 @@ vm_state_validate_core() {
     require_generated_state_dir "$state_name" "$role evidence directory" "$HARNESS_TARGET_DIR/evidence/$role"
     require_generated_state_dir "$state_name" "$role log directory" "$HARNESS_TARGET_DIR/logs/$role"
   done
+}
+
+vm_state_verify_run_and_vm_set() {
+  vm_state_verify_run_marker
+  vm_state_verify_vm_set_marker
 }
 
 vm_state_read_summary() {

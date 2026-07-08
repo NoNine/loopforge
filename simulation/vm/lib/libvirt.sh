@@ -2,9 +2,14 @@
 
 VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 VM_BASELINE_SNAPSHOT_NAME="${VM_BASELINE_SNAPSHOT_NAME:-loopforge-clean-baseline}"
+vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 
 vm_libvirt_domain_prefix() {
   printf '%s-' "$HARNESS_PROJECT_NAME"
+}
+
+vm_libvirt_domain_name() {
+  printf '%s%s' "$(vm_libvirt_domain_prefix)" "${1:?machine required}"
 }
 
 vm_libvirt_network_name() {
@@ -17,6 +22,15 @@ vm_libvirt_storage_pool_name() {
 
 vm_libvirt_seed_pool_name() {
   printf '%s-seed' "$HARNESS_PROJECT_NAME"
+}
+
+vm_libvirt_machine_mac() {
+  local machine digest
+  machine="${1:?machine required}"
+  digest="$(printf '%s:%s:%s\n' "$HARNESS_PROJECT_NAME" "$LOOPFORGE_VM_SET_ID" "$machine" |
+    sha256sum | awk '{print $1}')"
+  printf '52:54:00:%s:%s:%s\n' \
+    "${digest:0:2}" "${digest:2:2}" "${digest:4:2}"
 }
 
 vm_libvirt_marker_values() {
@@ -65,10 +79,357 @@ vm_libvirt_preflight_readonly() {
   printf 'libvirt=ok uri=%s kvm=%s\n' "$VM_LIBVIRT_URI" "$kvm_status"
 }
 
+vm_libvirt_require_base_image() {
+  require_readable_file "VM_BASE_IMAGE_PATH" "$VM_BASE_IMAGE_PATH"
+}
+
+vm_libvirt_network_xml_path() {
+  printf '%s/network.xml\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_libvirt_domain_xml_path() {
+  printf '%s/%s.xml\n' "$(vm_path_vm_set_machine_dir)" "${1:?machine required}"
+}
+
+vm_libvirt_disk_path() {
+  printf '%s/%s.qcow2\n' "$(vm_path_vm_set_disk_dir)" "${1:?machine required}"
+}
+
+vm_libvirt_seed_iso_path() {
+  printf '%s/%s-seed.iso\n' "$(vm_path_vm_set_seed_dir)" "${1:?machine required}"
+}
+
+vm_libvirt_seed_work_dir() {
+  printf '%s/%s\n' "$(vm_path_vm_set_seed_dir)" "${1:?machine required}"
+}
+
+vm_libvirt_machine_metadata_path() {
+  vm_path_vm_machine_file "${1:?machine required}"
+}
+
+vm_libvirt_machine_exists() {
+  virsh -c "$VM_LIBVIRT_URI" dominfo "$(vm_libvirt_domain_name "$1")" >/dev/null 2>&1
+}
+
+vm_libvirt_network_is_active() {
+  local network
+  network="$(vm_libvirt_network_name)"
+  virsh -c "$VM_LIBVIRT_URI" net-info "$network" 2>/dev/null |
+    awk -F: '$1 == "Active" { gsub(/[[:space:]]/, "", $2); if ($2 == "yes") found = 1 } END { exit !found }'
+}
+
+vm_libvirt_domain_state() {
+  local machine
+  machine="${1:?machine required}"
+  virsh -c "$VM_LIBVIRT_URI" domstate "$(vm_libvirt_domain_name "$machine")" 2>/dev/null ||
+    printf 'missing\n'
+}
+
+vm_libvirt_render_network_xml() {
+  local xml
+  xml="$(vm_libvirt_network_xml_path)"
+  mkdir -p "$(dirname "$xml")"
+  python3 - "$VM_NETWORK_CIDR" "$(vm_libvirt_network_name)" >"$xml" <<'PY'
+import ipaddress
+import sys
+cidr = sys.argv[1]
+name = sys.argv[2]
+network = ipaddress.ip_network(cidr, strict=False)
+hosts = list(network.hosts())
+if len(hosts) < 10:
+    raise SystemExit(f"VM_NETWORK_CIDR too small for VM harness network: {cidr}")
+gateway = hosts[0]
+dhcp_start = hosts[2]
+dhcp_end = hosts[-2]
+print(f"""<network>
+  <name>{name}</name>
+  <forward mode='nat'/>
+  <bridge name='{name[:15]}' stp='on' delay='0'/>
+  <ip address='{gateway}' netmask='{network.netmask}'>
+    <dhcp>
+      <range start='{dhcp_start}' end='{dhcp_end}'/>
+    </dhcp>
+  </ip>
+</network>""")
+PY
+  chmod 0600 "$xml"
+}
+
+vm_libvirt_render_domain_xml() {
+  local machine domain disk seed mac xml
+  machine="${1:?machine required}"
+  domain="$(vm_libvirt_domain_name "$machine")"
+  disk="$(vm_libvirt_disk_path "$machine")"
+  seed="$(vm_libvirt_seed_iso_path "$machine")"
+  mac="$(vm_libvirt_machine_mac "$machine")"
+  xml="$(vm_libvirt_domain_xml_path "$machine")"
+  mkdir -p "$(dirname "$xml")"
+  cat >"$xml" <<EOF
+<domain type='kvm'>
+  <name>$domain</name>
+  <memory unit='MiB'>$VM_DOMAIN_MEMORY_MIB</memory>
+  <currentMemory unit='MiB'>$VM_DOMAIN_MEMORY_MIB</currentMemory>
+  <vcpu placement='static'>$VM_DOMAIN_VCPUS</vcpu>
+  <os>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-model' check='partial'/>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='$disk'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='$seed'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+    <interface type='network'>
+      <mac address='$mac'/>
+      <source network='$(vm_libvirt_network_name)'/>
+      <model type='virtio'/>
+    </interface>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <graphics type='vnc' listen='127.0.0.1' autoport='yes'/>
+  </devices>
+</domain>
+EOF
+  chmod 0600 "$xml"
+}
+
+vm_libvirt_render_seed_media() {
+  local machine work_dir user_data meta_data network_config seed_iso mac public_key
+  machine="${1:?machine required}"
+  work_dir="$(vm_libvirt_seed_work_dir "$machine")"
+  user_data="$work_dir/user-data"
+  meta_data="$work_dir/meta-data"
+  network_config="$work_dir/network-config"
+  seed_iso="$(vm_libvirt_seed_iso_path "$machine")"
+  mac="$(vm_libvirt_machine_mac "$machine")"
+  public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
+  mkdir -p "$work_dir"
+  cat >"$user_data" <<EOF
+#cloud-config
+users:
+  - default
+  - name: $VM_OPERATOR_USER
+    gecos: Loopforge simulation operator
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - $public_key
+ssh_pwauth: false
+disable_root: true
+package_update: false
+runcmd:
+  - [ cloud-init-per, once, loopforge-ssh-enable, systemctl, enable, --now, ssh ]
+EOF
+  cat >"$meta_data" <<EOF
+instance-id: $HARNESS_PROJECT_NAME-$machine
+local-hostname: $machine
+EOF
+  cat >"$network_config" <<EOF
+version: 2
+ethernets:
+  harness0:
+    match:
+      macaddress: "$mac"
+    set-name: ens3
+    dhcp4: true
+EOF
+  if command -v cloud-localds >/dev/null 2>&1; then
+    cloud-localds --network-config="$network_config" "$seed_iso" "$user_data" "$meta_data"
+  elif command -v genisoimage >/dev/null 2>&1; then
+    (cd "$work_dir" && genisoimage -quiet -output "$seed_iso" -volid cidata -joliet -rock \
+      user-data meta-data network-config)
+  else
+    (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
+      user-data meta-data network-config)
+  fi
+  chmod 0600 "$user_data" "$meta_data" "$network_config" "$seed_iso"
+}
+
+vm_libvirt_write_machine_metadata() {
+  local machine file
+  machine="${1:?machine required}"
+  file="$(vm_libvirt_machine_metadata_path "$machine")"
+  mkdir -p "$(dirname "$file")"
+  cat >"$file" <<EOF
+machine=$machine
+domain=$(vm_libvirt_domain_name "$machine")
+mac=$(vm_libvirt_machine_mac "$machine")
+disk=$(vm_libvirt_disk_path "$machine")
+seed_iso=$(vm_libvirt_seed_iso_path "$machine")
+ssh_user=$VM_OPERATOR_USER
+ssh_host=pending-up
+ssh_port=22
+EOF
+  chmod 0600 "$file"
+}
+
+vm_libvirt_ensure_ssh_key() {
+  mkdir -p "$HARNESS_TARGET_SSH_DIR"
+  chmod 0700 "$HARNESS_TARGET_SSH_DIR"
+  if [ ! -f "$HARNESS_TARGET_SSH_IDENTITY_FILE" ]; then
+    ssh-keygen -q -t ed25519 -N '' -f "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  fi
+  chmod 0600 "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  chmod 0644 "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
+}
+
+vm_libvirt_create_disk() {
+  local machine disk
+  machine="${1:?machine required}"
+  disk="$(vm_libvirt_disk_path "$machine")"
+  [ -f "$disk" ] && return 0
+  qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$disk" >/dev/null
+  qemu-img resize "$disk" "$VM_DOMAIN_DISK_SIZE" >/dev/null
+  chmod 0600 "$disk"
+}
+
+vm_libvirt_define_network() {
+  local network xml
+  network="$(vm_libvirt_network_name)"
+  xml="$(vm_libvirt_network_xml_path)"
+  if ! vm_libvirt_selected_network_exists; then
+    vm_libvirt_render_network_xml
+    virsh -c "$VM_LIBVIRT_URI" net-define "$xml" >/dev/null
+  fi
+  if ! vm_libvirt_network_is_active; then
+    virsh -c "$VM_LIBVIRT_URI" net-start "$network" >/dev/null
+  fi
+}
+
+vm_libvirt_define_machine() {
+  local machine xml
+  machine="${1:?machine required}"
+  xml="$(vm_libvirt_domain_xml_path "$machine")"
+  vm_libvirt_create_disk "$machine"
+  vm_libvirt_render_seed_media "$machine"
+  vm_libvirt_render_domain_xml "$machine"
+  if ! vm_libvirt_machine_exists "$machine"; then
+    virsh -c "$VM_LIBVIRT_URI" define "$xml" >/dev/null
+  fi
+  vm_libvirt_write_machine_metadata "$machine"
+}
+
+vm_libvirt_create_set() {
+  local machine
+  vm_libvirt_require_base_image
+  mkdir -p "$(vm_path_vm_set_libvirt_dir)" "$(vm_path_vm_set_disk_dir)" \
+    "$(vm_path_vm_set_seed_dir)" "$(vm_path_vm_set_machine_dir)"
+  vm_libvirt_ensure_ssh_key
+  vm_libvirt_define_network
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_define_machine "$machine"
+  done
+}
+
+vm_libvirt_start_machine() {
+  local machine state
+  machine="${1:?machine required}"
+  vm_libvirt_machine_exists "$machine" ||
+    die "Missing VM domain for $machine: $(vm_libvirt_domain_name "$machine")"
+  state="$(vm_libvirt_domain_state "$machine")"
+  case "$state" in
+    running) ;;
+    'shut off'|shut*)
+      virsh -c "$VM_LIBVIRT_URI" start "$(vm_libvirt_domain_name "$machine")" >/dev/null
+      ;;
+    *)
+      die "VM domain $machine is not startable from state: $state"
+      ;;
+  esac
+}
+
+vm_libvirt_start_set() {
+  local machine
+  vm_libvirt_define_network
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_start_machine "$machine"
+  done
+}
+
+vm_libvirt_shutdown_machine() {
+  local machine domain deadline state
+  machine="${1:?machine required}"
+  domain="$(vm_libvirt_domain_name "$machine")"
+  vm_libvirt_machine_exists "$machine" || return 0
+  state="$(vm_libvirt_domain_state "$machine")"
+  case "$state" in
+    running)
+      virsh -c "$VM_LIBVIRT_URI" shutdown "$domain" >/dev/null || true
+      deadline=$((SECONDS + VM_OPERATOR_SSH_TIMEOUT_SECONDS))
+      while [ "$SECONDS" -lt "$deadline" ]; do
+        state="$(vm_libvirt_domain_state "$machine")"
+        case "$state" in
+          'shut off'|shut*) return 0 ;;
+        esac
+        sleep "$VM_OPERATOR_SSH_POLL_SECONDS"
+      done
+      die "Timed out waiting for VM domain shutdown: $domain"
+      ;;
+    'shut off'|shut*|missing) ;;
+    *)
+      die "VM domain $machine is in unexpected state for down: $state"
+      ;;
+  esac
+}
+
+vm_libvirt_shutdown_set() {
+  local machine
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_shutdown_machine "$machine"
+  done
+}
+
+vm_libvirt_machine_ip() {
+  local machine mac network
+  machine="${1:?machine required}"
+  mac="$(vm_libvirt_machine_mac "$machine")"
+  network="$(vm_libvirt_network_name)"
+  virsh -c "$VM_LIBVIRT_URI" net-dhcp-leases "$network" --mac "$mac" 2>/dev/null |
+    awk '$0 ~ /ipv4/ { split($5, address, "/"); print address[1]; found = 1; exit } END { exit !found }'
+}
+
+vm_libvirt_require_running() {
+  local machine state
+  machine="${1:?machine required}"
+  state="$(vm_libvirt_domain_state "$machine")"
+  [ "$state" = "running" ] ||
+    die "VM domain is not running for $machine: $state"
+}
+
 vm_libvirt_status_readonly() {
   local resource_status
   resource_status="$(vm_libvirt_selected_resource_status)"
   printf 'libvirt-uri=%s vm-resources=%s\n' "$VM_LIBVIRT_URI" "$resource_status"
+}
+
+vm_libvirt_status_table() {
+  local machine state ip
+  for machine in "${vm_machines[@]}"; do
+    state="$(vm_libvirt_domain_state "$machine")"
+    ip="$(vm_libvirt_machine_ip "$machine" 2>/dev/null || true)"
+    [ -n "$ip" ] || ip="pending-up"
+    printf '%s domain=%s state=%s ssh=%s\n' \
+      "$machine" "$(vm_libvirt_domain_name "$machine")" "$state" "$ip"
+  done
 }
 
 vm_libvirt_list_selected_domains() {

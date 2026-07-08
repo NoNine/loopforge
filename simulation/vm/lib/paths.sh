@@ -63,3 +63,23 @@ vm_path_runtime_inputs() {
 vm_path_bounded_log() {
   bounded_log_path_in_dir "$HARNESS_LOG_DIR" "${1:?log name required}"
 }
+
+vm_path_vm_set_libvirt_dir() {
+  printf '%s/libvirt\n' "$HARNESS_VM_SET_DIR"
+}
+
+vm_path_vm_set_disk_dir() {
+  printf '%s/disks\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_path_vm_set_seed_dir() {
+  printf '%s/seeds\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_path_vm_set_machine_dir() {
+  printf '%s/machines\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_path_vm_machine_file() {
+  printf '%s/%s.env\n' "$(vm_path_vm_set_machine_dir)" "${1:?machine required}"
+}

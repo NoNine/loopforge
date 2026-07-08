@@ -93,21 +93,28 @@ vm_cmd_init_run() {
 }
 
 vm_cmd_status() {
-  local libvirt_status vm_set_status
+  local status_label
   vm_config_load_runtime
-  libvirt_status="$(vm_libvirt_status_readonly)"
-  vm_set_status="$(vm_state_validate_vm_set_ownership_readonly)"
-  printf 'status: initialized\n\n'
+  vm_state_validate_vm_set_ownership_readonly >/dev/null
+  status_label="initialized"
+  if [ "$(vm_libvirt_domain_state gerrit)" = "running" ] &&
+    [ "$(vm_libvirt_domain_state jenkins-controller)" = "running" ] &&
+    [ "$(vm_libvirt_domain_state jenkins-agent)" = "running" ]; then
+    status_label="running"
+  fi
+  printf 'status: %s\n\n' "$status_label"
   printf 'Run\n'
   printf '  %-13s %s\n' 'Run ID' "$HARNESS_RUN_ID"
   printf '  %-13s %s\n' 'VM set' "$LOOPFORGE_VM_SET_ID"
-  printf '  %-13s %s\n' 'VM state' "$vm_set_status"
-  printf '  %-13s %s\n' 'Libvirt' "$libvirt_status"
+  printf '  %-13s %s\n' 'Project' "$HARNESS_PROJECT_NAME"
+  printf '  %-13s %s\n' 'Gerrit URL' 'pending-role-configuration'
+  printf '  %-13s %s\n' 'Jenkins URL' 'pending-role-configuration'
   printf '\n'
-  printf 'Interfaces\n'
-  printf '  %-13s %s\n' 'Gerrit URL' 'pending-up'
-  printf '  %-13s %s\n' 'Jenkins URL' 'pending-up'
-  printf '  %-13s %s\n' 'Target SSH' 'pending-up'
+  printf 'Target SSH\n'
+  printf '  %-18s  %-12s  %-15s  %-19s\n' 'Role' 'User' 'Host' 'State'
+  printf '  %-18s  %-12s  %-15s  %-19s\n' '------------------' '------------' '---------------' '-------------------'
+  vm_ssh_status_readonly
+  printf '  %-18s  %-12s  %-15s  %-19s\n' '------------------' '------------' '---------------' '-------------------'
   printf '\n'
   printf 'Login accounts\n'
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'System' 'Username' 'Password' 'Purpose'
@@ -115,6 +122,7 @@ vm_cmd_status() {
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit' 'gerrit-admin' 'admin-password' 'Gerrit admin user'
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'Jenkins' 'jenkins-admin' 'admin-password' 'Jenkins admin user'
   printf '  %-18s  %-14s  %-20s  %-40s\n' 'Gerrit' 'test-user' 'test-password' 'Test/change workflow user'
+  printf '  %-18s  %-14s  %-20s  %-40s\n' '------------------' '--------------' '--------------------' '----------------------------------------'
 }
 
 vm_cmd_audit_state() {
@@ -141,15 +149,51 @@ vm_cmd_run() {
 }
 
 vm_cmd_create() {
-  vm_cmd_blocked_m1 create ""
+  local evidence log
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log create)"
+  {
+    vm_state_validate_vm_set_ownership_readonly
+    vm_libvirt_require_base_image
+    vm_state_write_or_verify_vm_set_marker
+    vm_libvirt_create_set
+    vm_libvirt_status_table
+  } >"$log" 2>&1 || {
+    evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M3 Cloud Image Clone VM-set creation failed")"
+    print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M3 Cloud Image Clone VM set was defined without role mutation")"
+  print_command_summary create "" "ok vm-set=$LOOPFORGE_VM_SET_ID domains=defined"
 }
 
 vm_cmd_up() {
-  vm_cmd_blocked_m1 up ""
+  local evidence log
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log up)"
+  {
+    vm_state_verify_run_and_vm_set
+    vm_libvirt_start_set
+    vm_ssh_prepare_all
+    vm_libvirt_status_table
+    vm_ssh_status_readonly
+  } >"$log" 2>&1 || {
+    evidence="$(vm_write_harness_evidence up fail "simulate.sh up" "$log" "M3 VM-set startup or target OS SSH readiness failed")"
+    print_command_failure up "" "failed reason=vm-set-up" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence up pass "simulate.sh up" "$log" "M3 VM set started and target OS SSH readiness passed")"
+  print_command_summary up "" "ok vm-set=$LOOPFORGE_VM_SET_ID ssh=ready"
 }
 
 vm_cmd_ssh() {
-  vm_cmd_blocked_m1 ssh "${1:?role required}"
+  local role machine
+  role="${1:?role required}"
+  vm_config_load_runtime
+  vm_state_verify_run_and_vm_set
+  machine="$(vm_ssh_role_machine "$role")"
+  vm_libvirt_require_running "$machine"
+  vm_ssh_interactive_role "$role"
 }
 
 vm_cmd_prepare_artifacts() {
@@ -190,7 +234,20 @@ vm_cmd_reboot() {
 }
 
 vm_cmd_down() {
-  vm_cmd_blocked_m1 down ""
+  local evidence log
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log down)"
+  {
+    vm_state_verify_run_and_vm_set
+    vm_libvirt_shutdown_set
+    vm_libvirt_status_table
+  } >"$log" 2>&1 || {
+    evidence="$(vm_write_harness_evidence down fail "simulate.sh down" "$log" "M3 VM-set graceful shutdown failed")"
+    print_command_failure down "" "failed reason=vm-set-down" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence down pass "simulate.sh down" "$log" "M3 VM set shut down while retaining disks and generated state")"
+  print_command_summary down "" "ok vm-set=$LOOPFORGE_VM_SET_ID"
 }
 
 vm_cmd_clean() {

@@ -357,6 +357,25 @@ libvirt resources.
 M3 and M5 are the highest-risk early milestones. M3 proves that the VM control
 plane is real and stable. M5 proves that LDAP readiness is not modeled.
 
+## M3 Provisioning Decision
+
+M3 uses Cloud Image Clone provisioning. The harness consumes an
+operator-provided local Ubuntu Noble cloud image, such as
+`noble-server-cloudimg-amd64.img`, creates per-VM qcow2 disks, renders
+cloud-init seed media for the simulation operator account, defines libvirt
+domains, and proves target OS SSH readiness.
+
+This is the selected first implementation because it is repeatable, faster
+than ISO or network installation, and less operator-specific than attaching to
+precreated base VMs. Precreated base VMs remain too dependent on external
+golden-image custody for the reusable VM-set ownership model, and ISO/net
+install remains too slow and broad for the M3 control-plane milestone.
+
+The Ubuntu cloud image is VM host infrastructure input, not a Loopforge
+application artifact. Cloud-init is allowed for base OS bootstrap before the
+clean baseline boundary; later role and integration checkpoints must not use
+post-baseline cloud-init.
+
 ## Post-Baseline Rules
 
 After `create` captures the clean baseline snapshot, lifecycle checkpoints

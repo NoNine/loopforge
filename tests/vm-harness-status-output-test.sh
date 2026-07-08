@@ -26,6 +26,9 @@ case "${1:-}" in
   list|net-list|pool-list)
     printf '\n'
     ;;
+  domstate)
+    exit 1
+    ;;
   *)
     printf 'unexpected virsh command: %s\n' "$*" >&2
     exit 1
@@ -42,10 +45,26 @@ sed \
 "$repo_root/simulation/vm/simulate.sh" --env "$env_file" init-run >/dev/null
 PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$status_out"
 
-grep -Fq 'VM state      vm-set=absent vm-resources=absent' "$status_out"
-grep -Fq 'Libvirt       libvirt-uri=qemu:///system vm-resources=absent' "$status_out"
+grep -Fq 'status: initialized' "$status_out"
+grep -Fq "Run ID        $run_id" "$status_out"
+grep -Fq "VM set        $vm_set_id" "$status_out"
+grep -Fq "Project       loopforge-vm-$run_id-$vm_set_id" "$status_out"
+grep -Fq 'Gerrit URL    pending-role-configuration' "$status_out"
+grep -Fq 'Jenkins URL   pending-role-configuration' "$status_out"
+grep -Fq 'Target SSH' "$status_out"
+grep -Fq 'Role                User          Host             State' "$status_out"
+grep -Fq 'gerrit              ci-operator   pending-up       pending-up' "$status_out"
+grep -Fq 'jenkins-controller  ci-operator   pending-up       pending-up' "$status_out"
+grep -Fq 'jenkins-agent       ci-operator   pending-up       pending-up' "$status_out"
 grep -Fq 'Login accounts' "$status_out"
 grep -Fq 'System              Username        Password              Purpose' "$status_out"
 grep -Fq 'Gerrit              gerrit-admin    admin-password        Gerrit admin user' "$status_out"
 grep -Fq 'Jenkins             jenkins-admin   admin-password        Jenkins admin user' "$status_out"
 grep -Fq 'Gerrit              test-user       test-password         Test/change workflow user' "$status_out"
+tail -1 "$status_out" | grep -Fq -- '------------------  --------------  --------------------  ----------------------------------------'
+! grep -Fq 'VM state' "$status_out"
+! grep -Fq 'Libvirt' "$status_out"
+! grep -Fq 'vm-resources=' "$status_out"
+! grep -Fq 'libvirt-uri=' "$status_out"
+! grep -Fq 'VM domains' "$status_out"
+! grep -Fq 'domain=' "$status_out"

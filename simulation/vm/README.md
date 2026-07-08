@@ -181,6 +181,15 @@ VM harness prerequisites, LDAP service readiness, and LDAP seed verification.
 It is captured before Loopforge artifacts are staged, product services are
 configured, integration keys are created, or verification changes are made.
 
+M3 provisioning uses Cloud Image Clone. The VM harness consumes a local Ubuntu
+Noble cloud image such as `noble-server-cloudimg-amd64.img`, creates
+per-machine qcow2 disks for the selected VM set, renders cloud-init seed
+media, imports the domains into libvirt, and proves target OS SSH as the
+simulation operator account. The cloud image is an operator-provided VM host
+input and is not a Loopforge artifact. Cloud-init is limited to base OS
+bootstrap before the clean baseline boundary; later lifecycle checkpoints must
+use target OS SSH and helper-visible paths.
+
 ## Simulation Accounts
 
 The shared simulation account contract, including seeded LDAP login accounts,
