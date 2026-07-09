@@ -39,6 +39,35 @@ vm_state_write_or_verify_vm_set_marker() {
   fi
 }
 
+vm_state_write_baseline_prereqs_marker() {
+  mkdir -p "$HARNESS_VM_SET_DIR"
+  cat >"$HARNESS_VM_BASELINE_PREREQS_MARKER" <<EOF
+mode=$HARNESS_MODE
+vm_set_id=$LOOPFORGE_VM_SET_ID
+run_id=$HARNESS_RUN_ID
+project_name=$HARNESS_PROJECT_NAME
+ubuntu_release=$HARNESS_UBUNTU_BASELINE_RELEASE
+ubuntu_codename=$HARNESS_UBUNTU_BASELINE_CODENAME
+apt_mirror=$HARNESS_UBUNTU_APT_MIRROR
+ldap_host=$HARNESS_LDAP_HOST
+ldap_port=$HARNESS_LDAP_PORT
+ldap_base_dn=$HARNESS_LDAP_BASE_DN
+ldap_user_base=$HARNESS_LDAP_USER_BASE
+ldap_group_base=$HARNESS_LDAP_GROUP_BASE
+ldap_bind_dn=$HARNESS_LDAP_BIND_DN
+status=ready
+EOF
+  chmod 0600 "$HARNESS_VM_BASELINE_PREREQS_MARKER"
+}
+
+vm_state_baseline_prereqs_status() {
+  if [ -f "$HARNESS_VM_BASELINE_PREREQS_MARKER" ]; then
+    printf 'ready'
+  else
+    printf 'pending'
+  fi
+}
+
 vm_state_verify_run_marker() {
   verify_runtime_marker \
     "$HARNESS_RUN_MARKER" \

@@ -1,0 +1,50 @@
+dn: ou=people,dc=example,dc=test
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=test
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=gerrit-admin,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Gerrit Admin
+sn: Admin
+uid: gerrit-admin
+mail: gerrit-admin@example.test
+userPassword: admin-password
+
+dn: uid=jenkins-admin,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Jenkins Admin
+sn: Admin
+uid: jenkins-admin
+mail: jenkins-admin@example.test
+userPassword: admin-password
+
+dn: uid=test-user,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Test User
+sn: User
+uid: test-user
+mail: test-user@example.test
+userPassword: test-password
+
+dn: cn=gerrit-admins,ou=groups,dc=example,dc=test
+objectClass: groupOfNames
+cn: gerrit-admins
+member: uid=gerrit-admin,ou=people,dc=example,dc=test
+
+dn: cn=jenkins-admins,ou=groups,dc=example,dc=test
+objectClass: groupOfNames
+cn: jenkins-admins
+member: uid=jenkins-admin,ou=people,dc=example,dc=test

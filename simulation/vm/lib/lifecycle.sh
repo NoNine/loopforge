@@ -69,6 +69,7 @@ vm_cmd_preflight() {
   require_command python3
   require_command sha256sum
   require_command awk
+  require_command base64
   [ -f "$vm_env_example" ] || die "Missing VM example env: $vm_env_example"
   [ -f "$vm_dir/README.md" ] || die "Missing VM README"
   [ -f "$vm_dir/design.md" ] || die "Missing VM design doc"
@@ -93,9 +94,10 @@ vm_cmd_init_run() {
 }
 
 vm_cmd_status() {
-  local status_label
+  local status_label ldap_status
   vm_config_load_runtime
   vm_state_validate_vm_set_ownership_readonly >/dev/null
+  ldap_status="$(vm_state_baseline_prereqs_status)"
   status_label="initialized"
   if [ "$(vm_libvirt_domain_state gerrit)" = "running" ] &&
     [ "$(vm_libvirt_domain_state jenkins-controller)" = "running" ] &&
@@ -109,6 +111,7 @@ vm_cmd_status() {
   printf '  %-13s %s\n' 'Project' "$HARNESS_PROJECT_NAME"
   printf '  %-13s %s\n' 'Gerrit URL' 'pending-role-configuration'
   printf '  %-13s %s\n' 'Jenkins URL' 'pending-role-configuration'
+  printf '  %-13s %s\n' 'LDAP' "$ldap_status"
   printf '\n'
   printf 'Target SSH\n'
   printf '  %-18s  %-12s  %-15s  %-19s\n' 'Role' 'User' 'Host' 'State'
@@ -136,6 +139,7 @@ vm_cmd_audit_state() {
   log="$(vm_path_bounded_log audit-state)"
   {
     printf '%s\n' "$summary"
+    printf 'baseline-prereqs=%s\n' "$(vm_state_baseline_prereqs_status)"
     printf '%s\n' "$libvirt_status"
     printf '%s\n' "$vm_set_status"
     printf '%s\n' "$ssh_status"
@@ -157,14 +161,18 @@ vm_cmd_create() {
     vm_libvirt_require_base_image
     vm_state_write_or_verify_vm_set_marker
     vm_libvirt_create_set
+    vm_libvirt_start_set
+    vm_ssh_prepare_all
+    vm_libvirt_verify_baseline_prereqs
+    vm_libvirt_shutdown_set
     vm_libvirt_status_table
   } >"$log" 2>&1 || {
-    evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M3 Cloud Image Clone VM-set creation failed")"
+    evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 VM-set creation or baseline prerequisite proof failed")"
     print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
     return 1
   }
-  evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M3 Cloud Image Clone VM set was defined without role mutation")"
-  print_command_summary create "" "ok vm-set=$LOOPFORGE_VM_SET_ID domains=defined"
+  evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M4 VM set was defined and baseline prerequisites were proven before snapshot capture")"
+  print_command_summary create "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline-prereqs=ready"
 }
 
 vm_cmd_up() {

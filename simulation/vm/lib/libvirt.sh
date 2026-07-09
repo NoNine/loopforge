@@ -16,6 +16,13 @@ vm_libvirt_network_name() {
   printf '%s-net' "$HARNESS_PROJECT_NAME"
 }
 
+vm_libvirt_bridge_name() {
+  local digest
+  digest="$(printf '%s:%s\n' "$HARNESS_PROJECT_NAME" "$LOOPFORGE_VM_SET_ID" |
+    sha256sum | awk '{print $1}')"
+  printf 'lf-%s\n' "${digest:0:12}"
+}
+
 vm_libvirt_storage_pool_name() {
   printf '%s-images' "$HARNESS_PROJECT_NAME"
 }
@@ -129,11 +136,12 @@ vm_libvirt_render_network_xml() {
   local xml
   xml="$(vm_libvirt_network_xml_path)"
   mkdir -p "$(dirname "$xml")"
-  python3 - "$VM_NETWORK_CIDR" "$(vm_libvirt_network_name)" >"$xml" <<'PY'
+  python3 - "$VM_NETWORK_CIDR" "$(vm_libvirt_network_name)" "$(vm_libvirt_bridge_name)" >"$xml" <<'PY'
 import ipaddress
 import sys
 cidr = sys.argv[1]
 name = sys.argv[2]
+bridge_name = sys.argv[3]
 network = ipaddress.ip_network(cidr, strict=False)
 hosts = list(network.hosts())
 if len(hosts) < 10:
@@ -144,7 +152,7 @@ dhcp_end = hosts[-2]
 print(f"""<network>
   <name>{name}</name>
   <forward mode='nat'/>
-  <bridge name='{name[:15]}' stp='on' delay='0'/>
+  <bridge name='{bridge_name}' stp='on' delay='0'/>
   <ip address='{gateway}' netmask='{network.netmask}'>
     <dhcp>
       <range start='{dhcp_start}' end='{dhcp_end}'/>
@@ -338,6 +346,157 @@ vm_libvirt_create_set() {
   for machine in "${vm_machines[@]}"; do
     vm_libvirt_define_machine "$machine"
   done
+}
+
+vm_libvirt_seed_ldif_path() {
+  printf '%s/ldap/50-harness-seed.ldif\n' "$vm_dir"
+}
+
+vm_libvirt_service_packages_for_machine() {
+  case "${1:?machine required}" in
+    bundle-factory)
+      printf '%s\n' ca-certificates openjdk-21-jre-headless tar unzip wget
+      ;;
+    ldap)
+      printf '%s\n' slapd ldap-utils ca-certificates
+      ;;
+    gerrit)
+      printf '%s\n' ca-certificates curl openjdk-21-jre-headless openssh-client rsync tar ldap-utils
+      ;;
+    jenkins-controller)
+      printf '%s\n' ca-certificates curl fontconfig openjdk-21-jre openssh-client rsync tar unzip wget ldap-utils
+      ;;
+    jenkins-agent)
+      printf '%s\n' ca-certificates curl openjdk-21-jre-headless openssh-server rsync tar wget git unzip
+      ;;
+    *)
+      die "Unknown VM machine for package baseline: $1"
+      ;;
+  esac
+}
+
+vm_libvirt_package_list_csv() {
+  local machine package first
+  machine="${1:?machine required}"
+  first=1
+  while IFS= read -r package; do
+    [ -n "$package" ] || continue
+    if [ "$first" -eq 1 ]; then
+      first=0
+    else
+      printf ','
+    fi
+    printf '%s' "$package"
+  done <<EOF
+$(vm_libvirt_service_packages_for_machine "$machine")
+EOF
+}
+
+vm_libvirt_install_os_baseline() {
+  local machine packages script
+  machine="${1:?machine required}"
+  packages="$(vm_libvirt_package_list_csv "$machine")"
+  script=$(cat <<EOF
+set -euo pipefail
+machine=$(shell_quote "$machine")
+mirror=$(shell_quote "$HARNESS_UBUNTU_APT_MIRROR")
+packages_csv=$(shell_quote "$packages")
+ldap_domain=$(shell_quote "$HARNESS_LDAP_DOMAIN")
+sudo sed -i \
+  -e "s|http://archive.ubuntu.com/ubuntu/|\$mirror|g" \
+  -e "s|http://security.ubuntu.com/ubuntu/|\$mirror|g" \
+  /etc/apt/sources.list.d/ubuntu.sources
+printf 'public_internet_fallback=%s\n' $(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL") | sudo tee /etc/loopforge-source-boundary >/dev/null
+if [ "\$machine" = ldap ]; then
+  export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
+  sudo debconf-set-selections <<DEBCONF
+slapd slapd/no_configuration boolean false
+slapd slapd/domain string \$ldap_domain
+slapd shared/organization string Gerrit Jenkins Harness
+slapd slapd/password1 password \$LDAP_BIND_PASSWORD
+slapd slapd/password2 password \$LDAP_BIND_PASSWORD
+slapd slapd/move_old_database boolean true
+slapd slapd/purge_database boolean true
+DEBCONF
+fi
+sudo apt-get update
+IFS=, read -r -a packages <<<"\$packages_csv"
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "\${packages[@]}"
+EOF
+)
+  if [ "$machine" = ldap ]; then
+    vm_ssh_run_machine_with_ldap_password "$machine" "$script"
+  else
+    vm_ssh_run_machine "$machine" "$script"
+  fi
+  printf 'os-baseline machine=%s packages=%s apt-mirror=%s\n' \
+    "$machine" "$packages" "$HARNESS_UBUNTU_APT_MIRROR"
+}
+
+vm_libvirt_install_os_baselines() {
+  local machine
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_install_os_baseline "$machine"
+  done
+}
+
+vm_libvirt_configure_ldap_service() {
+  local ldif_file seed_b64 script
+  ldif_file="$(vm_libvirt_seed_ldif_path)"
+  require_readable_file "VM LDAP seed LDIF" "$ldif_file"
+  seed_b64="$(base64 <"$ldif_file" | tr -d '\n')"
+script=$(cat <<EOF
+set -euo pipefail
+export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
+readonly_dn=$(shell_quote "$HARNESS_LDAP_BIND_DN")
+readonly_cn=$(shell_quote "$HARNESS_LDAP_BIND_USER")
+sudo systemctl enable --now slapd
+readonly_ldif="\$(mktemp)"
+tmp_ldif="\$(mktemp)"
+cat >"\$readonly_ldif" <<LDIF
+dn: \$readonly_dn
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+cn: \$readonly_cn
+description: Simulation-owned read-only bind account
+userPassword: \$LDAP_BIND_PASSWORD
+LDIF
+printf '%s' $(shell_quote "$seed_b64") | base64 -d >"\$tmp_ldif"
+ldapadd -x -c -H ldap://127.0.0.1:389 -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" -f "\$readonly_ldif" >/dev/null || true
+ldapadd -x -c -H ldap://127.0.0.1:389 -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" -f "\$tmp_ldif" >/dev/null || true
+rm -f "\$readonly_ldif" "\$tmp_ldif"
+ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_BASE_DN") uid=gerrit-admin dn >/dev/null
+ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_GROUP_BASE") cn=gerrit-admins dn >/dev/null
+systemctl is-active --quiet slapd
+EOF
+)
+  vm_ssh_run_machine_with_ldap_password ldap "$script"
+  printf 'ldap-service=ready host=%s port=%s seed=%s\n' \
+    "$HARNESS_LDAP_HOST" "$HARNESS_LDAP_PORT" "$ldif_file"
+}
+
+vm_libvirt_verify_ldap_consumer_reachability() {
+  local machine script
+  machine="${1:?machine required}"
+  script=$(cat <<EOF
+set -euo pipefail
+export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
+ldapsearch -x -H ldap://$(shell_quote "$HARNESS_LDAP_HOST"):$(shell_quote "$HARNESS_LDAP_PORT") \
+  -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" \
+  -b $(shell_quote "$HARNESS_LDAP_USER_BASE") uid=test-user dn >/dev/null
+EOF
+)
+  vm_ssh_run_machine_with_ldap_password "$machine" "$script"
+  printf 'ldap-consumer=%s reachable host=%s port=%s\n' \
+    "$machine" "$HARNESS_LDAP_HOST" "$HARNESS_LDAP_PORT"
+}
+
+vm_libvirt_verify_baseline_prereqs() {
+  vm_libvirt_install_os_baselines
+  vm_libvirt_configure_ldap_service
+  vm_libvirt_verify_ldap_consumer_reachability gerrit
+  vm_libvirt_verify_ldap_consumer_reachability jenkins-controller
+  vm_state_write_baseline_prereqs_marker
 }
 
 vm_libvirt_start_machine() {

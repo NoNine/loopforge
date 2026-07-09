@@ -4,8 +4,8 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
-run_id="vm-m3-$$"
-vm_set_id="m3-$$"
+run_id="vm-m4-$$"
+vm_set_id="m4-$$"
 generated_root="$repo_root/generated/simulation/vm"
 trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id"' EXIT
 
@@ -146,13 +146,11 @@ printf 'seed stub\n' >"$output"
 STUB
 chmod +x "$stub_bin/cloud-localds"
 
-for tool in virt-install; do
-  cat >"$stub_bin/$tool" <<'STUB'
+cat >"$stub_bin/virt-install" <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
-  chmod +x "$stub_bin/$tool"
-done
+chmod +x "$stub_bin/virt-install"
 
 cat >"$stub_bin/ssh-keygen" <<'STUB'
 #!/usr/bin/env bash
@@ -193,16 +191,49 @@ chmod +x "$stub_bin/ssh-keyscan"
 cat >"$stub_bin/ssh" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-last="${@: -1}"
-if [ "$last" = "printf ready" ]; then
+state_dir="${VM_STUB_STATE:?VM_STUB_STATE required}"
+target=""
+for arg in "$@"; do
+  case "$arg" in
+    *@*) target="$arg" ;;
+  esac
+done
+case "$target" in
+  *@192.168.126.*) ;;
+  *) target="unknown@unknown" ;;
+esac
+host="${target#*@}"
+script="$(cat)"
+if [ -z "$script" ] && [ "${@: -1}" = "printf ready" ]; then
   printf ready
-elif printf '%s\n' "$*" | grep -Fq 'cloud-init status --wait'; then
   exit 0
-else
-  printf '%s\n' "$*" >"${VM_STUB_STATE:?}/interactive-ssh.args"
 fi
+if printf '%s\n' "$script" | grep -Fq 'cloud-init status --wait'; then
+  exit 0
+fi
+file_host="$(printf '%s\n' "$host" | tr -c 'A-Za-z0-9_.-' '_')"
+printf '%s\n' "$script" >"$state_dir/ssh-$file_host-$(date +%s%N).sh"
+case "$script" in
+  *"apt-get install"*)
+    printf '%s\n' "os-baseline $host" >>"$state_dir/calls"
+    ;;
+esac
+case "$script" in
+  *"systemctl enable --now slapd"*)
+    printf '%s\n' "ldap-service $host" >>"$state_dir/calls"
+    ;;
+esac
+case "$script" in
+  *"uid=test-user"*)
+    printf '%s\n' "ldap-consumer $host" >>"$state_dir/calls"
+    ;;
+esac
 STUB
 chmod +x "$stub_bin/ssh"
+
+[ -f "$repo_root/simulation/vm/ldap/50-harness-seed.ldif" ]
+grep -Fq 'uid=gerrit-admin' "$repo_root/simulation/vm/ldap/50-harness-seed.ldif"
+grep -Fq 'cn=jenkins-admins' "$repo_root/simulation/vm/ldap/50-harness-seed.ldif"
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" init-run >"$tmp_dir/init-run.out"
@@ -211,41 +242,44 @@ grep -Fxq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create.out"
 grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready" "$tmp_dir/create.out"
-marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-set.env"
-grep -Fq "vm_set_id=$vm_set_id" "$marker"
-grep -Fq 'VM_PROVISIONING_MODEL=cloud-image-clone' "$generated_root/$run_id/host/rendered/harness.runtime.env"
+
+marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-baseline-prereqs.env"
+[ -f "$marker" ]
+grep -Fq 'status=ready' "$marker"
+grep -Fq 'apt_mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$marker"
+grep -Fq 'ldap_bind_dn=cn=readonly,dc=example,dc=test' "$marker"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{12}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
-  [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/disks/$machine.qcow2" ]
-  [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine-seed.iso" ]
-  [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env" ]
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
 done
 
-PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/up.out"
-grep -Fxq "up: ok vm-set=$vm_set_id ssh=ready" "$tmp_dir/up.out"
-grep -Fq 'ssh_host=192.168.126.' "$generated_root/vm-sets/$vm_set_id/libvirt/machines/gerrit.env"
+create_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'apt-mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$create_log"
+grep -Fq 'ldap-service=ready host=ldap port=389' "$create_log"
+grep -Fq 'ldap-consumer=gerrit reachable host=ldap port=389' "$create_log"
+grep -Fq 'ldap-consumer=jenkins-controller reachable host=ldap port=389' "$create_log"
 
-PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status.out"
-grep -Fq 'status: running' "$tmp_dir/status.out"
-grep -Fq 'Target SSH' "$tmp_dir/status.out"
-grep -Fq 'gerrit              ci-operator   192.168.126.' "$tmp_dir/status.out"
-grep -Fq 'jenkins-controller  ci-operator   192.168.126.' "$tmp_dir/status.out"
-grep -Fq 'jenkins-agent       ci-operator   192.168.126.' "$tmp_dir/status.out"
-grep -Fq 'ready' "$tmp_dir/status.out"
-! grep -Fq 'VM domains' "$tmp_dir/status.out"
-! grep -Fq 'vm-resources=' "$tmp_dir/status.out"
-! grep -Fq 'domain=' "$tmp_dir/status.out"
+grep -Fq 'os-baseline' "$stub_state/calls"
+grep -Fq 'ldap-service' "$stub_state/calls"
+grep -Fq 'ldap-consumer' "$stub_state/calls"
 
-PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" ssh --role gerrit
-grep -Fq 'ci-operator@192.168.126.' "$stub_state/interactive-ssh.args"
+for script in "$stub_state"/ssh-*.sh; do
+  if grep -Fq 'apt-get install' "$script"; then
+    grep -Fq 'mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$script"
+  fi
+done
 
-PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" down >"$tmp_dir/down.out"
-grep -Fxq "down: ok vm-set=$vm_set_id" "$tmp_dir/down.out"
-grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-gerrit.state"
+grep -R -Fq 'LDAP_BIND_PASSWORD=' "$stub_state"/ssh-*.sh
+! grep -R -Fq -- '-w readonly-password' "$stub_state"/ssh-*.sh
+grep -R -Fq 'uid=test-user' "$stub_state"/ssh-*.sh
+
+runtime_env="$generated_root/$run_id/host/rendered/harness.runtime.env"
+rendered_env="$generated_root/$run_id/host/rendered/harness.env"
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$runtime_env"
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$rendered_env"
+if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id"; then
+  printf 'VM runtime files must not persist the raw LDAP bind password\n' >&2
+  exit 1
+fi

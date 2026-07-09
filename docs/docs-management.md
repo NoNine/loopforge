@@ -74,6 +74,9 @@ material as stale or contextual input.
 state, accepted commits, verification log paths, guardrails, waivers, blockers,
 and the next authorized work item.
 
+Ledger entries should be compressed resume snapshots, not chronological
+narratives; detailed investigation belongs in bounded logs.
+
 The ledger must not define product behavior, override stable docs, or become a
 second implementation plan. If a completed step changes product behavior,
 update the relevant authority document and then record only the resume or audit
