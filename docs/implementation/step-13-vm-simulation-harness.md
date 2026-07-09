@@ -10,6 +10,7 @@ docs are:
 - `simulation/vm/README.md` for the public VM command contract.
 - `simulation/vm/design.md` for module boundaries and milestone sequence.
 - `simulation/vm/sequences.md` for command flow.
+- `simulation/vm/verification.md` for milestone pass/fail gates.
 
 ## Roadmap Scope
 
@@ -46,7 +47,10 @@ state, verification logs, blockers, guardrails, and next authorized work.
 
 Verification is milestone-scoped. For each milestone, run syntax checks,
 focused tests added for that milestone, docs contract checks, and the VM
-commands that are in scope for that milestone.
+commands that are in scope for that milestone. A milestone is not accepted
+from marker presence or zero exit alone; the pass/fail gate in
+`simulation/vm/verification.md` must be satisfied, and bounded logs with
+contradictory failure evidence invalidate matching readiness markers.
 
 M1 verification:
 

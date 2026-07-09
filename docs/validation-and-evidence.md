@@ -90,6 +90,15 @@ work that did not run; do not use modeled records as passing service
 readiness, Jenkins scheduling, Gerrit Trigger delivery, or `Verified` voting
 proof.
 
+Readiness evidence must reject contradictory success and failure signals. A
+success marker, terminal summary, or evidence `pass` is invalid for the
+claimed checkpoint when the referenced bounded logs contain matching runtime
+failures such as package-manager errors, missing commands, missing service
+units, failed LDAP bind/search, checksum mismatch, ownership mismatch,
+permission denial, timeout, traceback, exception, or explicit failure markers.
+In that case the checkpoint must be recorded as `fail` or `blocked`, not
+accepted as a pass with caveats.
+
 ## Checkpoints
 
 Collect evidence at every operator workflow checkpoint so failed runs can be

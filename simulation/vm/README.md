@@ -17,7 +17,8 @@ cross-role integration orchestration. Do not add standalone VM phase scripts or
 a second VM simulation CLI.
 
 Internal harness module structure and implementation contracts are documented
-in `simulation/vm/design.md`.
+in `simulation/vm/design.md`. Milestone verification gates are documented in
+`simulation/vm/verification.md`.
 
 VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
@@ -79,6 +80,30 @@ edits, post-baseline cloud-init, host-side injection into guest helper or
 product paths, generated target sideband staging, or modeled success without
 runtime evidence to complete lifecycle checkpoints.
 
+## Milestone Verification Gates
+
+VM milestone completion requires fail-closed runtime proof. Terminal summaries,
+marker files, and evidence records summarize checks; they are not proof by
+themselves when bounded logs contain contradictory failures. A command must not
+emit a readiness marker such as `baseline-prereqs=ready`, role validation
+success, integration validation success, or proof success until the runtime
+assertions for that milestone have passed.
+
+The detailed gate contract is `simulation/vm/verification.md`. Public command
+behavior follows these rules:
+
+- `create` fails closed when VM provisioning, target OS SSH readiness, role OS
+  dependency installation, command availability, LDAP service readiness,
+  LDAP seed proof, or LDAP consumer reachability cannot be proven.
+- `clean` and `destroy` fail closed unless selected VM-set ownership and
+  rollback or deletion boundaries are proven first.
+- `prepare-artifacts` and `stage-artifacts` fail closed unless manifests,
+  checksums, source-boundary labels, transfer, and target-side staging are
+  proven.
+- `validate-role`, `validate-integration`, and `prove-integration` fail closed
+  unless the real service, product API, scheduling, trigger, build, or vote
+  behavior claimed by the command is proven.
+
 ## Command Reference
 
 This section owns VM command behavior. The command-to-checkpoint mapping is
@@ -97,7 +122,7 @@ Phase and lifecycle commands:
 | --- | --- |
 | `preflight [--env FILE]` | Validates required local tooling, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Loads the bootstrap env file, resolves `LOOPFORGE_VM_SET_ID` and `HARNESS_RUN_ID`, copies selected env inputs into private run-scoped runtime inputs, writes rendered/runtime env files, and records VM inventory expectations. Terminal output is a short `init-run: ok run-id=... vm-set=...` summary. |
-| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, role OS dependency baselines, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, VM harness prerequisites, role OS dependency fulfillment, LDAP service readiness, and LDAP seed verification, before Loopforge artifact staging, role configuration, or integration setup. |
+| `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, role OS dependency baselines, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, VM harness prerequisites, role OS dependency fulfillment, expected command availability, LDAP service readiness, LDAP seed verification, and consumer LDAP bind/search proof, before Loopforge artifact staging, role configuration, or integration setup. |
 | `up [--env FILE]` | Starts the selected VM set, waits for VM boot, SSH reachability, stable host fingerprints, and cloud-init completion. It does not run role or integration configuration. |
 | `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, and VM simulation login accounts, and prints a short status summary. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
