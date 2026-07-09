@@ -103,7 +103,7 @@ case "$cmd" in
       *:*) octet=$((0x$(printf '%s' "$mac" | awk -F: '{print $6}'))) ;;
       *) octet=20 ;;
     esac
-    printf ' 0  %s  ipv4  192.168.126.%s/24  host  *\n' "$mac" "$octet"
+    printf '2026-07-09 08:00:00  %s  ipv4  192.168.126.%s/24  host  *\n' "$mac" "$octet"
     ;;
   *)
     printf 'unexpected virsh command: %s %s\n' "$cmd" "$*" >&2
@@ -217,6 +217,8 @@ grep -Fq 'VM_PROVISIONING_MODEL=cloud-image-clone' "$generated_root/$run_id/host
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{12}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
+grep -Fq "<hostname>ldap</hostname>" "$network_xml"
+grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/disks/$machine.qcow2" ]
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine-seed.iso" ]

@@ -152,21 +152,23 @@ vm_cmd_run() {
   vm_cmd_blocked_m1 run ""
 }
 
+vm_cmd_create_steps() {
+  vm_state_validate_vm_set_ownership_readonly || return $?
+  vm_libvirt_require_base_image || return $?
+  vm_state_write_or_verify_vm_set_marker || return $?
+  vm_libvirt_create_set || return $?
+  vm_libvirt_start_set || return $?
+  vm_ssh_prepare_all || return $?
+  vm_libvirt_verify_baseline_prereqs || return $?
+  vm_libvirt_shutdown_set || return $?
+  vm_libvirt_status_table
+}
+
 vm_cmd_create() {
   local evidence log
   vm_config_load_runtime
   log="$(vm_path_bounded_log create)"
-  {
-    vm_state_validate_vm_set_ownership_readonly
-    vm_libvirt_require_base_image
-    vm_state_write_or_verify_vm_set_marker
-    vm_libvirt_create_set
-    vm_libvirt_start_set
-    vm_ssh_prepare_all
-    vm_libvirt_verify_baseline_prereqs
-    vm_libvirt_shutdown_set
-    vm_libvirt_status_table
-  } >"$log" 2>&1 || {
+  vm_cmd_create_steps >"$log" 2>&1 || {
     evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 VM-set creation or baseline prerequisite proof failed")"
     print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
     return 1

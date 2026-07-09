@@ -103,7 +103,7 @@ case "$cmd" in
       *:*) octet=$((0x$(printf '%s' "$mac" | awk -F: '{print $6}'))) ;;
       *) octet=20 ;;
     esac
-    printf ' 0  %s  ipv4  192.168.126.%s/24  host  *\n' "$mac" "$octet"
+    printf '2026-07-09 08:00:00  %s  ipv4  192.168.126.%s/24  host  *\n' "$mac" "$octet"
     ;;
   *)
     printf 'unexpected virsh command: %s %s\n' "$cmd" "$*" >&2
@@ -213,6 +213,26 @@ if printf '%s\n' "$script" | grep -Fq 'cloud-init status --wait'; then
 fi
 file_host="$(printf '%s\n' "$host" | tr -c 'A-Za-z0-9_.-' '_')"
 printf '%s\n' "$script" >"$state_dir/ssh-$file_host-$(date +%s%N).sh"
+case "${VM_STUB_FAIL_MODE:-}" in
+  apt)
+    if printf '%s\n' "$script" | grep -Fq 'apt-get install'; then
+      printf 'forced apt failure\n' >&2
+      exit 42
+    fi
+    ;;
+  slapd)
+    if printf '%s\n' "$script" | grep -Fq 'systemctl enable --now slapd'; then
+      printf 'forced slapd failure\n' >&2
+      exit 43
+    fi
+    ;;
+  ldap-consumer)
+    if printf '%s\n' "$script" | grep -Fq 'uid=test-user'; then
+      printf 'forced ldap consumer failure\n' >&2
+      exit 44
+    fi
+    ;;
+esac
 case "$script" in
   *"apt-get install"*)
     printf '%s\n' "os-baseline $host" >>"$state_dir/calls"
@@ -251,6 +271,8 @@ grep -Fq 'ldap_bind_dn=cn=readonly,dc=example,dc=test' "$marker"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{12}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
+grep -Fq "<hostname>ldap</hostname>" "$network_xml"
+grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
 done
@@ -268,12 +290,16 @@ grep -Fq 'ldap-consumer' "$stub_state/calls"
 for script in "$stub_state"/ssh-*.sh; do
   if grep -Fq 'apt-get install' "$script"; then
     grep -Fq 'mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$script"
+    grep -Fq 'dpkg-query -W' "$script"
+    grep -Fq 'check_package_command "$package"' "$script"
   fi
 done
 
 grep -R -Fq 'LDAP_BIND_PASSWORD=' "$stub_state"/ssh-*.sh
 ! grep -R -Fq -- '-w readonly-password' "$stub_state"/ssh-*.sh
 grep -R -Fq 'uid=test-user' "$stub_state"/ssh-*.sh
+grep -R -Fq 'systemctl is-active --quiet slapd' "$stub_state"/ssh-*.sh
+grep -R -Fq 'ldapsearch -x -H ldap://127.0.0.1:389' "$stub_state"/ssh-*.sh
 
 runtime_env="$generated_root/$run_id/host/rendered/harness.runtime.env"
 rendered_env="$generated_root/$run_id/host/rendered/harness.env"
@@ -283,3 +309,45 @@ if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' 
   printf 'VM runtime files must not persist the raw LDAP bind password\n' >&2
   exit 1
 fi
+
+run_fail_closed_case() {
+  local mode case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
+  mode="${1:?mode required}"
+  case_failure_text="${2:?failure text required}"
+  case_run_id="vm-m4-$mode-$$"
+  case_vm_set_id="m4-$mode-$$"
+  case_env="$tmp_dir/harness-$mode.env"
+  case_generated="$generated_root/$case_run_id"
+  case_marker="$generated_root/vm-sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
+
+  sed \
+    -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$case_run_id/" \
+    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$case_vm_set_id/" \
+    -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+    -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
+    -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+    "$repo_root/simulation/vm/example.env" >"$case_env"
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$case_env" init-run >"$tmp_dir/init-run-$mode.out"
+
+  if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_MODE="$mode" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$case_env" create >"$tmp_dir/create-$mode.out" 2>&1; then
+    printf 'create must fail closed for forced %s failure\n' "$mode" >&2
+    exit 1
+  fi
+
+  grep -Fq 'create: failed reason=vm-set-create' "$tmp_dir/create-$mode.out"
+  ! grep -Fq 'baseline-prereqs=ready' "$tmp_dir/create-$mode.out"
+  [ ! -f "$case_marker" ]
+  if [ -d "$case_generated/host/logs/harness" ]; then
+    case_create_log="$(find "$case_generated/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+    [ -n "$case_create_log" ]
+    grep -Fq "$case_failure_text" "$case_create_log"
+  fi
+  rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id"
+}
+
+run_fail_closed_case apt 'forced apt failure'
+run_fail_closed_case slapd 'forced slapd failure'
+run_fail_closed_case ldap-consumer 'forced ldap consumer failure'

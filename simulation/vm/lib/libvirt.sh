@@ -133,29 +133,51 @@ vm_libvirt_domain_state() {
 }
 
 vm_libvirt_render_network_xml() {
-  local xml
+  local machine machine_args xml
   xml="$(vm_libvirt_network_xml_path)"
+  machine_args=()
+  for machine in "${vm_machines[@]}"; do
+    machine_args+=("$machine=$(vm_libvirt_machine_mac "$machine")")
+  done
   mkdir -p "$(dirname "$xml")"
-  python3 - "$VM_NETWORK_CIDR" "$(vm_libvirt_network_name)" "$(vm_libvirt_bridge_name)" >"$xml" <<'PY'
+  python3 - "$VM_NETWORK_CIDR" "$(vm_libvirt_network_name)" "$(vm_libvirt_bridge_name)" \
+    "${machine_args[@]}" >"$xml" <<'PY'
 import ipaddress
 import sys
 cidr = sys.argv[1]
 name = sys.argv[2]
 bridge_name = sys.argv[3]
+machines = []
+for spec in sys.argv[4:]:
+    machine, mac = spec.split("=", 1)
+    machines.append((machine, mac))
 network = ipaddress.ip_network(cidr, strict=False)
 hosts = list(network.hosts())
-if len(hosts) < 10:
+if len(hosts) < len(machines) + 4:
     raise SystemExit(f"VM_NETWORK_CIDR too small for VM harness network: {cidr}")
 gateway = hosts[0]
 dhcp_start = hosts[2]
 dhcp_end = hosts[-2]
+reserved = hosts[2:2 + len(machines)]
+dns_hosts = "\n".join(
+    f"    <host ip='{ip}'><hostname>{machine}</hostname></host>"
+    for (machine, _), ip in zip(machines, reserved)
+)
+dhcp_hosts = "\n".join(
+    f"      <host mac='{mac}' name='{machine}' ip='{ip}'/>"
+    for (machine, mac), ip in zip(machines, reserved)
+)
 print(f"""<network>
   <name>{name}</name>
   <forward mode='nat'/>
   <bridge name='{bridge_name}' stp='on' delay='0'/>
+  <dns>
+{dns_hosts}
+  </dns>
   <ip address='{gateway}' netmask='{network.netmask}'>
     <dhcp>
       <range start='{dhcp_start}' end='{dhcp_end}'/>
+{dhcp_hosts}
     </dhcp>
   </ip>
 </network>""")
@@ -402,10 +424,16 @@ machine=$(shell_quote "$machine")
 mirror=$(shell_quote "$HARNESS_UBUNTU_APT_MIRROR")
 packages_csv=$(shell_quote "$packages")
 ldap_domain=$(shell_quote "$HARNESS_LDAP_DOMAIN")
-sudo sed -i \
-  -e "s|http://archive.ubuntu.com/ubuntu/|\$mirror|g" \
-  -e "s|http://security.ubuntu.com/ubuntu/|\$mirror|g" \
-  /etc/apt/sources.list.d/ubuntu.sources
+mirror_no_slash="\${mirror%/}"
+for sources_file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+  [ -e "\$sources_file" ] || continue
+  sudo sed -i \
+    -e "s|http://archive.ubuntu.com/ubuntu/|\$mirror|g" \
+    -e "s|http://archive.ubuntu.com/ubuntu|\$mirror_no_slash|g" \
+    -e "s|http://security.ubuntu.com/ubuntu/|\$mirror|g" \
+    -e "s|http://security.ubuntu.com/ubuntu|\$mirror_no_slash|g" \
+    "\$sources_file"
+done
 printf 'public_internet_fallback=%s\n' $(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL") | sudo tee /etc/loopforge-source-boundary >/dev/null
 if [ "\$machine" = ldap ]; then
   export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
@@ -422,12 +450,34 @@ fi
 sudo apt-get update
 IFS=, read -r -a packages <<<"\$packages_csv"
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "\${packages[@]}"
+check_package_command() {
+  case "\$1" in
+    ca-certificates) command -v update-ca-certificates >/dev/null ;;
+    curl) command -v curl >/dev/null ;;
+    fontconfig) command -v fc-cache >/dev/null ;;
+    git) command -v git >/dev/null ;;
+    ldap-utils) command -v ldapsearch >/dev/null ;;
+    openjdk-21-jre|openjdk-21-jre-headless) command -v java >/dev/null ;;
+    openssh-client) command -v ssh >/dev/null ;;
+    openssh-server) command -v sshd >/dev/null ;;
+    rsync) command -v rsync >/dev/null ;;
+    slapd) command -v slapd >/dev/null ;;
+    tar) command -v tar >/dev/null ;;
+    unzip) command -v unzip >/dev/null ;;
+    wget) command -v wget >/dev/null ;;
+    *) return 0 ;;
+  esac
+}
+for package in "\${packages[@]}"; do
+  dpkg-query -W -f='\${Status}' "\$package" | grep -Fxq 'install ok installed'
+  check_package_command "\$package"
+done
 EOF
 )
   if [ "$machine" = ldap ]; then
-    vm_ssh_run_machine_with_ldap_password "$machine" "$script"
+    vm_ssh_run_machine_with_ldap_password "$machine" "$script" || return $?
   else
-    vm_ssh_run_machine "$machine" "$script"
+    vm_ssh_run_machine "$machine" "$script" || return $?
   fi
   printf 'os-baseline machine=%s packages=%s apt-mirror=%s\n' \
     "$machine" "$packages" "$HARNESS_UBUNTU_APT_MIRROR"
@@ -436,7 +486,7 @@ EOF
 vm_libvirt_install_os_baselines() {
   local machine
   for machine in "${vm_machines[@]}"; do
-    vm_libvirt_install_os_baseline "$machine"
+    vm_libvirt_install_os_baseline "$machine" || return $?
   done
 }
 
@@ -470,7 +520,7 @@ ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") 
 systemctl is-active --quiet slapd
 EOF
 )
-  vm_ssh_run_machine_with_ldap_password ldap "$script"
+  vm_ssh_run_machine_with_ldap_password ldap "$script" || return $?
   printf 'ldap-service=ready host=%s port=%s seed=%s\n' \
     "$HARNESS_LDAP_HOST" "$HARNESS_LDAP_PORT" "$ldif_file"
 }
@@ -486,16 +536,16 @@ ldapsearch -x -H ldap://$(shell_quote "$HARNESS_LDAP_HOST"):$(shell_quote "$HARN
   -b $(shell_quote "$HARNESS_LDAP_USER_BASE") uid=test-user dn >/dev/null
 EOF
 )
-  vm_ssh_run_machine_with_ldap_password "$machine" "$script"
+  vm_ssh_run_machine_with_ldap_password "$machine" "$script" || return $?
   printf 'ldap-consumer=%s reachable host=%s port=%s\n' \
     "$machine" "$HARNESS_LDAP_HOST" "$HARNESS_LDAP_PORT"
 }
 
 vm_libvirt_verify_baseline_prereqs() {
-  vm_libvirt_install_os_baselines
-  vm_libvirt_configure_ldap_service
-  vm_libvirt_verify_ldap_consumer_reachability gerrit
-  vm_libvirt_verify_ldap_consumer_reachability jenkins-controller
+  vm_libvirt_install_os_baselines || return $?
+  vm_libvirt_configure_ldap_service || return $?
+  vm_libvirt_verify_ldap_consumer_reachability gerrit || return $?
+  vm_libvirt_verify_ldap_consumer_reachability jenkins-controller || return $?
   vm_state_write_baseline_prereqs_marker
 }
 
