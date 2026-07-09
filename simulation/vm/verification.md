@@ -52,7 +52,7 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
 
 - `create` baked or reused a simulation-owned dependency-prepared base image
   for the selected source image checksum, Ubuntu baseline, apt mirror,
-  source-boundary label, and VM package matrix;
+  source-boundary label, VM disk size, and VM package matrix;
 - the base-image bake completed package installation from the configured
   simulation apt mirror, or a matching ready marker proved the cache hit;
 - each VM proves the expected packages and commands are available from the
@@ -62,8 +62,9 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
   LDAP port;
 - the LDAP VM can bind and search seeded users and groups with
   simulation-owned credentials;
-- Gerrit and Jenkins controller VMs can bind and search the LDAP endpoint over
-  the VM network.
+- Gerrit and Jenkins controller VMs can resolve the configured VM LDAP FQDN,
+  connect to its LDAP port, and bind/search the LDAP endpoint over the VM
+  network.
 
 For M4, a create log that contains apt `E:` errors, `Err:` fetch failures,
 `command not found`, `Unit file ... does not exist`, failed `ldapsearch`,

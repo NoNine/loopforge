@@ -261,7 +261,7 @@ require_doc_text simulation/vm/README.md \
   'automatic baked base-image' \
   'VM README must allow create-owned baked base-image preparation'
 require_doc_text simulation/vm/README.md \
-  'source image, Ubuntu baseline, apt mirror, source-boundary label, or package' \
+  'size, and VM package matrix' \
   'VM README must document baked base-image invalidation inputs'
 require_doc_text simulation/vm/README.md \
   'they do not install Ubuntu/OS dependencies' \

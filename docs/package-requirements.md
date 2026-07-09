@@ -46,9 +46,10 @@ installation is simulation-only.
 VM simulation realizes role target OS dependency baselines during VM
 provisioning before the clean baseline snapshot. The VM harness may bake or
 reuse a simulation-owned base image that contains the VM package superset, but
-each VM must still verify role package and command expectations during M4.
-Role helpers validate those expectations later; they do not install Ubuntu/OS
-dependencies.
+the baked-image cache identity includes the source image, Ubuntu baseline, apt
+mirror, source-boundary label, VM disk size, and package matrix. Each VM must
+still verify role package and command expectations during M4. Role helpers
+validate those expectations later; they do not install Ubuntu/OS dependencies.
 
 ## Native Target Install Baselines
 

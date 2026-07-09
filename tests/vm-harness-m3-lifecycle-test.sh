@@ -223,10 +223,12 @@ marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-set.env"
 grep -Fq "vm_set_id=$vm_set_id" "$marker"
 grep -Fq 'VM_PROVISIONING_MODEL=cloud-image-clone' "$generated_root/$run_id/host/rendered/harness.runtime.env"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
-grep -Eq "<bridge name='lf-[0-9a-f]{12}'" "$network_xml"
+grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
-grep -Fq "<hostname>ldap</hostname>" "$network_xml"
-grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
+grep -Fq "<hostname>ldap.example.test</hostname>" "$network_xml"
+! grep -Fq "<hostname>ldap</hostname>" "$network_xml"
+! grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
+grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/disks/$machine.qcow2" ]
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine-seed.iso" ]

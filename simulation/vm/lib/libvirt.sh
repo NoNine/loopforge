@@ -2,7 +2,7 @@
 
 VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 VM_BASELINE_SNAPSHOT_NAME="${VM_BASELINE_SNAPSHOT_NAME:-loopforge-clean-baseline}"
-VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=1
+VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=2
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 
 vm_libvirt_domain_prefix() {
@@ -33,7 +33,19 @@ vm_libvirt_bridge_name() {
   local digest
   digest="$(printf '%s:%s\n' "$HARNESS_PROJECT_NAME" "$LOOPFORGE_VM_SET_ID" |
     sha256sum | awk '{print $1}')"
-  printf 'lf-%s\n' "${digest:0:12}"
+  printf 'lf-%s\n' "${digest:0:8}"
+}
+
+vm_libvirt_network_gateway() {
+  python3 - "$VM_NETWORK_CIDR" <<'PY'
+import ipaddress
+import sys
+network = ipaddress.ip_network(sys.argv[1], strict=False)
+hosts = list(network.hosts())
+if not hosts:
+    raise SystemExit(f"VM_NETWORK_CIDR has no usable gateway address: {sys.argv[1]}")
+print(hosts[0])
+PY
 }
 
 vm_libvirt_storage_pool_name() {
@@ -160,6 +172,7 @@ vm_libvirt_baked_base_image_fingerprint() {
     printf 'ubuntu_codename=%s\n' "$HARNESS_UBUNTU_BASELINE_CODENAME"
     printf 'apt_mirror=%s\n' "$HARNESS_UBUNTU_APT_MIRROR"
     printf 'source_boundary=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL"
+    printf 'disk_size=%s\n' "$VM_DOMAIN_DISK_SIZE"
     for machine in "${vm_machines[@]}"; do
       printf 'packages.%s=%s\n' "$machine" "$(vm_libvirt_package_list_csv "$machine")"
     done
@@ -201,14 +214,15 @@ vm_libvirt_render_network_xml() {
   done
   mkdir -p "$(dirname "$xml")"
   python3 - "$VM_NETWORK_CIDR" "$(vm_libvirt_network_name)" "$(vm_libvirt_bridge_name)" \
-    "${machine_args[@]}" >"$xml" <<'PY'
+    "$HARNESS_LDAP_DOMAIN" "${machine_args[@]}" >"$xml" <<'PY'
 import ipaddress
 import sys
 cidr = sys.argv[1]
 name = sys.argv[2]
 bridge_name = sys.argv[3]
+dns_domain = sys.argv[4].strip(".")
 machines = []
-for spec in sys.argv[4:]:
+for spec in sys.argv[5:]:
     machine, mac = spec.split("=", 1)
     machines.append((machine, mac))
 network = ipaddress.ip_network(cidr, strict=False)
@@ -220,11 +234,15 @@ dhcp_start = hosts[2]
 dhcp_end = hosts[-2]
 reserved = hosts[2:2 + len(machines)]
 dns_hosts = "\n".join(
-    f"    <host ip='{ip}'><hostname>{machine}</hostname></host>"
+    "\n".join([
+        f"    <host ip='{ip}'>",
+        f"      <hostname>{machine}.{dns_domain}</hostname>",
+        "    </host>",
+    ])
     for (machine, _), ip in zip(machines, reserved)
 )
 dhcp_hosts = "\n".join(
-    f"      <host mac='{mac}' name='{machine}' ip='{ip}'/>"
+    f"      <host mac='{mac}' ip='{ip}'/>"
     for (machine, mac), ip in zip(machines, reserved)
 )
 print(f"""<network>
@@ -355,7 +373,7 @@ EOF
 }
 
 vm_libvirt_render_seed_media() {
-  local machine work_dir user_data meta_data network_config seed_iso mac public_key
+  local machine work_dir user_data meta_data network_config seed_iso mac public_key dns_gateway
   machine="${1:?machine required}"
   work_dir="$(vm_libvirt_seed_work_dir "$machine")"
   user_data="$work_dir/user-data"
@@ -364,6 +382,7 @@ vm_libvirt_render_seed_media() {
   seed_iso="$(vm_libvirt_seed_iso_path "$machine")"
   mac="$(vm_libvirt_machine_mac "$machine")"
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
+  dns_gateway="$(vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
@@ -395,6 +414,11 @@ ethernets:
       macaddress: "$mac"
     set-name: ens3
     dhcp4: true
+    nameservers:
+      addresses:
+        - $dns_gateway
+      search:
+        - $HARNESS_LDAP_DOMAIN
 EOF
   if command -v cloud-localds >/dev/null 2>&1; then
     cloud-localds --network-config="$network_config" "$seed_iso" "$user_data" "$meta_data"
@@ -409,7 +433,7 @@ EOF
 }
 
 vm_libvirt_render_bake_seed_media() {
-  local work_dir user_data meta_data network_config seed_iso mac public_key
+  local work_dir user_data meta_data network_config seed_iso mac public_key dns_gateway
   work_dir="$(vm_libvirt_bake_seed_work_dir)"
   user_data="$work_dir/user-data"
   meta_data="$work_dir/meta-data"
@@ -417,6 +441,7 @@ vm_libvirt_render_bake_seed_media() {
   seed_iso="$(vm_libvirt_bake_seed_iso_path)"
   mac="$(vm_libvirt_bake_machine_mac)"
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
+  dns_gateway="$(vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
@@ -448,6 +473,11 @@ ethernets:
       macaddress: "$mac"
     set-name: ens3
     dhcp4: true
+    nameservers:
+      addresses:
+        - $dns_gateway
+      search:
+        - $HARNESS_LDAP_DOMAIN
 EOF
   if command -v cloud-localds >/dev/null 2>&1; then
     cloud-localds --network-config="$network_config" "$seed_iso" "$user_data" "$meta_data"
@@ -688,7 +718,7 @@ vm_libvirt_write_baked_base_image_marker() {
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
-  cat >"$marker" <<EOF
+  cat >"$marker" <<EOF || return $?
 schema=$VM_BASE_IMAGE_BAKE_SCHEMA_VERSION
 fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
 source_image=$VM_BASE_IMAGE_PATH
@@ -699,21 +729,47 @@ ubuntu_release=$HARNESS_UBUNTU_BASELINE_RELEASE
 ubuntu_codename=$HARNESS_UBUNTU_BASELINE_CODENAME
 apt_mirror=$HARNESS_UBUNTU_APT_MIRROR
 source_boundary=$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
+disk_size=$VM_DOMAIN_DISK_SIZE
 packages=$packages
 status=ready
 EOF
-  chmod 0600 "$marker"
+  chmod 0600 "$marker" || return $?
 }
 
 vm_libvirt_baked_base_image_ready() {
   local image marker status
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
-  [ -r "$image" ] || return 1
+  vm_libvirt_baked_base_image_file_ready "$image" || return 1
   [ -r "$marker" ] || return 1
   status="$(marker_value "$marker" status 2>/dev/null || true)"
   [ "$status" = ready ] || return 1
   [ "$(marker_value "$marker" fingerprint 2>/dev/null || true)" = "$VM_BAKED_BASE_IMAGE_FINGERPRINT" ]
+}
+
+vm_libvirt_baked_base_image_file_ready() {
+  local image
+  image="${1:?image required}"
+  [ -s "$image" ] || return 1
+  [ -r "$image" ] || return 1
+  qemu-img info "$image" >/dev/null 2>&1 || return 1
+}
+
+vm_libvirt_require_baked_base_image_file() {
+  local image
+  image="${1:?image required}"
+  if [ ! -s "$image" ]; then
+    printf 'ERROR: Missing or empty VM baked base image: %s\n' "$image" >&2
+    return 1
+  fi
+  if [ ! -r "$image" ]; then
+    printf 'ERROR: VM baked base image is not readable: %s\n' "$image" >&2
+    return 1
+  fi
+  if ! qemu-img info "$image" >/dev/null; then
+    printf 'ERROR: VM baked base image is not a readable qcow2 image: %s\n' "$image" >&2
+    return 1
+  fi
 }
 
 vm_libvirt_bake_base_image() {
@@ -721,9 +777,10 @@ vm_libvirt_bake_base_image() {
   final_image="$(vm_libvirt_baked_base_image_path)"
   tmp_image="$(vm_libvirt_bake_disk_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
-  mkdir -p "$(dirname "$final_image")" "$(vm_libvirt_bake_work_dir)"
-  rm -f "$tmp_image" "$final_image" "$(vm_libvirt_baked_base_image_marker_path)"
-  qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$tmp_image" >/dev/null
+  mkdir -p "$(dirname "$final_image")" "$(vm_libvirt_bake_work_dir)" || return $?
+  rm -f "$tmp_image" "$final_image" "$(vm_libvirt_baked_base_image_marker_path)" || return $?
+  qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$tmp_image" >/dev/null || return $?
+  qemu-img resize "$tmp_image" "$VM_DOMAIN_DISK_SIZE" >/dev/null || return $?
   vm_libvirt_render_bake_seed_media
   vm_libvirt_render_bake_domain_xml
   vm_libvirt_cleanup_bake_domain
@@ -749,10 +806,11 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
     return 1
   fi
   vm_libvirt_cleanup_bake_domain
-  mv "$tmp_image" "$final_image"
-  chmod 0600 "$final_image"
-  rm -rf "$(vm_libvirt_bake_work_dir)"
-  vm_libvirt_write_baked_base_image_marker
+  mv "$tmp_image" "$final_image" || return $?
+  vm_libvirt_require_baked_base_image_file "$final_image" || return $?
+  vm_libvirt_write_baked_base_image_marker || return $?
+  rm -rf "$(vm_libvirt_bake_work_dir)" || return $?
+  printf 'base-image-permissions=ready image=%s\n' "$final_image"
   printf 'base-image-bake=ready fingerprint=%s image=%s packages=%s apt-mirror=%s\n' \
     "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$final_image" "$packages" "$HARNESS_UBUNTU_APT_MIRROR"
 }
@@ -887,6 +945,11 @@ export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
 readonly_dn=$(shell_quote "$HARNESS_LDAP_BIND_DN")
 readonly_cn=$(shell_quote "$HARNESS_LDAP_BIND_USER")
 ldap_domain=$(shell_quote "$HARNESS_LDAP_DOMAIN")
+ldap_host=$(shell_quote "$HARNESS_LDAP_HOST")
+ldap_port=$(shell_quote "$HARNESS_LDAP_PORT")
+ldap_timeout=$(shell_quote "$VM_OPERATOR_SSH_TIMEOUT_SECONDS")
+ldap_poll=$(shell_quote "$VM_OPERATOR_SSH_POLL_SECONDS")
+ldap_user_base=$(shell_quote "$HARNESS_LDAP_USER_BASE")
 sudo debconf-set-selections <<DEBCONF
 slapd slapd/no_configuration boolean false
 slapd slapd/domain string \$ldap_domain
@@ -912,9 +975,24 @@ printf '%s' $(shell_quote "$seed_b64") | base64 -d >"\$tmp_ldif"
 ldapadd -x -c -H ldap://127.0.0.1:389 -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" -f "\$readonly_ldif" >/dev/null || true
 ldapadd -x -c -H ldap://127.0.0.1:389 -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" -f "\$tmp_ldif" >/dev/null || true
 rm -f "\$readonly_ldif" "\$tmp_ldif"
-ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_BASE_DN") uid=gerrit-admin dn >/dev/null
-ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_GROUP_BASE") cn=gerrit-admins dn >/dev/null
 systemctl is-active --quiet slapd
+retry_ldapsearch() {
+  deadline=\$((SECONDS + ldap_timeout))
+  output="\$(mktemp)"
+  while [ "\$SECONDS" -lt "\$deadline" ]; do
+    if ldapsearch "\$@" >"\$output" 2>&1; then
+      rm -f "\$output"
+      return 0
+    fi
+    sleep "\$ldap_poll"
+  done
+  cat "\$output" >&2
+  rm -f "\$output"
+  return 1
+}
+retry_ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_BASE_DN") uid=gerrit-admin dn
+retry_ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_GROUP_BASE") cn=gerrit-admins dn
+retry_ldapsearch -x -H ldap://\$ldap_host:\$ldap_port -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_user_base" uid=test-user dn
 EOF
 )
   vm_ssh_run_machine_with_ldap_password ldap "$script" || return $?
@@ -928,9 +1006,35 @@ vm_libvirt_verify_ldap_consumer_reachability() {
   script=$(cat <<EOF
 set -euo pipefail
 export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
-ldapsearch -x -H ldap://$(shell_quote "$HARNESS_LDAP_HOST"):$(shell_quote "$HARNESS_LDAP_PORT") \
+ldap_host=$(shell_quote "$HARNESS_LDAP_HOST")
+ldap_port=$(shell_quote "$HARNESS_LDAP_PORT")
+output="\$(mktemp)"
+hosts_output="\$(mktemp)"
+cleanup() {
+  rm -f "\$output" "\$hosts_output"
+}
+trap cleanup EXIT
+if ! getent hosts "\$ldap_host" >"\$hosts_output" 2>&1; then
+  printf 'LDAP consumer diagnostics for %s:%s\n' "\$ldap_host" "\$ldap_port" >&2
+  cat "\$hosts_output" >&2
+  exit 1
+fi
+if ! timeout 3 bash -c "</dev/tcp/\$ldap_host/\$ldap_port" >"\$output" 2>&1; then
+  printf 'LDAP consumer diagnostics for %s:%s\n' "\$ldap_host" "\$ldap_port" >&2
+  cat "\$hosts_output" >&2
+  printf 'tcp-connect=failed host=%s port=%s\n' "\$ldap_host" "\$ldap_port" >&2
+  cat "\$output" >&2
+  exit 1
+fi
+if ! ldapsearch -x -H ldap://\$ldap_host:\$ldap_port \
   -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" \
-  -b $(shell_quote "$HARNESS_LDAP_USER_BASE") uid=test-user dn >/dev/null
+  -b $(shell_quote "$HARNESS_LDAP_USER_BASE") uid=test-user dn >"\$output" 2>&1; then
+  printf 'LDAP consumer diagnostics for %s:%s\n' "\$ldap_host" "\$ldap_port" >&2
+  cat "\$hosts_output" >&2
+  printf 'tcp-connect=ready host=%s port=%s\n' "\$ldap_host" "\$ldap_port" >&2
+  cat "\$output" >&2
+  exit 1
+fi
 EOF
 )
   vm_ssh_run_machine_with_ldap_password "$machine" "$script" || return $?

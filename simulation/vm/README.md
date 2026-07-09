@@ -37,6 +37,10 @@ endpoint identities follow `docs/endpoint-identity.md`.
 VM simulation may use simulation-owned fake LDAP bind passwords for its own
 LDAP VM, matching Docker simulation. Those values must be labeled as test
 credentials and must not be replaced with real organization LDAP secrets.
+The default VM LDAP endpoint is the FQDN `ldap.example.test`, derived from
+`HARNESS_LDAP_DOMAIN`. Libvirt network DNS remains the source of truth for VM
+names and publishes FQDN aliases only; cloud-init configures guests to query
+the libvirt gateway DNS with the simulation search domain.
 
 The LDAP VM must run a real LDAP service. VM provisioning seeds the
 simulation-owned directory with the entries defined in `simulation/README.md`
@@ -218,14 +222,22 @@ created, or verification changes are made.
 M3 provisioning uses Cloud Image Clone. The VM harness consumes a local Ubuntu
 Noble cloud image such as `noble-server-cloudimg-amd64.img`, creates
 or reuses a simulation-owned baked base image keyed by the selected source
-image checksum, Ubuntu baseline, apt mirror, source-boundary label, and VM
-package matrix, creates per-machine qcow2 disks for the selected VM set,
-renders cloud-init seed media, imports the domains into libvirt, and proves
-target OS SSH as the simulation operator account. The cloud image and baked
-base image are VM host infrastructure inputs, not Loopforge application
+image checksum, Ubuntu baseline, apt mirror, source-boundary label, VM disk
+size, and VM package matrix, creates per-machine qcow2 disks for the selected
+VM set, renders cloud-init seed media, imports the domains into libvirt, and
+proves target OS SSH as the simulation operator account. The cloud image and
+baked base image are VM host infrastructure inputs, not Loopforge application
 artifacts. Cloud-init is limited to base OS bootstrap and role OS dependency
 fulfillment before the clean baseline boundary; later lifecycle checkpoints
 must use target OS SSH and helper-visible paths.
+
+The baked `base.qcow2` may be owned by the libvirt runtime user after the bake
+domain writes to it. The harness must not repair that by `chmod` or `chown`;
+it treats readiness as a readable, non-empty qcow2 image accepted by
+`qemu-img info` plus a matching ready marker. Cleanup of generated VM images
+must happen after owned libvirt domains are stopped and undefined, using
+simulation-owned parent directories rather than direct ownership changes to
+libvirt-owned image files.
 
 ## Simulation Accounts
 

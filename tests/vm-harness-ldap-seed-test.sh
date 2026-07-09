@@ -8,7 +8,8 @@ run_id="vm-m4-$$"
 vm_set_id="m4-$$"
 generated_root="$repo_root/generated/simulation/vm"
 baked_cache_dir=""
-trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" "$baked_cache_dir"' EXIT
+case_baked_cache_dirs="$tmp_dir/case-baked-cache-dirs"
+trap 'if [ -f "$case_baked_cache_dirs" ]; then xargs -r rm -rf <"$case_baked_cache_dirs"; fi; rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" "$baked_cache_dir"' EXIT
 
 env_file="$tmp_dir/harness.env"
 stub_bin="$tmp_dir/bin"
@@ -125,6 +126,7 @@ chmod +x "$stub_bin/virsh"
 cat >"$stub_bin/qemu-img" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+state_dir="${VM_STUB_STATE:-}"
 case "${1:-}" in
   create)
     output="${@: -1}"
@@ -132,6 +134,20 @@ case "${1:-}" in
     printf 'qcow2 stub\n' >"$output"
     ;;
   resize)
+    target="${2:?resize target required}"
+    size="${3:?resize size required}"
+    if [ -n "$state_dir" ]; then
+      printf '%s %s\n' "$target" "$size" >>"$state_dir/qemu-img-resize"
+    fi
+    ;;
+  info)
+    image="${2:?image required}"
+    [ -s "$image" ] || exit 1
+    if [ "${VM_STUB_FAIL_MODE:-}" = image-info ]; then
+      printf 'forced image info failure\n' >&2
+      exit 45
+    fi
+    printf 'image: %s\nfile format: qcow2\n' "$image"
     ;;
   *)
     printf 'unexpected qemu-img command: %s\n' "$*" >&2
@@ -278,10 +294,23 @@ grep -Fq 'status=ready' "$marker"
 grep -Fq 'apt_mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$marker"
 grep -Fq 'ldap_bind_dn=cn=readonly,dc=example,dc=test' "$marker"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
-grep -Eq "<bridge name='lf-[0-9a-f]{12}'" "$network_xml"
+grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
-grep -Fq "<hostname>ldap</hostname>" "$network_xml"
-grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
+grep -Fq "<hostname>ldap.example.test</hostname>" "$network_xml"
+grep -Fq "<hostname>gerrit.example.test</hostname>" "$network_xml"
+! grep -Fq "<hostname>ldap</hostname>" "$network_xml"
+! grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
+grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
+ldap_network_config="$generated_root/vm-sets/$vm_set_id/libvirt/seeds/ldap/network-config"
+gerrit_network_config="$generated_root/vm-sets/$vm_set_id/libvirt/seeds/gerrit/network-config"
+grep -Fq 'nameservers:' "$ldap_network_config"
+grep -Fq '        - 192.168.126.1' "$ldap_network_config"
+grep -Fq '      search:' "$ldap_network_config"
+grep -Fq '        - example.test' "$ldap_network_config"
+grep -Fq 'nameservers:' "$gerrit_network_config"
+grep -Fq '        - 192.168.126.1' "$gerrit_network_config"
+grep -Fq '      search:' "$gerrit_network_config"
+grep -Fq '        - example.test' "$gerrit_network_config"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
 done
@@ -289,11 +318,12 @@ done
 create_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
 grep -Fq 'apt-mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$create_log"
 grep -Fq 'base-image-cache=miss' "$create_log"
+grep -Fq 'base-image-permissions=ready' "$create_log"
 grep -Fq 'base-image-bake=ready' "$create_log"
 grep -Fq 'source=base-image' "$create_log"
-grep -Fq 'ldap-service=ready host=ldap port=389' "$create_log"
-grep -Fq 'ldap-consumer=gerrit reachable host=ldap port=389' "$create_log"
-grep -Fq 'ldap-consumer=jenkins-controller reachable host=ldap port=389' "$create_log"
+grep -Fq 'ldap-service=ready host=ldap.example.test port=389' "$create_log"
+grep -Fq 'ldap-consumer=gerrit reachable host=ldap.example.test port=389' "$create_log"
+grep -Fq 'ldap-consumer=jenkins-controller reachable host=ldap.example.test port=389' "$create_log"
 
 baked_marker="$(find "$generated_root/base-images" -name .loopforge-vm-base-image.env -print 2>/dev/null |
   while IFS= read -r marker_file; do
@@ -305,7 +335,9 @@ baked_marker="$(find "$generated_root/base-images" -name .loopforge-vm-base-imag
 [ -n "$baked_marker" ]
 baked_cache_dir="$(dirname "$baked_marker")"
 grep -Fq 'status=ready' "$baked_marker"
+grep -Fq 'disk_size=20G' "$baked_marker"
 grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
+grep -Eq '/base-images/.*/bake-work/base-build\.qcow2 20G$' "$stub_state/qemu-img-resize"
 
 grep -Fq 'os-baseline' "$stub_state/calls"
 grep -Fq 'ldap-service' "$stub_state/calls"
@@ -327,9 +359,28 @@ grep -R -Fq 'LDAP_BIND_PASSWORD=' "$stub_state"/ssh-*.sh
 grep -R -Fq 'uid=test-user' "$stub_state"/ssh-*.sh
 grep -R -Fq 'systemctl is-active --quiet slapd' "$stub_state"/ssh-*.sh
 grep -R -Fq 'ldapsearch -x -H ldap://127.0.0.1:389' "$stub_state"/ssh-*.sh
+grep -R -Fq 'ldap://$ldap_host:$ldap_port' "$stub_state"/ssh-*.sh
+grep -R -Fq 'deadline=$((SECONDS + ldap_timeout))' "$stub_state"/ssh-*.sh
+grep -R -Fq 'sleep "$ldap_poll"' "$stub_state"/ssh-*.sh
+grep -R -Fq 'getent hosts "$ldap_host"' "$stub_state"/ssh-*.sh
+grep -R -Fq '</dev/tcp/$ldap_host/$ldap_port' "$stub_state"/ssh-*.sh
+consumer_script_count=0
+for script in "$stub_state"/ssh-*.sh; do
+  if grep -Fq 'LDAP consumer diagnostics' "$script"; then
+    consumer_script_count=$((consumer_script_count + 1))
+    grep -Fq 'getent hosts "$ldap_host"' "$script"
+    grep -Fq '</dev/tcp/$ldap_host/$ldap_port' "$script"
+    grep -Fq 'ldapsearch -x -H ldap://$ldap_host:$ldap_port' "$script"
+    ! grep -Fq 'deadline=$((SECONDS + ldap_timeout))' "$script"
+    ! grep -Fq 'sleep "$ldap_poll"' "$script"
+  fi
+done
+[ "$consumer_script_count" -eq 2 ]
 
 runtime_env="$generated_root/$run_id/host/rendered/harness.runtime.env"
 rendered_env="$generated_root/$run_id/host/rendered/harness.env"
+grep -Fq 'HARNESS_LDAP_HOST=ldap.example.test' "$runtime_env"
+grep -Fq 'HARNESS_LDAP_HOST=ldap.example.test' "$rendered_env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$runtime_env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$rendered_env"
 if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id"; then
@@ -361,7 +412,7 @@ after_cache_hit_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*
 rm -rf "$generated_root/$cache_hit_run_id" "$generated_root/vm-sets/$cache_hit_vm_set_id"
 
 run_fail_closed_case() {
-  local mode case_base_image case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
+  local mode case_baked_cache_dir case_base_image case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
   mode="${1:?mode required}"
   case_failure_text="${2:?failure text required}"
   case_run_id="vm-m4-$mode-$$"
@@ -370,7 +421,7 @@ run_fail_closed_case() {
   case_generated="$generated_root/$case_run_id"
   case_marker="$generated_root/vm-sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
   case_base_image="$base_image"
-  if [ "$mode" = apt ]; then
+  if [ "$mode" = apt ] || [ "$mode" = image-info ]; then
     case_base_image="$tmp_dir/noble-server-cloudimg-amd64-$mode.img"
     printf 'stub cloud image for forced %s failure\n' "$mode" >"$case_base_image"
   fi
@@ -391,6 +442,10 @@ run_fail_closed_case() {
     printf 'create must fail closed for forced %s failure\n' "$mode" >&2
     exit 1
   fi
+  if [ -f "$case_generated/host/rendered/base-image-fingerprint.txt" ]; then
+    case_baked_cache_dir="$generated_root/base-images/$(cat "$case_generated/host/rendered/base-image-fingerprint.txt")"
+    printf '%s\n' "$case_baked_cache_dir" >>"$case_baked_cache_dirs"
+  fi
 
   grep -Fq 'create: failed reason=vm-set-create' "$tmp_dir/create-$mode.out"
   ! grep -Fq 'baseline-prereqs=ready' "$tmp_dir/create-$mode.out"
@@ -400,9 +455,10 @@ run_fail_closed_case() {
     [ -n "$case_create_log" ]
     grep -Fq "$case_failure_text" "$case_create_log"
   fi
-  rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id"
+  rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id" "$case_baked_cache_dir"
 }
 
 run_fail_closed_case apt 'forced apt failure'
+run_fail_closed_case image-info 'VM baked base image is not a readable qcow2 image'
 run_fail_closed_case slapd 'forced slapd failure'
 run_fail_closed_case ldap-consumer 'forced ldap consumer failure'

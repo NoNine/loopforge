@@ -16,20 +16,20 @@ policy.
 | Environment | Prefer | Use IP Only When |
 | --- | --- | --- |
 | Docker simulation | Docker service names inside containers; `127.0.0.1` with published ports from the host | Never use container IP addresses as stable endpoint identity. |
-| VM simulation | Stable VM DNS names or reviewed VM host aliases | DNS is unavailable and the VM IP address is static for the run. |
+| VM simulation | Stable VM FQDNs published by the VM network DNS | DNS is unavailable and the VM IP address is static for the run. |
 | Target deployment | Site-approved FQDNs or DNS names | Bootstrap, break-glass, or site policy requires reviewed static IP inventory. |
 
 ## Applied To Loopforge
 
 | Value | Docker Simulation | VM Simulation | Target Deployment |
 | --- | --- | --- | --- |
-| `GERRIT_HOST` | `gerrit-target` for container/service access | VM DNS or alias such as `gerrit-vm` or `gerrit.vm.example.test` | FQDN such as `gerrit.example.internal` |
+| `GERRIT_HOST` | `gerrit-target` for container/service access | VM FQDN such as `gerrit.example.test` | FQDN such as `gerrit.example.internal` |
 | `GERRIT_CANONICAL_WEB_URL` | Host browser URL: `http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/` | Browser-reachable VM URL, preferably hostname-based | Public or internal user-facing URL, preferably HTTPS FQDN |
-| `JENKINS_HOST` | `jenkins-controller-target` for container/service access | VM DNS or alias such as `jenkins-controller-vm` | FQDN such as `jenkins.example.internal` |
+| `JENKINS_HOST` | `jenkins-controller-target` for container/service access | VM FQDN such as `jenkins-controller.example.test` | FQDN such as `jenkins.example.internal` |
 | `JENKINS_URL` | Internal default `http://jenkins-controller-target:8080/`; host browser status URL `http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login` | Browser-reachable VM URL, preferably hostname-based | Jenkins root URL matching reverse proxy and TLS configuration |
-| `JENKINS_AGENT_HOST` | `jenkins-agent-target` for container/service access | VM DNS or alias for the agent VM | FQDN or site inventory hostname for the agent |
-| `LDAP_URL` | `ldap://ldap:389` | VM DNS or alias for simulation LDAP when present | Enterprise LDAP FQDN, normally `ldaps://...` when site policy requires TLS |
-| `INTEGRATION_*_TARGET_SSH_HOST` | `127.0.0.1` with the published Docker SSH port | VM DNS or alias preferred | FQDN preferred; reviewed static IP inventory is acceptable by site policy |
+| `JENKINS_AGENT_HOST` | `jenkins-agent-target` for container/service access | VM FQDN such as `jenkins-agent.example.test` | FQDN or site inventory hostname for the agent |
+| `LDAP_URL` | `ldap://ldap:389` | VM LDAP FQDN such as `ldap.example.test` | Enterprise LDAP FQDN, normally `ldaps://...` when site policy requires TLS |
+| `INTEGRATION_*_TARGET_SSH_HOST` | `127.0.0.1` with the published Docker SSH port | VM FQDN preferred | FQDN preferred; reviewed static IP inventory is acceptable by site policy |
 | `INTEGRATION_*_TARGET_SSH_KNOWN_HOSTS_FILE` | Entries match `127.0.0.1:published-port` SSH inventory | Entries match the selected VM SSH host strings | Entries match the selected deployment SSH host strings |
 
 ## Identity Invariants
@@ -44,7 +44,7 @@ policy.
   run.
 - Use `127.0.0.1` only for Docker published host ports or an explicit VM port
   forward. It is not a cross-host target-deployment identity.
-- Prefer stable DNS names or FQDNs for VM simulation and target deployment.
+- Prefer stable FQDNs for VM simulation and target deployment.
 - Raw IP addresses are allowed only as a reviewed static inventory fallback.
 - `known_hosts` files must be generated and checked for the exact SSH host
   string and port recorded in reviewed inventory.
