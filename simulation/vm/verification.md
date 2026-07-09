@@ -50,11 +50,14 @@ log shows failed commands.
 M4 is the baseline-prerequisite gate. It must not accept marker-only proof.
 Before writing `baseline-prereqs=ready`, the harness must prove:
 
-- each VM completed package installation from the configured simulation apt
-  mirror;
-- expected commands are available after installation, such as `java`, `curl`,
-  `ssh`, `rsync`, `tar`, `wget`, `git`, `unzip`, `sshd`, and `ldapsearch`
-  where required by the VM role;
+- `create` baked or reused a simulation-owned dependency-prepared base image
+  for the selected source image checksum, Ubuntu baseline, apt mirror,
+  source-boundary label, and VM package matrix;
+- the base-image bake completed package installation from the configured
+  simulation apt mirror, or a matching ready marker proved the cache hit;
+- each VM proves the expected packages and commands are available from the
+  baked base image, such as `java`, `curl`, `ssh`, `rsync`, `tar`, `wget`,
+  `git`, `unzip`, `sshd`, and `ldapsearch` where required by the VM role;
 - the LDAP VM has `slapd` installed, active, and listening on the configured
   LDAP port;
 - the LDAP VM can bind and search seeded users and groups with
@@ -65,8 +68,8 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
 For M4, a create log that contains apt `E:` errors, `Err:` fetch failures,
 `command not found`, `Unit file ... does not exist`, failed `ldapsearch`,
 permission errors, or timeouts invalidates `os-baseline`,
-`ldap-service=ready`, `ldap-consumer=... reachable`, and
-`baseline-prereqs=ready` for that run.
+`base-image-bake=ready`, `base-image-cache=hit`, `ldap-service=ready`,
+`ldap-consumer=... reachable`, and `baseline-prereqs=ready` for that run.
 
 ## Review Use
 

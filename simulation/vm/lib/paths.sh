@@ -12,6 +12,10 @@ vm_path_set_dir() {
   printf '%s/vm-sets/%s\n' "$(vm_generated_root)" "$LOOPFORGE_VM_SET_ID"
 }
 
+vm_path_base_image_cache_root() {
+  printf '%s/base-images\n' "$(vm_generated_root)"
+}
+
 vm_paths_apply_canonical() {
   HARNESS_GENERATED_RUN_DIR="$(vm_path_run_dir)"
   HARNESS_VM_SET_DIR="$(vm_path_set_dir)"
@@ -84,4 +88,16 @@ vm_path_vm_set_machine_dir() {
 
 vm_path_vm_machine_file() {
   printf '%s/%s.env\n' "$(vm_path_vm_set_machine_dir)" "${1:?machine required}"
+}
+
+vm_path_baked_base_image_dir() {
+  printf '%s/%s\n' "$(vm_path_base_image_cache_root)" "${1:?fingerprint required}"
+}
+
+vm_path_baked_base_image() {
+  printf '%s/base.qcow2\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
+}
+
+vm_path_baked_base_image_marker() {
+  printf '%s/.loopforge-vm-base-image.env\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
 }

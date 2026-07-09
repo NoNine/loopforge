@@ -62,13 +62,17 @@ environment, not a public API, and there is no standalone
 VM simulation is expected to be near target deployment for lifecycle
 checkpoint execution. VM-specific mechanisms are allowed for VM
 infrastructure work: libvirt/KVM provisioning, seed media or cloud-init base
-OS bootstrap before the clean baseline snapshot, baseline snapshot
+OS bootstrap before the clean baseline snapshot, automatic baked base-image
+preparation for simulation-owned OS dependencies, baseline snapshot
 capture/rollback, VM start/stop/destruction, VM-set ownership inspection, and
 VM-set-owned NFS setup.
 
 VM provisioning must satisfy the role target OS dependency baselines before
-the clean baseline snapshot is captured. Role helpers validate those package
-and command expectations later; they do not install Ubuntu/OS dependencies.
+the clean baseline snapshot is captured. The `create` command may bake or
+reuse a simulation-owned dependency-prepared base image when the selected
+source image, Ubuntu baseline, apt mirror, source-boundary label, or package
+matrix changes. Role helpers validate those package and command expectations
+later; they do not install Ubuntu/OS dependencies.
 
 After the clean baseline snapshot, checkpoint work must use target-like
 interfaces and paths: target OS SSH as `ci-operator`, SSH file transfer, role
@@ -93,8 +97,8 @@ The detailed gate contract is `simulation/vm/verification.md`. Public command
 behavior follows these rules:
 
 - `create` fails closed when VM provisioning, target OS SSH readiness, role OS
-  dependency installation, command availability, LDAP service readiness,
-  LDAP seed proof, or LDAP consumer reachability cannot be proven.
+  dependency image bake or reuse, command availability, LDAP service
+  readiness, LDAP seed proof, or LDAP consumer reachability cannot be proven.
 - `clean` and `destroy` fail closed unless selected VM-set ownership and
   rollback or deletion boundaries are proven first.
 - `prepare-artifacts` and `stage-artifacts` fail closed unless manifests,
@@ -213,13 +217,15 @@ created, or verification changes are made.
 
 M3 provisioning uses Cloud Image Clone. The VM harness consumes a local Ubuntu
 Noble cloud image such as `noble-server-cloudimg-amd64.img`, creates
-per-machine qcow2 disks for the selected VM set, renders cloud-init seed
-media, imports the domains into libvirt, and proves target OS SSH as the
-simulation operator account. The cloud image is an operator-provided VM host
-input and is not a Loopforge artifact. Cloud-init is limited to base OS
-bootstrap and role OS dependency fulfillment before the clean baseline
-boundary; later lifecycle checkpoints must use target OS SSH and
-helper-visible paths.
+or reuses a simulation-owned baked base image keyed by the selected source
+image checksum, Ubuntu baseline, apt mirror, source-boundary label, and VM
+package matrix, creates per-machine qcow2 disks for the selected VM set,
+renders cloud-init seed media, imports the domains into libvirt, and proves
+target OS SSH as the simulation operator account. The cloud image and baked
+base image are VM host infrastructure inputs, not Loopforge application
+artifacts. Cloud-init is limited to base OS bootstrap and role OS dependency
+fulfillment before the clean baseline boundary; later lifecycle checkpoints
+must use target OS SSH and helper-visible paths.
 
 ## Simulation Accounts
 

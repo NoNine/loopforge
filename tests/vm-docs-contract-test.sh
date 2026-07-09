@@ -258,6 +258,12 @@ require_doc_text simulation/vm/README.md \
   'VM provisioning must satisfy the role target OS dependency baselines before' \
   'VM README must place role OS dependencies before baseline snapshot'
 require_doc_text simulation/vm/README.md \
+  'automatic baked base-image' \
+  'VM README must allow create-owned baked base-image preparation'
+require_doc_text simulation/vm/README.md \
+  'source image, Ubuntu baseline, apt mirror, source-boundary label, or package' \
+  'VM README must document baked base-image invalidation inputs'
+require_doc_text simulation/vm/README.md \
   'they do not install Ubuntu/OS dependencies' \
   'VM README must keep role helpers out of OS dependency installation'
 require_doc_text simulation/vm/README.md \
@@ -290,6 +296,12 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'role OS dependency fulfillment, LDAP service' \
   'VM README must place role OS dependency fulfillment before baseline snapshot capture'
+require_doc_text simulation/vm/verification.md \
+  '`create` baked or reused a simulation-owned dependency-prepared base image' \
+  'VM verification must require baked base-image proof for M4'
+require_doc_text simulation/vm/verification.md \
+  'each VM proves the expected packages and commands are available from the' \
+  'VM verification must keep per-VM package and command proof after baking'
 require_doc_text simulation/vm/README.md \
   '`reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS' \
   'VM README must document reboot behavior'

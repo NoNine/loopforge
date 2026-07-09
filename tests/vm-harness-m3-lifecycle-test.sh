@@ -91,6 +91,14 @@ case "$cmd" in
     domain="${1:?domain required}"
     printf 'shut off\n' >"$state_dir/domains/$domain.state"
     ;;
+  destroy)
+    domain="${1:?domain required}"
+    printf 'shut off\n' >"$state_dir/domains/$domain.state"
+    ;;
+  undefine)
+    domain="${1:?domain required}"
+    rm -f "$state_dir/domains/$domain.state"
+    ;;
   net-dhcp-leases)
     mac=""
     while [ "$#" -gt 0 ]; do

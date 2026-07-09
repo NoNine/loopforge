@@ -44,8 +44,10 @@ installation is simulation-only.
 | Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker README and this document. |
 
 VM simulation realizes role target OS dependency baselines during VM
-provisioning before the clean baseline snapshot. Role helpers validate those
-package and command expectations later; they do not install Ubuntu/OS
+provisioning before the clean baseline snapshot. The VM harness may bake or
+reuse a simulation-owned base image that contains the VM package superset, but
+each VM must still verify role package and command expectations during M4.
+Role helpers validate those expectations later; they do not install Ubuntu/OS
 dependencies.
 
 ## Native Target Install Baselines

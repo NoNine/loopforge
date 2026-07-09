@@ -7,7 +7,8 @@ tmp_dir="$(mktemp -d)"
 run_id="vm-m4-$$"
 vm_set_id="m4-$$"
 generated_root="$repo_root/generated/simulation/vm"
-trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id"' EXIT
+baked_cache_dir=""
+trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" "$baked_cache_dir"' EXIT
 
 env_file="$tmp_dir/harness.env"
 stub_bin="$tmp_dir/bin"
@@ -15,7 +16,7 @@ stub_state="$tmp_dir/state"
 mkdir -p "$stub_bin" "$stub_state"
 
 base_image="$tmp_dir/noble-server-cloudimg-amd64.img"
-printf 'stub cloud image\n' >"$base_image"
+printf 'stub cloud image for %s\n' "$run_id" >"$base_image"
 
 sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$run_id/" \
@@ -90,6 +91,14 @@ case "$cmd" in
   shutdown)
     domain="${1:?domain required}"
     printf 'shut off\n' >"$state_dir/domains/$domain.state"
+    ;;
+  destroy)
+    domain="${1:?domain required}"
+    printf 'shut off\n' >"$state_dir/domains/$domain.state"
+    ;;
+  undefine)
+    domain="${1:?domain required}"
+    rm -f "$state_dir/domains/$domain.state"
     ;;
   net-dhcp-leases)
     mac=""
@@ -279,13 +288,31 @@ done
 
 create_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
 grep -Fq 'apt-mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$create_log"
+grep -Fq 'base-image-cache=miss' "$create_log"
+grep -Fq 'base-image-bake=ready' "$create_log"
+grep -Fq 'source=base-image' "$create_log"
 grep -Fq 'ldap-service=ready host=ldap port=389' "$create_log"
 grep -Fq 'ldap-consumer=gerrit reachable host=ldap port=389' "$create_log"
 grep -Fq 'ldap-consumer=jenkins-controller reachable host=ldap port=389' "$create_log"
 
+baked_marker="$(find "$generated_root/base-images" -name .loopforge-vm-base-image.env -print 2>/dev/null |
+  while IFS= read -r marker_file; do
+    if grep -Fxq "source_image=$base_image" "$marker_file"; then
+      printf '%s\n' "$marker_file"
+      break
+    fi
+  done)"
+[ -n "$baked_marker" ]
+baked_cache_dir="$(dirname "$baked_marker")"
+grep -Fq 'status=ready' "$baked_marker"
+grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
+
 grep -Fq 'os-baseline' "$stub_state/calls"
 grep -Fq 'ldap-service' "$stub_state/calls"
 grep -Fq 'ldap-consumer' "$stub_state/calls"
+
+apt_install_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
+[ "$apt_install_count" -eq 1 ]
 
 for script in "$stub_state"/ssh-*.sh; do
   if grep -Fq 'apt-get install' "$script"; then
@@ -310,8 +337,31 @@ if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' 
   exit 1
 fi
 
+cache_hit_run_id="vm-m4-cache-hit-$$"
+cache_hit_vm_set_id="m4-cache-hit-$$"
+cache_hit_env="$tmp_dir/harness-cache-hit.env"
+sed \
+  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$cache_hit_run_id/" \
+  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$cache_hit_vm_set_id/" \
+  -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+  -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
+  -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+  "$repo_root/simulation/vm/example.env" >"$cache_hit_env"
+
+before_cache_hit_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$cache_hit_env" init-run >"$tmp_dir/init-run-cache-hit.out"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$cache_hit_env" create >"$tmp_dir/create-cache-hit.out"
+grep -Fxq "create: ok vm-set=$cache_hit_vm_set_id baseline-prereqs=ready" "$tmp_dir/create-cache-hit.out"
+cache_hit_log="$(find "$generated_root/$cache_hit_run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'base-image-cache=hit' "$cache_hit_log"
+after_cache_hit_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
+[ "$after_cache_hit_apt_count" -eq "$before_cache_hit_apt_count" ]
+rm -rf "$generated_root/$cache_hit_run_id" "$generated_root/vm-sets/$cache_hit_vm_set_id"
+
 run_fail_closed_case() {
-  local mode case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
+  local mode case_base_image case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
   mode="${1:?mode required}"
   case_failure_text="${2:?failure text required}"
   case_run_id="vm-m4-$mode-$$"
@@ -319,11 +369,16 @@ run_fail_closed_case() {
   case_env="$tmp_dir/harness-$mode.env"
   case_generated="$generated_root/$case_run_id"
   case_marker="$generated_root/vm-sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
+  case_base_image="$base_image"
+  if [ "$mode" = apt ]; then
+    case_base_image="$tmp_dir/noble-server-cloudimg-amd64-$mode.img"
+    printf 'stub cloud image for forced %s failure\n' "$mode" >"$case_base_image"
+  fi
 
   sed \
     -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$case_run_id/" \
     -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$case_vm_set_id/" \
-    -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+    -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$case_base_image|" \
     -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
     -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
     "$repo_root/simulation/vm/example.env" >"$case_env"
