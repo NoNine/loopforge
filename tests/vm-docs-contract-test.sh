@@ -362,6 +362,9 @@ require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
   'simulation/vm/design.md` for module boundaries and milestone sequence' \
   'Step 13 plan must point internal VM design to the VM design doc'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+  'simulation/vm/libvirt-refactor.md` for the accepted libvirt, VM-set,' \
+  'Step 13 plan must name the accepted libvirt refactor companion'
+require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
   'simulation/vm/sequences.md` for command flow' \
   'Step 13 plan must point VM command flow to the sequence companion doc'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
@@ -385,6 +388,18 @@ require_doc_text simulation/vm/design.md \
 require_doc_text simulation/vm/design.md \
   '| M5 Baseline snapshot, clean rollback, and destroy |' \
   'VM design M5 must own baseline snapshot rollback and destroy'
+require_doc_text simulation/vm/design.md \
+  'simulation/vm/libvirt-refactor.md`' \
+  'VM design must name the accepted libvirt refactor companion'
+require_doc_text simulation/vm/libvirt-refactor.md \
+  'This decision is accepted for implementation.' \
+  'VM libvirt refactor companion must record its accepted status'
+require_doc_text simulation/vm/libvirt-refactor.md \
+  '`lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`' \
+  'VM libvirt refactor companion must define the target dependency direction'
+require_doc_text simulation/vm/libvirt-refactor.md \
+  'The public CLI is unchanged.' \
+  'VM libvirt refactor companion must preserve the public CLI'
 require_doc_text simulation/vm/sequences.md \
   'verify role OS dependency baselines' \
   'VM create sequence must verify role OS dependency baselines before snapshot'

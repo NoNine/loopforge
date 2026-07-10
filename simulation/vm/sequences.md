@@ -60,17 +60,16 @@ sequenceDiagram
 
   CLI->>LC: vm_cmd_create(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_run_marker()
+  LC->>ST: vm_state_validate_vm_set_ownership_readonly()
+  LC->>LV: vm_libvirt_select_baked_base_image()
   LC->>ST: vm_state_write_or_verify_vm_set_marker()
+  LC->>LV: verify or ensure image, network, and storage
   LC->>LV: vm_libvirt_create_set()
-  LC->>LV: vm_libvirt_prepare_guest_baseline_seed()
-  LC->>LV: vm_libvirt_boot_for_baseline()
-  LC->>SSH: vm_ssh_wait_ready(all VMs)
-  LC->>SSH: vm_ssh_wait_cloud_init(all VMs)
-  LC->>SSH: vm_ssh_capture_known_hosts()
-  LC->>LV: vm_libvirt_verify_guest_baseline()
-  LC->>SSH: vm_ssh_run(service VMs, verify role OS dependency baselines)
-  LC->>SSH: vm_ssh_run(ldap, verify LDAP seed and bind/search)
+  LC->>LV: vm_libvirt_start_set()
+  LC->>SSH: vm_ssh_prepare_all()
+  LC->>LV: vm_libvirt_verify_baseline_prereqs()
+  Note over LC,LV: verify role OS dependency baselines and LDAP proof
+  LC->>LV: vm_libvirt_shutdown_set()
   LC->>LV: vm_libvirt_capture_baseline()
   LC-->>CLI: compact create summary
 ```
@@ -305,12 +304,15 @@ sequenceDiagram
   participant CFG as config.sh
   participant ST as state.sh
   participant LV as libvirt.sh
+  participant SSH as ssh.sh
 
   CLI->>LC: vm_cmd_audit_state(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_audit_run()
-  LC->>ST: vm_state_audit_vm_set()
-  LC->>LV: vm_libvirt_audit_readonly()
+  LC->>ST: vm_state_audit_readonly()
+  LC->>ST: vm_state_read_summary()
+  LC->>LV: vm_libvirt_status_readonly()
+  LC->>ST: vm_state_validate_vm_set_ownership_readonly()
+  LC->>SSH: vm_ssh_status_readonly()
   LC-->>CLI: compact audit-state summary
 ```
 
@@ -344,7 +346,6 @@ sequenceDiagram
   CLI->>LC: vm_cmd_clean(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_and_vm_set()
-  LC->>ST: vm_state_verify_baseline_snapshot_records()
   LC->>LV: vm_libvirt_restore_baseline()
   LC->>ST: vm_state_clean_mutable_run_state()
   LC-->>CLI: compact clean summary
@@ -362,8 +363,7 @@ sequenceDiagram
 
   CLI->>LC: vm_cmd_destroy(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_vm_set_marker()
-  LC->>LV: vm_libvirt_verify_selected_teardown_ownership()
+  LC->>ST: vm_state_verify_run_marker()
   LC->>LV: vm_libvirt_destroy_set()
   LC->>ST: vm_state_remove_vm_set_metadata()
   LC-->>CLI: compact destroy summary

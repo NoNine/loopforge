@@ -15,6 +15,11 @@ durable shared boundary.
 Per-command internal sequence diagrams are documented in
 `simulation/vm/sequences.md`.
 
+The accepted detailed decision for splitting the M5 `libvirt.sh` monolith is
+documented in `simulation/vm/libvirt-refactor.md`. Read that companion before
+changing libvirt operations, VM-set ownership, baked images, seed media,
+snapshots, or guest baseline and LDAP verification.
+
 ## Design Direction
 
 VM simulation intentionally does not mirror the Docker harness structure when
@@ -135,11 +140,13 @@ details.
 must enforce matching validation markers before active proof and must fail or
 report blocked rather than creating synthetic success markers.
 
-## Module Relationships
+## Initial Folded Module Relationships
 
-The VM harness module layout is a layered shell API. Command-shaped entrypoints
-belong in `lifecycle.sh`; other modules expose capability-shaped APIs. Lower
-layers must not call higher layers.
+The initial VM harness module layout was designed as a layered shell API.
+Command-shaped entrypoints belong in `lifecycle.sh`; other modules expose
+capability-shaped APIs. Lower layers must not call higher layers. The accepted
+refactor below replaces the folded relationships where implementation pressure
+proved a smaller boundary.
 
 ```mermaid
 flowchart TD
@@ -294,11 +301,12 @@ flowchart LR
   SEED -. forbidden after baseline .-> HELPERS
 ```
 
-## Public Module API
+## Initial Folded Module API
 
-Public module functions use a `vm_` prefix. Module-private helpers should use a
-`__vm_` prefix or remain local to the file. `simulate.sh` should call command
-functions, not low-level implementation helpers.
+Until the accepted refactor is implemented, public module functions use a
+`vm_` prefix. Module-private helpers should use a `__vm_` prefix or remain
+local to the file. `simulate.sh` should call command functions, not low-level
+implementation helpers.
 
 | Module | Public API shape | Owns |
 | --- | --- | --- |
@@ -333,6 +341,34 @@ files:
 
 Splits should be driven by implementation pressure, not by matching a
 preselected file list.
+
+## Accepted Libvirt Refactor
+
+The M4 and M5 implementation activated the `vm_set.sh`, `seed_media.sh`,
+`snapshots.sh`, and LDAP verifier split triggers above. Baked-image and
+libvirt-managed storage work also established two substantial boundaries that
+the initial table did not anticipate.
+
+The accepted target keeps `libvirt.sh` as the logical libvirt entrypoint and
+splits implementation into capability-shaped modules:
+
+| Target module | Owns |
+| --- | --- |
+| `libvirt.sh` | Constants, explicit implementation loading, and the logical libvirt API boundary |
+| `libvirt-core.sh` | Preflight, resource identity, live queries, domain runtime control, addresses, and status |
+| `libvirt-storage.sh` | Pools, volumes, disk metadata and identity, mediated checksums, and storage removal primitives |
+| `libvirt-domain.sh` | Network and domain definitions, machine definition, SSH-key preparation, and seed media |
+| `libvirt-image.sh` | Package policy, image fingerprinting, bake workflow, publication locking, and cache validation |
+| `baseline.sh` | Guest package and LDAP proof plus baseline-readiness markers over target SSH |
+| `snapshots.sh` | Snapshot status, records, capture, verification, and restore coordination |
+| `vm-set.sh` | VM-set marker identity, live ownership validation, create composition, teardown, and audit |
+
+The target dependency direction is
+`lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`.
+`state.sh` must not query live libvirt resources, and the `libvirt-*.sh`
+implementation files must not call target SSH or state functions. Detailed
+rationale, current anatomy, API policy, migration slices, and verification are
+owned by `simulation/vm/libvirt-refactor.md`.
 
 ## Shared Helper Boundary
 

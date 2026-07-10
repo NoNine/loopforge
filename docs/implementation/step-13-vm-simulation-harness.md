@@ -9,6 +9,9 @@ docs are:
 - `simulation/README.md` for shared simulation behavior.
 - `simulation/vm/README.md` for the public VM command contract.
 - `simulation/vm/design.md` for module boundaries and milestone sequence.
+- `simulation/vm/libvirt-refactor.md` for the accepted libvirt, VM-set,
+  snapshot, seed-media, and baseline-verifier refactor; read it before changing
+  those implementation boundaries.
 - `simulation/vm/sequences.md` for command flow.
 - `simulation/vm/verification.md` for milestone pass/fail gates.
 
