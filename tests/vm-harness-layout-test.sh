@@ -81,8 +81,20 @@ grep -Fq -- '/loopforge-inputs' "$vm_root/lib/paths.sh" || {
   printf 'VM harness must define operator input custody for role env files\n' >&2
   exit 1
 }
-grep -Fq -- 'chmod -R u+w' "$vm_root/lib/ssh.sh" || {
-  printf 'VM harness must make temporary read-only packages removable before cleanup\n' >&2
+grep -Fq -- 'vm_ssh_stage_role_helpers_all' "$vm_root/lib/ssh.sh" || {
+  printf 'VM harness must stage the shared role-helper tree for the environment run\n' >&2
+  exit 1
+}
+grep -Fq -- 'vm_ssh_stage_role_helpers_all' "$vm_root/lib/lifecycle.sh" || {
+  printf 'VM up must stage role helpers for the environment run\n' >&2
+  exit 1
+}
+grep -Fq -- 'find $(shell_quote "$remote_tmp") -type d -exec chmod 0700' "$vm_root/lib/ssh.sh" || {
+  printf 'VM role-helper directories must remain operator-writable\n' >&2
+  exit 1
+}
+grep -Fq -- 'find $(shell_quote "$remote_tmp") -type f -exec chmod 0600' "$vm_root/lib/ssh.sh" || {
+  printf 'VM role-helper files must remain operator-writable\n' >&2
   exit 1
 }
 

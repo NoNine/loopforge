@@ -74,7 +74,7 @@ case "$*" in
           *"prepare-artifacts"*)
             exit 7
             ;;
-          *"/workspace/scripts/"*)
+          *"/home/ci-operator/loopforge/scripts/"*)
             exit 7
             ;;
           *)

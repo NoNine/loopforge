@@ -848,8 +848,8 @@ cmd_configure_runtime() {
   run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc")"
   account_home="$(runtime_account_home)"
   [ -n "$account_home" ] || die "Could not determine home directory for $JENKINS_AGENT_ACCOUNT"
-  render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
-  render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
+  render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
+  render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
   write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/runtime.status" \

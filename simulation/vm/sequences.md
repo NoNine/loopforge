@@ -151,7 +151,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>ART: vm_artifacts_prepare_role(role)
   ART->>SSH: copy role env to operator input path
-  ART->>SSH: copy temporary read-only helper package
+  ART->>SSH: invoke staged role helper
   ART->>SSH: vm_ssh_run(bundle-factory, helper prepare-artifacts)
   ART->>SSH: copy archive pair from bundle-factory
   ART->>ART: verify exported manifest and checksums

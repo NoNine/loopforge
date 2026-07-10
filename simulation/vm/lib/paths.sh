@@ -81,11 +81,12 @@ vm_path_guest_role_env() {
     "${1:?role required}"
 }
 
-vm_path_guest_package_dir() {
-  printf '/home/%s/.loopforge-package-%s-%s\n' \
-    "$VM_OPERATOR_USER" \
-    "$HARNESS_RUN_ID" \
-    "${1:?role required}"
+vm_path_guest_role_helpers_root() {
+  role_helpers_root_for_operator "$VM_OPERATOR_USER"
+}
+
+vm_path_guest_role_helper() {
+  role_helper_path_for_operator "$VM_OPERATOR_USER" "${1:?role required}"
 }
 
 vm_path_vm_set_libvirt_dir() {

@@ -82,7 +82,7 @@ case "$*" in
             printf 'missing_staged_artifacts manifest=/var/lib/loopforge/staging/gerrit/manifest.txt\n'
             exit 1
             ;;
-          *"/workspace/scripts/"*)
+          *"/home/ci-operator/loopforge/scripts/"*)
             printf 'role helper must not run when staged artifacts are missing\n' >&2
             exit 99
             ;;
@@ -157,7 +157,7 @@ grep -Fq 'configure-role[gerrit]: failed' "$tmp_dir/configure-role.out"
 grep -Fq 'run stage-artifacts --role gerrit first' "$tmp_dir/configure-role.out"
 grep -Fq 'missing_staged_artifacts manifest=' "$run_dir/host/logs/harness"/configure-role-gerrit-*.log
 grep -Fq 'Staged artifacts are missing or invalid' "$run_dir/host/evidence/harness"/configure-role-gerrit-*.json
-if grep -Eq '/workspace/scripts/gerrit-setup\.sh .* (--yes )?(install|configure|validate|collect-evidence)' "$calls"; then
+if grep -Eq '/home/ci-operator/loopforge/scripts/gerrit-setup\.sh .* (--yes )?(install|configure|validate|collect-evidence)' "$calls"; then
   printf 'configure-role must not call the role helper when staged artifacts are missing\n' >&2
   exit 1
 fi

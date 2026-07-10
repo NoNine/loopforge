@@ -116,11 +116,10 @@ vm_artifacts_validate_archive_pair() {
 }
 
 vm_artifacts_prepare_guest() {
-  local role machine helper package_dir guest_env guest_dir archive checksum script rc
+  local role machine helper_path guest_env guest_dir archive checksum script rc
   role="${1:?role required}"
   machine="bundle-factory"
-  helper="$(helper_for_role "$role")"
-  package_dir="$(vm_path_guest_package_dir "$role")"
+  helper_path="$(vm_path_guest_role_helper "$role")"
   guest_env="$(vm_path_guest_role_env "$role")"
   guest_dir="$(vm_artifacts_guest_preparing_dir "$role")/$(bundle_payload_dir_for_role "$role")"
   archive="$(vm_artifacts_guest_archive "$role")"
@@ -128,13 +127,9 @@ vm_artifacts_prepare_guest() {
   vm_set_verify_run_and_set || return $?
   vm_artifacts_verify_source_boundary "$machine" || return $?
   vm_artifacts_stage_role_env "$machine" "$role" || return $?
-  vm_ssh_copy_role_package "$machine" "$role" || return $?
-  script="set -eu; $(shell_quote "$package_dir/$helper") --env $(shell_quote "$guest_env") --yes prepare-artifacts; test -f $(shell_quote "$guest_dir/manifest.txt"); test -f $(shell_quote "$guest_dir/checksums.sha256"); cd $(shell_quote "$guest_dir"); sha256sum -c checksums.sha256; cd /var/lib/loopforge/preparing; sha256sum -c $(shell_quote "$(basename "$checksum")")"
+  script="set -eu; $(shell_quote "$helper_path") --env $(shell_quote "$guest_env") --yes prepare-artifacts; test -f $(shell_quote "$guest_dir/manifest.txt"); test -f $(shell_quote "$guest_dir/checksums.sha256"); cd $(shell_quote "$guest_dir"); sha256sum -c checksums.sha256; cd /var/lib/loopforge/preparing; sha256sum -c $(shell_quote "$(basename "$checksum")")"
   rc=0
   vm_ssh_run_machine "$machine" "$script" || rc=$?
-  if ! vm_ssh_remove_role_package "$machine" "$role"; then
-    [ "$rc" -ne 0 ] || rc=1
-  fi
   [ "$rc" -eq 0 ] || return "$rc"
   printf 'artifact-prepare=ready role=%s machine=%s archive=%s\n' "$role" "$machine" "$archive"
 }
@@ -170,20 +165,15 @@ vm_artifacts_prepare_role() {
 }
 
 vm_artifacts_prepare_target_workspace() {
-  local role machine helper package_dir guest_env rc
+  local role machine helper_path guest_env rc
   role="${1:?role required}"
   machine="$(vm_artifacts_role_machine "$role")"
-  helper="$(helper_for_role "$role")"
-  package_dir="$(vm_path_guest_package_dir "$role")"
+  helper_path="$(vm_path_guest_role_helper "$role")"
   guest_env="$(vm_path_guest_role_env "$role")"
   vm_artifacts_stage_role_env "$machine" "$role" || return $?
-  vm_ssh_copy_role_package "$machine" "$role" || return $?
   rc=0
   vm_ssh_run_machine "$machine" \
-    "set -eu; $(shell_quote "$package_dir/$helper") --env $(shell_quote "$guest_env") --yes prepare-target-workspace; test -d /var/lib/loopforge/staging; test \"\$(stat -c %U:%G /var/lib/loopforge/staging)\" = $(shell_quote "$VM_OPERATOR_USER:$VM_OPERATOR_USER")" || rc=$?
-  if ! vm_ssh_remove_role_package "$machine" "$role"; then
-    [ "$rc" -ne 0 ] || rc=1
-  fi
+    "set -eu; $(shell_quote "$helper_path") --env $(shell_quote "$guest_env") --yes prepare-target-workspace; test -d /var/lib/loopforge/staging; test \"\$(stat -c %U:%G /var/lib/loopforge/staging)\" = $(shell_quote "$VM_OPERATOR_USER:$VM_OPERATOR_USER")" || rc=$?
   return "$rc"
 }
 

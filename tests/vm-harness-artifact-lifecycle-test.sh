@@ -121,16 +121,18 @@ vm_ssh_copy_file_from_machine() {
     "$machine" "$source" "$target" >>"$calls"
 }
 
-vm_ssh_copy_role_package() {
-  local machine role helper package_dir mapped
+vm_ssh_stage_role_helpers() {
+  local machine role helper root mapped
   machine="${1:?machine required}"
-  role="${2:?role required}"
-  helper="$(helper_for_role "$role")"
-  package_dir="$(vm_path_guest_package_dir "$role")"
-  mapped="$(guest_path "$machine" "$package_dir")"
+  root="$(vm_path_guest_role_helpers_root)"
+  mapped="$(guest_path "$machine" "$root")"
   rm -rf -- "$mapped"
-  mkdir -p "$mapped/scripts"
-  cat >"$mapped/$helper" <<'HELPER'
+  mkdir -p "$mapped/scripts" "$mapped/templates/gerrit" \
+    "$mapped/templates/jenkins-controller" "$mapped/templates/jenkins-agent"
+  printf 'shared role helper library\n' >"$mapped/scripts/common.sh"
+  for role in "${roles[@]}"; do
+    helper="$(helper_for_role "$role")"
+    cat >"$mapped/$helper" <<'HELPER'
 #!/usr/bin/env bash
 set -euo pipefail
 helper="$(basename "$0")"
@@ -174,6 +176,11 @@ case "$role" in
   jenkins-agent)
     gerrit=not-applicable; jenkins=not-applicable; manager=not-applicable
     printf 'bootstrap\n' >"$dir/jenkins-agent-bootstrap.txt"
+    mkdir -p "$dir/templates"
+    printf 'runtime profile template\n' >"$dir/templates/agent-runtime-profile.env.template"
+    printf 'SSH policy template\n' >"$dir/templates/sshd-policy.conf.template"
+    chmod 0600 "$dir/templates/agent-runtime-profile.env.template" \
+      "$dir/templates/sshd-policy.conf.template"
     extra='bootstrap=jenkins-agent-bootstrap.txt'
     ;;
 esac
@@ -193,25 +200,36 @@ EOF
 (cd "$preparing/$bundle" && tar -czf "$preparing/$bundle.tar.gz" "$payload")
 (cd "$preparing" && sha256sum "$bundle.tar.gz" >"$bundle.tar.gz.sha256")
 HELPER
-  chmod 0500 "$mapped/$helper"
-  printf 'package machine=%s role=%s path=%s\n' "$machine" "$role" "$package_dir" >>"$calls"
+    chmod 0700 "$mapped/$helper"
+  done
+  find "$mapped" -type d -exec chmod 0700 {} +
+  find "$mapped" -type f ! -name '*-setup.sh' -exec chmod 0600 {} +
+  printf 'role-helpers machine=%s path=%s\n' "$machine" "$root" >>"$calls"
 }
 
-vm_ssh_remove_role_package() {
-  local machine role path
-  machine="${1:?machine required}"
-  role="${2:?role required}"
-  path="$(guest_path "$machine" "$(vm_path_guest_package_dir "$role")")"
-  rm -rf -- "$path"
-  printf 'package-removed machine=%s role=%s\n' "$machine" "$role" >>"$calls"
+vm_ssh_stage_role_helpers_all() {
+  local machine
+  for machine in bundle-factory gerrit jenkins-controller jenkins-agent; do
+    vm_ssh_stage_role_helpers "$machine"
+  done
 }
 
 for machine in bundle-factory gerrit jenkins-controller jenkins-agent; do
   mkdir -p "$guests/$machine/home/ci-operator" "$guests/$machine/etc"
 done
 
+vm_ssh_stage_role_helpers_all
 vm_cmd_prepare_artifacts "" >"$tmp_dir/prepare.out"
 vm_cmd_stage_artifacts "" >"$tmp_dir/stage.out"
+
+for machine in bundle-factory gerrit jenkins-controller jenkins-agent; do
+  helper_root="$(guest_path "$machine" "$(vm_path_guest_role_helpers_root)")"
+  [ "$(stat -c %a "$helper_root")" = 700 ]
+  [ "$(stat -c %a "$helper_root/scripts/common.sh")" = 600 ]
+  for role in "${roles[@]}"; do
+    [ "$(stat -c %a "$helper_root/$(helper_for_role "$role")")" = 700 ]
+  done
+done
 
 for role in "${roles[@]}"; do
   bundle="$(bundle_name_for_role "$role")"
@@ -223,12 +241,22 @@ for role in "${roles[@]}"; do
   [ -f "$HARNESS_EXPORTED_ARTIFACT_DIR/$bundle.tar.gz.sha256" ]
   [ -f "$guests/$machine/var/lib/loopforge/staging/$payload/manifest.txt" ]
   grep -Fq "role=$role" "$guests/$machine/var/lib/loopforge/staging/$payload/manifest.txt"
+  if [ "$role" = jenkins-agent ]; then
+    for template in agent-runtime-profile.env.template sshd-policy.conf.template; do
+      staged_template="$guests/$machine/var/lib/loopforge/staging/$payload/templates/$template"
+      [ -r "$staged_template" ] || {
+        printf 'VM staged Jenkins agent template must remain operator-readable: %s\n' "$template" >&2
+        exit 1
+      }
+      [ "$(stat -c %a "$staged_template")" = 600 ]
+    done
+  fi
   for env_machine in bundle-factory "$machine"; do
     env_path="$guests/$env_machine/home/ci-operator/loopforge-inputs/$role.env"
     [ -f "$env_path" ]
     [ "$(stat -c %a "$env_path")" = 600 ]
     grep -Fq 'vm-simulation' "$env_path"
-    [ ! -e "$(guest_path "$env_machine" "$(vm_path_guest_package_dir "$role")")" ]
+    [ -x "$(guest_path "$env_machine" "$(vm_path_guest_role_helper "$role")")" ]
   done
   prepare_evidence="$(find "$HARNESS_EVIDENCE_DIR" -name "prepare-artifacts-$role-*.json" | sort | tail -1)"
   stage_evidence="$(find "$HARNESS_EVIDENCE_DIR" -name "stage-artifacts-$role-*.json" | sort | tail -1)"
@@ -238,9 +266,26 @@ for role in "${roles[@]}"; do
   grep -Fq "\"artifact_manifest_references\": \"/var/lib/loopforge/staging/$payload/manifest.txt\"" "$stage_evidence"
 done
 
+grep -Fq -- \
+  'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/agent-runtime-profile.env.template"' \
+  "$repo_root/scripts/jenkins-agent-setup.sh"
+grep -Fq -- \
+  'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template"' \
+  "$repo_root/scripts/jenkins-agent-setup.sh"
+if grep -Fq -- \
+  'render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/' \
+  "$repo_root/scripts/jenkins-agent-setup.sh"; then
+  printf 'VM-staged Jenkins agent helper must not read service-owned template copies\n' >&2
+  exit 1
+fi
+
 grep -Fq 'target=/home/ci-operator/loopforge-inputs/gerrit.env mode=0600' "$calls"
 if grep -Eq '/home/ci-operator/loopforge-inputs/(bundle-factory|vm-m6-test)/' "$calls"; then
   printf 'VM role envs must use the selected flat guest input layout\n' >&2
+  exit 1
+fi
+if grep -Fq -- '.loopforge-package-' "$calls"; then
+  printf 'VM role helpers must not use run-scoped package directories\n' >&2
   exit 1
 fi
 if grep -Fq 'target/artifacts/staging' "$calls"; then

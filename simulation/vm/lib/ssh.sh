@@ -93,32 +93,30 @@ vm_ssh_copy_file_from_machine() {
   chmod 0600 "$local_file"
 }
 
-vm_ssh_copy_role_package() {
-  local machine role helper template_dir remote_dir
+vm_ssh_stage_role_helpers() {
+  local machine remote_dir remote_tmp path
+  local -a source_paths
   machine="${1:?machine required}"
-  role="${2:?role required}"
-  helper="$(helper_for_role "$role")"
-  template_dir="templates/$role"
-  remote_dir="$(vm_path_guest_package_dir "$role")"
-  [ -f "$repo_root/$helper" ] || die "Missing role helper: $repo_root/$helper"
-  [ -f "$repo_root/scripts/common.sh" ] || die "Missing shared role helper library"
-  [ -d "$repo_root/$template_dir" ] || die "Missing role template directory: $repo_root/$template_dir"
+  remote_dir="$(vm_path_guest_role_helpers_root)"
+  remote_tmp="$remote_dir.loopforge-tmp-$$"
+  mapfile -t source_paths < <(role_helper_source_paths)
+  for path in "${source_paths[@]}"; do
+    [ -e "$repo_root/$path" ] || die "Missing role helper source: $repo_root/$path"
+  done
   vm_libvirt_require_running "$machine" || return $?
   vm_ssh_verify_known_host "$machine" || return $?
   vm_ssh_run_machine "$machine" \
-    "set -eu; if test -e $(shell_quote "$remote_dir"); then chmod -R u+w $(shell_quote "$remote_dir"); rm -rf -- $(shell_quote "$remote_dir"); fi; install -d -m 0700 $(shell_quote "$remote_dir")" || return $?
-  tar -C "$repo_root" -cf - scripts/common.sh "$helper" "$template_dir" |
+    "set -eu; rm -rf -- $(shell_quote "$remote_tmp"); install -d -m 0700 $(shell_quote "$remote_tmp")" || return $?
+  tar -C "$repo_root" -cf - "${source_paths[@]}" |
     ssh $(vm_ssh_common_options) "$(vm_ssh_target "$machine")" \
-      "set -eu; tar -xf - -C $(shell_quote "$remote_dir"); find $(shell_quote "$remote_dir") -type d -exec chmod 0500 {} +; find $(shell_quote "$remote_dir") -type f -exec chmod 0400 {} +; chmod 0500 $(shell_quote "$remote_dir/$helper")"
+      "set -eu; tar -xf - -C $(shell_quote "$remote_tmp"); find $(shell_quote "$remote_tmp") -type d -exec chmod 0700 {} +; find $(shell_quote "$remote_tmp") -type f -exec chmod 0600 {} +; chmod 0700 $(shell_quote "$remote_tmp/scripts/gerrit-setup.sh") $(shell_quote "$remote_tmp/scripts/jenkins-controller-setup.sh") $(shell_quote "$remote_tmp/scripts/jenkins-agent-setup.sh"); rm -rf -- $(shell_quote "$remote_dir"); mv -- $(shell_quote "$remote_tmp") $(shell_quote "$remote_dir"); test -x $(shell_quote "$remote_dir/scripts/gerrit-setup.sh"); test -x $(shell_quote "$remote_dir/scripts/jenkins-controller-setup.sh"); test -x $(shell_quote "$remote_dir/scripts/jenkins-agent-setup.sh")"
 }
 
-vm_ssh_remove_role_package() {
-  local machine role remote_dir
-  machine="${1:?machine required}"
-  role="${2:?role required}"
-  remote_dir="$(vm_path_guest_package_dir "$role")"
-  vm_ssh_run_machine "$machine" \
-    "set -eu; if test -e $(shell_quote "$remote_dir"); then chmod -R u+w $(shell_quote "$remote_dir"); rm -rf -- $(shell_quote "$remote_dir"); fi"
+vm_ssh_stage_role_helpers_all() {
+  local machine
+  for machine in bundle-factory gerrit jenkins-controller jenkins-agent; do
+    vm_ssh_stage_role_helpers "$machine" || return $?
+  done
 }
 
 vm_ssh_wait_host() {

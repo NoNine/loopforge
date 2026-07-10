@@ -77,7 +77,7 @@ case "$*" in
               *) printf 'HARNESS_ENVIRONMENT=%s\n' "$service" ;;
             esac
             ;;
-          *"/workspace/scripts/gerrit-setup.sh "*" prepare-artifacts")
+          *"/home/ci-operator/loopforge/scripts/gerrit-setup.sh "*" prepare-artifacts")
             bundle_dir="$FAKE_CONTAINER_FS/var/lib/loopforge/preparing/gerrit-artifacts-bundle"
             dir="$bundle_dir/gerrit"
             mkdir -p "$dir/plugins"
@@ -156,6 +156,7 @@ grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
 grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$prepare_evidence"
 grep -Fq '"checksum_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256;/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/checksums.sha256"' "$prepare_evidence"
 grep -Fq -- '/home/ci-operator/loopforge-inputs/gerrit.env' "$calls"
+grep -Fq -- '/home/ci-operator/loopforge/scripts/gerrit-setup.sh' "$calls"
 if grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/' "$calls"; then
   printf 'Bundle-factory env staging must use the canonical flat operator input path\n' >&2
   exit 1

@@ -32,6 +32,9 @@ for helper in \
   shell_quote \
   validate_role_name \
   helper_for_role \
+  role_helpers_root_for_operator \
+  role_helper_path_for_operator \
+  role_helper_source_paths \
   parse_role \
   parse_optional_role \
   bundle_name_for_role \
@@ -87,6 +90,14 @@ usage() {
 [ "$(helper_for_role gerrit)" = "scripts/gerrit-setup.sh" ]
 [ "$(helper_for_role jenkins-controller)" = "scripts/jenkins-controller-setup.sh" ]
 [ "$(helper_for_role jenkins-agent)" = "scripts/jenkins-agent-setup.sh" ]
+[ "$(role_helpers_root_for_operator ci-operator)" = "/home/ci-operator/loopforge" ]
+[ "$(role_helper_path_for_operator ci-operator gerrit)" = "/home/ci-operator/loopforge/scripts/gerrit-setup.sh" ]
+[ "$(role_helper_path_for_operator deploy jenkins-controller)" = "/home/deploy/loopforge/scripts/jenkins-controller-setup.sh" ]
+for path in scripts/common.sh scripts/gerrit-setup.sh \
+  scripts/jenkins-controller-setup.sh scripts/jenkins-agent-setup.sh \
+  templates/gerrit templates/jenkins-controller templates/jenkins-agent; do
+  role_helper_source_paths | grep -Fxq "$path"
+done
 
 [ "$(bundle_name_for_role gerrit)" = "gerrit-artifacts-bundle" ]
 [ "$(bundle_name_for_role jenkins-controller)" = "jenkins-artifacts-bundle" ]

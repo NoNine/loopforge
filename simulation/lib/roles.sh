@@ -18,6 +18,30 @@ helper_for_role() {
   esac
 }
 
+role_helpers_root_for_operator() {
+  printf '/home/%s/loopforge\n' "${1:?operator account required}"
+}
+
+role_helper_path_for_operator() {
+  local operator role
+  operator="${1:?operator account required}"
+  role="${2:?role required}"
+  printf '%s/%s\n' \
+    "$(role_helpers_root_for_operator "$operator")" \
+    "$(helper_for_role "$role")"
+}
+
+role_helper_source_paths() {
+  printf '%s\n' \
+    scripts/common.sh \
+    scripts/gerrit-setup.sh \
+    scripts/jenkins-controller-setup.sh \
+    scripts/jenkins-agent-setup.sh \
+    templates/gerrit \
+    templates/jenkins-controller \
+    templates/jenkins-agent
+}
+
 parse_role() {
   local role=""
   while [ "$#" -gt 0 ]; do

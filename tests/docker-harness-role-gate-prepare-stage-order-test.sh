@@ -100,7 +100,7 @@ case "$*" in
               *) printf 'HARNESS_ENVIRONMENT=%s\n' "$service" ;;
             esac
             ;;
-          *"/workspace/scripts/"*)
+          *"/home/ci-operator/loopforge/scripts/"*)
             exit 0
             ;;
           *)
@@ -252,9 +252,9 @@ fi
 gerrit_env_copy_line="$(grep -n 'helper-envs/gerrit-target/gerrit.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
 controller_env_copy_line="$(grep -n 'helper-envs/jenkins-controller-target/jenkins-controller.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
 agent_env_copy_line="$(grep -n 'helper-envs/jenkins-agent-target/jenkins-agent.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
-gerrit_install_line="$(grep -n '/workspace/scripts/gerrit-setup.sh --env /home/ci-operator/loopforge-inputs/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
-controller_install_line="$(grep -n '/workspace/scripts/jenkins-controller-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
-agent_install_line="$(grep -n '/workspace/scripts/jenkins-agent-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
+gerrit_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/gerrit-setup.sh --env /home/ci-operator/loopforge-inputs/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
+controller_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/jenkins-controller-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
+agent_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/jenkins-agent-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 
 if [ -f "$tmp_dir/role-calls.log" ] && grep -Eq '^prepare-artifacts |^stage-artifacts ' "$tmp_dir/role-calls.log"; then
   printf 'role configuration must not rerun prepare-artifacts or stage-artifacts\n' >&2

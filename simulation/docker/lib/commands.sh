@@ -174,6 +174,11 @@ cmd_up() {
   check_ubuntu_service_baseline gerrit-target gerrit
   check_ubuntu_service_baseline jenkins-controller-target jenkins-controller
   check_ubuntu_service_baseline jenkins-agent-target jenkins-agent
+  if ! stage_role_helpers_for_all_services "$log"; then
+    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Canonical role-helper staging failed")"
+    print_command_failure up "" failed "$log" "$evidence"
+    return 1
+  fi
   if ! stage_target_ssh_authorized_keys "$log"; then
     evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start target SSH public-key staging failed")"
     print_command_failure up "" failed "$log" "$evidence"
@@ -273,14 +278,14 @@ cmd_ssh() {
 }
 
 role_helper_present_in_container() {
-  local service helper
+  local service helper_path
   service="${1:?service required}"
-  helper="${2:?helper required}"
-  compose exec -T "$service" test -x "/workspace/$helper" >/dev/null 2>&1
+  helper_path="${2:?helper path required}"
+  compose exec -T "$service" test -x "$helper_path" >/dev/null 2>&1
 }
 
 cmd_prepare_artifacts() {
-  local role helper service log rc evidence artifact_dir host_env_file role_env_file export_archive
+  local role helper_path service log rc evidence artifact_dir host_env_file role_env_file export_archive
   bootstrap_harness_env
   ensure_runtime_config
   role="${1-}"
@@ -292,7 +297,7 @@ cmd_prepare_artifacts() {
     test_stub_role_command prepare-artifacts "$role"
     return "$?"
   fi
-  helper="$(helper_for_role "$role")"
+  helper_path="$(role_helper_path_for_operator ci-operator "$role")"
   service="bundle-factory"
   case "$role" in
     gerrit)
@@ -321,9 +326,9 @@ cmd_prepare_artifacts() {
   fi
 
   log="$(bounded_log_path "prepare-artifacts-$role")"
-  if ! role_helper_present_in_container "$service" "$helper"; then
-    evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Missing executable role helper /workspace/$helper in bundle factory")"
-    printf 'ERROR: Missing role helper for %s in bundle factory: /workspace/%s\n' "$role" "$helper" >"$log"
+  if ! role_helper_present_in_container "$service" "$helper_path"; then
+    evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Missing executable role helper $helper_path in bundle factory")"
+    printf 'ERROR: Missing role helper for %s in bundle factory: %s\n' "$role" "$helper_path" >"$log"
     print_command_failure prepare-artifacts "$role" failed "$log" "$evidence" >&2
     return 1
   fi
@@ -332,24 +337,24 @@ cmd_prepare_artifacts() {
   role_env_file="$(stage_operator_env_file "$service" "$host_env_file" "$role_env_file" ci-operator ci-operator "$log")"
 
   if [ "$role" = "gerrit" ]; then
-    if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+    if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
     fi
   elif [ "$role" = "jenkins-controller" ]; then
-    if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+    if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
     fi
   elif [ "$role" = "jenkins-agent" ]; then
-    if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" prepare-artifacts >>"$log" 2>&1; then
+    if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" prepare-artifacts >>"$log" 2>&1; then
       rc=0
     else
       rc=$?
     fi
-  elif compose exec -T -u ci-operator "$service" "/workspace/$helper" prepare-artifacts >>"$log" 2>&1; then
+  elif compose exec -T -u ci-operator "$service" "$helper_path" prepare-artifacts >>"$log" 2>&1; then
     rc=0
   else
     rc=$?
@@ -377,13 +382,13 @@ cmd_prepare_artifacts() {
 }
 
 prepare_target_workspace_for_role() {
-  local role service helper log role_env_file
+  local role service helper_path log role_env_file
   role="${1:?role required}"
   service="${2:?service required}"
-  helper="$(helper_for_role "$role")"
+  helper_path="$(role_helper_path_for_operator ci-operator "$role")"
   log="${3:?log required}"
   role_env_file="$(stage_container_role_env "$role" "$service" "$log")"
-  compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes prepare-target-workspace >>"$log" 2>&1
+  compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes prepare-target-workspace >>"$log" 2>&1
 }
 
 cmd_stage_artifacts() {
@@ -481,7 +486,7 @@ sha256sum -c checksums.sha256
 }
 
 cmd_configure_role() {
-  local role helper service log rc evidence role_env_file
+  local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
   ensure_runtime_config
   role="${1:-}"
@@ -489,15 +494,15 @@ cmd_configure_role() {
     run_all_roles configure-role
     return "$?"
   fi
-  helper="$(helper_for_role "$role")"
+  helper_path="$(role_helper_path_for_operator ci-operator "$role")"
   service="$(service_for_role "$role")"
   require_running_service "$service"
 
   log="$(bounded_log_path "configure-role-$role")"
   : >"$log"
-  if ! role_helper_present_in_container "$service" "$helper"; then
-    evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Missing executable role helper /workspace/$helper in target container")"
-    printf 'ERROR: Missing role helper for %s in target container: /workspace/%s\n' "$role" "$helper" >>"$log"
+  if ! role_helper_present_in_container "$service" "$helper_path"; then
+    evidence="$(write_evidence configure-role "$role" blocked "simulate.sh configure-role" "$log" "Missing executable role helper $helper_path in target container")"
+    printf 'ERROR: Missing role helper for %s in target container: %s\n' "$role" "$helper_path" >>"$log"
     printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
     return 1
   fi
@@ -506,8 +511,8 @@ cmd_configure_role() {
   case "$role" in
     gerrit)
       if require_staged_artifacts_in_target gerrit "$service" "$log" &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes configure >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -515,10 +520,10 @@ cmd_configure_role() {
       ;;
     jenkins-controller)
       if require_staged_artifacts_in_target jenkins-controller "$service" "$log" &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes configure-service >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes install-plugins >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes configure-jcasc >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -526,8 +531,8 @@ cmd_configure_role() {
       ;;
     jenkins-agent)
       if require_staged_artifacts_in_target jenkins-agent "$service" "$log" &&
-        compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1; then
+        compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes install >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes configure-runtime >>"$log" 2>&1; then
         rc=0
       else
         rc=$?
@@ -572,7 +577,7 @@ cmd_configure_role() {
 }
 
 cmd_validate_role() {
-  local role helper service log rc evidence role_env_file
+  local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
   ensure_runtime_config
   role="${1:-}"
@@ -580,16 +585,16 @@ cmd_validate_role() {
     run_all_roles validate-role
     return "$?"
   fi
-  helper="$(helper_for_role "$role")"
+  helper_path="$(role_helper_path_for_operator ci-operator "$role")"
   service="$(service_for_role "$role")"
   require_running_service "$service"
   check_target_os_release "$role"
 
   log="$(bounded_log_path "validate-role-$role")"
   : >"$log"
-  if ! role_helper_present_in_container "$service" "$helper"; then
-    evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Missing executable role helper /workspace/$helper in target container")"
-    printf 'ERROR: Missing role helper for %s in target container: /workspace/%s\n' "$role" "$helper" >>"$log"
+  if ! role_helper_present_in_container "$service" "$helper_path"; then
+    evidence="$(write_evidence validate-role "$role" blocked "simulate.sh validate-role" "$log" "Missing executable role helper $helper_path in target container")"
+    printf 'ERROR: Missing role helper for %s in target container: %s\n' "$role" "$helper_path" >>"$log"
     printf 'exit=1 log=%s evidence=%s\n' "$log" "$evidence" >&2
     return 1
   fi
@@ -597,8 +602,8 @@ cmd_validate_role() {
 
   case "$role" in
     gerrit)
-      if compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
+      if compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes validate >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes collect-evidence >>"$log" 2>&1 &&
         normalize_gerrit_role_evidence_logs "$log"; then
         rc=0
       else
@@ -606,8 +611,8 @@ cmd_validate_role() {
       fi
       ;;
     jenkins-controller)
-      if compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
-        compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+      if compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
         rc=0
       else
@@ -615,8 +620,8 @@ cmd_validate_role() {
       fi
       ;;
     jenkins-agent)
-      if compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" validate >>"$log" 2>&1 &&
-        compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+      if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" validate >>"$log" 2>&1 &&
+        compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
         normalize_jenkins_agent_role_evidence_logs "$log"; then
         rc=0
       else

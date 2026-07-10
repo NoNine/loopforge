@@ -43,7 +43,7 @@ esac
 SH
 chmod +x "$fake_bin/docker-compose"
 
-state_dir="$run_dir/target/helper-state"
+rendered_dir="$run_dir/host/rendered"
 
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
@@ -65,8 +65,15 @@ PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"
 
-grep -Fq "HARNESS_RUN_ID=$run_id" "$state_dir/rendered/harness.runtime.env"
+grep -Fq "HARNESS_RUN_ID=$run_id" "$rendered_dir/harness.runtime.env"
 grep -Fq "up: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/up.out"
+for service in bundle-factory gerrit-target jenkins-controller-target jenkins-agent-target; do
+  grep -F -- "exec -T -u root $service sh -c" "$calls" | \
+    grep -Fq -- '/home/ci-operator/loopforge.loopforge-tmp-' || {
+      printf 'up must stage the shared role-helper tree in %s\n' "$service" >&2
+      exit 1
+    }
+done
 
 rm -rf "$run_dir"
 rm -f "$calls"

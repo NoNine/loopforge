@@ -103,6 +103,21 @@ require_doc_text docs/directory-model.md \
   '`bundle-factory/` directory are not part of the canonical path' \
   'Directory model must require a flat factory and target role env layout'
 require_doc_text docs/directory-model.md \
+  '## Role Helper Custody' \
+  'Directory model must own role-helper execution paths'
+require_doc_text docs/directory-model.md \
+  '`/home/<operator-account>/loopforge/`' \
+  'Directory model must define the configurable canonical role-helper root'
+require_doc_text docs/directory-model.md \
+  '`/home/ci-operator/loopforge/`' \
+  'Directory model must name the default role-helper root'
+require_doc_text docs/directory-model.md \
+  'Root and directories `0700`; regular files `0600`; role helper scripts `0700`' \
+  'Directory model must keep role helpers operator-writable and executable'
+require_doc_text docs/directory-model.md \
+  'Run IDs and role-specific package directories are not part of the' \
+  'Directory model must require one shared role-helper tree'
+require_doc_text docs/directory-model.md \
   'VM artifact staging uses target OS SSH' \
   'Directory model must document VM staging through target OS SSH'
 require_doc_text docs/directory-model.md \

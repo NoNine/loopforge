@@ -81,6 +81,22 @@ The default example operator account resolves these paths to
 execution use the same flat role filenames; environment names, run IDs, and a
 `bundle-factory/` directory are not part of the canonical path.
 
+## Role Helper Custody
+
+Role helpers execute from one operator-owned tree on the bundle factory and
+role targets. The selected environment stages the complete tree before helper
+execution and retains it until environment cleanup:
+
+| Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/home/<operator-account>/loopforge/` | Bundle factory and targets | Human operator, machine runner, or simulation transfer utility | Selected operator account and group | Root and directories `0700`; regular files `0600`; role helper scripts `0700` | `scripts/common.sh`, all three role helper scripts, and all three role template trees | Executable control-plane input; no secrets | Stage as a complete tree before execution; retain across lifecycle commands until environment teardown; remove directly during cleanup without delegated privilege or permission repair |
+
+The default operator account resolves the root to
+`/home/ci-operator/loopforge/`. Role helpers execute from its `scripts/`
+directory. Run IDs and role-specific package directories are not part of the
+canonical path. `scripts/integration-setup.sh` is a separate shared
+integration helper and is outside this role-helper path contract.
+
 ## Helper-Owned Paths
 
 Helper-owned paths are execution state, not Gerrit or Jenkins service homes.

@@ -249,35 +249,35 @@ grep -Fq -- 'custody=docker-simulation-control-plane' "${docker_harness_sources[
   printf 'Docker target SSH public key staging must be labeled as simulation control-plane custody\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes collect-evidence' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes collect-evidence' "${docker_harness_sources[@]}" || {
   printf 'Gerrit collect-evidence must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes install' "${docker_harness_sources[@]}" || {
   printf 'Gerrit install must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes configure' "${docker_harness_sources[@]}" || {
   printf 'Gerrit configure must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" collect-evidence' "${docker_harness_sources[@]}" || {
   printf 'Jenkins controller collect-evidence must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes install' "${docker_harness_sources[@]}" || {
   printf 'Jenkins controller install must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-service' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes configure-service' "${docker_harness_sources[@]}" || {
   printf 'Jenkins controller configure-service must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes install-plugins' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes install-plugins' "${docker_harness_sources[@]}" || {
   printf 'Jenkins controller install-plugins must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose_exec_with_ldap_password "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-jcasc' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" --yes configure-jcasc' "${docker_harness_sources[@]}" || {
   printf 'Jenkins controller configure-jcasc must run as ci-operator\n' >&2
   exit 1
 }
@@ -285,15 +285,15 @@ grep -Fq -- 'compose exec -T -u ci-operator -e LDAP_BIND_PASSWORD "$service" "$@
   printf 'LDAP bind password must be injected by env name, not command-line value\n' >&2
   exit 1
 }
-grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" collect-evidence' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" collect-evidence' "${docker_harness_sources[@]}" || {
   printf 'Jenkins agent collect-evidence must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes install' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes install' "${docker_harness_sources[@]}" || {
   printf 'Jenkins agent install must run as ci-operator\n' >&2
   exit 1
 }
-grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper" --env "$role_env_file" --yes configure-runtime' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes configure-runtime' "${docker_harness_sources[@]}" || {
   printf 'Jenkins agent configure-runtime must run as ci-operator\n' >&2
   exit 1
 }
@@ -356,10 +356,30 @@ grep -Fq -- 'bundle_factory_artifact_export' "${docker_harness_sources[@]}" || {
   printf 'Docker harness must explicitly export bundle-factory artifacts to host\n' >&2
   exit 1
 }
-grep -Fq -- 'compose exec -T -u ci-operator "$service" "/workspace/$helper"' "${docker_harness_sources[@]}" || {
+grep -Fq -- 'compose exec -T -u ci-operator "$service" "$helper_path"' "${docker_harness_sources[@]}" || {
   printf 'Docker harness must run bundle-factory helper operations as ci-operator\n' >&2
   exit 1
 }
+grep -Fq -- 'role_helpers_root_for_operator ci-operator' "${docker_harness_sources[@]}" || {
+  printf 'Docker harness must resolve the canonical role-helper root\n' >&2
+  exit 1
+}
+grep -Fq -- 'stage_role_helpers_for_all_services "$log"' "${docker_harness_sources[@]}" || {
+  printf 'Docker up must stage the shared role-helper tree\n' >&2
+  exit 1
+}
+grep -Fq -- 'find $(shell_quote "$tmp") -type d -exec chmod 0700' "${docker_harness_sources[@]}" || {
+  printf 'Docker role-helper directories must remain operator-writable\n' >&2
+  exit 1
+}
+grep -Fq -- 'find $(shell_quote "$tmp") -type f -exec chmod 0600' "${docker_harness_sources[@]}" || {
+  printf 'Docker role-helper files must remain operator-writable\n' >&2
+  exit 1
+}
+if grep -Fq -- '"/workspace/$helper"' "${docker_harness_sources[@]}"; then
+  printf 'Docker harness must not execute role helpers from the source mount\n' >&2
+  exit 1
+fi
 grep -Fq -- 'transfer_mode=docker-cp-waiver' "${docker_harness_sources[@]}" || {
   printf 'Docker harness must label Docker cp transfers as simulation-only waivers\n' >&2
   exit 1

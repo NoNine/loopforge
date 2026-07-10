@@ -404,8 +404,14 @@ require_pattern scripts/jenkins-agent-setup.sh \
   'install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644' \
   'Jenkins agent install must place bootstrap files through delegated runtime-owned install'
 require_pattern scripts/jenkins-agent-setup.sh \
-  'render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"' \
-  'Jenkins agent configure-runtime must render runtime profile through delegated runtime-owned install'
+  'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"' \
+  'Jenkins agent configure-runtime must render the staged runtime profile through delegated runtime-owned install'
+require_pattern scripts/jenkins-agent-setup.sh \
+  'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"' \
+  'Jenkins agent configure-runtime must render the staged SSH policy through delegated runtime-owned install'
+reject_pattern scripts/jenkins-agent-setup.sh \
+  'render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/' \
+  'Jenkins agent configure-runtime must not read service-owned template copies as the operator'
 reject_pattern scripts/jenkins-agent-setup.sh \
   'JENKINS_AGENT_ACCOUNT must be $JENKINS_AGENT_NATIVE_ACCOUNT' \
   'Agent helper must not require a fixed literal runtime account name'

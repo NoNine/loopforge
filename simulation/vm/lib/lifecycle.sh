@@ -258,6 +258,7 @@ vm_cmd_up() {
     vm_set_verify_run_and_set
     vm_libvirt_start_set
     vm_ssh_prepare_all
+    vm_ssh_stage_role_helpers_all
     vm_libvirt_status_table
     vm_ssh_status_readonly
   } >"$log" 2>&1 || {

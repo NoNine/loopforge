@@ -78,7 +78,7 @@ case "$*" in
               *) printf 'HARNESS_ENVIRONMENT=%s\n' "$service" ;;
             esac
             ;;
-          *"/workspace/scripts/"*)
+          *"/home/ci-operator/loopforge/scripts/"*)
             exit 9
             ;;
           *)

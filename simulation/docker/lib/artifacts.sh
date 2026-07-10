@@ -79,7 +79,7 @@ docker_cp_file_to_service() {
   fi
   command="test -d $(shell_quote "$dest_dir")"
   command="$command && mv $(shell_quote "$tmp_path") $(shell_quote "$container_path") && chown $(shell_quote "$owner:$group") $(shell_quote "$container_path") && chmod $(shell_quote "$mode") $(shell_quote "$container_path")"
-  compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1
+  compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1 || return $?
   printf 'transfer_mode=docker-cp-waiver source=%s service=%s destination=%s owner=%s group=%s mode=%s scope=docker-simulation-only\n' \
     "$host_file" "$service" "$container_path" "$owner" "$group" "$mode" >>"$log"
 }
@@ -135,6 +135,38 @@ stage_operator_env_file() {
   log="${6:?log required}"
   stage_operator_input_file "$service" "$host_env_file" "$container_env_file" "$owner" "$group" 0600 "$log"
   printf '%s\n' "$container_env_file"
+}
+
+stage_role_helpers_for_service() {
+  local service log root tmp command
+  service="${1:?service required}"
+  log="${2:?log required}"
+  root="$(role_helpers_root_for_operator ci-operator)"
+  tmp="$root.loopforge-tmp-$$"
+  command="rm -rf -- $(shell_quote "$tmp")"
+  command="$command && install -d -m 0700 -o ci-operator -g ci-operator $(shell_quote "$tmp/scripts") $(shell_quote "$tmp/templates/gerrit") $(shell_quote "$tmp/templates/jenkins-controller") $(shell_quote "$tmp/templates/jenkins-agent")"
+  command="$command && install -m 0600 -o ci-operator -g ci-operator /workspace/scripts/common.sh $(shell_quote "$tmp/scripts/common.sh")"
+  command="$command && install -m 0700 -o ci-operator -g ci-operator /workspace/scripts/gerrit-setup.sh /workspace/scripts/jenkins-controller-setup.sh /workspace/scripts/jenkins-agent-setup.sh $(shell_quote "$tmp/scripts")"
+  command="$command && cp -R /workspace/templates/gerrit/. $(shell_quote "$tmp/templates/gerrit/")"
+  command="$command && cp -R /workspace/templates/jenkins-controller/. $(shell_quote "$tmp/templates/jenkins-controller/")"
+  command="$command && cp -R /workspace/templates/jenkins-agent/. $(shell_quote "$tmp/templates/jenkins-agent/")"
+  command="$command && chown -R ci-operator:ci-operator $(shell_quote "$tmp")"
+  command="$command && find $(shell_quote "$tmp") -type d -exec chmod 0700 {} +"
+  command="$command && find $(shell_quote "$tmp") -type f -exec chmod 0600 {} +"
+  command="$command && chmod 0700 $(shell_quote "$tmp/scripts/gerrit-setup.sh") $(shell_quote "$tmp/scripts/jenkins-controller-setup.sh") $(shell_quote "$tmp/scripts/jenkins-agent-setup.sh")"
+  command="$command && rm -rf -- $(shell_quote "$root") && mv -- $(shell_quote "$tmp") $(shell_quote "$root")"
+  command="$command && test -x $(shell_quote "$root/scripts/gerrit-setup.sh") && test -x $(shell_quote "$root/scripts/jenkins-controller-setup.sh") && test -x $(shell_quote "$root/scripts/jenkins-agent-setup.sh")"
+  compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1
+  printf 'role_helpers=ready service=%s path=%s owner=ci-operator mode=operator-writable source=/workspace scope=docker-simulation-only\n' \
+    "$service" "$root" >>"$log"
+}
+
+stage_role_helpers_for_all_services() {
+  local service log
+  log="${1:?log required}"
+  for service in bundle-factory gerrit-target jenkins-controller-target jenkins-agent-target; do
+    stage_role_helpers_for_service "$service" "$log" || return $?
+  done
 }
 
 require_gerrit_bundle_factory_env() {
