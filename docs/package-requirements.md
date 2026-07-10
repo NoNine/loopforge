@@ -74,7 +74,7 @@ document owns the layered rationale.
 | Bundle-factory baseline | `docs/artifact-bundle-contract.md` records the shared package list used to prepare role artifact bundles. |
 | Docker shared target image | `simulation/docker/target/Dockerfile` installs the shared superset used by Gerrit, Jenkins controller, and Jenkins agent target containers. |
 | Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
-| Docker `procps` layer | `simulation/docker/simulate.sh` and Gerrit helper runtime checks use `ps` to inspect service processes inside slim containers. |
+| Docker `procps` layer | `simulation/docker/simulate.sh`, Gerrit helper runtime checks, and Jenkins agent SSH readiness checks use process inspection inside slim containers. |
 | Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
 | Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
 | VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, SSH client tools, and NFS utilities when shared storage is used. |

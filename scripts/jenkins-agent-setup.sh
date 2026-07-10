@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 # shellcheck source=common.sh
 . "$script_dir/common.sh"
@@ -783,12 +783,11 @@ runtime_account_home() {
 }
 
 validate_os_sshd_service() {
-  local pidfile log_file sshd_config sshd_bin
-  pidfile="$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid"
+  local log_file sshd_config sshd_bin
   log_file="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
   sshd_config="$JENKINS_AGENT_STATE_DIR/etc/sshd_config"
   sshd_bin="$(command -v sshd)"
-  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/run") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") && : >$(shell_quote "$log_file") && chown $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$log_file")"
+  run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") && : >$(shell_quote "$log_file") && chown $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$log_file")"
   run_with_privilege "ssh-keygen -A >>$(shell_quote "$log_file") 2>&1"
   local tmp_config tmp_log
   tmp_config="$(mktemp)"
@@ -798,7 +797,6 @@ Port $JENKINS_AGENT_SSH_PORT
 ListenAddress 0.0.0.0
 HostKey /etc/ssh/ssh_host_ed25519_key
 HostKey /etc/ssh/ssh_host_rsa_key
-PidFile $pidfile
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PubkeyAuthentication yes
@@ -824,8 +822,7 @@ EOF
   run_with_privilege "cat $(shell_quote "$tmp_log") >>$(shell_quote "$log_file")"
   rm -f "$tmp_log"
   run_with_privilege "$(shell_quote "$sshd_bin") -t -f $(shell_quote "$sshd_config") >>$(shell_quote "$log_file") 2>&1" || die "sshd configuration validation failed; log=$log_file"
-  pid="$(pgrep -x sshd | sed -n '1p')" || die "Target OS sshd is not running on $JENKINS_AGENT_HOST:$JENKINS_AGENT_SSH_PORT"
-  write_text_file_as_agent "$pidfile" "$pid"
+  check_os_sshd_process
 }
 
 cmd_configure_runtime() {
@@ -891,8 +888,45 @@ sshd_process_running() {
   printf '%s\n' "$args" | grep -Eq '(^|/| )sshd([: ]|$)' || return 1
 }
 
-check_runtime_readiness() {
+systemd_sshd_main_pid() {
+  local unit load_state pid
+  for unit in ssh.service sshd.service; do
+    load_state="$(systemctl show "$unit" --property=LoadState --value 2>/dev/null || true)"
+    [ "$load_state" = "loaded" ] || continue
+    systemctl is-active --quiet "$unit" ||
+      die "Target OS SSH service is not active: $unit"
+    pid="$(systemctl show "$unit" --property=MainPID --value 2>/dev/null || true)"
+    case "$pid" in
+      ''|0|*[!0-9]*)
+        die "Target OS SSH service has no valid MainPID: $unit"
+        ;;
+    esac
+    printf '%s\n' "$pid"
+    return 0
+  done
+  die "Target OS SSH service unit is not loaded"
+}
+
+check_os_sshd_process() {
   local sshd_pid
+  require_simulation_runtime
+  case "$JENKINS_AGENT_VERIFICATION_MODE" in
+    vm-simulation)
+      sshd_pid="$(systemd_sshd_main_pid)"
+      ;;
+    docker-simulation)
+      sshd_pid="$(pgrep -xo -u 0 sshd)" ||
+        die "Docker target sshd daemon process is not running"
+      ;;
+    *)
+      die "Unsupported Jenkins agent verification mode: $JENKINS_AGENT_VERIFICATION_MODE"
+      ;;
+  esac
+  sshd_process_running "$sshd_pid" ||
+    die "Target OS sshd process is not running"
+}
+
+check_runtime_readiness() {
   verify_staged_artifacts
   validate_agent_render_inputs
   check_os_dependency_expectations
@@ -901,11 +935,7 @@ check_runtime_readiness() {
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" ] || die "Agent bootstrap marker is missing"
   check_runtime_account
   check_remote_fs_ownership
-  sshd_pid="$(pgrep -x sshd | sed -n '1p')" ||
-    die "Target OS sshd process is not running"
-  sshd_process_running "$sshd_pid" ||
-    die "Target OS sshd process is not running"
-  write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" "$sshd_pid"
+  check_os_sshd_process
   check_ssh_reachability >/dev/null
 }
 
@@ -1044,4 +1074,6 @@ main() {
   esac
 }
 
-main "$@"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

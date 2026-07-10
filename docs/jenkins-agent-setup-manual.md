@@ -223,8 +223,8 @@ Mutation side effects:
 - Verifies the dedicated local runtime account and role-local runtime group
   from `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`.
 - Creates or updates the remote filesystem.
-- Starts OpenSSH `sshd` in the Docker harness target so Step 9 can prove real
-  SSH reachability without claiming Jenkins controller scheduling.
+- Validates the harness- or target-OS-managed OpenSSH daemon and the rendered
+  SSH policy without taking ownership of the daemon lifecycle.
 - Leaves `authorized_keys` creation and Jenkins public-key installation to
   integration-native operations or the shared helper workflow.
 - Leaves the shared Jenkins integration group and shared storage path to
@@ -267,8 +267,10 @@ Produced outputs:
 
 Validation checks:
 
+- The OS-managed SSH service has a valid `sshd` process in VM simulation, or
+  the Docker target has a root-owned `sshd` daemon process.
 - The OpenSSH banner is reachable at
-  `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the Docker harness.
+  `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the selected harness.
 - The dedicated runtime account exists.
 - `JENKINS_AGENT_REMOTE_FS` exists and is owned by the runtime account and
   role-local runtime group.

@@ -167,6 +167,3 @@ if grep -Fq 'run_as_gerrit_runtime "$(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.
   printf 'Gerrit runtime startup must not leave the helper waiting on a foreground child\n' >&2
   exit 1
 fi
-grep -Fq 'sshd_pid="$(pgrep -x sshd' "$repo_root/scripts/jenkins-agent-setup.sh"
-grep -Fq 'write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" "$sshd_pid"' \
-  "$repo_root/scripts/jenkins-agent-setup.sh"
