@@ -55,16 +55,29 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
   source-boundary label, VM disk size, and VM package matrix;
 - the base-image bake completed package installation from the configured
   simulation apt mirror, or a matching ready marker proved the cache hit;
+- cache hits prove qcow2 format and the recorded baked-image SHA-256, and
+  fingerprint-scoped locking prevents concurrent publication races;
+- existing VM disks prove that their recorded backing path, fingerprint,
+  SHA-256, and disk size match the selected baked image;
 - each VM proves the expected packages and commands are available from the
   baked base image, such as `java`, `curl`, `ssh`, `rsync`, `tar`, `wget`,
   `git`, `unzip`, `sshd`, and `ldapsearch` where required by the VM role;
 - the LDAP VM has `slapd` installed, active, and listening on the configured
   LDAP port;
-- the LDAP VM can bind and search seeded users and groups with
-  simulation-owned credentials;
+- the LDAP VM can bind and search all seeded users and groups with
+  simulation-owned credentials, and every search returns the exact expected
+  entry DN rather than only a successful LDAP operation;
 - Gerrit and Jenkins controller VMs can resolve the configured VM LDAP FQDN,
   connect to its LDAP port, and bind/search the LDAP endpoint over the VM
   network.
+
+The M4 LDAP evidence record names the simulation endpoint, seeded accounts and
+groups, local and consumer bind/search results, bounded log, simulation-only
+label, and redaction status. It never contains the bind password.
+
+A failed `create` revalidation removes baseline readiness. `status` reports a
+malformed or mismatched readiness marker as `stale`, and `audit-state` fails
+without repairing it.
 
 For M4, a create log that contains apt `E:` errors, `Err:` fetch failures,
 `command not found`, `Unit file ... does not exist`, failed `ldapsearch`,

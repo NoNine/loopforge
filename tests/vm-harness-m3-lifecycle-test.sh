@@ -85,6 +85,12 @@ case "$cmd" in
     ;;
   start)
     domain="${1:?domain required}"
+    if printf '%s\n' "$domain" | grep -Fq 'base-image-bake'; then
+      [ -f "$state_dir/network.active" ] || {
+        printf 'base-image bake requires an active VM network\n' >&2
+        exit 47
+      }
+    fi
     printf 'running\n' >"$state_dir/domains/$domain.state"
     ;;
   shutdown)
@@ -127,10 +133,30 @@ set -euo pipefail
 case "${1:-}" in
   create)
     output="${@: -1}"
+    backing=""
+    previous=""
+    for arg in "$@"; do
+      if [ "$previous" = -b ]; then backing="$arg"; fi
+      previous="$arg"
+    done
     mkdir -p "$(dirname "$output")"
     printf 'qcow2 stub\n' >"$output"
+    [ -z "$backing" ] || printf '%s\n' "$backing" >"$output.backing"
     ;;
   resize)
+    ;;
+  info)
+    image="${@: -1}"
+    [ -s "$image" ] || exit 1
+    if printf '%s\n' "$*" | grep -Fq -- '--output=json'; then
+      if [ -f "$image.backing" ]; then
+        printf '{"format":"qcow2","virtual-size":21474836480,"full-backing-filename":"%s"}\n' "$(cat "$image.backing")"
+      else
+        printf '{"format":"qcow2","virtual-size":21474836480}\n'
+      fi
+    else
+      printf 'image: %s\nfile format: qcow2\n' "$image"
+    fi
     ;;
   *)
     printf 'unexpected qemu-img command: %s\n' "$*" >&2
@@ -206,6 +232,20 @@ if [ "$last" = "printf ready" ]; then
   printf ready
 elif printf '%s\n' "$*" | grep -Fq 'cloud-init status --wait'; then
   exit 0
+elif [ "$last" = bash ] || [ "$last" = -s ]; then
+  script="$(cat)"
+  if printf '%s\n' "$script" | grep -Fq 'systemctl enable --now slapd'; then
+    printf '%s\n' \
+      'ldap-seed-entry=ready type=user id=gerrit-admin dn=uid=gerrit-admin,ou=people,dc=example,dc=test' \
+      'ldap-seed-entry=ready type=user id=jenkins-admin dn=uid=jenkins-admin,ou=people,dc=example,dc=test' \
+      'ldap-seed-entry=ready type=user id=test-user dn=uid=test-user,ou=people,dc=example,dc=test' \
+      'ldap-seed-entry=ready type=group id=gerrit-admins dn=cn=gerrit-admins,ou=groups,dc=example,dc=test' \
+      'ldap-seed-entry=ready type=group id=jenkins-admins dn=cn=jenkins-admins,ou=groups,dc=example,dc=test' \
+      'ldap-seed-entry=ready type=endpoint id=test-user dn=uid=test-user,ou=people,dc=example,dc=test'
+  elif printf '%s\n' "$script" | grep -Fq 'LDAP consumer diagnostics'; then
+    machine="$(printf '%s\n' "$script" | sed -n 's/^consumer_machine=//p' | head -1)"
+    printf 'ldap-consumer-bind-search=ready machine=%s id=test-user dn=uid=test-user,ou=people,dc=example,dc=test\n' "$machine"
+  fi
 else
   printf '%s\n' "$*" >"${VM_STUB_STATE:?}/interactive-ssh.args"
 fi

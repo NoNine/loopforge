@@ -101,3 +101,7 @@ vm_path_baked_base_image() {
 vm_path_baked_base_image_marker() {
   printf '%s/.loopforge-vm-base-image.env\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
 }
+
+vm_path_baked_base_image_lock() {
+  printf '%s/.locks/%s.lock\n' "$(vm_path_base_image_cache_root)" "${1:?fingerprint required}"
+}

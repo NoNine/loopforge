@@ -83,6 +83,21 @@ ownership_schema_version=1
 EOF
 chmod 0600 "$marker"
 
+if PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$audit_out" 2>"$audit_err"; then
+  printf 'audit-state must fail for a legacy VM-set ownership marker\n' >&2
+  exit 1
+fi
+grep -Fq "Incompatible legacy VM set $vm_set_id" "$audit_err"
+grep -Fq 'Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID' "$audit_err"
+grep -Fq 'M5 down/destroy cleanup' "$audit_err"
+
+sed -i 's/^ownership_schema_version=1$/ownership_schema_version=2/' "$marker"
+cat >>"$marker" <<EOF
+base_image=not-created
+base_image_fingerprint=not-created
+disk_size=20G
+EOF
+
 PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$audit_out"
 grep -Fxq 'audit-state: ok' "$audit_out"
 audit_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'audit-state-*.log' -print | sort | tail -1)"

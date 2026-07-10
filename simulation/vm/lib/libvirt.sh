@@ -2,7 +2,7 @@
 
 VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 VM_BASELINE_SNAPSHOT_NAME="${VM_BASELINE_SNAPSHOT_NAME:-loopforge-clean-baseline}"
-VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=2
+VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=3
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 
 vm_libvirt_domain_prefix() {
@@ -66,7 +66,7 @@ vm_libvirt_machine_mac() {
 }
 
 vm_libvirt_marker_values() {
-  VM_SET_MARKER_SCHEMA_VERSION=1
+  VM_SET_MARKER_SCHEMA_VERSION=2
   VM_SET_MARKER_LIBVIRT_URI="$VM_LIBVIRT_URI"
   VM_SET_MARKER_DOMAIN_PREFIX="$(vm_libvirt_domain_prefix)"
   VM_SET_MARKER_NETWORK_NAME="$(vm_libvirt_network_name)"
@@ -128,7 +128,9 @@ vm_libvirt_disk_path() {
 }
 
 vm_libvirt_bake_work_dir() {
-  printf '%s/bake-work\n' "$(vm_path_baked_base_image_dir "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}")"
+  printf '%s/bake-work-%s-%s\n' \
+    "$(vm_path_baked_base_image_dir "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}")" \
+    "$HARNESS_PROJECT_NAME" "$$"
 }
 
 vm_libvirt_bake_disk_path() {
@@ -177,6 +179,15 @@ vm_libvirt_baked_base_image_fingerprint() {
       printf 'packages.%s=%s\n' "$machine" "$(vm_libvirt_package_list_csv "$machine")"
     done
   } | sha256sum | awk '{print $1}'
+}
+
+vm_libvirt_select_baked_base_image() {
+  local fingerprint_file
+  VM_BAKED_BASE_IMAGE_FINGERPRINT="$(vm_libvirt_baked_base_image_fingerprint)" || return $?
+  fingerprint_file="$(vm_libvirt_baked_base_image_fingerprint_file)"
+  mkdir -p "$(dirname "$fingerprint_file")" || return $?
+  printf '%s\n' "$VM_BAKED_BASE_IMAGE_FINGERPRINT" >"$fingerprint_file" || return $?
+  chmod 0600 "$fingerprint_file" || return $?
 }
 
 vm_libvirt_baked_base_image_path() {
@@ -492,21 +503,137 @@ EOF
 }
 
 vm_libvirt_write_machine_metadata() {
-  local machine file
+  local machine file disk baked_image baked_sha256 disk_virtual_size_bytes
   machine="${1:?machine required}"
   file="$(vm_libvirt_machine_metadata_path "$machine")"
+  disk="$(vm_libvirt_disk_path "$machine")"
+  baked_image="$(vm_libvirt_baked_base_image_path)"
+  baked_sha256="$(marker_value "$(vm_libvirt_baked_base_image_marker_path)" baked_sha256)"
+  disk_virtual_size_bytes="$(vm_libvirt_disk_virtual_size_bytes "$disk")" || return $?
   mkdir -p "$(dirname "$file")"
   cat >"$file" <<EOF
 machine=$machine
 domain=$(vm_libvirt_domain_name "$machine")
 mac=$(vm_libvirt_machine_mac "$machine")
-disk=$(vm_libvirt_disk_path "$machine")
+disk=$disk
+disk_size=$VM_DOMAIN_DISK_SIZE
+disk_virtual_size_bytes=$disk_virtual_size_bytes
+base_image=$baked_image
+base_image_fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
+base_image_sha256=$baked_sha256
 seed_iso=$(vm_libvirt_seed_iso_path "$machine")
 ssh_user=$VM_OPERATOR_USER
 ssh_host=pending-up
 ssh_port=22
 EOF
   chmod 0600 "$file"
+}
+
+vm_libvirt_disk_backing_image() {
+  local disk
+  disk="${1:?disk required}"
+  qemu-img info --output=json "$disk" |
+    python3 -c '
+import json
+import os
+import sys
+
+disk = os.path.abspath(sys.argv[1])
+data = json.load(sys.stdin)
+backing = data.get("full-backing-filename") or data.get("backing-filename")
+if not backing:
+    raise SystemExit(f"VM disk has no qcow2 backing image: {disk}")
+if not os.path.isabs(backing):
+    backing = os.path.join(os.path.dirname(disk), backing)
+print(os.path.abspath(backing))
+' "$disk"
+}
+
+vm_libvirt_disk_virtual_size_bytes() {
+  local disk
+  disk="${1:?disk required}"
+  qemu-img info --output=json "$disk" |
+    python3 -c '
+import json
+import sys
+
+value = json.load(sys.stdin).get("virtual-size")
+if not isinstance(value, int) or value <= 0:
+    raise SystemExit("VM disk has no valid virtual-size")
+print(value)
+'
+}
+
+vm_libvirt_verify_existing_disk_identity() {
+  local machine disk metadata expected_image expected_sha actual_backing key expected actual
+  local recorded_virtual_size actual_virtual_size
+  machine="${1:?machine required}"
+  disk="$(vm_libvirt_disk_path "$machine")"
+  metadata="$(vm_libvirt_machine_metadata_path "$machine")"
+  expected_image="$(vm_libvirt_baked_base_image_path)"
+  expected_sha="$(marker_value "$(vm_libvirt_baked_base_image_marker_path)" baked_sha256)"
+  [ -r "$metadata" ] || {
+    printf 'ERROR: Existing VM disk metadata is incompatible for %s: %s. %s\n' \
+      "$machine" "$metadata" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  }
+  for key in disk disk_size base_image base_image_fingerprint base_image_sha256; do
+    case "$key" in
+      disk) expected="$disk" ;;
+      disk_size) expected="$VM_DOMAIN_DISK_SIZE" ;;
+      base_image) expected="$expected_image" ;;
+      base_image_fingerprint) expected="$VM_BAKED_BASE_IMAGE_FINGERPRINT" ;;
+      base_image_sha256) expected="$expected_sha" ;;
+    esac
+    actual="$(marker_value "$metadata" "$key" 2>/dev/null || true)"
+    [ "$actual" = "$expected" ] || {
+      printf 'ERROR: Existing VM disk identity mismatch for %s (%s). %s\n' \
+        "$machine" "$key" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      return 1
+    }
+  done
+  actual_backing="$(vm_libvirt_disk_backing_image "$disk")" || return $?
+  [ "$actual_backing" = "$expected_image" ] || {
+    printf 'ERROR: Existing VM disk backing image mismatch for %s. %s\n' \
+      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  }
+  recorded_virtual_size="$(marker_value "$metadata" disk_virtual_size_bytes 2>/dev/null || true)"
+  actual_virtual_size="$(vm_libvirt_disk_virtual_size_bytes "$disk")" || return $?
+  if [ -z "$recorded_virtual_size" ] || [ "$actual_virtual_size" != "$recorded_virtual_size" ]; then
+    printf 'ERROR: Existing VM disk virtual size mismatch for %s. %s\n' \
+      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  fi
+}
+
+vm_libvirt_verify_existing_disk_identities() {
+  local machine disk
+  for machine in "${vm_machines[@]}"; do
+    disk="$(vm_libvirt_disk_path "$machine")"
+    [ ! -e "$disk" ] || vm_libvirt_verify_existing_disk_identity "$machine" || return $?
+  done
+}
+
+vm_libvirt_existing_disks_present() {
+  local machine
+  for machine in "${vm_machines[@]}"; do
+    [ ! -e "$(vm_libvirt_disk_path "$machine")" ] || return 0
+  done
+  return 1
+}
+
+vm_libvirt_require_existing_baked_base_image() {
+  if vm_libvirt_baked_base_image_ready; then
+    printf 'base-image-cache=hit fingerprint=%s image=%s marker=%s\n' \
+      "$VM_BAKED_BASE_IMAGE_FINGERPRINT" \
+      "$(vm_libvirt_baked_base_image_path)" \
+      "$(vm_libvirt_baked_base_image_marker_path)"
+    return 0
+  fi
+  printf 'ERROR: Existing VM disks require their original valid baked-image cache entry. %s\n' \
+    "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+  return 1
 }
 
 vm_libvirt_ensure_ssh_key() {
@@ -523,12 +650,15 @@ vm_libvirt_create_disk() {
   local backing_image machine disk
   machine="${1:?machine required}"
   disk="$(vm_libvirt_disk_path "$machine")"
-  [ -f "$disk" ] && return 0
+  if [ -f "$disk" ]; then
+    vm_libvirt_verify_existing_disk_identity "$machine"
+    return $?
+  fi
   backing_image="$(vm_libvirt_baked_base_image_path)"
-  require_readable_file "VM baked base image" "$backing_image"
-  qemu-img create -f qcow2 -F qcow2 -b "$backing_image" "$disk" >/dev/null
-  qemu-img resize "$disk" "$VM_DOMAIN_DISK_SIZE" >/dev/null
-  chmod 0600 "$disk"
+  require_readable_file "VM baked base image" "$backing_image" || return $?
+  qemu-img create -f qcow2 -F qcow2 -b "$backing_image" "$disk" >/dev/null || return $?
+  qemu-img resize "$disk" "$VM_DOMAIN_DISK_SIZE" >/dev/null || return $?
+  chmod 0600 "$disk" || return $?
 }
 
 vm_libvirt_base_image_superset_packages_csv() {
@@ -706,19 +836,21 @@ vm_libvirt_cleanup_bake_domain() {
   vm_libvirt_bake_domain_exists || return 0
   state="$(vm_libvirt_bake_domain_state)"
   if [ "$state" = running ]; then
-    virsh -c "$VM_LIBVIRT_URI" destroy "$domain" >/dev/null || true
+    virsh -c "$VM_LIBVIRT_URI" destroy "$domain" >/dev/null || return $?
   fi
   virsh -c "$VM_LIBVIRT_URI" undefine "$domain" --nvram >/dev/null 2>&1 ||
-    virsh -c "$VM_LIBVIRT_URI" undefine "$domain" >/dev/null 2>&1 ||
-    true
+    virsh -c "$VM_LIBVIRT_URI" undefine "$domain" >/dev/null 2>&1 || return $?
+  vm_libvirt_bake_domain_exists && return 1
+  return 0
 }
 
 vm_libvirt_write_baked_base_image_marker() {
-  local image marker packages
+  local image marker packages tmp
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
-  cat >"$marker" <<EOF || return $?
+  tmp="$(mktemp "${marker}.XXXXXX")" || return $?
+  if ! cat >"$tmp" <<EOF
 schema=$VM_BASE_IMAGE_BAKE_SCHEMA_VERSION
 fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
 source_image=$VM_BASE_IMAGE_PATH
@@ -733,18 +865,32 @@ disk_size=$VM_DOMAIN_DISK_SIZE
 packages=$packages
 status=ready
 EOF
-  chmod 0600 "$marker" || return $?
+  then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod 0600 "$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  mv -- "$tmp" "$marker"
 }
 
 vm_libvirt_baked_base_image_ready() {
-  local image marker status
+  local image marker status expected_sha actual_sha
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
   vm_libvirt_baked_base_image_file_ready "$image" || return 1
   [ -r "$marker" ] || return 1
   status="$(marker_value "$marker" status 2>/dev/null || true)"
   [ "$status" = ready ] || return 1
-  [ "$(marker_value "$marker" fingerprint 2>/dev/null || true)" = "$VM_BAKED_BASE_IMAGE_FINGERPRINT" ]
+  [ "$(marker_value "$marker" schema 2>/dev/null || true)" = "$VM_BASE_IMAGE_BAKE_SCHEMA_VERSION" ] || return 1
+  [ "$(marker_value "$marker" fingerprint 2>/dev/null || true)" = "$VM_BAKED_BASE_IMAGE_FINGERPRINT" ] || return 1
+  [ "$(marker_value "$marker" baked_image 2>/dev/null || true)" = "$image" ] || return 1
+  expected_sha="$(marker_value "$marker" baked_sha256 2>/dev/null || true)"
+  [ -n "$expected_sha" ] || return 1
+  actual_sha="$(sha256_file "$image")" || return 1
+  [ "$actual_sha" = "$expected_sha" ]
 }
 
 vm_libvirt_baked_base_image_file_ready() {
@@ -752,7 +898,8 @@ vm_libvirt_baked_base_image_file_ready() {
   image="${1:?image required}"
   [ -s "$image" ] || return 1
   [ -r "$image" ] || return 1
-  qemu-img info "$image" >/dev/null 2>&1 || return 1
+  qemu-img info --output=json "$image" 2>/dev/null |
+    python3 -c 'import json, sys; raise SystemExit(0 if json.load(sys.stdin).get("format") == "qcow2" else 1)' || return 1
 }
 
 vm_libvirt_require_baked_base_image_file() {
@@ -766,7 +913,7 @@ vm_libvirt_require_baked_base_image_file() {
     printf 'ERROR: VM baked base image is not readable: %s\n' "$image" >&2
     return 1
   fi
-  if ! qemu-img info "$image" >/dev/null; then
+  if ! vm_libvirt_baked_base_image_file_ready "$image"; then
     printf 'ERROR: VM baked base image is not a readable qcow2 image: %s\n' "$image" >&2
     return 1
   fi
@@ -777,13 +924,18 @@ vm_libvirt_bake_base_image() {
   final_image="$(vm_libvirt_baked_base_image_path)"
   tmp_image="$(vm_libvirt_bake_disk_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
+  if [ -e "$final_image" ] || [ -e "$(vm_libvirt_baked_base_image_marker_path)" ]; then
+    printf 'ERROR: Refusing to replace an existing invalid VM baked-image cache entry: %s\n' \
+      "$(dirname "$final_image")" >&2
+    return 1
+  fi
   mkdir -p "$(dirname "$final_image")" "$(vm_libvirt_bake_work_dir)" || return $?
-  rm -f "$tmp_image" "$final_image" "$(vm_libvirt_baked_base_image_marker_path)" || return $?
+  vm_libvirt_cleanup_bake_domain || return $?
+  rm -f "$tmp_image" || return $?
   qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$tmp_image" >/dev/null || return $?
   qemu-img resize "$tmp_image" "$VM_DOMAIN_DISK_SIZE" >/dev/null || return $?
-  vm_libvirt_render_bake_seed_media
-  vm_libvirt_render_bake_domain_xml
-  vm_libvirt_cleanup_bake_domain
+  vm_libvirt_render_bake_seed_media || return $?
+  vm_libvirt_render_bake_domain_xml || return $?
   script="$(vm_libvirt_os_baseline_install_script base-image-bake "$packages")
 $(vm_libvirt_os_baseline_verify_script "$packages")
 sudo rm -f /etc/ssh/ssh_host_* || true
@@ -802,10 +954,12 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
       vm_libvirt_bake_run "$script" &&
       vm_libvirt_shutdown_bake_domain
   }; then
-    vm_libvirt_cleanup_bake_domain
+    vm_libvirt_cleanup_bake_domain || true
+    rm -rf "$(vm_libvirt_bake_work_dir)" || true
     return 1
   fi
-  vm_libvirt_cleanup_bake_domain
+  vm_libvirt_cleanup_bake_domain || return $?
+  vm_libvirt_require_baked_base_image_file "$tmp_image" || return $?
   mv "$tmp_image" "$final_image" || return $?
   vm_libvirt_require_baked_base_image_file "$final_image" || return $?
   vm_libvirt_write_baked_base_image_marker || return $?
@@ -816,22 +970,36 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
 }
 
 vm_libvirt_ensure_baked_base_image() {
-  local fingerprint_file image marker
-  VM_BAKED_BASE_IMAGE_FINGERPRINT="$(vm_libvirt_baked_base_image_fingerprint)"
+  local image marker lock lock_fd rc
+  [ -n "${VM_BAKED_BASE_IMAGE_FINGERPRINT:-}" ] || vm_libvirt_select_baked_base_image
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
-  fingerprint_file="$(vm_libvirt_baked_base_image_fingerprint_file)"
-  mkdir -p "$(dirname "$fingerprint_file")"
-  printf '%s\n' "$VM_BAKED_BASE_IMAGE_FINGERPRINT" >"$fingerprint_file"
-  chmod 0600 "$fingerprint_file"
+  lock="$(vm_path_baked_base_image_lock "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  mkdir -p "$(dirname "$lock")" || return $?
+  exec {lock_fd}>"$lock" || return $?
+  flock "$lock_fd" || {
+    exec {lock_fd}>&-
+    return 1
+  }
   if vm_libvirt_baked_base_image_ready; then
     printf 'base-image-cache=hit fingerprint=%s image=%s marker=%s\n' \
       "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$image" "$marker"
+    exec {lock_fd}>&-
     return 0
+  fi
+  if [ -e "$image" ] || [ -e "$marker" ]; then
+    printf 'ERROR: Existing VM baked-image cache entry failed integrity validation: %s. %s\n' \
+      "$(dirname "$image")" \
+      "Do not remove it while VM disks may depend on it; preserve affected sets for M5 down/destroy cleanup." >&2
+    exec {lock_fd}>&-
+    return 1
   fi
   printf 'base-image-cache=miss fingerprint=%s image=%s marker=%s\n' \
     "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$image" "$marker"
   vm_libvirt_bake_base_image
+  rc=$?
+  exec {lock_fd}>&-
+  return "$rc"
 }
 
 vm_libvirt_define_network() {
@@ -839,11 +1007,11 @@ vm_libvirt_define_network() {
   network="$(vm_libvirt_network_name)"
   xml="$(vm_libvirt_network_xml_path)"
   if ! vm_libvirt_selected_network_exists; then
-    vm_libvirt_render_network_xml
-    virsh -c "$VM_LIBVIRT_URI" net-define "$xml" >/dev/null
+    vm_libvirt_render_network_xml || return $?
+    virsh -c "$VM_LIBVIRT_URI" net-define "$xml" >/dev/null || return $?
   fi
   if ! vm_libvirt_network_is_active; then
-    virsh -c "$VM_LIBVIRT_URI" net-start "$network" >/dev/null
+    virsh -c "$VM_LIBVIRT_URI" net-start "$network" >/dev/null || return $?
   fi
 }
 
@@ -851,13 +1019,13 @@ vm_libvirt_define_machine() {
   local machine xml
   machine="${1:?machine required}"
   xml="$(vm_libvirt_domain_xml_path "$machine")"
-  vm_libvirt_create_disk "$machine"
-  vm_libvirt_render_seed_media "$machine"
-  vm_libvirt_render_domain_xml "$machine"
+  vm_libvirt_create_disk "$machine" || return $?
+  vm_libvirt_render_seed_media "$machine" || return $?
+  vm_libvirt_render_domain_xml "$machine" || return $?
   if ! vm_libvirt_machine_exists "$machine"; then
-    virsh -c "$VM_LIBVIRT_URI" define "$xml" >/dev/null
+    virsh -c "$VM_LIBVIRT_URI" define "$xml" >/dev/null || return $?
   fi
-  vm_libvirt_write_machine_metadata "$machine"
+  vm_libvirt_write_machine_metadata "$machine" || return $?
 }
 
 vm_libvirt_create_set() {
@@ -935,10 +1103,10 @@ vm_libvirt_install_os_baselines() {
 }
 
 vm_libvirt_configure_ldap_service() {
-  local ldif_file seed_b64 script
+  local ldif_file seed_b64 script output expected
   ldif_file="$(vm_libvirt_seed_ldif_path)"
-  require_readable_file "VM LDAP seed LDIF" "$ldif_file"
-  seed_b64="$(base64 <"$ldif_file" | tr -d '\n')"
+  require_readable_file "VM LDAP seed LDIF" "$ldif_file" || return $?
+  seed_b64="$(base64 <"$ldif_file" | tr -d '\n')" || return $?
 script=$(cat <<EOF
 set -euo pipefail
 export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
@@ -950,6 +1118,7 @@ ldap_port=$(shell_quote "$HARNESS_LDAP_PORT")
 ldap_timeout=$(shell_quote "$VM_OPERATOR_SSH_TIMEOUT_SECONDS")
 ldap_poll=$(shell_quote "$VM_OPERATOR_SSH_POLL_SECONDS")
 ldap_user_base=$(shell_quote "$HARNESS_LDAP_USER_BASE")
+ldap_group_base=$(shell_quote "$HARNESS_LDAP_GROUP_BASE")
 sudo debconf-set-selections <<DEBCONF
 slapd slapd/no_configuration boolean false
 slapd slapd/domain string \$ldap_domain
@@ -963,6 +1132,10 @@ sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure slapd
 sudo systemctl enable --now slapd
 readonly_ldif="\$(mktemp)"
 tmp_ldif="\$(mktemp)"
+cleanup_ldap_seed_files() {
+  rm -f "\$readonly_ldif" "\$tmp_ldif"
+}
+trap cleanup_ldap_seed_files EXIT
 cat >"\$readonly_ldif" <<LDIF
 dn: \$readonly_dn
 objectClass: simpleSecurityObject
@@ -972,16 +1145,41 @@ description: Simulation-owned read-only bind account
 userPassword: \$LDAP_BIND_PASSWORD
 LDIF
 printf '%s' $(shell_quote "$seed_b64") | base64 -d >"\$tmp_ldif"
-ldapadd -x -c -H ldap://127.0.0.1:389 -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" -f "\$readonly_ldif" >/dev/null || true
-ldapadd -x -c -H ldap://127.0.0.1:389 -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" -f "\$tmp_ldif" >/dev/null || true
+apply_ldif() {
+  apply_output="\$(mktemp)"
+  if ldapadd -x -c -H ldap://127.0.0.1:389 \
+    -D $(shell_quote "cn=admin,$HARNESS_LDAP_BASE_DN") -w "\$LDAP_BIND_PASSWORD" \
+    -f "\$1" >"\$apply_output" 2>&1; then
+    rm -f "\$apply_output"
+    return 0
+  fi
+  if grep -Fq 'Already exists (68)' "\$apply_output" &&
+    ! grep '^ldap_add:' "\$apply_output" | grep -Fv 'Already exists (68)' >/dev/null; then
+    rm -f "\$apply_output"
+    return 0
+  fi
+  cat "\$apply_output" >&2
+  rm -f "\$apply_output"
+  return 1
+}
+apply_ldif "\$readonly_ldif"
+apply_ldif "\$tmp_ldif"
 rm -f "\$readonly_ldif" "\$tmp_ldif"
+trap - EXIT
 systemctl is-active --quiet slapd
-retry_ldapsearch() {
+retry_ldapsearch_dn() {
+  entry_type="\$1"
+  entry_id="\$2"
+  expected_dn="\$3"
+  shift 3
   deadline=\$((SECONDS + ldap_timeout))
   output="\$(mktemp)"
   while [ "\$SECONDS" -lt "\$deadline" ]; do
-    if ldapsearch "\$@" >"\$output" 2>&1; then
+    if ldapsearch "\$@" >"\$output" 2>&1 &&
+      grep -Fxi "dn: \$expected_dn" "\$output" >/dev/null; then
       rm -f "\$output"
+      printf 'ldap-seed-entry=ready type=%s id=%s dn=%s\n' \
+        "\$entry_type" "\$entry_id" "\$expected_dn"
       return 0
     fi
     sleep "\$ldap_poll"
@@ -990,24 +1188,42 @@ retry_ldapsearch() {
   rm -f "\$output"
   return 1
 }
-retry_ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_BASE_DN") uid=gerrit-admin dn
-retry_ldapsearch -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b $(shell_quote "$HARNESS_LDAP_GROUP_BASE") cn=gerrit-admins dn
-retry_ldapsearch -x -H ldap://\$ldap_host:\$ldap_port -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_user_base" uid=test-user dn
+retry_ldapsearch_dn user gerrit-admin "uid=gerrit-admin,\$ldap_user_base" -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_user_base" uid=gerrit-admin dn
+retry_ldapsearch_dn user jenkins-admin "uid=jenkins-admin,\$ldap_user_base" -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_user_base" uid=jenkins-admin dn
+retry_ldapsearch_dn user test-user "uid=test-user,\$ldap_user_base" -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_user_base" uid=test-user dn
+retry_ldapsearch_dn group gerrit-admins "cn=gerrit-admins,\$ldap_group_base" -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_group_base" cn=gerrit-admins dn
+retry_ldapsearch_dn group jenkins-admins "cn=jenkins-admins,\$ldap_group_base" -x -H ldap://127.0.0.1:389 -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_group_base" cn=jenkins-admins dn
+retry_ldapsearch_dn endpoint test-user "uid=test-user,\$ldap_user_base" -x -H ldap://\$ldap_host:\$ldap_port -D $(shell_quote "$HARNESS_LDAP_BIND_DN") -w "\$LDAP_BIND_PASSWORD" -b "\$ldap_user_base" uid=test-user dn
 EOF
 )
-  vm_ssh_run_machine_with_ldap_password ldap "$script" || return $?
+  output="$(vm_ssh_run_machine_with_ldap_password ldap "$script")" || return $?
+  printf '%s\n' "$output"
+  for expected in \
+    "ldap-seed-entry=ready type=user id=gerrit-admin dn=uid=gerrit-admin,$HARNESS_LDAP_USER_BASE" \
+    "ldap-seed-entry=ready type=user id=jenkins-admin dn=uid=jenkins-admin,$HARNESS_LDAP_USER_BASE" \
+    "ldap-seed-entry=ready type=user id=test-user dn=uid=test-user,$HARNESS_LDAP_USER_BASE" \
+    "ldap-seed-entry=ready type=group id=gerrit-admins dn=cn=gerrit-admins,$HARNESS_LDAP_GROUP_BASE" \
+    "ldap-seed-entry=ready type=group id=jenkins-admins dn=cn=jenkins-admins,$HARNESS_LDAP_GROUP_BASE" \
+    "ldap-seed-entry=ready type=endpoint id=test-user dn=uid=test-user,$HARNESS_LDAP_USER_BASE"; do
+    printf '%s\n' "$output" | grep -Fxq "$expected" || {
+      printf 'ERROR: Missing exact VM LDAP seed proof: %s\n' "$expected" >&2
+      return 1
+    }
+  done
   printf 'ldap-service=ready host=%s port=%s seed=%s\n' \
     "$HARNESS_LDAP_HOST" "$HARNESS_LDAP_PORT" "$ldif_file"
 }
 
 vm_libvirt_verify_ldap_consumer_reachability() {
-  local machine script
+  local machine script output expected_dn expected_marker
   machine="${1:?machine required}"
+  expected_dn="uid=test-user,$HARNESS_LDAP_USER_BASE"
   script=$(cat <<EOF
 set -euo pipefail
 export LDAP_BIND_PASSWORD="\${LDAP_BIND_PASSWORD:?LDAP_BIND_PASSWORD required}"
 ldap_host=$(shell_quote "$HARNESS_LDAP_HOST")
 ldap_port=$(shell_quote "$HARNESS_LDAP_PORT")
+consumer_machine=$(shell_quote "$machine")
 output="\$(mktemp)"
 hosts_output="\$(mktemp)"
 cleanup() {
@@ -1035,9 +1251,22 @@ if ! ldapsearch -x -H ldap://\$ldap_host:\$ldap_port \
   cat "\$output" >&2
   exit 1
 fi
+if ! grep -Fxi $(shell_quote "dn: $expected_dn") "\$output" >/dev/null; then
+  printf 'LDAP consumer search returned no exact test-user DN for %s:%s\n' "\$ldap_host" "\$ldap_port" >&2
+  cat "\$output" >&2
+  exit 1
+fi
+printf 'ldap-consumer-bind-search=ready machine=%s id=test-user dn=%s\n' \
+  "\$consumer_machine" $(shell_quote "$expected_dn")
 EOF
 )
-  vm_ssh_run_machine_with_ldap_password "$machine" "$script" || return $?
+  output="$(vm_ssh_run_machine_with_ldap_password "$machine" "$script")" || return $?
+  printf '%s\n' "$output"
+  expected_marker="ldap-consumer-bind-search=ready machine=$machine id=test-user dn=$expected_dn"
+  printf '%s\n' "$output" | grep -Fxq "$expected_marker" || {
+    printf 'ERROR: Missing exact VM LDAP consumer proof: %s\n' "$expected_marker" >&2
+    return 1
+  }
   printf 'ldap-consumer=%s reachable host=%s port=%s\n' \
     "$machine" "$HARNESS_LDAP_HOST" "$HARNESS_LDAP_PORT"
 }
@@ -1047,7 +1276,9 @@ vm_libvirt_verify_baseline_prereqs() {
   vm_libvirt_configure_ldap_service || return $?
   vm_libvirt_verify_ldap_consumer_reachability gerrit || return $?
   vm_libvirt_verify_ldap_consumer_reachability jenkins-controller || return $?
-  vm_state_write_baseline_prereqs_marker
+  vm_state_write_baseline_prereqs_marker || return $?
+  printf 'baseline-prereqs=ready marker=%s\n' \
+    "$HARNESS_VM_BASELINE_PREREQS_MARKER"
 }
 
 vm_libvirt_start_machine() {

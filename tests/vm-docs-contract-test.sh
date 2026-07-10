@@ -110,6 +110,9 @@ require_doc_text docs/package-requirements.md \
   '`ldap-utils` for LDAP bind/search readiness and seed proof' \
   'Package requirements must document VM LDAP proof tooling'
 require_doc_text docs/package-requirements.md \
+  '`flock` serializes shared baked-image cache publication' \
+  'Package requirements must document VM baked-image cache locking'
+require_doc_text docs/package-requirements.md \
   'VM LDAP guest service' \
   'Package requirements evidence map must include VM LDAP guest service'
 require_doc_text docs/package-requirements.md \
@@ -260,6 +263,15 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'automatic baked base-image' \
   'VM README must allow create-owned baked base-image preparation'
+require_doc_text simulation/vm/README.md \
+  'successful LDAP operation with no matching entries is a failure' \
+  'VM README must require exact LDAP entry proof'
+require_doc_text simulation/vm/README.md \
+  'fingerprint-scoped `flock` locking' \
+  'VM README must document serialized baked-image cache publication'
+require_doc_text simulation/vm/README.md \
+  'Legacy VM sets rejected by M4 remain preserved until M5' \
+  'VM README must document deferred legacy VM-set cleanup'
 require_doc_text simulation/vm/README.md \
   'size, and VM package matrix' \
   'VM README must document baked base-image invalidation inputs'

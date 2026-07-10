@@ -74,9 +74,9 @@ VM-set-owned NFS setup.
 VM provisioning must satisfy the role target OS dependency baselines before
 the clean baseline snapshot is captured. The `create` command may bake or
 reuse a simulation-owned dependency-prepared base image when the selected
-source image, Ubuntu baseline, apt mirror, source-boundary label, or package
-matrix changes. Role helpers validate those package and command expectations
-later; they do not install Ubuntu/OS dependencies.
+source image, Ubuntu baseline, apt mirror, source-boundary label, VM disk size,
+or package matrix changes. Role helpers validate those package and command
+expectations later; they do not install Ubuntu/OS dependencies.
 
 After the clean baseline snapshot, checkpoint work must use target-like
 interfaces and paths: target OS SSH as `ci-operator`, SSH file transfer, role
@@ -103,6 +103,8 @@ behavior follows these rules:
 - `create` fails closed when VM provisioning, target OS SSH readiness, role OS
   dependency image bake or reuse, command availability, LDAP service
   readiness, LDAP seed proof, or LDAP consumer reachability cannot be proven.
+- LDAP seed and consumer proof requires the exact expected entry DNs; a
+  successful LDAP operation with no matching entries is a failure.
 - `clean` and `destroy` fail closed unless selected VM-set ownership and
   rollback or deletion boundaries are proven first.
 - `prepare-artifacts` and `stage-artifacts` fail closed unless manifests,
@@ -128,11 +130,11 @@ Phase and lifecycle commands:
 
 | Command | Purpose |
 | --- | --- |
-| `preflight [--env FILE]` | Validates required local tooling, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
+| `preflight [--env FILE]` | Validates required local tooling, including `flock`, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Loads the bootstrap env file, resolves `LOOPFORGE_VM_SET_ID` and `HARNESS_RUN_ID`, copies selected env inputs into private run-scoped runtime inputs, writes rendered/runtime env files, and records VM inventory expectations. Terminal output is a short `init-run: ok run-id=... vm-set=...` summary. |
 | `create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set, including set-owned networks, storage, domain definitions, seed media, role OS dependency baselines, and baseline snapshot metadata. It captures the baseline snapshot after OS, cloud-init, control-plane readiness, VM harness prerequisites, role OS dependency fulfillment, expected command availability, LDAP service readiness, and LDAP seed verification, including consumer LDAP bind/search proof, before Loopforge artifact staging, role configuration, or integration setup. |
 | `up [--env FILE]` | Starts the selected VM set, waits for VM boot, SSH reachability, stable host fingerprints, and cloud-init completion. It does not run role or integration configuration. |
-| `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, and VM simulation login accounts, and prints a short status summary. |
+| `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, VM simulation login accounts, and baseline prerequisite state. LDAP prerequisite state is `pending`, `ready`, or `stale`; malformed or mismatched proof is never reported as ready. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Transfers prepared artifact archives from the bundle factory VM to the target VM, verifies archive manifests and checksums on the target side, and stages them under the helper-visible staging path before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all VM roles when `--role` is omitted, against target VMs and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
@@ -232,12 +234,21 @@ fulfillment before the clean baseline boundary; later lifecycle checkpoints
 must use target OS SSH and helper-visible paths.
 
 The baked `base.qcow2` may be owned by the libvirt runtime user after the bake
-domain writes to it. The harness must not repair that by `chmod` or `chown`;
-it treats readiness as a readable, non-empty qcow2 image accepted by
-`qemu-img info` plus a matching ready marker. Cleanup of generated VM images
-must happen after owned libvirt domains are stopped and undefined, using
-simulation-owned parent directories rather than direct ownership changes to
-libvirt-owned image files.
+domain writes to it. The harness must not repair that by `chmod` or `chown`.
+Cache readiness requires qcow2 format, a matching fingerprint marker, and the
+recorded image SHA-256. Publication uses fingerprint-scoped `flock` locking;
+the completed image is published before its ready marker. An existing
+invalid entry fails closed and is not replaced because reusable VM disks may
+depend on it. Cleanup of generated VM images must happen after owned libvirt
+domains are stopped and undefined, using simulation-owned parent directories
+rather than direct ownership changes to libvirt-owned image files.
+
+Each reusable VM disk records and verifies its baked-image path, fingerprint,
+SHA-256, and disk size. `create` rejects legacy or mismatched disk metadata
+without changing the selected VM set. To continue before M5, choose a fresh
+`HARNESS_RUN_ID` and `LOOPFORGE_VM_SET_ID`, run `init-run`, then run `create`.
+Retain the old env and VM-set state; do not delete its libvirt resources or
+generated backing directly.
 
 ## Simulation Accounts
 
@@ -355,6 +366,19 @@ If generated state, VM-set metadata, snapshots, or libvirt resources are
 inconsistent, lifecycle phases fail clearly instead of recreating state or
 rerunning earlier phases. Recover with the explicit `down`, `clean`, or
 `destroy` command for the selected VM set and run.
+
+Legacy VM sets rejected by M4 remain preserved until M5 implements
+ownership-checked destruction. After M5 is available, clean up the old set with
+its retained env:
+
+```bash
+simulation/vm/simulate.sh --env OLD_ENV down
+simulation/vm/simulate.sh --env OLD_ENV destroy
+simulation/vm/simulate.sh --env OLD_ENV audit-state
+```
+
+M5 `destroy` must recognize the legacy ownership marker only for cleanup,
+validate its immutable ownership fields, and remove only the selected VM set.
 
 Typical flow:
 

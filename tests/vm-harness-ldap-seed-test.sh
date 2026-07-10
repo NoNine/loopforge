@@ -87,6 +87,12 @@ case "$cmd" in
     ;;
   start)
     domain="${1:?domain required}"
+    if printf '%s\n' "$domain" | grep -Fq 'base-image-bake'; then
+      [ -f "$state_dir/network.active" ] || {
+        printf 'base-image bake requires an active VM network\n' >&2
+        exit 47
+      }
+    fi
     printf 'running\n' >"$state_dir/domains/$domain.state"
     ;;
   shutdown)
@@ -130,8 +136,15 @@ state_dir="${VM_STUB_STATE:-}"
 case "${1:-}" in
   create)
     output="${@: -1}"
+    backing=""
+    previous=""
+    for arg in "$@"; do
+      if [ "$previous" = -b ]; then backing="$arg"; fi
+      previous="$arg"
+    done
     mkdir -p "$(dirname "$output")"
     printf 'qcow2 stub\n' >"$output"
+    [ -z "$backing" ] || printf '%s\n' "$backing" >"$output.backing"
     ;;
   resize)
     target="${2:?resize target required}"
@@ -141,13 +154,21 @@ case "${1:-}" in
     fi
     ;;
   info)
-    image="${2:?image required}"
+    image="${@: -1}"
     [ -s "$image" ] || exit 1
     if [ "${VM_STUB_FAIL_MODE:-}" = image-info ]; then
       printf 'forced image info failure\n' >&2
       exit 45
     fi
-    printf 'image: %s\nfile format: qcow2\n' "$image"
+    if printf '%s\n' "$*" | grep -Fq -- '--output=json'; then
+      if [ -f "$image.backing" ]; then
+        printf '{"format":"qcow2","virtual-size":21474836480,"full-backing-filename":"%s"}\n' "$(cat "$image.backing")"
+      else
+        printf '{"format":"qcow2","virtual-size":21474836480}\n'
+      fi
+    else
+      printf 'image: %s\nfile format: qcow2\n' "$image"
+    fi
     ;;
   *)
     printf 'unexpected qemu-img command: %s\n' "$*" >&2
@@ -257,6 +278,17 @@ case "${VM_STUB_FAIL_MODE:-}" in
       exit 44
     fi
     ;;
+  ldap-empty)
+    if printf '%s\n' "$script" | grep -Fq 'systemctl enable --now slapd'; then
+      exit 0
+    fi
+    ;;
+  ldap-add)
+    if printf '%s\n' "$script" | grep -Fq 'apply_ldif'; then
+      printf 'forced ldapadd failure\n' >&2
+      exit 46
+    fi
+    ;;
 esac
 case "$script" in
   *"apt-get install"*)
@@ -273,6 +305,18 @@ case "$script" in
     printf '%s\n' "ldap-consumer $host" >>"$state_dir/calls"
     ;;
 esac
+if printf '%s\n' "$script" | grep -Fq 'systemctl enable --now slapd'; then
+  printf '%s\n' \
+    'ldap-seed-entry=ready type=user id=gerrit-admin dn=uid=gerrit-admin,ou=people,dc=example,dc=test' \
+    'ldap-seed-entry=ready type=user id=jenkins-admin dn=uid=jenkins-admin,ou=people,dc=example,dc=test' \
+    'ldap-seed-entry=ready type=user id=test-user dn=uid=test-user,ou=people,dc=example,dc=test' \
+    'ldap-seed-entry=ready type=group id=gerrit-admins dn=cn=gerrit-admins,ou=groups,dc=example,dc=test' \
+    'ldap-seed-entry=ready type=group id=jenkins-admins dn=cn=jenkins-admins,ou=groups,dc=example,dc=test' \
+    'ldap-seed-entry=ready type=endpoint id=test-user dn=uid=test-user,ou=people,dc=example,dc=test'
+elif printf '%s\n' "$script" | grep -Fq 'LDAP consumer diagnostics'; then
+  machine="$(printf '%s\n' "$script" | sed -n 's/^consumer_machine=//p' | head -1)"
+  printf 'ldap-consumer-bind-search=ready machine=%s id=test-user dn=uid=test-user,ou=people,dc=example,dc=test\n' "$machine"
+fi
 STUB
 chmod +x "$stub_bin/ssh"
 
@@ -291,8 +335,11 @@ grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready" "$tmp_dir/create
 marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-baseline-prereqs.env"
 [ -f "$marker" ]
 grep -Fq 'status=ready' "$marker"
+grep -Fq 'schema=2' "$marker"
 grep -Fq 'apt_mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$marker"
 grep -Fq 'ldap_bind_dn=cn=readonly,dc=example,dc=test' "$marker"
+grep -Fq 'base_image_fingerprint=' "$marker"
+grep -Fq 'base_image_sha256=' "$marker"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
@@ -313,6 +360,8 @@ grep -Fq '      search:' "$gerrit_network_config"
 grep -Fq '        - example.test' "$gerrit_network_config"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
+  grep -Fq 'disk_virtual_size_bytes=21474836480' \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
 done
 
 create_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
@@ -324,6 +373,29 @@ grep -Fq 'source=base-image' "$create_log"
 grep -Fq 'ldap-service=ready host=ldap.example.test port=389' "$create_log"
 grep -Fq 'ldap-consumer=gerrit reachable host=ldap.example.test port=389' "$create_log"
 grep -Fq 'ldap-consumer=jenkins-controller reachable host=ldap.example.test port=389' "$create_log"
+grep -Fq 'ldap-seed-entry=ready type=user id=jenkins-admin' "$create_log"
+grep -Fq 'ldap-seed-entry=ready type=group id=jenkins-admins' "$create_log"
+grep -Fq 'ldap-consumer-bind-search=ready machine=gerrit id=test-user' "$create_log"
+grep -Fq 'baseline-prereqs=ready marker=' "$create_log"
+
+ldap_evidence="$(find "$generated_root/$run_id/host/evidence/harness" -name 'create-ldap-*.json' -print | sort | tail -1)"
+[ -n "$ldap_evidence" ]
+python3 - "$ldap_evidence" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    evidence = json.load(handle)
+assert evidence["verification_mode"] == "vm-simulation"
+assert evidence["ldap_endpoint"] == "ldap://ldap.example.test:389"
+assert evidence["ldap_label"] == "simulation-only"
+assert evidence["seeded_accounts"] == ["gerrit-admin", "jenkins-admin", "test-user"]
+assert evidence["seeded_groups"] == ["gerrit-admins", "jenkins-admins"]
+assert evidence["local_bind_search"] == "pass"
+assert evidence["consumer_bind_search"] == {"gerrit": "pass", "jenkins-controller": "pass"}
+assert evidence["redaction"] == "secrets-not-recorded"
+PY
+! grep -Fq 'readonly-password' "$ldap_evidence"
 
 baked_marker="$(find "$generated_root/base-images" -name .loopforge-vm-base-image.env -print 2>/dev/null |
   while IFS= read -r marker_file; do
@@ -337,7 +409,7 @@ baked_cache_dir="$(dirname "$baked_marker")"
 grep -Fq 'status=ready' "$baked_marker"
 grep -Fq 'disk_size=20G' "$baked_marker"
 grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
-grep -Eq '/base-images/.*/bake-work/base-build\.qcow2 20G$' "$stub_state/qemu-img-resize"
+grep -Eq '/base-images/.*/bake-work-[^/]+/base-build\.qcow2 20G$' "$stub_state/qemu-img-resize"
 
 grep -Fq 'os-baseline' "$stub_state/calls"
 grep -Fq 'ldap-service' "$stub_state/calls"
@@ -358,8 +430,10 @@ grep -R -Fq 'LDAP_BIND_PASSWORD=' "$stub_state"/ssh-*.sh
 ! grep -R -Fq -- '-w readonly-password' "$stub_state"/ssh-*.sh
 grep -R -Fq 'uid=test-user' "$stub_state"/ssh-*.sh
 grep -R -Fq 'systemctl is-active --quiet slapd' "$stub_state"/ssh-*.sh
-grep -R -Fq 'ldapsearch -x -H ldap://127.0.0.1:389' "$stub_state"/ssh-*.sh
+grep -R -Fq -- '-H ldap://127.0.0.1:389' "$stub_state"/ssh-*.sh
 grep -R -Fq 'ldap://$ldap_host:$ldap_port' "$stub_state"/ssh-*.sh
+grep -R -Fq 'grep -Fxi "dn: $expected_dn"' "$stub_state"/ssh-*.sh
+grep -R -Fq 'Already exists (68)' "$stub_state"/ssh-*.sh
 grep -R -Fq 'deadline=$((SECONDS + ldap_timeout))' "$stub_state"/ssh-*.sh
 grep -R -Fq 'sleep "$ldap_poll"' "$stub_state"/ssh-*.sh
 grep -R -Fq 'getent hosts "$ldap_host"' "$stub_state"/ssh-*.sh
@@ -388,6 +462,20 @@ if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' 
   exit 1
 fi
 
+marker_backup="$tmp_dir/baseline-prereqs.env"
+cp "$marker" "$marker_backup"
+sed -i 's/^status=ready$/status=broken/' "$marker"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status-stale.out"
+grep -Eq 'LDAP[[:space:]]+stale' "$tmp_dir/status-stale.out"
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$tmp_dir/audit-stale.out" 2>&1; then
+  printf 'audit-state must fail for a stale baseline prerequisite marker\n' >&2
+  exit 1
+fi
+grep -Fq 'Stale VM baseline prerequisite marker' "$tmp_dir/audit-stale.out"
+mv "$marker_backup" "$marker"
+
 cache_hit_run_id="vm-m4-cache-hit-$$"
 cache_hit_vm_set_id="m4-cache-hit-$$"
 cache_hit_env="$tmp_dir/harness-cache-hit.env"
@@ -409,7 +497,68 @@ cache_hit_log="$(find "$generated_root/$cache_hit_run_id/host/logs/harness" -nam
 grep -Fq 'base-image-cache=hit' "$cache_hit_log"
 after_cache_hit_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
 [ "$after_cache_hit_apt_count" -eq "$before_cache_hit_apt_count" ]
-rm -rf "$generated_root/$cache_hit_run_id" "$generated_root/vm-sets/$cache_hit_vm_set_id"
+rm -rf "$generated_root/${cache_hit_run_id:?}" "$generated_root/vm-sets/${cache_hit_vm_set_id:?}"
+
+machine_metadata="$generated_root/vm-sets/$vm_set_id/libvirt/machines/gerrit.env"
+machine_metadata_backup="$tmp_dir/gerrit.env"
+cp "$machine_metadata" "$machine_metadata_backup"
+marker_sha_before="$(sha256sum "$marker" | awk '{print $1}')"
+sed -i 's/^base_image_fingerprint=.*/base_image_fingerprint=incompatible/' "$machine_metadata"
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-incompatible.out" 2>&1; then
+  printf 'create must reject incompatible existing VM disk metadata\n' >&2
+  exit 1
+fi
+incompatible_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID' "$incompatible_log"
+[ "$(sha256sum "$marker" | awk '{print $1}')" = "$marker_sha_before" ]
+grep -Fq 'base_image_fingerprint=incompatible' "$machine_metadata"
+mv "$machine_metadata_backup" "$machine_metadata"
+
+lock_run_id="vm-m4-lock-$$"
+lock_vm_set_id="m4-lock-$$"
+lock_env="$tmp_dir/harness-lock.env"
+lock_state="$tmp_dir/lock-state"
+mkdir -p "$lock_state"
+sed \
+  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$lock_run_id/" \
+  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$lock_vm_set_id/" \
+  -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+  -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
+  -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+  "$repo_root/simulation/vm/example.env" >"$lock_env"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$lock_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$lock_env" init-run >"$tmp_dir/init-run-lock.out"
+fingerprint="$(cat "$generated_root/$run_id/host/rendered/base-image-fingerprint.txt")"
+lock_file="$generated_root/base-images/.locks/$fingerprint.lock"
+held_file="$tmp_dir/cache-lock-held"
+before_lock_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
+(
+  flock 9
+  touch "$held_file"
+  sleep 2
+) 9>"$lock_file" &
+lock_holder=$!
+for _ in 1 2 3 4 5; do
+  [ -f "$held_file" ] && break
+  sleep 1
+done
+[ -f "$held_file" ]
+lock_started="$(date +%s)"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$lock_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$lock_env" create >"$tmp_dir/create-lock.out"
+lock_elapsed=$(( $(date +%s) - lock_started ))
+wait "$lock_holder"
+[ "$lock_elapsed" -ge 1 ]
+lock_log="$(find "$generated_root/$lock_run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'base-image-cache=hit' "$lock_log"
+after_lock_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
+[ "$after_lock_apt_count" -eq "$before_lock_apt_count" ]
+if grep -R -Fq 'apt-get install' "$lock_state"; then
+  printf 'cache waiter must reuse the published image without another bake\n' >&2
+  exit 1
+fi
+rm -rf "$generated_root/${lock_run_id:?}" "$generated_root/vm-sets/${lock_vm_set_id:?}"
 
 run_fail_closed_case() {
   local mode case_baked_cache_dir case_base_image case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
@@ -442,7 +591,8 @@ run_fail_closed_case() {
     printf 'create must fail closed for forced %s failure\n' "$mode" >&2
     exit 1
   fi
-  if [ -f "$case_generated/host/rendered/base-image-fingerprint.txt" ]; then
+  if { [ "$mode" = apt ] || [ "$mode" = image-info ]; } &&
+    [ -f "$case_generated/host/rendered/base-image-fingerprint.txt" ]; then
     case_baked_cache_dir="$generated_root/base-images/$(cat "$case_generated/host/rendered/base-image-fingerprint.txt")"
     printf '%s\n' "$case_baked_cache_dir" >>"$case_baked_cache_dirs"
   fi
@@ -455,10 +605,48 @@ run_fail_closed_case() {
     [ -n "$case_create_log" ]
     grep -Fq "$case_failure_text" "$case_create_log"
   fi
-  rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id" "$case_baked_cache_dir"
+  rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id"
+  if [ "$mode" = apt ] || [ "$mode" = image-info ]; then
+    rm -rf "$case_baked_cache_dir"
+  fi
 }
 
 run_fail_closed_case apt 'forced apt failure'
 run_fail_closed_case image-info 'VM baked base image is not a readable qcow2 image'
 run_fail_closed_case slapd 'forced slapd failure'
 run_fail_closed_case ldap-consumer 'forced ldap consumer failure'
+run_fail_closed_case ldap-empty 'Missing exact VM LDAP seed proof'
+run_fail_closed_case ldap-add 'forced ldapadd failure'
+
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_MODE=ldap-empty \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-revalidate.out" 2>&1; then
+  printf 'create revalidation must fail when exact LDAP proof is absent\n' >&2
+  exit 1
+fi
+[ ! -f "$marker" ]
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status-pending.out"
+grep -Eq 'LDAP[[:space:]]+pending' "$tmp_dir/status-pending.out"
+
+baked_image="$baked_cache_dir/base.qcow2"
+printf 'tampered\n' >>"$baked_image"
+tampered_sha="$(sha256sum "$baked_image" | awk '{print $1}')"
+tamper_run_id="vm-m4-tamper-$$"
+tamper_vm_set_id="m4-tamper-$$"
+tamper_env="$tmp_dir/harness-tamper.env"
+sed \
+  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$tamper_run_id/" \
+  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$tamper_vm_set_id/" \
+  -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+  "$repo_root/simulation/vm/example.env" >"$tamper_env"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$tamper_env" init-run >"$tmp_dir/init-run-tamper.out"
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$tamper_env" create >"$tmp_dir/create-tamper.out" 2>&1; then
+  printf 'create must reject a cached image with a mismatched SHA-256\n' >&2
+  exit 1
+fi
+tamper_log="$(find "$generated_root/$tamper_run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'cache entry failed integrity validation' "$tamper_log"
+[ "$(sha256sum "$baked_image" | awk '{print $1}')" = "$tampered_sha" ]
+rm -rf "$generated_root/${tamper_run_id:?}" "$generated_root/vm-sets/${tamper_vm_set_id:?}"

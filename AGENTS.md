@@ -53,6 +53,17 @@ EOF
 Do not use repeated `-m` flags to simulate wrapped body lines; each `-m`
 argument creates a separate paragraph.
 
+## Commit Scope
+
+- Never stage or commit `docs/execution-status.md` as part of implementation,
+  documentation, cleanup, or a broad request to commit current changes.
+- Keep `docs/execution-status.md` as unstaged mutable resume state by default,
+  including when other repository changes are committed.
+- Commit that file only when the user explicitly requests a ledger snapshot
+  commit and names `docs/execution-status.md` or the execution ledger.
+- Before every commit or amend, verify that the staged path list excludes
+  `docs/execution-status.md` unless that explicit exception applies.
+
 ## Log Handling
 
 Never stream verbose Docker, Jenkins, Gerrit, package-manager, build, download,

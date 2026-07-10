@@ -46,6 +46,47 @@ EOF
   printf '%s\n' "$file"
 }
 
+vm_write_ldap_evidence() {
+  local log_ref file tmp q_timestamp q_run q_set q_endpoint q_log_ref
+  log_ref="${1:?bounded log required}"
+  mkdir -p "$HARNESS_EVIDENCE_DIR"
+  file="$(evidence_record_path "$HARNESS_EVIDENCE_DIR" create ldap)"
+  tmp="$(mktemp "${file}.XXXXXX")"
+  q_timestamp="$(json_quote "$(iso_timestamp_utc)")"
+  q_run="$(json_quote "$HARNESS_RUN_ID")"
+  q_set="$(json_quote "$LOOPFORGE_VM_SET_ID")"
+  q_endpoint="$(json_quote "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT")"
+  q_log_ref="$(json_quote "$log_ref")"
+  cat >"$tmp" <<EOF
+{
+  "verification_mode": "vm-simulation",
+  "timestamp": $q_timestamp,
+  "package_version": "gerrit-jenkins-setup",
+  "helper_command_version": "simulation/vm/simulate.sh",
+  "role_or_environment": "ldap",
+  "checkpoint": "create",
+  "status": "pass",
+  "run_id": $q_run,
+  "vm_set_id": $q_set,
+  "ldap_endpoint": $q_endpoint,
+  "ldap_label": "simulation-only",
+  "service_readiness": "pass",
+  "seeded_accounts": ["gerrit-admin", "jenkins-admin", "test-user"],
+  "seeded_groups": ["gerrit-admins", "jenkins-admins"],
+  "local_bind_search": "pass",
+  "consumer_bind_search": {
+    "gerrit": "pass",
+    "jenkins-controller": "pass"
+  },
+  "bounded_log": $q_log_ref,
+  "redaction": "secrets-not-recorded"
+}
+EOF
+  chmod 0600 "$tmp"
+  mv -- "$tmp" "$file"
+  printf '%s\n' "$file"
+}
+
 vm_cmd_blocked_m1() {
   local command_name role
   command_name="${1:?command required}"
@@ -70,6 +111,7 @@ vm_cmd_preflight() {
   require_command sha256sum
   require_command awk
   require_command base64
+  require_command flock
   [ -f "$vm_env_example" ] || die "Missing VM example env: $vm_env_example"
   [ -f "$vm_dir/README.md" ] || die "Missing VM README"
   [ -f "$vm_dir/design.md" ] || die "Missing VM design doc"
@@ -153,9 +195,21 @@ vm_cmd_run() {
 }
 
 vm_cmd_create_steps() {
+  VM_CREATE_BASELINE_INVALIDATED=0
   vm_state_validate_vm_set_ownership_readonly || return $?
   vm_libvirt_require_base_image || return $?
+  vm_libvirt_select_baked_base_image || return $?
   vm_state_write_or_verify_vm_set_marker || return $?
+  if vm_libvirt_existing_disks_present; then
+    vm_libvirt_require_existing_baked_base_image || return $?
+    vm_libvirt_verify_existing_disk_identities || return $?
+  else
+    vm_libvirt_ensure_ssh_key || return $?
+    vm_libvirt_define_network || return $?
+    vm_libvirt_ensure_baked_base_image || return $?
+  fi
+  vm_state_invalidate_baseline_prereqs_marker || return $?
+  VM_CREATE_BASELINE_INVALIDATED=1
   vm_libvirt_create_set || return $?
   vm_libvirt_start_set || return $?
   vm_ssh_prepare_all || return $?
@@ -169,8 +223,17 @@ vm_cmd_create() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log create)"
   vm_cmd_create_steps >"$log" 2>&1 || {
+    if [ "${VM_CREATE_BASELINE_INVALIDATED:-0}" -eq 1 ]; then
+      vm_state_invalidate_baseline_prereqs_marker
+    fi
     evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 VM-set creation or baseline prerequisite proof failed")"
     print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
+    return 1
+  }
+  vm_write_ldap_evidence "$log" >/dev/null || {
+    vm_state_invalidate_baseline_prereqs_marker
+    evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 LDAP evidence generation failed after runtime proof")"
+    print_command_failure create "" "failed reason=ldap-evidence" "$log" "$evidence"
     return 1
   }
   evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M4 VM set was defined and baseline prerequisites were proven before snapshot capture")"

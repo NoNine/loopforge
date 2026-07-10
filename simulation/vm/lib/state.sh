@@ -12,9 +12,11 @@ vm_state_write_run_marker() {
 }
 
 vm_state_write_vm_set_marker() {
+  local tmp
   mkdir -p "$HARNESS_VM_SET_DIR"
   vm_libvirt_marker_values
-  cat >"$HARNESS_VM_SET_MARKER" <<EOF
+  tmp="$(mktemp "${HARNESS_VM_SET_MARKER}.XXXXXX")"
+  cat >"$tmp" <<EOF
 mode=$HARNESS_MODE
 vm_set_id=$LOOPFORGE_VM_SET_ID
 project_name=$HARNESS_PROJECT_NAME
@@ -26,29 +28,47 @@ network_name=$VM_SET_MARKER_NETWORK_NAME
 storage_pool_name=$VM_SET_MARKER_STORAGE_POOL_NAME
 seed_pool_name=$VM_SET_MARKER_SEED_POOL_NAME
 baseline_snapshot_name=$VM_SET_MARKER_BASELINE_SNAPSHOT_NAME
+base_image=$(vm_libvirt_baked_base_image_path)
+base_image_fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
+disk_size=$VM_DOMAIN_DISK_SIZE
 ownership_schema_version=$VM_SET_MARKER_SCHEMA_VERSION
 EOF
-  chmod 0600 "$HARNESS_VM_SET_MARKER"
+  chmod 0600 "$tmp"
+  mv -- "$tmp" "$HARNESS_VM_SET_MARKER"
 }
 
 vm_state_write_or_verify_vm_set_marker() {
   if [ -f "$HARNESS_VM_SET_MARKER" ]; then
     vm_state_verify_vm_set_marker
+    vm_state_verify_vm_set_base_identity
   else
     vm_state_write_vm_set_marker
   fi
 }
 
 vm_state_write_baseline_prereqs_marker() {
-  mkdir -p "$HARNESS_VM_SET_DIR"
-  cat >"$HARNESS_VM_BASELINE_PREREQS_MARKER" <<EOF
+  local baked_marker baked_sha256 packages runtime_fingerprint tmp
+  baked_marker="$(vm_libvirt_baked_base_image_marker_path)"
+  baked_sha256="$(marker_value "$baked_marker" baked_sha256)" || return $?
+  packages="$(vm_libvirt_base_image_superset_packages_csv)" || return $?
+  runtime_fingerprint="$(runtime_env_fingerprint "$HARNESS_RUNTIME_ENV")" || return $?
+  mkdir -p "$HARNESS_VM_SET_DIR" || return $?
+  tmp="$(mktemp "${HARNESS_VM_BASELINE_PREREQS_MARKER}.XXXXXX")" || return $?
+  cat >"$tmp" <<EOF
+schema=2
 mode=$HARNESS_MODE
 vm_set_id=$LOOPFORGE_VM_SET_ID
 run_id=$HARNESS_RUN_ID
 project_name=$HARNESS_PROJECT_NAME
+runtime_env_fingerprint=$runtime_fingerprint
 ubuntu_release=$HARNESS_UBUNTU_BASELINE_RELEASE
 ubuntu_codename=$HARNESS_UBUNTU_BASELINE_CODENAME
 apt_mirror=$HARNESS_UBUNTU_APT_MIRROR
+base_image=$(vm_libvirt_baked_base_image_path)
+base_image_fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
+base_image_sha256=$baked_sha256
+disk_size=$VM_DOMAIN_DISK_SIZE
+packages=$packages
 ldap_host=$HARNESS_LDAP_HOST
 ldap_port=$HARNESS_LDAP_PORT
 ldap_base_dn=$HARNESS_LDAP_BASE_DN
@@ -57,14 +77,67 @@ ldap_group_base=$HARNESS_LDAP_GROUP_BASE
 ldap_bind_dn=$HARNESS_LDAP_BIND_DN
 status=ready
 EOF
-  chmod 0600 "$HARNESS_VM_BASELINE_PREREQS_MARKER"
+  chmod 0600 "$tmp"
+  mv -- "$tmp" "$HARNESS_VM_BASELINE_PREREQS_MARKER"
+}
+
+vm_state_invalidate_baseline_prereqs_marker() {
+  rm -f "$HARNESS_VM_BASELINE_PREREQS_MARKER"
+}
+
+vm_state_baseline_prereqs_marker_valid() {
+  local baked_marker fingerprint_file key expected actual
+  [ -r "$HARNESS_VM_BASELINE_PREREQS_MARKER" ] || return 1
+  fingerprint_file="$(vm_libvirt_baked_base_image_fingerprint_file)"
+  [ -r "$fingerprint_file" ] || return 1
+  VM_BAKED_BASE_IMAGE_FINGERPRINT="$(cat "$fingerprint_file")"
+  baked_marker="$(vm_libvirt_baked_base_image_marker_path)"
+  [ -r "$baked_marker" ] || return 1
+  for key in schema mode vm_set_id run_id project_name runtime_env_fingerprint \
+    ubuntu_release ubuntu_codename apt_mirror base_image base_image_fingerprint \
+    base_image_sha256 disk_size packages ldap_host ldap_port ldap_base_dn \
+    ldap_user_base ldap_group_base ldap_bind_dn status; do
+    case "$key" in
+      schema) expected=2 ;;
+      mode) expected="$HARNESS_MODE" ;;
+      vm_set_id) expected="$LOOPFORGE_VM_SET_ID" ;;
+      run_id) expected="$HARNESS_RUN_ID" ;;
+      project_name) expected="$HARNESS_PROJECT_NAME" ;;
+      runtime_env_fingerprint) expected="$(runtime_env_fingerprint "$HARNESS_RUNTIME_ENV")" ;;
+      ubuntu_release) expected="$HARNESS_UBUNTU_BASELINE_RELEASE" ;;
+      ubuntu_codename) expected="$HARNESS_UBUNTU_BASELINE_CODENAME" ;;
+      apt_mirror) expected="$HARNESS_UBUNTU_APT_MIRROR" ;;
+      base_image) expected="$(vm_libvirt_baked_base_image_path)" ;;
+      base_image_fingerprint) expected="$VM_BAKED_BASE_IMAGE_FINGERPRINT" ;;
+      base_image_sha256) expected="$(marker_value "$baked_marker" baked_sha256 2>/dev/null || true)" ;;
+      disk_size) expected="$VM_DOMAIN_DISK_SIZE" ;;
+      packages) expected="$(vm_libvirt_base_image_superset_packages_csv)" ;;
+      ldap_host) expected="$HARNESS_LDAP_HOST" ;;
+      ldap_port) expected="$HARNESS_LDAP_PORT" ;;
+      ldap_base_dn) expected="$HARNESS_LDAP_BASE_DN" ;;
+      ldap_user_base) expected="$HARNESS_LDAP_USER_BASE" ;;
+      ldap_group_base) expected="$HARNESS_LDAP_GROUP_BASE" ;;
+      ldap_bind_dn) expected="$HARNESS_LDAP_BIND_DN" ;;
+      status) expected=ready ;;
+    esac
+    actual="$(marker_value "$HARNESS_VM_BASELINE_PREREQS_MARKER" "$key" 2>/dev/null || true)"
+    [ "$actual" = "$expected" ] || return 1
+  done
+  vm_libvirt_baked_base_image_ready || return 1
+}
+
+vm_state_require_baseline_prereqs_marker() {
+  vm_state_baseline_prereqs_marker_valid ||
+    die "Stale VM baseline prerequisite marker: $HARNESS_VM_BASELINE_PREREQS_MARKER"
 }
 
 vm_state_baseline_prereqs_status() {
-  if [ -f "$HARNESS_VM_BASELINE_PREREQS_MARKER" ]; then
+  if [ ! -f "$HARNESS_VM_BASELINE_PREREQS_MARKER" ]; then
+    printf 'pending'
+  elif vm_state_baseline_prereqs_marker_valid; then
     printf 'ready'
   else
-    printf 'pending'
+    printf 'stale'
   fi
 }
 
@@ -112,9 +185,12 @@ vm_state_verify_vm_set_marker_key() {
 }
 
 vm_state_verify_vm_set_marker() {
-  local key
+  local key schema
   [ -f "$HARNESS_VM_SET_MARKER" ] ||
     die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
+  schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
+  [ "$schema" = 2 ] ||
+    die "Incompatible legacy VM set $LOOPFORGE_VM_SET_ID. Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup."
   for key in \
     mode \
     vm_set_id \
@@ -130,6 +206,20 @@ vm_state_verify_vm_set_marker() {
     ownership_schema_version
   do
     vm_state_verify_vm_set_marker_key "$key"
+  done
+}
+
+vm_state_verify_vm_set_base_identity() {
+  local key expected actual
+  for key in base_image base_image_fingerprint disk_size; do
+    case "$key" in
+      base_image) expected="$(vm_libvirt_baked_base_image_path)" ;;
+      base_image_fingerprint) expected="$VM_BAKED_BASE_IMAGE_FINGERPRINT" ;;
+      disk_size) expected="$VM_DOMAIN_DISK_SIZE" ;;
+    esac
+    actual="$(marker_value "$HARNESS_VM_SET_MARKER" "$key" 2>/dev/null || true)"
+    [ "$actual" = "$expected" ] ||
+      die "Incompatible VM set $LOOPFORGE_VM_SET_ID base-image identity ($key). Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup."
   done
 }
 
@@ -197,4 +287,9 @@ vm_state_audit_readonly() {
   vm_state_validate_core
   vm_state_verify_run_marker
   vm_state_validate_vm_set_ownership_readonly >/dev/null
+  if [ -f "$HARNESS_VM_BASELINE_PREREQS_MARKER" ]; then
+    vm_state_require_baseline_prereqs_marker
+    vm_libvirt_baked_base_image_ready ||
+      die "VM baked-image cache integrity validation failed during audit-state"
+  fi
 }
