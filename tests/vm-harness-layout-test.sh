@@ -34,9 +34,14 @@ require_in_file() {
 
 mapfile -t vm_impl_files < <(
   find "$vm_root" -type f \
-    \( -name 'simulate.sh' -o -path "$vm_root/lib/*.sh" \) |
+    \( -name 'simulate.sh' -o -path "$vm_root/lib/*.sh" -o -path "$vm_root/tools/*.sh" \) |
     sort
 )
+
+[ -x "$vm_root/tools/cleanup-libvirt-resources.sh" ] || {
+  printf 'Missing executable VM libvirt resource cleanup tool\n' >&2
+  exit 1
+}
 
 if [ -f "$vm_root/simulate.sh" ]; then
   require_in_file "$vm_root/simulate.sh" 'simulation/lib|/lib/' \

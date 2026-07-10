@@ -336,6 +336,12 @@ require_doc_text simulation/vm/README.md \
   'Use `destroy` only when the reusable VM set should be permanently removed.' \
   'VM README must document destroy as permanent VM-set removal'
 require_doc_text simulation/vm/README.md \
+  'cleanup-libvirt-resources.sh --dry-run' \
+  'VM README must document host cleanup dry-run'
+require_doc_text simulation/vm/README.md \
+  'host-wide recovery tool' \
+  'VM README must distinguish host cleanup from selected VM-set destroy'
+require_doc_text simulation/vm/README.md \
   'Exported artifact review copies' \
   'VM README must document exported artifacts as review copies'
 require_doc_text simulation/vm/README.md \

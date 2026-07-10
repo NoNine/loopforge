@@ -334,6 +334,22 @@ simulation steps.
 
 ## Cleanup And Destruction
 
+Host-wide libvirt recovery is available as a separate operator tool:
+
+```bash
+simulation/vm/tools/cleanup-libvirt-resources.sh --dry-run
+sudo simulation/vm/tools/cleanup-libvirt-resources.sh
+```
+
+The dry run inventories every `loopforge-vm-*` domain, managed volume, pool,
+and network plus every `lf-*` bridge and prints the ordered removal actions
+without mutation. Actual cleanup requires root, deletes all matching libvirt
+resources through libvirt APIs before removing residual LoopForge bridges, and
+fails if any matching resource remains. It does not remove generated
+workspaces, logs, evidence, test images, or source cloud images. This is a
+host-wide recovery tool, not the ownership-checked, selected-VM-set behavior
+of the M5 `destroy` command.
+
 `down`, `clean`, and `destroy` are deliberately separate:
 
 - `down` stops selected VM domains and preserves VM state.
