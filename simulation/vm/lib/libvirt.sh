@@ -390,6 +390,41 @@ vm_libvirt_machine_exists() {
   virsh -c "$VM_LIBVIRT_URI" dominfo "$(vm_libvirt_domain_name "$1")" >/dev/null 2>&1
 }
 
+vm_libvirt_domain_uuid() {
+  virsh -c "$VM_LIBVIRT_URI" domuuid "$(vm_libvirt_domain_name "${1:?machine required}")"
+}
+
+vm_libvirt_verify_domain_attachments() {
+  local disk domain machine mac network seed
+  machine="${1:?machine required}"
+  domain="$(vm_libvirt_domain_name "$machine")"
+  disk="$(vm_libvirt_disk_path "$machine")"
+  seed="$(vm_libvirt_seed_iso_path "$machine")"
+  network="$(vm_libvirt_network_name)"
+  mac="$(vm_libvirt_machine_mac "$machine")"
+  virsh -c "$VM_LIBVIRT_URI" dumpxml "$domain" | python3 -c '
+import os, sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.stdin).getroot()
+expected_disk, expected_seed, expected_network, expected_mac = sys.argv[1:]
+nodes = root.findall("./devices/disk")
+disks = [os.path.abspath(n.find("./source").get("file")) for n in nodes
+         if n.get("device") == "disk" and n.find("./source") is not None]
+seeds = [os.path.abspath(n.find("./source").get("file")) for n in nodes
+         if n.get("device") == "cdrom" and n.find("./source") is not None]
+interfaces = root.findall("./devices/interface")
+networks = [n.find("./source").get("network") for n in interfaces
+            if n.find("./source") is not None]
+macs = [n.find("./mac").get("address") for n in interfaces
+        if n.find("./mac") is not None]
+if disks != [os.path.abspath(expected_disk)]:
+    raise SystemExit("domain disk attachment does not match selected volume")
+if os.path.abspath(expected_seed) not in seeds:
+    raise SystemExit("domain seed attachment does not match selected VM set")
+if networks != [expected_network] or macs != [expected_mac]:
+    raise SystemExit("domain network attachment does not match selected VM set")
+' "$disk" "$seed" "$network" "$mac"
+}
+
 vm_libvirt_network_is_active() {
   local network
   network="$(vm_libvirt_network_name)"
@@ -1533,6 +1568,331 @@ vm_libvirt_verify_baseline_prereqs() {
   vm_state_write_baseline_prereqs_marker || return $?
   printf 'baseline-prereqs=ready marker=%s\n' \
     "$HARNESS_VM_BASELINE_PREREQS_MARKER"
+}
+
+vm_libvirt_snapshot_exists() {
+  local domain
+  domain="$(vm_libvirt_domain_name "${1:?machine required}")"
+  virsh -c "$VM_LIBVIRT_URI" snapshot-info "$domain" \
+    --snapshotname "$VM_BASELINE_SNAPSHOT_NAME" >/dev/null 2>&1
+}
+
+vm_libvirt_write_snapshot_record() {
+  local machine record tmp
+  machine="${1:?machine required}"
+  record="$(vm_path_vm_snapshot_record "$machine")"
+  mkdir -p "$HARNESS_VM_SNAPSHOT_DIR"
+  tmp="$(mktemp "${record}.XXXXXX")"
+  cat >"$tmp" <<EOF
+schema=1
+mode=$HARNESS_MODE
+vm_set_id=$LOOPFORGE_VM_SET_ID
+project_name=$HARNESS_PROJECT_NAME
+machine=$machine
+domain=$(vm_libvirt_domain_name "$machine")
+domain_uuid=$(vm_libvirt_domain_uuid "$machine")
+storage_pool_name=$(vm_libvirt_storage_pool_name)
+volume_name=$(vm_libvirt_machine_volume_name "$machine")
+disk=$(vm_libvirt_volume_path "$(vm_libvirt_storage_pool_name)" "$(vm_libvirt_machine_volume_name "$machine")")
+snapshot_name=$VM_BASELINE_SNAPSHOT_NAME
+vm_set_marker_sha256=$(sha256sum "$HARNESS_VM_SET_MARKER" | awk '{print $1}')
+baseline_prereqs_sha256=$(sha256sum "$HARNESS_VM_BASELINE_PREREQS_MARKER" | awk '{print $1}')
+capture_run_id=$HARNESS_RUN_ID
+captured_at=$(timestamp_utc)
+EOF
+  chmod 0600 "$tmp"
+  mv -- "$tmp" "$record"
+}
+
+vm_libvirt_verify_snapshot_record() {
+  local actual expected key machine record
+  machine="${1:?machine required}"
+  record="$(vm_path_vm_snapshot_record "$machine")"
+  [ -r "$record" ] || die "Missing VM baseline snapshot record: $record"
+  for key in schema mode vm_set_id project_name machine domain domain_uuid \
+    storage_pool_name volume_name disk snapshot_name vm_set_marker_sha256 \
+    baseline_prereqs_sha256 capture_run_id captured_at; do
+    actual="$(marker_value "$record" "$key" 2>/dev/null || true)"
+    case "$key" in
+      schema) expected=1 ;;
+      mode) expected="$HARNESS_MODE" ;;
+      vm_set_id) expected="$LOOPFORGE_VM_SET_ID" ;;
+      project_name) expected="$HARNESS_PROJECT_NAME" ;;
+      machine) expected="$machine" ;;
+      domain) expected="$(vm_libvirt_domain_name "$machine")" ;;
+      domain_uuid) expected="$(vm_libvirt_domain_uuid "$machine")" ;;
+      storage_pool_name) expected="$(vm_libvirt_storage_pool_name)" ;;
+      volume_name) expected="$(vm_libvirt_machine_volume_name "$machine")" ;;
+      disk) expected="$(vm_libvirt_volume_path "$(vm_libvirt_storage_pool_name)" "$(vm_libvirt_machine_volume_name "$machine")")" ;;
+      snapshot_name) expected="$VM_BASELINE_SNAPSHOT_NAME" ;;
+      vm_set_marker_sha256) expected="$(sha256sum "$HARNESS_VM_SET_MARKER" | awk '{print $1}')" ;;
+      baseline_prereqs_sha256) expected="$(sha256sum "$HARNESS_VM_BASELINE_PREREQS_MARKER" | awk '{print $1}')" ;;
+      capture_run_id|captured_at) expected="$actual" ;;
+    esac
+    [ -n "$actual" ] && [ "$actual" = "$expected" ] ||
+      die "VM baseline snapshot record mismatch for $machine ($key)"
+  done
+  vm_libvirt_snapshot_exists "$machine" ||
+    die "Missing libvirt baseline snapshot for $machine: $VM_BASELINE_SNAPSHOT_NAME"
+}
+
+vm_libvirt_verify_baseline_snapshots() {
+  local machine
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_verify_snapshot_record "$machine" || return $?
+  done
+}
+
+vm_libvirt_capture_baseline() {
+  local created domain machine status
+  status="$(vm_state_baseline_snapshot_status)"
+  case "$status" in
+    ready)
+      printf 'baseline-snapshot=ready source=existing\n'
+      return 0
+      ;;
+    stale)
+      die "Incomplete or mismatched VM baseline snapshot state; destroy the selected VM set before retrying create"
+      ;;
+  esac
+  vm_state_require_baseline_prereqs_marker
+  created=""
+  for machine in "${vm_machines[@]}"; do
+    domain="$(vm_libvirt_domain_name "$machine")"
+    case "$(vm_libvirt_domain_state "$machine")" in
+      'shut off'|shut*) ;;
+      *) die "VM domain must be shut off before baseline snapshot capture: $domain" ;;
+    esac
+    if ! virsh -c "$VM_LIBVIRT_URI" snapshot-create-as "$domain" \
+      --name "$VM_BASELINE_SNAPSHOT_NAME" \
+      --description "Loopforge clean baseline for $LOOPFORGE_VM_SET_ID" \
+      --atomic >/dev/null; then
+      for domain in $created; do
+        virsh -c "$VM_LIBVIRT_URI" snapshot-delete "$domain" \
+          "$VM_BASELINE_SNAPSHOT_NAME" >/dev/null 2>&1 || true
+      done
+      rm -rf -- "$HARNESS_VM_SNAPSHOT_DIR"
+      return 1
+    fi
+    created="$created $domain"
+    if ! vm_libvirt_write_snapshot_record "$machine"; then
+      for domain in $created; do
+        virsh -c "$VM_LIBVIRT_URI" snapshot-delete "$domain" \
+          "$VM_BASELINE_SNAPSHOT_NAME" >/dev/null 2>&1 || true
+      done
+      rm -rf -- "$HARNESS_VM_SNAPSHOT_DIR"
+      return 1
+    fi
+  done
+  vm_libvirt_verify_baseline_snapshots || return $?
+  printf 'baseline-snapshot=ready source=captured\n'
+}
+
+vm_libvirt_verify_selected_domain_names() {
+  local actual expected machine
+  expected="$(for machine in "${vm_machines[@]}"; do
+    printf '%s\n' "$(vm_libvirt_domain_name "$machine")"
+  done | sort)"
+  actual="$(vm_libvirt_list_selected_domains | sort)"
+  [ "$actual" = "$expected" ] || {
+    printf 'ERROR: Selected libvirt domain inventory does not match the owned VM set\n' >&2
+    printf 'expected-domains=%s\n' "$(printf '%s' "$expected" | paste -sd, -)" >&2
+    printf 'actual-domains=%s\n' "$(printf '%s' "$actual" | paste -sd, -)" >&2
+    return 1
+  }
+}
+
+vm_libvirt_verify_network_identity() {
+  local bridge network
+  network="$(vm_libvirt_network_name)"
+  bridge="$(vm_libvirt_bridge_name)"
+  virsh -c "$VM_LIBVIRT_URI" net-dumpxml "$network" | python3 -c '
+import sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.stdin).getroot()
+name, bridge = sys.argv[1:]
+bridge_node = root.find("./bridge")
+if root.findtext("./name") != name or bridge_node is None or bridge_node.get("name") != bridge:
+    raise SystemExit("network identity mismatch")
+' "$network" "$bridge"
+}
+
+vm_libvirt_verify_selected_set_ownership() {
+  local machine pool
+  vm_state_verify_vm_set_marker || return $?
+  vm_libvirt_verify_selected_domain_names || return $?
+  vm_libvirt_selected_network_exists || die "Missing selected VM network: $(vm_libvirt_network_name)"
+  vm_libvirt_verify_network_identity || die "Selected VM network identity mismatch"
+  pool="$(vm_libvirt_storage_pool_name)"
+  vm_libvirt_require_directory_pool "$pool" "$(vm_path_vm_set_disk_dir)" ||
+    die "Selected VM storage pool identity mismatch: $pool"
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_machine_exists "$machine" || die "Missing selected VM domain: $(vm_libvirt_domain_name "$machine")"
+    vm_libvirt_verify_existing_disk_identity "$machine" || return $?
+    vm_libvirt_verify_domain_attachments "$machine" ||
+      die "Selected VM domain attachment identity mismatch: $(vm_libvirt_domain_name "$machine")"
+  done
+}
+
+vm_libvirt_restore_baseline() {
+  local machine
+  vm_state_require_baseline_prereqs_marker || return $?
+  vm_libvirt_verify_selected_set_ownership || return $?
+  vm_libvirt_verify_baseline_snapshots || return $?
+  vm_libvirt_shutdown_set || return $?
+  for machine in "${vm_machines[@]}"; do
+    virsh -c "$VM_LIBVIRT_URI" snapshot-revert \
+      "$(vm_libvirt_domain_name "$machine")" \
+      "$VM_BASELINE_SNAPSHOT_NAME" >/dev/null || return $?
+    case "$(vm_libvirt_domain_state "$machine")" in
+      'shut off'|shut*) ;;
+      *) die "Baseline restore did not leave VM domain shut off: $(vm_libvirt_domain_name "$machine")" ;;
+    esac
+  done
+  vm_libvirt_verify_selected_set_ownership || return $?
+  vm_libvirt_verify_baseline_snapshots || return $?
+  printf 'baseline-restore=ready\n'
+}
+
+vm_libvirt_verify_selected_teardown_ownership() {
+  local domain machine pool schema seed_pool volume
+  vm_state_verify_vm_set_marker_for_teardown || return $?
+  schema="$(vm_state_vm_set_schema)"
+  while IFS= read -r domain; do
+    [ -n "$domain" ] || continue
+    for machine in "${vm_machines[@]}"; do
+      [ "$domain" != "$(vm_libvirt_domain_name "$machine")" ] || continue 2
+    done
+    die "Unowned domain shares the selected VM-set prefix: $domain"
+  done < <(vm_libvirt_list_selected_domains)
+  pool="$(vm_libvirt_storage_pool_name)"
+  if vm_libvirt_pool_exists "$pool"; then
+    [ "$(vm_libvirt_pool_target "$pool")" = "$(vm_path_vm_set_disk_dir)" ] ||
+      die "Selected teardown storage pool target mismatch: $pool"
+    vm_libvirt_verify_teardown_pool_volumes "$pool" disk || return $?
+  fi
+  seed_pool="$(vm_libvirt_seed_pool_name)"
+  if vm_libvirt_pool_exists "$seed_pool"; then
+    [ "$(vm_libvirt_pool_target "$seed_pool")" = "$(vm_path_vm_set_seed_dir)" ] ||
+      die "Selected teardown seed pool target mismatch: $seed_pool"
+    vm_libvirt_verify_teardown_pool_volumes "$seed_pool" seed || return $?
+  fi
+  if vm_libvirt_selected_network_exists; then
+    vm_libvirt_verify_network_identity || die "Selected teardown network identity mismatch"
+  fi
+  for machine in "${vm_machines[@]}"; do
+    volume="$(vm_libvirt_machine_volume_name "$machine")"
+    if [ "$schema" = 5 ] && vm_libvirt_volume_exists "$pool" "$volume"; then
+      vm_libvirt_verify_teardown_disk_identity "$machine" || return $?
+    fi
+    vm_libvirt_machine_exists "$machine" || continue
+    vm_libvirt_verify_domain_attachments "$machine" ||
+      die "Selected teardown domain attachment identity mismatch: $(vm_libvirt_domain_name "$machine")"
+  done
+}
+
+vm_libvirt_verify_teardown_pool_volumes() {
+  local actual allowed kind machine pool volume
+  pool="${1:?pool required}"
+  kind="${2:?volume kind required}"
+  while IFS= read -r actual; do
+    [ -n "$actual" ] || continue
+    allowed=0
+    for machine in "${vm_machines[@]}"; do
+      case "$kind" in
+        disk) volume="$(vm_libvirt_machine_volume_name "$machine")" ;;
+        seed) volume="$machine-seed.iso" ;;
+        *) die "Unknown teardown volume kind: $kind" ;;
+      esac
+      [ "$actual" != "$volume" ] || allowed=1
+    done
+    [ "$allowed" -eq 1 ] ||
+      die "Unowned volume exists in selected teardown pool $pool: $actual"
+  done < <(virsh -c "$VM_LIBVIRT_URI" vol-list "$pool" --name)
+}
+
+vm_libvirt_verify_teardown_disk_identity() {
+  local actual expected key machine metadata pool volume
+  machine="${1:?machine required}"
+  metadata="$(vm_libvirt_machine_metadata_path "$machine")"
+  pool="$(vm_libvirt_storage_pool_name)"
+  volume="$(vm_libvirt_machine_volume_name "$machine")"
+  [ -r "$metadata" ] || die "Missing selected VM disk metadata for teardown: $metadata"
+  vm_libvirt_volume_exists "$pool" "$volume" ||
+    die "Missing selected libvirt volume for teardown: $pool/$volume"
+  for key in machine domain disk storage_pool_name volume_name disk_ownership; do
+    actual="$(marker_value "$metadata" "$key" 2>/dev/null || true)"
+    case "$key" in
+      machine) expected="$machine" ;;
+      domain) expected="$(vm_libvirt_domain_name "$machine")" ;;
+      disk) expected="$(vm_libvirt_disk_path "$machine")" ;;
+      storage_pool_name) expected="$pool" ;;
+      volume_name) expected="$volume" ;;
+      disk_ownership) expected=libvirt-managed ;;
+    esac
+    [ "$actual" = "$expected" ] ||
+      die "Selected VM disk metadata mismatch for teardown: $machine ($key)"
+  done
+  [ "$(vm_libvirt_volume_path "$pool" "$volume")" = "$(vm_libvirt_disk_path "$machine")" ] ||
+    die "Selected VM volume path mismatch for teardown: $machine"
+  [ "$(vm_libvirt_volume_value "$pool" "$volume" format)" = qcow2 ] ||
+    die "Selected VM volume format mismatch for teardown: $machine"
+}
+
+vm_libvirt_remove_pool() {
+  local pool
+  pool="${1:?pool required}"
+  vm_libvirt_pool_exists "$pool" || return 0
+  if vm_libvirt_pool_is_active "$pool"; then
+    virsh -c "$VM_LIBVIRT_URI" pool-destroy "$pool" >/dev/null || return $?
+  fi
+  virsh -c "$VM_LIBVIRT_URI" pool-undefine "$pool" >/dev/null
+}
+
+vm_libvirt_destroy_set() {
+  local domain machine network pool seed_pool state volume
+  vm_libvirt_verify_selected_teardown_ownership || return $?
+  pool="$(vm_libvirt_storage_pool_name)"
+  seed_pool="$(vm_libvirt_seed_pool_name)"
+  network="$(vm_libvirt_network_name)"
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_machine_exists "$machine" || continue
+    domain="$(vm_libvirt_domain_name "$machine")"
+    state="$(vm_libvirt_domain_state "$machine")"
+    case "$state" in
+      'shut off'|shut*) ;;
+      *) virsh -c "$VM_LIBVIRT_URI" destroy "$domain" >/dev/null || return $? ;;
+    esac
+    virsh -c "$VM_LIBVIRT_URI" undefine "$domain" \
+      --snapshots-metadata --nvram >/dev/null 2>&1 ||
+      virsh -c "$VM_LIBVIRT_URI" undefine "$domain" \
+        --snapshots-metadata >/dev/null 2>&1 ||
+      virsh -c "$VM_LIBVIRT_URI" undefine "$domain" >/dev/null || return $?
+  done
+  if vm_libvirt_pool_exists "$pool"; then
+    for machine in "${vm_machines[@]}"; do
+      volume="$(vm_libvirt_machine_volume_name "$machine")"
+      vm_libvirt_volume_exists "$pool" "$volume" || continue
+      virsh -c "$VM_LIBVIRT_URI" vol-delete "$volume" --pool "$pool" >/dev/null || return $?
+    done
+  fi
+  if vm_libvirt_pool_exists "$seed_pool"; then
+    for machine in "${vm_machines[@]}"; do
+      volume="$machine-seed.iso"
+      vm_libvirt_volume_exists "$seed_pool" "$volume" || continue
+      virsh -c "$VM_LIBVIRT_URI" vol-delete "$volume" --pool "$seed_pool" >/dev/null || return $?
+    done
+  fi
+  vm_libvirt_remove_pool "$pool" || return $?
+  vm_libvirt_remove_pool "$seed_pool" || return $?
+  if vm_libvirt_selected_network_exists; then
+    if vm_libvirt_network_is_active; then
+      virsh -c "$VM_LIBVIRT_URI" net-destroy "$network" >/dev/null || return $?
+    fi
+    virsh -c "$VM_LIBVIRT_URI" net-undefine "$network" >/dev/null || return $?
+  fi
+  vm_libvirt_selected_resources_exist &&
+    die "Selected VM resources remain after destroy"
+  printf 'vm-set-destroy=ready\n'
 }
 
 vm_libvirt_start_machine() {

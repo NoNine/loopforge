@@ -218,6 +218,64 @@ vm_state_verify_vm_set_marker() {
   done
 }
 
+vm_state_verify_vm_set_marker_for_teardown() {
+  local actual expected key schema
+  [ -f "$HARNESS_VM_SET_MARKER" ] ||
+    die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
+  schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
+  case "$schema" in
+    1|2|3|4)
+      for key in mode vm_set_id project_name repo_root vm_set_dir libvirt_uri \
+        domain_prefix network_name storage_pool_name seed_pool_name \
+        baseline_snapshot_name; do
+        actual="$(marker_value "$HARNESS_VM_SET_MARKER" "$key" 2>/dev/null || true)"
+        case "$key" in
+          mode) expected="$HARNESS_MODE" ;;
+          vm_set_id) expected="$LOOPFORGE_VM_SET_ID" ;;
+          project_name) expected="$HARNESS_PROJECT_NAME" ;;
+          repo_root) expected="$repo_root" ;;
+          vm_set_dir) expected="$HARNESS_VM_SET_DIR" ;;
+          libvirt_uri) expected="$VM_LIBVIRT_URI" ;;
+          domain_prefix) expected="$(vm_libvirt_domain_prefix)" ;;
+          network_name) expected="$(vm_libvirt_network_name)" ;;
+          storage_pool_name) expected="$(vm_libvirt_storage_pool_name)" ;;
+          seed_pool_name) expected="$(vm_libvirt_seed_pool_name)" ;;
+          baseline_snapshot_name) expected="$VM_BASELINE_SNAPSHOT_NAME" ;;
+        esac
+        [ "$actual" = "$expected" ] ||
+          die "Legacy VM-set marker $key does not match selected runtime config"
+      done
+      ;;
+    5)
+      vm_state_verify_vm_set_marker
+      ;;
+    *)
+      die "Unsupported VM-set ownership schema for teardown: ${schema:-missing}"
+      ;;
+  esac
+}
+
+vm_state_vm_set_schema() {
+  marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version
+}
+
+vm_state_baseline_snapshot_status() {
+  local machine present
+  present=0
+  for machine in "${vm_machines[@]}"; do
+    [ -f "$(vm_path_vm_snapshot_record "$machine")" ] && present=$((present + 1))
+  done
+  if [ "$present" -eq 0 ]; then
+    printf 'pending'
+  elif [ "$present" -ne "${#vm_machines[@]}" ]; then
+    printf 'stale'
+  elif vm_libvirt_verify_baseline_snapshots >/dev/null 2>&1; then
+    printf 'ready'
+  else
+    printf 'stale'
+  fi
+}
+
 vm_state_verify_vm_set_base_identity() {
   local key expected actual
   for key in base_image base_image_fingerprint base_image_pool_name \
@@ -304,4 +362,16 @@ vm_state_audit_readonly() {
     vm_libvirt_baked_base_image_ready ||
       die "VM baked-image cache integrity validation failed during audit-state"
   fi
+  if [ -d "$HARNESS_VM_SNAPSHOT_DIR" ]; then
+    vm_libvirt_verify_selected_set_ownership || return $?
+    vm_libvirt_verify_baseline_snapshots || return $?
+  fi
+}
+
+vm_state_clean_mutable_run_state() {
+  rm -rf -- "$HARNESS_HOST_DIR/state"
+}
+
+vm_state_remove_vm_set_metadata() {
+  rm -rf -- "$HARNESS_VM_SET_DIR"
 }

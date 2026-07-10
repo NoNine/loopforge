@@ -196,6 +196,7 @@ vm_cmd_run() {
 
 vm_cmd_create_steps() {
   VM_CREATE_BASELINE_INVALIDATED=0
+  VM_CREATE_BASELINE_REUSED=0
   vm_state_validate_vm_set_ownership_readonly || return $?
   vm_libvirt_require_base_image || return $?
   vm_libvirt_select_baked_base_image || return $?
@@ -210,6 +211,20 @@ vm_cmd_create_steps() {
     vm_libvirt_ensure_baked_base_image || return $?
     vm_libvirt_ensure_storage_pool || return $?
   fi
+  case "$(vm_state_baseline_snapshot_status)" in
+    ready)
+      vm_state_require_baseline_prereqs_marker || return $?
+      vm_libvirt_verify_selected_set_ownership || return $?
+      vm_libvirt_verify_baseline_snapshots || return $?
+      VM_CREATE_BASELINE_REUSED=1
+      printf 'baseline-snapshot=ready source=existing\n'
+      vm_libvirt_status_table
+      return 0
+      ;;
+    stale)
+      die "Incomplete or mismatched VM baseline snapshot state; destroy the selected VM set before retrying create"
+      ;;
+  esac
   vm_state_invalidate_baseline_prereqs_marker || return $?
   VM_CREATE_BASELINE_INVALIDATED=1
   vm_libvirt_create_set || return $?
@@ -217,6 +232,7 @@ vm_cmd_create_steps() {
   vm_ssh_prepare_all || return $?
   vm_libvirt_verify_baseline_prereqs || return $?
   vm_libvirt_shutdown_set || return $?
+  vm_libvirt_capture_baseline || return $?
   vm_libvirt_status_table
 }
 
@@ -232,14 +248,16 @@ vm_cmd_create() {
     print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
     return 1
   }
-  vm_write_ldap_evidence "$log" >/dev/null || {
-    vm_state_invalidate_baseline_prereqs_marker
-    evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 LDAP evidence generation failed after runtime proof")"
-    print_command_failure create "" "failed reason=ldap-evidence" "$log" "$evidence"
-    return 1
-  }
-  evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M4 VM set was defined and baseline prerequisites were proven before snapshot capture")"
-  print_command_summary create "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline-prereqs=ready"
+  if [ "${VM_CREATE_BASELINE_REUSED:-0}" -eq 0 ]; then
+    vm_write_ldap_evidence "$log" >/dev/null || {
+      vm_state_invalidate_baseline_prereqs_marker
+      evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 LDAP evidence generation failed after runtime proof")"
+      print_command_failure create "" "failed reason=ldap-evidence" "$log" "$evidence"
+      return 1
+    }
+  fi
+  evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M5 VM set baseline was captured after prerequisite proof")"
+  print_command_summary create "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline-prereqs=ready baseline-snapshot=ready"
 }
 
 vm_cmd_up() {
@@ -313,7 +331,8 @@ vm_cmd_down() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log down)"
   {
-    vm_state_verify_run_and_vm_set
+    vm_state_verify_run_marker
+    vm_state_verify_vm_set_marker_for_teardown
     vm_libvirt_shutdown_set
     vm_libvirt_status_table
   } >"$log" 2>&1 || {
@@ -326,9 +345,35 @@ vm_cmd_down() {
 }
 
 vm_cmd_clean() {
-  vm_cmd_blocked_m1 clean ""
+  local evidence log
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log clean)"
+  {
+    vm_state_verify_run_and_vm_set
+    vm_libvirt_restore_baseline
+    vm_state_clean_mutable_run_state
+  } >"$log" 2>&1 || {
+    evidence="$(vm_write_harness_evidence clean fail "simulate.sh clean" "$log" "M5 baseline rollback failed ownership or snapshot validation")"
+    print_command_failure clean "" "failed reason=baseline-rollback" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence clean pass "simulate.sh clean" "$log" "M5 restored the selected owned VM set and preserved review output")"
+  print_command_summary clean "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline=restored"
 }
 
 vm_cmd_destroy() {
-  vm_cmd_blocked_m1 destroy ""
+  local evidence log
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log destroy)"
+  {
+    vm_state_verify_run_marker
+    vm_libvirt_destroy_set
+    vm_state_remove_vm_set_metadata
+  } >"$log" 2>&1 || {
+    evidence="$(vm_write_harness_evidence destroy fail "simulate.sh destroy" "$log" "M5 selected VM-set destruction failed ownership validation or removal")"
+    print_command_failure destroy "" "failed reason=vm-set-destroy" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence destroy pass "simulate.sh destroy" "$log" "M5 permanently removed only the selected owned VM set")"
+  print_command_summary destroy "" "ok vm-set=$LOOPFORGE_VM_SET_ID removed"
 }

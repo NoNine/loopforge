@@ -42,6 +42,10 @@ mapfile -t vm_impl_files < <(
   printf 'Missing executable VM libvirt resource cleanup tool\n' >&2
   exit 1
 }
+[ -x "$repo_root/tests/vm-harness-m5-lifecycle-test.sh" ] || {
+  printf 'Missing executable VM M5 lifecycle test\n' >&2
+  exit 1
+}
 
 if [ -f "$vm_root/simulate.sh" ]; then
   require_in_file "$vm_root/simulate.sh" 'simulation/lib|/lib/' \

@@ -113,3 +113,23 @@ if PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" --env "$env_fil
   exit 1
 fi
 grep -Fq 'VM-set marker vm_set_id does not match selected runtime config' "$audit_err"
+
+cat >"$marker" <<EOF
+mode=vm-simulation
+vm_set_id=$vm_set_id
+project_name=$project_name
+repo_root=$repo_root
+vm_set_dir=$vm_set_dir
+libvirt_uri=qemu:///system
+domain_prefix=$project_name-
+network_name=$project_name-net
+storage_pool_name=$project_name-images
+seed_pool_name=$project_name-seed
+baseline_snapshot_name=loopforge-clean-baseline
+ownership_schema_version=1
+EOF
+chmod 0600 "$marker"
+PATH="$stub_bin:$PATH" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" destroy >"$tmp_dir/destroy-legacy.out"
+grep -Fxq "destroy: ok vm-set=$vm_set_id removed" "$tmp_dir/destroy-legacy.out"
+[ ! -e "$vm_set_dir" ]

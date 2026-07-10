@@ -282,8 +282,8 @@ require_doc_text docs/directory-model.md \
   'Libvirt directory-pool target' \
   'Directory model must identify libvirt-managed VM image paths'
 require_doc_text simulation/vm/README.md \
-  'Legacy VM sets rejected by M4 remain preserved until M5' \
-  'VM README must document deferred legacy VM-set cleanup'
+  'Legacy VM sets rejected by normal lifecycle commands remain eligible only for' \
+  'VM README must document ownership-checked legacy VM-set cleanup'
 require_doc_text simulation/vm/README.md \
   'size, and VM package matrix' \
   'VM README must document baked base-image invalidation inputs'

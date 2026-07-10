@@ -7,7 +7,11 @@ tmp_dir="$(mktemp -d)"
 run_id="vm-m3-$$"
 vm_set_id="m3-$$"
 generated_root="$repo_root/generated/simulation/vm"
-trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id"' EXIT
+cleanup() {
+  [ "${VM_TEST_KEEP_TMP:-0}" -eq 1 ] ||
+    rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id"
+}
+trap cleanup EXIT
 
 env_file="$tmp_dir/harness.env"
 stub_bin="$tmp_dir/bin"
@@ -85,6 +89,12 @@ case "$cmd" in
     pool="${1:?pool required}"
     [ -f "$state_dir/pools/$pool/active" ]
     ;;
+  pool-destroy)
+    rm -f "$state_dir/pools/${1:?pool required}/active"
+    ;;
+  pool-undefine)
+    rm -rf "$state_dir/pools/${1:?pool required}"
+    ;;
   vol-info)
     volume="${1:?volume required}"
     shift
@@ -92,6 +102,11 @@ case "$cmd" in
     pool="${2:?pool required}"
     target="$(cat "$state_dir/pools/$pool/target")"
     [ -f "$target/$volume" ]
+    ;;
+  vol-list)
+    pool="${1:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    find "$target" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | sort
     ;;
   vol-path)
     volume="${1:?volume required}"
@@ -138,6 +153,14 @@ case "$cmd" in
     target="$(cat "$state_dir/pools/$pool/target")"
     cp "$target/$volume" "$output"
     ;;
+  vol-delete)
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    rm -f "$target/$volume" "$state_dir/pools/$pool/volumes/$volume.xml"
+    ;;
   net-info)
     if [ -f "$state_dir/network.active" ]; then
       printf 'Active: yes\n'
@@ -148,10 +171,20 @@ case "$cmd" in
   net-define)
     xml="${1:?xml required}"
     sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" >"$state_dir/network.name"
+    cp "$xml" "$state_dir/network.xml"
+    ;;
+  net-dumpxml)
+    cat "$state_dir/network.xml"
     ;;
   net-start)
     printf '%s\n' "$1" >"$state_dir/network.name"
     touch "$state_dir/network.active"
+    ;;
+  net-destroy)
+    rm -f "$state_dir/network.active"
+    ;;
+  net-undefine)
+    rm -f "$state_dir/network.name" "$state_dir/network.xml"
     ;;
   dominfo)
     domain="${1:?domain required}"
@@ -162,6 +195,13 @@ case "$cmd" in
     domain="$(sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" | head -1)"
     mkdir -p "$state_dir/domains"
     printf 'shut off\n' >"$state_dir/domains/$domain.state"
+    cp "$xml" "$state_dir/domains/$domain.xml"
+    ;;
+  dumpxml)
+    cat "$state_dir/domains/${1:?domain required}.xml"
+    ;;
+  domuuid)
+    printf '%s\n' "${1:?domain required}" | sha256sum | awk '{print substr($1, 1, 32)}'
     ;;
   domstate)
     domain="${1:?domain required}"
@@ -187,7 +227,30 @@ case "$cmd" in
     ;;
   undefine)
     domain="${1:?domain required}"
-    rm -f "$state_dir/domains/$domain.state"
+    rm -rf "$state_dir/domains/$domain.state" "$state_dir/domains/$domain.xml" \
+      "$state_dir/snapshots/$domain"
+    ;;
+  snapshot-create-as)
+    domain="${1:?domain required}"
+    shift
+    [ "${1:-}" = --name ]
+    snapshot="${2:?snapshot required}"
+    mkdir -p "$state_dir/snapshots/$domain"
+    touch "$state_dir/snapshots/$domain/$snapshot"
+    ;;
+  snapshot-info)
+    domain="${1:?domain required}"
+    shift
+    [ "${1:-}" = --snapshotname ]
+    [ -f "$state_dir/snapshots/$domain/${2:?snapshot required}" ]
+    ;;
+  snapshot-delete)
+    rm -f "$state_dir/snapshots/${1:?domain required}/${2:?snapshot required}"
+    ;;
+  snapshot-revert)
+    domain="${1:?domain required}"
+    [ -f "$state_dir/snapshots/$domain/${2:?snapshot required}" ]
+    printf 'shut off\n' >"$state_dir/domains/$domain.state"
     ;;
   net-dhcp-leases)
     mac=""
@@ -348,7 +411,7 @@ grep -Fxq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create.out"
-grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready" "$tmp_dir/create.out"
+grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" "$tmp_dir/create.out"
 marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-set.env"
 grep -Fq "vm_set_id=$vm_set_id" "$marker"
 grep -Fq 'ownership_schema_version=5' "$marker"
@@ -401,3 +464,70 @@ PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" down >"$tmp_dir/down.out"
 grep -Fxq "down: ok vm-set=$vm_set_id" "$tmp_dir/down.out"
 grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-gerrit.state"
+
+if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
+  snapshot_dir="$generated_root/vm-sets/$vm_set_id/snapshots"
+  for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
+    record="$snapshot_dir/$machine.env"
+    [ -f "$record" ]
+    grep -Fq 'schema=1' "$record"
+    grep -Fq "snapshot_name=loopforge-clean-baseline" "$record"
+    [ -f "$stub_state/snapshots/loopforge-vm-$run_id-$vm_set_id-$machine/loopforge-clean-baseline" ]
+  done
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-reuse.out"
+  grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" \
+    "$tmp_dir/create-reuse.out"
+  reuse_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
+  grep -Fq 'baseline-snapshot=ready source=existing' "$reuse_log"
+
+  mkdir -p "$generated_root/$run_id/host/state"
+  touch "$generated_root/$run_id/host/state/mutable-marker"
+  printf 'retained\n' >"$generated_root/$run_id/host/artifacts/exported/m5.txt"
+  printf 'retained\n' >"$generated_root/$run_id/target/evidence/gerrit/m5.txt"
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/m5-up.out"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" clean >"$tmp_dir/clean.out"
+  grep -Fxq "clean: ok vm-set=$vm_set_id baseline=restored" "$tmp_dir/clean.out"
+  [ ! -e "$generated_root/$run_id/host/state" ]
+  [ -f "$generated_root/$run_id/host/artifacts/exported/m5.txt" ]
+  [ -f "$generated_root/$run_id/target/evidence/gerrit/m5.txt" ]
+  [ -f "$generated_root/$run_id/.loopforge-vm-run.env" ]
+  [ -f "$generated_root/$run_id/host/rendered/harness.runtime.env" ]
+  for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
+    grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
+  done
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$tmp_dir/audit-clean.out"
+  grep -Fxq 'audit-state: ok' "$tmp_dir/audit-clean.out"
+
+  touch "$generated_root/vm-sets/$vm_set_id/libvirt/disks/unowned.qcow2"
+  if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" destroy >"$tmp_dir/destroy-unowned.out"; then
+    printf 'destroy must reject an unowned volume in the selected pool\n' >&2
+    exit 1
+  fi
+  [ -f "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-gerrit.state" ]
+  rm -f "$generated_root/vm-sets/$vm_set_id/libvirt/disks/unowned.qcow2"
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" destroy >"$tmp_dir/destroy.out"
+  grep -Fxq "destroy: ok vm-set=$vm_set_id removed" "$tmp_dir/destroy.out"
+  [ ! -e "$generated_root/vm-sets/$vm_set_id" ]
+  [ ! -e "$stub_state/network.name" ]
+  [ ! -d "$stub_state/pools/loopforge-vm-$run_id-$vm_set_id-images" ]
+  find "$stub_state/pools" -mindepth 1 -maxdepth 1 -type d \
+    -name 'loopforge-vm-base-*' -print -quit | grep -q .
+  [ -f "$generated_root/$run_id/host/artifacts/exported/m5.txt" ]
+  [ -f "$generated_root/$run_id/target/evidence/gerrit/m5.txt" ]
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$tmp_dir/audit-destroy.out"
+  grep -Fxq 'audit-state: ok' "$tmp_dir/audit-destroy.out"
+  audit_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'audit-state-*.log' -print | sort | tail -1)"
+  grep -Fq 'vm-set=absent vm-resources=absent' "$audit_log"
+fi

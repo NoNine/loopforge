@@ -248,10 +248,10 @@ closed and is not replaced because reusable VM disks may depend on it.
 Each reusable VM disk records and verifies its storage pool, volume, backing
 path, fingerprint, SHA-256, and disk size through libvirt APIs. `create`
 rejects legacy unmanaged sets or mismatched volume metadata without changing
-the selected VM disks. To continue before M5, choose a fresh
+the selected VM disks. To continue normal lifecycle work, choose a fresh
 `HARNESS_RUN_ID` and `LOOPFORGE_VM_SET_ID`, run `init-run`, then run `create`.
-Retain the old env and VM-set state; do not delete its libvirt resources or
-generated backing directly.
+Retain the old env and use ownership-checked `down` and `destroy` for the old
+set; do not delete its libvirt resources or generated backing directly.
 
 ## Simulation Accounts
 
@@ -386,9 +386,9 @@ inconsistent, lifecycle phases fail clearly instead of recreating state or
 rerunning earlier phases. Recover with the explicit `down`, `clean`, or
 `destroy` command for the selected VM set and run.
 
-Legacy VM sets rejected by M4 remain preserved until M5 implements
-ownership-checked destruction. After M5 is available, clean up the old set with
-its retained env:
+Legacy VM sets rejected by normal lifecycle commands remain eligible only for
+ownership-checked `down` and `destroy`. Clean up an old set with its retained
+env:
 
 ```bash
 simulation/vm/simulate.sh --env OLD_ENV down
@@ -396,8 +396,9 @@ simulation/vm/simulate.sh --env OLD_ENV destroy
 simulation/vm/simulate.sh --env OLD_ENV audit-state
 ```
 
-M5 `destroy` must recognize the legacy ownership marker only for cleanup,
-validate its immutable ownership fields, and remove only the selected VM set.
+`destroy` recognizes legacy ownership schemas only for cleanup, validates their
+immutable ownership fields, and removes only the selected VM set. Legacy sets
+cannot be rolled back because they have no M5 baseline snapshot registry.
 
 Typical flow:
 

@@ -9,7 +9,15 @@ vm_set_id="m4-$$"
 generated_root="$repo_root/generated/simulation/vm"
 baked_cache_dir=""
 case_baked_cache_dirs="$tmp_dir/case-baked-cache-dirs"
-trap 'if [ -f "$case_baked_cache_dirs" ]; then xargs -r rm -rf <"$case_baked_cache_dirs"; fi; rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" "$baked_cache_dir"' EXIT
+cleanup() {
+  if [ -f "$case_baked_cache_dirs" ]; then
+    xargs -r rm -rf <"$case_baked_cache_dirs"
+  fi
+  [ "${VM_TEST_KEEP_TMP:-0}" -eq 1 ] ||
+    rm -rf "$tmp_dir" "$generated_root/$run_id" \
+      "$generated_root/vm-sets/$vm_set_id" "$baked_cache_dir"
+}
+trap cleanup EXIT
 
 env_file="$tmp_dir/harness.env"
 stub_bin="$tmp_dir/bin"
@@ -87,6 +95,12 @@ case "$cmd" in
     pool="${1:?pool required}"
     [ -f "$state_dir/pools/$pool/active" ]
     ;;
+  pool-destroy)
+    rm -f "$state_dir/pools/${1:?pool required}/active"
+    ;;
+  pool-undefine)
+    rm -rf "$state_dir/pools/${1:?pool required}"
+    ;;
   vol-info)
     volume="${1:?volume required}"
     shift
@@ -94,6 +108,11 @@ case "$cmd" in
     pool="${2:?pool required}"
     target="$(cat "$state_dir/pools/$pool/target")"
     [ -f "$target/$volume" ]
+    ;;
+  vol-list)
+    pool="${1:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    find "$target" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | sort
     ;;
   vol-path)
     volume="${1:?volume required}"
@@ -140,6 +159,14 @@ case "$cmd" in
     target="$(cat "$state_dir/pools/$pool/target")"
     cp "$target/$volume" "$output"
     ;;
+  vol-delete)
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    rm -f "$target/$volume" "$state_dir/pools/$pool/volumes/$volume.xml"
+    ;;
   net-info)
     if [ -f "$state_dir/network.active" ]; then
       printf 'Active: yes\n'
@@ -150,10 +177,20 @@ case "$cmd" in
   net-define)
     xml="${1:?xml required}"
     sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" >"$state_dir/network.name"
+    cp "$xml" "$state_dir/network.xml"
+    ;;
+  net-dumpxml)
+    cat "$state_dir/network.xml"
     ;;
   net-start)
     printf '%s\n' "$1" >"$state_dir/network.name"
     touch "$state_dir/network.active"
+    ;;
+  net-destroy)
+    rm -f "$state_dir/network.active"
+    ;;
+  net-undefine)
+    rm -f "$state_dir/network.name" "$state_dir/network.xml"
     ;;
   dominfo)
     domain="${1:?domain required}"
@@ -164,6 +201,13 @@ case "$cmd" in
     domain="$(sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" | head -1)"
     mkdir -p "$state_dir/domains"
     printf 'shut off\n' >"$state_dir/domains/$domain.state"
+    cp "$xml" "$state_dir/domains/$domain.xml"
+    ;;
+  dumpxml)
+    cat "$state_dir/domains/${1:?domain required}.xml"
+    ;;
+  domuuid)
+    printf '%s\n' "${1:?domain required}" | sha256sum | awk '{print substr($1, 1, 32)}'
     ;;
   domstate)
     domain="${1:?domain required}"
@@ -189,7 +233,30 @@ case "$cmd" in
     ;;
   undefine)
     domain="${1:?domain required}"
-    rm -f "$state_dir/domains/$domain.state"
+    rm -rf "$state_dir/domains/$domain.state" "$state_dir/domains/$domain.xml" \
+      "$state_dir/snapshots/$domain"
+    ;;
+  snapshot-create-as)
+    domain="${1:?domain required}"
+    shift
+    [ "${1:-}" = --name ]
+    snapshot="${2:?snapshot required}"
+    mkdir -p "$state_dir/snapshots/$domain"
+    touch "$state_dir/snapshots/$domain/$snapshot"
+    ;;
+  snapshot-info)
+    domain="${1:?domain required}"
+    shift
+    [ "${1:-}" = --snapshotname ]
+    [ -f "$state_dir/snapshots/$domain/${2:?snapshot required}" ]
+    ;;
+  snapshot-delete)
+    rm -f "$state_dir/snapshots/${1:?domain required}/${2:?snapshot required}"
+    ;;
+  snapshot-revert)
+    domain="${1:?domain required}"
+    [ -f "$state_dir/snapshots/$domain/${2:?snapshot required}" ]
+    printf 'shut off\n' >"$state_dir/domains/$domain.state"
     ;;
   net-dhcp-leases)
     mac=""
@@ -420,7 +487,7 @@ grep -Fxq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create.out"
-grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready" "$tmp_dir/create.out"
+grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" "$tmp_dir/create.out"
 
 marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-baseline-prereqs.env"
 [ -f "$marker" ]
@@ -588,7 +655,7 @@ PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$cache_hit_env" init-run >"$tmp_dir/init-run-cache-hit.out"
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$cache_hit_env" create >"$tmp_dir/create-cache-hit.out"
-grep -Fxq "create: ok vm-set=$cache_hit_vm_set_id baseline-prereqs=ready" "$tmp_dir/create-cache-hit.out"
+grep -Fxq "create: ok vm-set=$cache_hit_vm_set_id baseline-prereqs=ready baseline-snapshot=ready" "$tmp_dir/create-cache-hit.out"
 cache_hit_log="$(find "$generated_root/$cache_hit_run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
 grep -Fq 'base-image-cache=hit' "$cache_hit_log"
 after_cache_hit_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
@@ -713,16 +780,6 @@ run_fail_closed_case slapd 'forced slapd failure'
 run_fail_closed_case ldap-consumer 'forced ldap consumer failure'
 run_fail_closed_case ldap-empty 'Missing exact VM LDAP seed proof'
 run_fail_closed_case ldap-add 'forced ldapadd failure'
-
-if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_MODE=ldap-empty \
-  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-revalidate.out" 2>&1; then
-  printf 'create revalidation must fail when exact LDAP proof is absent\n' >&2
-  exit 1
-fi
-[ ! -f "$marker" ]
-PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status-pending.out"
-grep -Eq 'LDAP[[:space:]]+pending' "$tmp_dir/status-pending.out"
 
 baked_image="$baked_cache_dir/volumes/base.qcow2"
 printf 'tampered\n' >>"$baked_image"

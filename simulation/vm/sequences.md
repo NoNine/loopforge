@@ -344,6 +344,7 @@ sequenceDiagram
   CLI->>LC: vm_cmd_clean(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_and_vm_set()
+  LC->>ST: vm_state_verify_baseline_snapshot_records()
   LC->>LV: vm_libvirt_restore_baseline()
   LC->>ST: vm_state_clean_mutable_run_state()
   LC-->>CLI: compact clean summary
@@ -362,6 +363,7 @@ sequenceDiagram
   CLI->>LC: vm_cmd_destroy(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_vm_set_marker()
+  LC->>LV: vm_libvirt_verify_selected_teardown_ownership()
   LC->>LV: vm_libvirt_destroy_set()
   LC->>ST: vm_state_remove_vm_set_metadata()
   LC-->>CLI: compact destroy summary
