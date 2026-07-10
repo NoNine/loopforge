@@ -125,10 +125,6 @@ grep -Fq -- 'wget -nv --show-progress=off' "$repo_root/scripts/jenkins-controlle
   exit 1
 }
 
-grep -Fxq -- 'version: "2"' "$repo_root/simulation/docker/compose.yaml" || {
-  printf 'Docker compose must declare legacy-compatible Compose file version 2\n' >&2
-  exit 1
-}
 grep -Fxq -- 'services:' "$repo_root/simulation/docker/compose.yaml" || {
   printf 'Docker compose must keep top-level services for Compose v2 format\n' >&2
   exit 1

@@ -65,6 +65,22 @@ helper-owned `/var/lib/loopforge/` state.
 | `/mnt/jenkins-shared` | Jenkins controller target and Jenkins agent target | Shared integration helper | Runtime owner for each host, group `JENKINS_SHARED_GROUP` | Setgid group-write storage, normally `2775` | Shared integration proof storage only | Review-sensitive; not a credential store | Evidence records group name, GID, path, and read/write proof |
 | `/tmp` transient files | Targets | Role helpers and integration helper | Creating process | Temporary only | REST payloads, public-key handoff files, generated Groovy scripts, transfer scratch | Potentially sensitive while present | Must not bypass reviewed helper inputs; do not retain as evidence |
 
+## Operator Input Custody
+
+Reviewed role env files are operator inputs, not helper-owned state. On the
+bundle factory and role targets, their canonical execution paths derive from
+the selected operator account:
+
+| Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/home/<operator-account>/loopforge-inputs/` | Bundle factory and targets | Human operator, machine runner, or simulation transfer utility | Selected operator account and group | `0700` | Reviewed helper inputs transferred for execution | Private operator input custody | Evidence may record the path and transfer status, never file contents; cleanup follows the selected environment lifecycle |
+| `/home/<operator-account>/loopforge-inputs/<role>.env` | Bundle factory and matching role target | Human operator, machine runner, or simulation transfer utility; role helper reads only | Selected operator account and group | `0600` | Full reviewed env input for `gerrit`, `jenkins-controller`, or `jenkins-agent` | Review-sensitive; execution-time secrets such as LDAP bind passwords remain excluded | Replace atomically before helper execution; never embed in bundles, helper state, service state, logs, or evidence |
+
+The default example operator account resolves these paths to
+`/home/ci-operator/loopforge-inputs/<role>.env`. Bundle-factory and target
+execution use the same flat role filenames; environment names, run IDs, and a
+`bundle-factory/` directory are not part of the canonical path.
+
 ## Helper-Owned Paths
 
 Helper-owned paths are execution state, not Gerrit or Jenkins service homes.

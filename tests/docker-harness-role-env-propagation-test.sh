@@ -192,11 +192,15 @@ do
   }
 done
 
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env' "${docker_harness_sources[@]}"
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/jenkins-controller-bundle-factory.env' "${docker_harness_sources[@]}"
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/%s.env' "${docker_harness_sources[@]}"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/gerrit.env' "${docker_harness_sources[@]}"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/jenkins-controller.env' "${docker_harness_sources[@]}"
 grep -Fq -- '/home/ci-operator/loopforge-inputs/%s.env' "${docker_harness_sources[@]}"
 grep -Fq -- 'transfer_mode=docker-cp-input-waiver' "${docker_harness_sources[@]}"
+grep -Fq -- 'ci-operator ci-operator 0600 "$log"' "${docker_harness_sources[@]}"
+if grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/' "${docker_harness_sources[@]}"; then
+  printf 'Docker bundle-factory role envs must use the canonical flat operator input path\n' >&2
+  exit 1
+fi
 if grep -Fq -- '/var/lib/loopforge/rendered' "${docker_harness_sources[@]}"; then
   printf 'Docker harness must not stage helper env files under Loopforge rendered state\n' >&2
   exit 1

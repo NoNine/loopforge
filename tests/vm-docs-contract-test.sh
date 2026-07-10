@@ -82,6 +82,27 @@ require_doc_text docs/directory-model.md \
   '`host/artifacts/exported/`' \
   'Directory model must document VM host-owned artifact review copies'
 require_doc_text docs/directory-model.md \
+  '## Operator Input Custody' \
+  'Directory model must own operator input custody paths'
+require_doc_text docs/directory-model.md \
+  '`/home/<operator-account>/loopforge-inputs/<role>.env`' \
+  'Directory model must define the configurable canonical role env path'
+require_doc_text docs/directory-model.md \
+  '`/home/ci-operator/loopforge-inputs/<role>.env`' \
+  'Directory model must name the default operator role env path'
+require_doc_text docs/directory-model.md \
+  '| `0700` |' \
+  'Directory model must protect the operator input directory'
+require_doc_text docs/directory-model.md \
+  '| `0600` |' \
+  'Directory model must protect reviewed role env files'
+require_doc_text docs/directory-model.md \
+  '`gerrit`, `jenkins-controller`, or `jenkins-agent`' \
+  'Directory model must constrain canonical role env filenames'
+require_doc_text docs/directory-model.md \
+  '`bundle-factory/` directory are not part of the canonical path' \
+  'Directory model must require a flat factory and target role env layout'
+require_doc_text docs/directory-model.md \
   'VM artifact staging uses target OS SSH' \
   'Directory model must document VM staging through target OS SSH'
 require_doc_text docs/directory-model.md \

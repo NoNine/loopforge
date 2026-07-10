@@ -155,7 +155,11 @@ grep -Fq "artifact-export=gerrit-artifacts-bundle.tar.gz" "$tmp_dir/prepare.out"
 }
 grep -Fq '"artifact_manifest_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/manifest.txt"' "$prepare_evidence"
 grep -Fq '"checksum_references": "/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256;/var/lib/loopforge/preparing/gerrit-artifacts-bundle/gerrit/checksums.sha256"' "$prepare_evidence"
-grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env' "$calls"
+grep -Fq -- '/home/ci-operator/loopforge-inputs/gerrit.env' "$calls"
+if grep -Fq -- '/home/ci-operator/loopforge-inputs/bundle-factory/' "$calls"; then
+  printf 'Bundle-factory env staging must use the canonical flat operator input path\n' >&2
+  exit 1
+fi
 if grep -Fq -- '/var/lib/loopforge/rendered' "$calls"; then
   printf 'prepare-artifacts must not stage helper env files under Loopforge rendered state\n' >&2
   exit 1

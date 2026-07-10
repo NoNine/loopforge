@@ -133,7 +133,7 @@ stage_operator_env_file() {
   owner="${4:?owner required}"
   group="${5:?group required}"
   log="${6:?log required}"
-  stage_operator_input_file "$service" "$host_env_file" "$container_env_file" "$owner" "$group" 0640 "$log"
+  stage_operator_input_file "$service" "$host_env_file" "$container_env_file" "$owner" "$group" 0600 "$log"
   printf '%s\n' "$container_env_file"
 }
 

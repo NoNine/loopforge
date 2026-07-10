@@ -24,21 +24,21 @@ ensure_gerrit_validation_key() {
 }
 
 gerrit_bundle_factory_env_file() {
-  printf '%s\n' "/home/ci-operator/loopforge-inputs/bundle-factory/gerrit-bundle-factory.env"
+  printf '%s\n' "/home/ci-operator/loopforge-inputs/gerrit.env"
 }
 
 jenkins_controller_bundle_factory_env_file() {
-  printf '%s\n' "/home/ci-operator/loopforge-inputs/bundle-factory/jenkins-controller-bundle-factory.env"
+  printf '%s\n' "/home/ci-operator/loopforge-inputs/jenkins-controller.env"
 }
 
 container_env_file_for_role() {
-  local role service state_dir
+  local role service
   role="${1:?role required}"
   service="${2:?service required}"
-  if [ "$service" = "bundle-factory" ]; then
-    printf '/home/ci-operator/loopforge-inputs/bundle-factory/%s.env\n' "$role"
-    return 0
-  fi
+  case "$service" in
+    bundle-factory|gerrit-target|jenkins-controller-target|jenkins-agent-target) ;;
+    *) die "Unknown harness service for role env: $service" ;;
+  esac
   printf '/home/ci-operator/loopforge-inputs/%s.env\n' "$role"
 }
 
@@ -162,7 +162,7 @@ stage_container_role_env() {
   host_env_file="$(host_container_env_file_for_role "$role" "$service")"
   container_env_file="$(container_env_file_for_role "$role" "$service")"
   require_readable_file "Rendered $role env file; run init-run first" "$host_env_file"
-  stage_operator_input_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator 0640 "$log"
+  stage_operator_input_file "$service" "$host_env_file" "$container_env_file" ci-operator ci-operator 0600 "$log"
   printf '%s\n' "$container_env_file"
 }
 
