@@ -86,6 +86,18 @@ vm_path_vm_set_machine_dir() {
   printf '%s/machines\n' "$(vm_path_vm_set_libvirt_dir)"
 }
 
+vm_path_vm_set_volume_dir() {
+  printf '%s/volumes\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_path_vm_set_storage_pool_xml() {
+  printf '%s/storage-pool.xml\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_path_vm_volume_xml() {
+  printf '%s/%s.xml\n' "$(vm_path_vm_set_volume_dir)" "${1:?machine required}"
+}
+
 vm_path_vm_machine_file() {
   printf '%s/%s.env\n' "$(vm_path_vm_set_machine_dir)" "${1:?machine required}"
 }
@@ -94,8 +106,16 @@ vm_path_baked_base_image_dir() {
   printf '%s/%s\n' "$(vm_path_base_image_cache_root)" "${1:?fingerprint required}"
 }
 
+vm_path_baked_base_image_volume_dir() {
+  printf '%s/volumes\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
+}
+
+vm_path_baked_base_image_pool_xml() {
+  printf '%s/storage-pool.xml\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
+}
+
 vm_path_baked_base_image() {
-  printf '%s/base.qcow2\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
+  printf '%s/base.qcow2\n' "$(vm_path_baked_base_image_volume_dir "${1:?fingerprint required}")"
 }
 
 vm_path_baked_base_image_marker() {

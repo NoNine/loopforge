@@ -270,6 +270,18 @@ require_doc_text simulation/vm/README.md \
   'fingerprint-scoped `flock` locking' \
   'VM README must document serialized baked-image cache publication'
 require_doc_text simulation/vm/README.md \
+  'become libvirt-managed volumes' \
+  'VM README must define libvirt-managed image ownership'
+require_doc_text simulation/vm/README.md \
+  "libvirt-reported path as a file-backed" \
+  'VM README must use file-backed attachment for managed volumes'
+require_doc_text simulation/vm/verification.md \
+  'without requiring direct host file access' \
+  'VM verification must avoid operator reads of managed images'
+require_doc_text docs/directory-model.md \
+  'Libvirt directory-pool target' \
+  'Directory model must identify libvirt-managed VM image paths'
+require_doc_text simulation/vm/README.md \
   'Legacy VM sets rejected by M4 remain preserved until M5' \
   'VM README must document deferred legacy VM-set cleanup'
 require_doc_text simulation/vm/README.md \

@@ -2,7 +2,7 @@
 
 VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 VM_BASELINE_SNAPSHOT_NAME="${VM_BASELINE_SNAPSHOT_NAME:-loopforge-clean-baseline}"
-VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=3
+VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=5
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 
 vm_libvirt_domain_prefix() {
@@ -52,6 +52,22 @@ vm_libvirt_storage_pool_name() {
   printf '%s-images' "$HARNESS_PROJECT_NAME"
 }
 
+vm_libvirt_baked_base_image_pool_name() {
+  local digest target
+  target="$(vm_path_baked_base_image_volume_dir \
+    "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}")"
+  digest="$(printf '%s\n' "$target" | sha256sum | awk '{print $1}')"
+  printf 'loopforge-vm-base-%s\n' "${digest:0:16}"
+}
+
+vm_libvirt_baked_base_image_volume_name() {
+  printf 'base.qcow2\n'
+}
+
+vm_libvirt_machine_volume_name() {
+  printf '%s.qcow2\n' "${1:?machine required}"
+}
+
 vm_libvirt_seed_pool_name() {
   printf '%s-seed' "$HARNESS_PROJECT_NAME"
 }
@@ -66,11 +82,13 @@ vm_libvirt_machine_mac() {
 }
 
 vm_libvirt_marker_values() {
-  VM_SET_MARKER_SCHEMA_VERSION=2
+  VM_SET_MARKER_SCHEMA_VERSION=5
   VM_SET_MARKER_LIBVIRT_URI="$VM_LIBVIRT_URI"
   VM_SET_MARKER_DOMAIN_PREFIX="$(vm_libvirt_domain_prefix)"
   VM_SET_MARKER_NETWORK_NAME="$(vm_libvirt_network_name)"
   VM_SET_MARKER_STORAGE_POOL_NAME="$(vm_libvirt_storage_pool_name)"
+  VM_SET_MARKER_STORAGE_POOL_TARGET="$(vm_path_vm_set_disk_dir)"
+  VM_SET_MARKER_DISK_OWNERSHIP="libvirt-managed"
   VM_SET_MARKER_SEED_POOL_NAME="$(vm_libvirt_seed_pool_name)"
   VM_SET_MARKER_BASELINE_SNAPSHOT_NAME="$VM_BASELINE_SNAPSHOT_NAME"
 }
@@ -198,6 +216,176 @@ vm_libvirt_baked_base_image_marker_path() {
   vm_path_baked_base_image_marker "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}"
 }
 
+vm_libvirt_pool_exists() {
+  virsh -c "$VM_LIBVIRT_URI" pool-info "${1:?pool name required}" >/dev/null 2>&1
+}
+
+vm_libvirt_pool_is_active() {
+  virsh -c "$VM_LIBVIRT_URI" pool-info "${1:?pool name required}" 2>/dev/null |
+    awk -F: '$1 == "State" { gsub(/[[:space:]]/, "", $2); if ($2 == "running") found = 1 } END { exit !found }'
+}
+
+vm_libvirt_pool_target() {
+  virsh -c "$VM_LIBVIRT_URI" pool-dumpxml "${1:?pool name required}" |
+    python3 -c '
+import os
+import sys
+import xml.etree.ElementTree as ET
+
+path = ET.parse(sys.stdin).getroot().findtext("./target/path")
+if not path:
+    raise SystemExit("libvirt storage pool has no target path")
+print(os.path.abspath(path))
+'
+}
+
+vm_libvirt_render_directory_pool_xml() {
+  local name target xml
+  name="${1:?pool name required}"
+  target="${2:?pool target required}"
+  xml="${3:?pool XML path required}"
+  mkdir -p "$target" "$(dirname "$xml")" || return $?
+  python3 - "$name" "$target" >"$xml" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+pool = ET.Element("pool", {"type": "dir"})
+ET.SubElement(pool, "name").text = sys.argv[1]
+target = ET.SubElement(pool, "target")
+ET.SubElement(target, "path").text = sys.argv[2]
+ET.ElementTree(pool).write(sys.stdout, encoding="unicode")
+print()
+PY
+  chmod 0600 "$xml"
+}
+
+vm_libvirt_require_directory_pool() {
+  local name target actual_target
+  name="${1:?pool name required}"
+  target="${2:?pool target required}"
+  vm_libvirt_pool_exists "$name" || return 1
+  actual_target="$(vm_libvirt_pool_target "$name")" || return $?
+  [ "$actual_target" = "$target" ] || return 1
+  if ! vm_libvirt_pool_is_active "$name"; then
+    virsh -c "$VM_LIBVIRT_URI" pool-start "$name" >/dev/null || return $?
+  fi
+  virsh -c "$VM_LIBVIRT_URI" pool-refresh "$name" >/dev/null
+}
+
+vm_libvirt_ensure_directory_pool() {
+  local name target xml
+  name="${1:?pool name required}"
+  target="${2:?pool target required}"
+  xml="${3:?pool XML path required}"
+  if vm_libvirt_pool_exists "$name"; then
+    vm_libvirt_require_directory_pool "$name" "$target" || {
+      printf 'ERROR: Libvirt storage pool identity mismatch: %s\n' "$name" >&2
+      return 1
+    }
+    return 0
+  fi
+  vm_libvirt_render_directory_pool_xml "$name" "$target" "$xml" || return $?
+  virsh -c "$VM_LIBVIRT_URI" pool-define "$xml" >/dev/null || return $?
+  vm_libvirt_require_directory_pool "$name" "$target"
+}
+
+vm_libvirt_ensure_storage_pool() {
+  vm_libvirt_ensure_directory_pool \
+    "$(vm_libvirt_storage_pool_name)" \
+    "$(vm_path_vm_set_disk_dir)" \
+    "$(vm_path_vm_set_storage_pool_xml)"
+}
+
+vm_libvirt_require_existing_storage_pool() {
+  vm_libvirt_require_directory_pool \
+    "$(vm_libvirt_storage_pool_name)" \
+    "$(vm_path_vm_set_disk_dir)" || {
+    printf 'ERROR: Existing VM disks require their original libvirt storage pool. %s\n' \
+      "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  }
+}
+
+vm_libvirt_ensure_baked_base_image_pool() {
+  vm_libvirt_ensure_directory_pool \
+    "$(vm_libvirt_baked_base_image_pool_name)" \
+    "$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")" \
+    "$(vm_path_baked_base_image_pool_xml "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+}
+
+vm_libvirt_volume_exists() {
+  local pool volume
+  pool="${1:?pool name required}"
+  volume="${2:?volume name required}"
+  virsh -c "$VM_LIBVIRT_URI" vol-info "$volume" --pool "$pool" >/dev/null 2>&1
+}
+
+vm_libvirt_volume_value() {
+  local pool volume key
+  pool="${1:?pool name required}"
+  volume="${2:?volume name required}"
+  key="${3:?volume value key required}"
+  virsh -c "$VM_LIBVIRT_URI" vol-dumpxml "$volume" --pool "$pool" |
+    python3 -c '
+import os
+import sys
+import xml.etree.ElementTree as ET
+
+key = sys.argv[1]
+root = ET.parse(sys.stdin).getroot()
+if key == "capacity_bytes":
+    node = root.find("./capacity")
+    if node is None or not node.text:
+        raise SystemExit("libvirt volume has no capacity")
+    units = {"bytes": 1, "B": 1, "KiB": 1024, "MiB": 1024**2,
+             "GiB": 1024**3, "TiB": 1024**4}
+    unit = node.get("unit", "bytes")
+    if unit not in units:
+        raise SystemExit(f"unsupported libvirt capacity unit: {unit}")
+    print(int(node.text) * units[unit])
+elif key == "format":
+    node = root.find("./target/format")
+    if node is None or not node.get("type"):
+        raise SystemExit("libvirt volume has no target format")
+    print(node.get("type"))
+elif key == "backing_path":
+    path = root.findtext("./backingStore/path")
+    if not path:
+        raise SystemExit("libvirt volume has no backing path")
+    print(os.path.abspath(path))
+elif key == "backing_format":
+    node = root.find("./backingStore/format")
+    if node is None or not node.get("type"):
+        raise SystemExit("libvirt volume has no backing format")
+    print(node.get("type"))
+else:
+    raise SystemExit(f"unknown libvirt volume value: {key}")
+' "$key"
+}
+
+vm_libvirt_volume_path() {
+  virsh -c "$VM_LIBVIRT_URI" vol-path \
+    "${2:?volume name required}" --pool "${1:?pool name required}"
+}
+
+vm_libvirt_volume_sha256() {
+  local pool volume tmp sha rc
+  pool="${1:?pool name required}"
+  volume="${2:?volume name required}"
+  tmp="$(mktemp "$(vm_path_baked_base_image_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")/.volume-download.XXXXXX")" || return $?
+  if virsh -c "$VM_LIBVIRT_URI" vol-download "$volume" "$tmp" \
+    --pool "$pool" --sparse >/dev/null; then
+    sha="$(sha256sum "$tmp" | awk '{print $1}')"
+    rc=$?
+  else
+    sha=""
+    rc=1
+  fi
+  rm -f "$tmp"
+  [ "$rc" -eq 0 ] || return "$rc"
+  printf '%s\n' "$sha"
+}
+
 vm_libvirt_machine_exists() {
   virsh -c "$VM_LIBVIRT_URI" dominfo "$(vm_libvirt_domain_name "$1")" >/dev/null 2>&1
 }
@@ -275,10 +463,12 @@ PY
 }
 
 vm_libvirt_render_domain_xml() {
-  local machine domain disk seed mac xml
+  local machine domain pool volume disk seed mac xml
   machine="${1:?machine required}"
   domain="$(vm_libvirt_domain_name "$machine")"
-  disk="$(vm_libvirt_disk_path "$machine")"
+  pool="$(vm_libvirt_storage_pool_name)"
+  volume="$(vm_libvirt_machine_volume_name "$machine")"
+  disk="$(vm_libvirt_volume_path "$pool" "$volume")" || return $?
   seed="$(vm_libvirt_seed_iso_path "$machine")"
   mac="$(vm_libvirt_machine_mac "$machine")"
   xml="$(vm_libvirt_domain_xml_path "$machine")"
@@ -502,14 +692,58 @@ EOF
   chmod 0600 "$user_data" "$meta_data" "$network_config" "$seed_iso"
 }
 
+vm_libvirt_disk_size_bytes() {
+  python3 - "$VM_DOMAIN_DISK_SIZE" <<'PY'
+import re
+import sys
+
+match = re.fullmatch(r"([1-9][0-9]*)([KMGTPE]?)", sys.argv[1])
+if not match:
+    raise SystemExit(f"Unsupported VM_DOMAIN_DISK_SIZE: {sys.argv[1]}")
+units = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3,
+         "T": 1024**4, "P": 1024**5, "E": 1024**6}
+print(int(match.group(1)) * units[match.group(2)])
+PY
+}
+
+vm_libvirt_render_machine_volume_xml() {
+  local machine volume capacity backing xml
+  machine="${1:?machine required}"
+  volume="$(vm_libvirt_machine_volume_name "$machine")"
+  capacity="$(vm_libvirt_disk_size_bytes)" || return $?
+  backing="$(vm_libvirt_baked_base_image_path)"
+  xml="$(vm_path_vm_volume_xml "$machine")"
+  mkdir -p "$(dirname "$xml")" || return $?
+  python3 - "$volume" "$capacity" "$backing" >"$xml" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+volume = ET.Element("volume", {"type": "file"})
+ET.SubElement(volume, "name").text = sys.argv[1]
+ET.SubElement(volume, "capacity", {"unit": "bytes"}).text = sys.argv[2]
+ET.SubElement(volume, "allocation", {"unit": "bytes"}).text = "0"
+target = ET.SubElement(volume, "target")
+ET.SubElement(target, "format", {"type": "qcow2"})
+backing = ET.SubElement(volume, "backingStore")
+ET.SubElement(backing, "path").text = sys.argv[3]
+ET.SubElement(backing, "format", {"type": "qcow2"})
+ET.ElementTree(volume).write(sys.stdout, encoding="unicode")
+print()
+PY
+  chmod 0600 "$xml"
+}
+
 vm_libvirt_write_machine_metadata() {
-  local machine file disk baked_image baked_sha256 disk_virtual_size_bytes
+  local machine file disk pool volume
+  local baked_image baked_sha256 disk_virtual_size_bytes
   machine="${1:?machine required}"
   file="$(vm_libvirt_machine_metadata_path "$machine")"
-  disk="$(vm_libvirt_disk_path "$machine")"
+  pool="$(vm_libvirt_storage_pool_name)"
+  volume="$(vm_libvirt_machine_volume_name "$machine")"
+  disk="$(vm_libvirt_volume_path "$pool" "$volume")" || return $?
   baked_image="$(vm_libvirt_baked_base_image_path)"
   baked_sha256="$(marker_value "$(vm_libvirt_baked_base_image_marker_path)" baked_sha256)"
-  disk_virtual_size_bytes="$(vm_libvirt_disk_virtual_size_bytes "$disk")" || return $?
+  disk_virtual_size_bytes="$(vm_libvirt_volume_value "$pool" "$volume" capacity_bytes)" || return $?
   mkdir -p "$(dirname "$file")"
   cat >"$file" <<EOF
 machine=$machine
@@ -518,6 +752,9 @@ mac=$(vm_libvirt_machine_mac "$machine")
 disk=$disk
 disk_size=$VM_DOMAIN_DISK_SIZE
 disk_virtual_size_bytes=$disk_virtual_size_bytes
+storage_pool_name=$pool
+volume_name=$volume
+disk_ownership=libvirt-managed
 base_image=$baked_image
 base_image_fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
 base_image_sha256=$baked_sha256
@@ -529,47 +766,14 @@ EOF
   chmod 0600 "$file"
 }
 
-vm_libvirt_disk_backing_image() {
-  local disk
-  disk="${1:?disk required}"
-  qemu-img info --output=json "$disk" |
-    python3 -c '
-import json
-import os
-import sys
-
-disk = os.path.abspath(sys.argv[1])
-data = json.load(sys.stdin)
-backing = data.get("full-backing-filename") or data.get("backing-filename")
-if not backing:
-    raise SystemExit(f"VM disk has no qcow2 backing image: {disk}")
-if not os.path.isabs(backing):
-    backing = os.path.join(os.path.dirname(disk), backing)
-print(os.path.abspath(backing))
-' "$disk"
-}
-
-vm_libvirt_disk_virtual_size_bytes() {
-  local disk
-  disk="${1:?disk required}"
-  qemu-img info --output=json "$disk" |
-    python3 -c '
-import json
-import sys
-
-value = json.load(sys.stdin).get("virtual-size")
-if not isinstance(value, int) or value <= 0:
-    raise SystemExit("VM disk has no valid virtual-size")
-print(value)
-'
-}
-
 vm_libvirt_verify_existing_disk_identity() {
-  local machine disk metadata expected_image expected_sha actual_backing key expected actual
-  local recorded_virtual_size actual_virtual_size
+  local machine disk metadata pool volume expected_image expected_sha key expected actual
+  local recorded_virtual_size actual_virtual_size actual_backing
   machine="${1:?machine required}"
   disk="$(vm_libvirt_disk_path "$machine")"
   metadata="$(vm_libvirt_machine_metadata_path "$machine")"
+  pool="$(vm_libvirt_storage_pool_name)"
+  volume="$(vm_libvirt_machine_volume_name "$machine")"
   expected_image="$(vm_libvirt_baked_base_image_path)"
   expected_sha="$(marker_value "$(vm_libvirt_baked_base_image_marker_path)" baked_sha256)"
   [ -r "$metadata" ] || {
@@ -577,10 +781,19 @@ vm_libvirt_verify_existing_disk_identity() {
       "$machine" "$metadata" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
     return 1
   }
-  for key in disk disk_size base_image base_image_fingerprint base_image_sha256; do
+  vm_libvirt_volume_exists "$pool" "$volume" || {
+    printf 'ERROR: Existing VM disk is not a libvirt-managed volume for %s. %s\n' \
+      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  }
+  for key in disk disk_size storage_pool_name volume_name disk_ownership \
+    base_image base_image_fingerprint base_image_sha256; do
     case "$key" in
       disk) expected="$disk" ;;
       disk_size) expected="$VM_DOMAIN_DISK_SIZE" ;;
+      storage_pool_name) expected="$pool" ;;
+      volume_name) expected="$volume" ;;
+      disk_ownership) expected=libvirt-managed ;;
       base_image) expected="$expected_image" ;;
       base_image_fingerprint) expected="$VM_BAKED_BASE_IMAGE_FINGERPRINT" ;;
       base_image_sha256) expected="$expected_sha" ;;
@@ -592,14 +805,21 @@ vm_libvirt_verify_existing_disk_identity() {
       return 1
     }
   done
-  actual_backing="$(vm_libvirt_disk_backing_image "$disk")" || return $?
-  [ "$actual_backing" = "$expected_image" ] || {
-    printf 'ERROR: Existing VM disk backing image mismatch for %s. %s\n' \
+  [ "$(vm_libvirt_volume_path "$pool" "$volume")" = "$disk" ] || {
+    printf 'ERROR: Existing VM disk volume path mismatch for %s. %s\n' \
       "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
     return 1
   }
+  [ "$(vm_libvirt_volume_value "$pool" "$volume" format)" = qcow2 ] || return 1
+  actual_backing="$(vm_libvirt_volume_value "$pool" "$volume" backing_path)" || return $?
+  if [ "$actual_backing" != "$expected_image" ] ||
+    [ "$(vm_libvirt_volume_value "$pool" "$volume" backing_format)" != qcow2 ]; then
+    printf 'ERROR: Existing VM disk backing image mismatch for %s. %s\n' \
+      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  fi
   recorded_virtual_size="$(marker_value "$metadata" disk_virtual_size_bytes 2>/dev/null || true)"
-  actual_virtual_size="$(vm_libvirt_disk_virtual_size_bytes "$disk")" || return $?
+  actual_virtual_size="$(vm_libvirt_volume_value "$pool" "$volume" capacity_bytes)" || return $?
   if [ -z "$recorded_virtual_size" ] || [ "$actual_virtual_size" != "$recorded_virtual_size" ]; then
     printf 'ERROR: Existing VM disk virtual size mismatch for %s. %s\n' \
       "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
@@ -608,23 +828,30 @@ vm_libvirt_verify_existing_disk_identity() {
 }
 
 vm_libvirt_verify_existing_disk_identities() {
-  local machine disk
+  local machine pool volume
+  pool="$(vm_libvirt_storage_pool_name)"
   for machine in "${vm_machines[@]}"; do
-    disk="$(vm_libvirt_disk_path "$machine")"
-    [ ! -e "$disk" ] || vm_libvirt_verify_existing_disk_identity "$machine" || return $?
+    volume="$(vm_libvirt_machine_volume_name "$machine")"
+    vm_libvirt_volume_exists "$pool" "$volume" || continue
+    vm_libvirt_verify_existing_disk_identity "$machine" || return $?
   done
 }
 
 vm_libvirt_existing_disks_present() {
-  local machine
+  local machine pool volume
+  pool="$(vm_libvirt_storage_pool_name)"
   for machine in "${vm_machines[@]}"; do
     [ ! -e "$(vm_libvirt_disk_path "$machine")" ] || return 0
+    if vm_libvirt_pool_exists "$pool"; then
+      volume="$(vm_libvirt_machine_volume_name "$machine")"
+      vm_libvirt_volume_exists "$pool" "$volume" && return 0
+    fi
   done
   return 1
 }
 
 vm_libvirt_require_existing_baked_base_image() {
-  if vm_libvirt_baked_base_image_ready; then
+  if vm_libvirt_ensure_baked_base_image_pool && vm_libvirt_baked_base_image_ready; then
     printf 'base-image-cache=hit fingerprint=%s image=%s marker=%s\n' \
       "$VM_BAKED_BASE_IMAGE_FINGERPRINT" \
       "$(vm_libvirt_baked_base_image_path)" \
@@ -647,18 +874,25 @@ vm_libvirt_ensure_ssh_key() {
 }
 
 vm_libvirt_create_disk() {
-  local backing_image machine disk
+  local machine pool volume xml
   machine="${1:?machine required}"
-  disk="$(vm_libvirt_disk_path "$machine")"
-  if [ -f "$disk" ]; then
+  pool="$(vm_libvirt_storage_pool_name)"
+  volume="$(vm_libvirt_machine_volume_name "$machine")"
+  xml="$(vm_path_vm_volume_xml "$machine")"
+  if vm_libvirt_volume_exists "$pool" "$volume"; then
     vm_libvirt_verify_existing_disk_identity "$machine"
     return $?
   fi
-  backing_image="$(vm_libvirt_baked_base_image_path)"
-  require_readable_file "VM baked base image" "$backing_image" || return $?
-  qemu-img create -f qcow2 -F qcow2 -b "$backing_image" "$disk" >/dev/null || return $?
-  qemu-img resize "$disk" "$VM_DOMAIN_DISK_SIZE" >/dev/null || return $?
-  chmod 0600 "$disk" || return $?
+  [ ! -e "$(vm_libvirt_disk_path "$machine")" ] || {
+    printf 'ERROR: Existing VM disk is not registered in the selected libvirt storage pool: %s. %s\n' \
+      "$(vm_libvirt_disk_path "$machine")" \
+      "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    return 1
+  }
+  vm_libvirt_render_machine_volume_xml "$machine" || return $?
+  virsh -c "$VM_LIBVIRT_URI" vol-create "$pool" "$xml" >/dev/null || return $?
+  virsh -c "$VM_LIBVIRT_URI" pool-refresh "$pool" >/dev/null || return $?
+  vm_libvirt_volume_exists "$pool" "$volume"
 }
 
 vm_libvirt_base_image_superset_packages_csv() {
@@ -845,10 +1079,14 @@ vm_libvirt_cleanup_bake_domain() {
 }
 
 vm_libvirt_write_baked_base_image_marker() {
-  local image marker packages tmp
+  local image marker packages pool target volume baked_sha256 tmp
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
+  pool="$(vm_libvirt_baked_base_image_pool_name)"
+  target="$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  volume="$(vm_libvirt_baked_base_image_volume_name)"
+  baked_sha256="$(vm_libvirt_volume_sha256 "$pool" "$volume")" || return $?
   tmp="$(mktemp "${marker}.XXXXXX")" || return $?
   if ! cat >"$tmp" <<EOF
 schema=$VM_BASE_IMAGE_BAKE_SCHEMA_VERSION
@@ -856,7 +1094,11 @@ fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
 source_image=$VM_BASE_IMAGE_PATH
 source_sha256=$(sha256sum "$VM_BASE_IMAGE_PATH" | awk '{print $1}')
 baked_image=$image
-baked_sha256=$(sha256sum "$image" | awk '{print $1}')
+baked_sha256=$baked_sha256
+storage_pool_name=$pool
+storage_pool_target=$target
+volume_name=$volume
+image_ownership=libvirt-managed
 ubuntu_release=$HARNESS_UBUNTU_BASELINE_RELEASE
 ubuntu_codename=$HARNESS_UBUNTU_BASELINE_CODENAME
 apt_mirror=$HARNESS_UBUNTU_APT_MIRROR
@@ -876,47 +1118,47 @@ EOF
   mv -- "$tmp" "$marker"
 }
 
+vm_libvirt_baked_base_image_volume_ready() {
+  local image pool target volume
+  image="$(vm_libvirt_baked_base_image_path)"
+  pool="$(vm_libvirt_baked_base_image_pool_name)"
+  target="$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  volume="$(vm_libvirt_baked_base_image_volume_name)"
+  vm_libvirt_pool_exists "$pool" || return 1
+  vm_libvirt_pool_is_active "$pool" || return 1
+  [ "$(vm_libvirt_pool_target "$pool")" = "$target" ] || return 1
+  vm_libvirt_volume_exists "$pool" "$volume" || return 1
+  [ "$(vm_libvirt_volume_path "$pool" "$volume")" = "$image" ] || return 1
+  [ "$(vm_libvirt_volume_value "$pool" "$volume" format)" = qcow2 ] || return 1
+  [ "$(vm_libvirt_volume_value "$pool" "$volume" capacity_bytes)" = \
+    "$(vm_libvirt_disk_size_bytes)" ] || return 1
+  [ "$(vm_libvirt_volume_value "$pool" "$volume" backing_path)" = \
+    "$VM_BASE_IMAGE_PATH" ] || return 1
+  [ "$(vm_libvirt_volume_value "$pool" "$volume" backing_format)" = qcow2 ] || return 1
+}
+
 vm_libvirt_baked_base_image_ready() {
-  local image marker status expected_sha actual_sha
+  local image marker pool target volume status expected_sha actual_sha
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
-  vm_libvirt_baked_base_image_file_ready "$image" || return 1
   [ -r "$marker" ] || return 1
+  pool="$(vm_libvirt_baked_base_image_pool_name)"
+  target="$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  volume="$(vm_libvirt_baked_base_image_volume_name)"
+  vm_libvirt_baked_base_image_volume_ready || return 1
   status="$(marker_value "$marker" status 2>/dev/null || true)"
   [ "$status" = ready ] || return 1
   [ "$(marker_value "$marker" schema 2>/dev/null || true)" = "$VM_BASE_IMAGE_BAKE_SCHEMA_VERSION" ] || return 1
   [ "$(marker_value "$marker" fingerprint 2>/dev/null || true)" = "$VM_BAKED_BASE_IMAGE_FINGERPRINT" ] || return 1
   [ "$(marker_value "$marker" baked_image 2>/dev/null || true)" = "$image" ] || return 1
+  [ "$(marker_value "$marker" storage_pool_name 2>/dev/null || true)" = "$pool" ] || return 1
+  [ "$(marker_value "$marker" storage_pool_target 2>/dev/null || true)" = "$target" ] || return 1
+  [ "$(marker_value "$marker" volume_name 2>/dev/null || true)" = "$volume" ] || return 1
+  [ "$(marker_value "$marker" image_ownership 2>/dev/null || true)" = libvirt-managed ] || return 1
   expected_sha="$(marker_value "$marker" baked_sha256 2>/dev/null || true)"
   [ -n "$expected_sha" ] || return 1
-  actual_sha="$(sha256_file "$image")" || return 1
+  actual_sha="$(vm_libvirt_volume_sha256 "$pool" "$volume")" || return 1
   [ "$actual_sha" = "$expected_sha" ]
-}
-
-vm_libvirt_baked_base_image_file_ready() {
-  local image
-  image="${1:?image required}"
-  [ -s "$image" ] || return 1
-  [ -r "$image" ] || return 1
-  qemu-img info --output=json "$image" 2>/dev/null |
-    python3 -c 'import json, sys; raise SystemExit(0 if json.load(sys.stdin).get("format") == "qcow2" else 1)' || return 1
-}
-
-vm_libvirt_require_baked_base_image_file() {
-  local image
-  image="${1:?image required}"
-  if [ ! -s "$image" ]; then
-    printf 'ERROR: Missing or empty VM baked base image: %s\n' "$image" >&2
-    return 1
-  fi
-  if [ ! -r "$image" ]; then
-    printf 'ERROR: VM baked base image is not readable: %s\n' "$image" >&2
-    return 1
-  fi
-  if ! vm_libvirt_baked_base_image_file_ready "$image"; then
-    printf 'ERROR: VM baked base image is not a readable qcow2 image: %s\n' "$image" >&2
-    return 1
-  fi
 }
 
 vm_libvirt_bake_base_image() {
@@ -959,12 +1201,18 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
     return 1
   fi
   vm_libvirt_cleanup_bake_domain || return $?
-  vm_libvirt_require_baked_base_image_file "$tmp_image" || return $?
   mv "$tmp_image" "$final_image" || return $?
-  vm_libvirt_require_baked_base_image_file "$final_image" || return $?
+  vm_libvirt_ensure_baked_base_image_pool || return $?
+  vm_libvirt_baked_base_image_volume_ready || {
+    printf 'ERROR: VM baked base image is not a valid libvirt-managed qcow2 volume: %s\n' \
+      "$final_image" >&2
+    return 1
+  }
   vm_libvirt_write_baked_base_image_marker || return $?
   rm -rf "$(vm_libvirt_bake_work_dir)" || return $?
-  printf 'base-image-permissions=ready image=%s\n' "$final_image"
+  printf 'base-image-ownership=libvirt-managed pool=%s volume=%s image=%s\n' \
+    "$(vm_libvirt_baked_base_image_pool_name)" \
+    "$(vm_libvirt_baked_base_image_volume_name)" "$final_image"
   printf 'base-image-bake=ready fingerprint=%s image=%s packages=%s apt-mirror=%s\n' \
     "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$final_image" "$packages" "$HARNESS_UBUNTU_APT_MIRROR"
 }
@@ -981,6 +1229,10 @@ vm_libvirt_ensure_baked_base_image() {
     exec {lock_fd}>&-
     return 1
   }
+  if ! vm_libvirt_ensure_baked_base_image_pool; then
+    exec {lock_fd}>&-
+    return 1
+  fi
   if vm_libvirt_baked_base_image_ready; then
     printf 'base-image-cache=hit fingerprint=%s image=%s marker=%s\n' \
       "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$image" "$marker"
@@ -1032,10 +1284,12 @@ vm_libvirt_create_set() {
   local machine
   vm_libvirt_require_base_image || return $?
   mkdir -p "$(vm_path_vm_set_libvirt_dir)" "$(vm_path_vm_set_disk_dir)" \
-    "$(vm_path_vm_set_seed_dir)" "$(vm_path_vm_set_machine_dir)" || return $?
+    "$(vm_path_vm_set_seed_dir)" "$(vm_path_vm_set_machine_dir)" \
+    "$(vm_path_vm_set_volume_dir)" || return $?
   vm_libvirt_ensure_ssh_key || return $?
   vm_libvirt_define_network || return $?
   vm_libvirt_ensure_baked_base_image || return $?
+  vm_libvirt_ensure_storage_pool || return $?
   for machine in "${vm_machines[@]}"; do
     vm_libvirt_define_machine "$machine" || return $?
   done

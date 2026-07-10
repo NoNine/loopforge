@@ -55,10 +55,14 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
   source-boundary label, VM disk size, and VM package matrix;
 - the base-image bake completed package installation from the configured
   simulation apt mirror, or a matching ready marker proved the cache hit;
-- cache hits prove qcow2 format and the recorded baked-image SHA-256, and
-  fingerprint-scoped locking prevents concurrent publication races;
-- existing VM disks prove that their recorded backing path, fingerprint,
-  SHA-256, and disk size match the selected baked image;
+- cache hits prove qcow2 format and the recorded baked-image SHA-256 through
+  libvirt volume metadata and mediated download, and fingerprint-scoped
+  locking prevents concurrent publication races;
+- existing VM disks prove through libvirt volume metadata that their recorded
+  pool, volume, backing path, fingerprint, SHA-256, and disk size match the
+  selected baked image, without requiring direct host file access, and domain
+  XML attaches the libvirt-reported volume path as a file-backed disk so the
+  host security driver can apply its runtime label;
 - each VM proves the expected packages and commands are available from the
   baked base image, such as `java`, `curl`, `ssh`, `rsync`, `tar`, `wget`,
   `git`, `unzip`, `sshd`, and `ldapsearch` where required by the VM role;

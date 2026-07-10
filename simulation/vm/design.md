@@ -36,6 +36,31 @@ use target-like interfaces and helper-visible paths. Host-side VM
 infrastructure mechanisms remain available for VM lifecycle management, but
 they must not complete Loopforge role or integration checkpoints.
 
+## Host Storage Ownership
+
+The host operator owns generated control metadata, including pool and volume
+XML, ownership markers, cache fingerprints, locks, logs, and evidence.
+Published baked images and per-machine qcow2 disks are libvirt-managed storage
+volumes. Their runtime POSIX owner is host-specific and is not part of the
+harness contract. Domains attach the libvirt-reported mutable volume path as a
+file-backed disk so libvirt applies the host security driver's runtime label.
+Read-only base volume validity does not depend on its post-shutdown owner.
+
+The directory-pool backend on the validation host ignored requested volume
+owner and group values and created mutable overlays as `root:root 0600`.
+Attaching those overlays with a `type='volume'` domain disk did not trigger DAC
+relabeling, so QEMU could not open them. The same unchanged volume started when
+attached by its libvirt-reported path as `type='file'`; libvirt then applied
+the KVM DAC label. Volume creation and inspection therefore remain mediated by
+libvirt storage APIs, while domain attachment uses that reported file path.
+
+After a qcow2 file is adopted, the harness uses libvirt storage APIs for
+format, capacity, path, backing-store, content-download, and deletion
+operations. It does not use direct `qemu-img`, `sha256sum`, `chmod`, or `chown`
+against adopted volume paths. This keeps validation and later M5 destruction
+independent of libvirt DAC ownership restoration, SELinux, and AppArmor
+details.
+
 ## Initial Module Layout
 
 The VM harness should start with a folded module layout. The folded structure

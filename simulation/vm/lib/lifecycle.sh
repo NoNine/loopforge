@@ -202,11 +202,13 @@ vm_cmd_create_steps() {
   vm_state_write_or_verify_vm_set_marker || return $?
   if vm_libvirt_existing_disks_present; then
     vm_libvirt_require_existing_baked_base_image || return $?
+    vm_libvirt_require_existing_storage_pool || return $?
     vm_libvirt_verify_existing_disk_identities || return $?
   else
     vm_libvirt_ensure_ssh_key || return $?
     vm_libvirt_define_network || return $?
     vm_libvirt_ensure_baked_base_image || return $?
+    vm_libvirt_ensure_storage_pool || return $?
   fi
   vm_state_invalidate_baseline_prereqs_marker || return $?
   VM_CREATE_BASELINE_INVALIDATED=1

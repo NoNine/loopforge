@@ -91,11 +91,13 @@ grep -Fq "Incompatible legacy VM set $vm_set_id" "$audit_err"
 grep -Fq 'Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID' "$audit_err"
 grep -Fq 'M5 down/destroy cleanup' "$audit_err"
 
-sed -i 's/^ownership_schema_version=1$/ownership_schema_version=2/' "$marker"
+sed -i 's/^ownership_schema_version=1$/ownership_schema_version=5/' "$marker"
 cat >>"$marker" <<EOF
 base_image=not-created
 base_image_fingerprint=not-created
 disk_size=20G
+storage_pool_target=$vm_set_dir/libvirt/disks
+disk_ownership=libvirt-managed
 EOF
 
 PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$audit_out"

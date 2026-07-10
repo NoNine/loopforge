@@ -181,7 +181,10 @@ generated/simulation/vm/<run-id>/
 | VM path | Canonical or VM-visible path | Content dominance | Purpose |
 | --- | --- | --- | --- |
 | `vm-sets/<vm-set-id>/` | VM-set registry root | Host-dominated | Ownership marker, selected VM set identity, and reusable resource records |
-| `vm-sets/<vm-set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Domain, network, storage, volume, seed media, and baseline snapshot records |
+| `vm-sets/<vm-set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
+| `vm-sets/<vm-set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | Mutable qcow2 volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
+| `base-images/<fingerprint>/` | Baked-image cache registry | Host-dominated | Operator-owned fingerprint marker, pool descriptor, and cache lock state |
+| `base-images/<fingerprint>/volumes/` | Shared libvirt directory-pool target | Libvirt-dominated | Dependency-prepared qcow2 base volume managed, hashed, and inspected through libvirt after publication |
 | `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
 | `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
 | `vm-sets/<vm-set-id>/shared-jenkins-storage/` | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | VM-set dominated | VM-set-owned Jenkins shared storage backing for controller and agent VMs |
@@ -209,6 +212,15 @@ selected-run state, while preserving exported artifacts, evidence, bounded
 logs, and retained-output backups. `destroy` is the only command that removes
 simulation-owned VM domains, disks, snapshots, seed media, networks, or
 VM-set-owned shared storage after ownership validation.
+
+The host operator owns VM control metadata but does not own adopted qcow2
+content. Libvirt volume APIs provide format, capacity, backing-store, hashing,
+and deletion operations without requiring direct host reads or ownership
+repair. Domains attach libvirt-reported mutable volume paths as file-backed
+disks so the host security driver manages runtime access without a hard-coded
+account. Read-only backing volumes are validated independently of their
+incidental owner. Harness behavior must not depend on ownership restoration
+after shutdown.
 
 Evidence produced from Docker or VM simulation must be labeled as simulation
 evidence and must not imply `target-deployment` acceptance.

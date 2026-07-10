@@ -54,7 +54,91 @@ case "$cmd" in
     fi
     ;;
   pool-list)
-    printf '\n'
+    if [ -d "$state_dir/pools" ]; then
+      find "$state_dir/pools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
+    fi
+    ;;
+  pool-info)
+    pool="${1:?pool required}"
+    [ -d "$state_dir/pools/$pool" ] || exit 1
+    if [ -f "$state_dir/pools/$pool/active" ]; then
+      printf 'State: running\n'
+    else
+      printf 'State: inactive\n'
+    fi
+    ;;
+  pool-dumpxml)
+    pool="${1:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    printf "<pool type='dir'><name>%s</name><target><path>%s</path></target></pool>\n" "$pool" "$target"
+    ;;
+  pool-define)
+    xml="${1:?pool XML required}"
+    pool="$(sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" | head -1)"
+    target="$(sed -n "s:.*<path>\\(.*\\)</path>.*:\\1:p" "$xml" | head -1)"
+    mkdir -p "$state_dir/pools/$pool/volumes" "$target"
+    printf '%s\n' "$target" >"$state_dir/pools/$pool/target"
+    ;;
+  pool-start)
+    pool="${1:?pool required}"
+    touch "$state_dir/pools/$pool/active"
+    ;;
+  pool-refresh)
+    pool="${1:?pool required}"
+    [ -f "$state_dir/pools/$pool/active" ]
+    ;;
+  vol-info)
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    [ -f "$target/$volume" ]
+    ;;
+  vol-path)
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    printf '%s/%s\n' "$target" "$volume"
+    ;;
+  vol-create)
+    pool="${1:?pool required}"
+    xml="${2:?volume XML required}"
+    volume="$(sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" | head -1)"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    mkdir -p "$target"
+    printf 'libvirt-managed qcow2 stub\n' >"$target/$volume"
+    chmod 000 "$target/$volume"
+    cp "$xml" "$state_dir/pools/$pool/volumes/$volume.xml"
+    ;;
+  vol-dumpxml)
+    [ "${VM_STUB_FAIL_MODE:-}" != image-info ] || {
+      printf 'forced volume info failure\n' >&2
+      exit 45
+    }
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    stored="$state_dir/pools/$pool/volumes/$volume.xml"
+    if [ -f "$stored" ]; then
+      cat "$stored"
+    else
+      printf "<volume type='file'><name>%s</name><capacity unit='bytes'>21474836480</capacity><target><path>%s/%s</path><format type='qcow2'/><permissions><mode>0644</mode><owner>0</owner><group>0</group></permissions></target><backingStore><path>%s</path><format type='qcow2'/></backingStore></volume>\n" \
+        "$volume" "$target" "$volume" "${VM_BASE_IMAGE_PATH:?VM_BASE_IMAGE_PATH required}"
+    fi
+    ;;
+  vol-download)
+    volume="${1:?volume required}"
+    output="${2:?output required}"
+    shift 2
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    cp "$target/$volume" "$output"
     ;;
   net-info)
     if [ -f "$state_dir/network.active" ]; then
@@ -155,6 +239,12 @@ case "${1:-}" in
     ;;
   info)
     image="${@: -1}"
+    case "$image" in
+      */vm-sets/*/libvirt/disks/*)
+        printf 'libvirt-managed volume inspected directly: %s\n' "$image" >&2
+        exit 49
+        ;;
+    esac
     [ -s "$image" ] || exit 1
     if [ "${VM_STUB_FAIL_MODE:-}" = image-info ]; then
       printf 'forced image info failure\n' >&2
@@ -362,12 +452,16 @@ for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
   grep -Fq 'disk_virtual_size_bytes=21474836480' \
     "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+  grep -Fq 'disk_ownership=libvirt-managed' \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+  grep -Fq "volume_name=$machine.qcow2" \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
 done
 
 create_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
 grep -Fq 'apt-mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$create_log"
 grep -Fq 'base-image-cache=miss' "$create_log"
-grep -Fq 'base-image-permissions=ready' "$create_log"
+grep -Fq 'base-image-ownership=libvirt-managed' "$create_log"
 grep -Fq 'base-image-bake=ready' "$create_log"
 grep -Fq 'source=base-image' "$create_log"
 grep -Fq 'ldap-service=ready host=ldap.example.test port=389' "$create_log"
@@ -407,6 +501,8 @@ baked_marker="$(find "$generated_root/base-images" -name .loopforge-vm-base-imag
 [ -n "$baked_marker" ]
 baked_cache_dir="$(dirname "$baked_marker")"
 grep -Fq 'status=ready' "$baked_marker"
+grep -Fq 'image_ownership=libvirt-managed' "$baked_marker"
+grep -Fq 'volume_name=base.qcow2' "$baked_marker"
 grep -Fq 'disk_size=20G' "$baked_marker"
 grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
 grep -Eq '/base-images/.*/bake-work-[^/]+/base-build\.qcow2 20G$' "$stub_state/qemu-img-resize"
@@ -612,7 +708,7 @@ run_fail_closed_case() {
 }
 
 run_fail_closed_case apt 'forced apt failure'
-run_fail_closed_case image-info 'VM baked base image is not a readable qcow2 image'
+run_fail_closed_case image-info 'VM baked base image is not a valid libvirt-managed qcow2 volume'
 run_fail_closed_case slapd 'forced slapd failure'
 run_fail_closed_case ldap-consumer 'forced ldap consumer failure'
 run_fail_closed_case ldap-empty 'Missing exact VM LDAP seed proof'
@@ -628,7 +724,7 @@ PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status-pending.out"
 grep -Eq 'LDAP[[:space:]]+pending' "$tmp_dir/status-pending.out"
 
-baked_image="$baked_cache_dir/base.qcow2"
+baked_image="$baked_cache_dir/volumes/base.qcow2"
 printf 'tampered\n' >>"$baked_image"
 tampered_sha="$(sha256sum "$baked_image" | awk '{print $1}')"
 tamper_run_id="vm-m4-tamper-$$"

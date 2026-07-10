@@ -26,10 +26,14 @@ libvirt_uri=$VM_SET_MARKER_LIBVIRT_URI
 domain_prefix=$VM_SET_MARKER_DOMAIN_PREFIX
 network_name=$VM_SET_MARKER_NETWORK_NAME
 storage_pool_name=$VM_SET_MARKER_STORAGE_POOL_NAME
+storage_pool_target=$VM_SET_MARKER_STORAGE_POOL_TARGET
+disk_ownership=$VM_SET_MARKER_DISK_OWNERSHIP
 seed_pool_name=$VM_SET_MARKER_SEED_POOL_NAME
 baseline_snapshot_name=$VM_SET_MARKER_BASELINE_SNAPSHOT_NAME
 base_image=$(vm_libvirt_baked_base_image_path)
 base_image_fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
+base_image_pool_name=$(vm_libvirt_baked_base_image_pool_name)
+base_image_volume_name=$(vm_libvirt_baked_base_image_volume_name)
 disk_size=$VM_DOMAIN_DISK_SIZE
 ownership_schema_version=$VM_SET_MARKER_SCHEMA_VERSION
 EOF
@@ -167,6 +171,8 @@ vm_state_expected_vm_set_marker_value() {
     domain_prefix) printf '%s\n' "$VM_SET_MARKER_DOMAIN_PREFIX" ;;
     network_name) printf '%s\n' "$VM_SET_MARKER_NETWORK_NAME" ;;
     storage_pool_name) printf '%s\n' "$VM_SET_MARKER_STORAGE_POOL_NAME" ;;
+    storage_pool_target) printf '%s\n' "$VM_SET_MARKER_STORAGE_POOL_TARGET" ;;
+    disk_ownership) printf '%s\n' "$VM_SET_MARKER_DISK_OWNERSHIP" ;;
     seed_pool_name) printf '%s\n' "$VM_SET_MARKER_SEED_POOL_NAME" ;;
     baseline_snapshot_name) printf '%s\n' "$VM_SET_MARKER_BASELINE_SNAPSHOT_NAME" ;;
     ownership_schema_version) printf '%s\n' "$VM_SET_MARKER_SCHEMA_VERSION" ;;
@@ -188,8 +194,9 @@ vm_state_verify_vm_set_marker() {
   local key schema
   [ -f "$HARNESS_VM_SET_MARKER" ] ||
     die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
+  vm_libvirt_marker_values
   schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
-  [ "$schema" = 2 ] ||
+  [ "$schema" = "$VM_SET_MARKER_SCHEMA_VERSION" ] ||
     die "Incompatible legacy VM set $LOOPFORGE_VM_SET_ID. Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup."
   for key in \
     mode \
@@ -201,6 +208,8 @@ vm_state_verify_vm_set_marker() {
     domain_prefix \
     network_name \
     storage_pool_name \
+    storage_pool_target \
+    disk_ownership \
     seed_pool_name \
     baseline_snapshot_name \
     ownership_schema_version
@@ -211,10 +220,13 @@ vm_state_verify_vm_set_marker() {
 
 vm_state_verify_vm_set_base_identity() {
   local key expected actual
-  for key in base_image base_image_fingerprint disk_size; do
+  for key in base_image base_image_fingerprint base_image_pool_name \
+    base_image_volume_name disk_size; do
     case "$key" in
       base_image) expected="$(vm_libvirt_baked_base_image_path)" ;;
       base_image_fingerprint) expected="$VM_BAKED_BASE_IMAGE_FINGERPRINT" ;;
+      base_image_pool_name) expected="$(vm_libvirt_baked_base_image_pool_name)" ;;
+      base_image_volume_name) expected="$(vm_libvirt_baked_base_image_volume_name)" ;;
       disk_size) expected="$VM_DOMAIN_DISK_SIZE" ;;
     esac
     actual="$(marker_value "$HARNESS_VM_SET_MARKER" "$key" 2>/dev/null || true)"

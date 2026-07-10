@@ -233,19 +233,22 @@ artifacts. Cloud-init is limited to base OS bootstrap and role OS dependency
 fulfillment before the clean baseline boundary; later lifecycle checkpoints
 must use target OS SSH and helper-visible paths.
 
-The baked `base.qcow2` may be owned by the libvirt runtime user after the bake
-domain writes to it. The harness must not repair that by `chmod` or `chown`.
-Cache readiness requires qcow2 format, a matching fingerprint marker, and the
-recorded image SHA-256. Publication uses fingerprint-scoped `flock` locking;
-the completed image is published before its ready marker. An existing
-invalid entry fails closed and is not replaced because reusable VM disks may
-depend on it. Cleanup of generated VM images must happen after owned libvirt
-domains are stopped and undefined, using simulation-owned parent directories
-rather than direct ownership changes to libvirt-owned image files.
+The operator owns pool and volume descriptors, markers, locks, logs, and
+evidence. Baked and per-machine qcow2 files become libvirt-managed volumes;
+the harness does not depend on their POSIX owner or repair access with
+`chmod` or `chown`. It uses libvirt volume metadata for format, capacity, and
+backing-store proof and uses mediated volume download for SHA-256 proof.
+Domains attach each mutable volume's libvirt-reported path as a file-backed
+disk so the host security driver applies its runtime label. Cache validity
+does not depend on the read-only base volume's incidental owner.
+Publication uses fingerprint-scoped `flock` locking; the completed volume is
+published before its ready marker. An existing invalid entry fails
+closed and is not replaced because reusable VM disks may depend on it.
 
-Each reusable VM disk records and verifies its baked-image path, fingerprint,
-SHA-256, and disk size. `create` rejects legacy or mismatched disk metadata
-without changing the selected VM set. To continue before M5, choose a fresh
+Each reusable VM disk records and verifies its storage pool, volume, backing
+path, fingerprint, SHA-256, and disk size through libvirt APIs. `create`
+rejects legacy unmanaged sets or mismatched volume metadata without changing
+the selected VM disks. To continue before M5, choose a fresh
 `HARNESS_RUN_ID` and `LOOPFORGE_VM_SET_ID`, run `init-run`, then run `create`.
 Retain the old env and VM-set state; do not delete its libvirt resources or
 generated backing directly.

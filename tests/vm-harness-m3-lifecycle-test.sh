@@ -52,7 +52,91 @@ case "$cmd" in
     fi
     ;;
   pool-list)
-    printf '\n'
+    if [ -d "$state_dir/pools" ]; then
+      find "$state_dir/pools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
+    fi
+    ;;
+  pool-info)
+    pool="${1:?pool required}"
+    [ -d "$state_dir/pools/$pool" ] || exit 1
+    if [ -f "$state_dir/pools/$pool/active" ]; then
+      printf 'State: running\n'
+    else
+      printf 'State: inactive\n'
+    fi
+    ;;
+  pool-dumpxml)
+    pool="${1:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    printf "<pool type='dir'><name>%s</name><target><path>%s</path></target></pool>\n" "$pool" "$target"
+    ;;
+  pool-define)
+    xml="${1:?pool XML required}"
+    pool="$(sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" | head -1)"
+    target="$(sed -n "s:.*<path>\\(.*\\)</path>.*:\\1:p" "$xml" | head -1)"
+    mkdir -p "$state_dir/pools/$pool/volumes" "$target"
+    printf '%s\n' "$target" >"$state_dir/pools/$pool/target"
+    ;;
+  pool-start)
+    pool="${1:?pool required}"
+    touch "$state_dir/pools/$pool/active"
+    ;;
+  pool-refresh)
+    pool="${1:?pool required}"
+    [ -f "$state_dir/pools/$pool/active" ]
+    ;;
+  vol-info)
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    [ -f "$target/$volume" ]
+    ;;
+  vol-path)
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    printf '%s/%s\n' "$target" "$volume"
+    ;;
+  vol-create)
+    pool="${1:?pool required}"
+    xml="${2:?volume XML required}"
+    volume="$(sed -n "s:.*<name>\\(.*\\)</name>.*:\\1:p" "$xml" | head -1)"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    mkdir -p "$target"
+    printf 'libvirt-managed qcow2 stub\n' >"$target/$volume"
+    chmod 000 "$target/$volume"
+    cp "$xml" "$state_dir/pools/$pool/volumes/$volume.xml"
+    ;;
+  vol-dumpxml)
+    [ "${VM_STUB_FAIL_MODE:-}" != image-info ] || {
+      printf 'forced volume info failure\n' >&2
+      exit 45
+    }
+    volume="${1:?volume required}"
+    shift
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    stored="$state_dir/pools/$pool/volumes/$volume.xml"
+    if [ -f "$stored" ]; then
+      cat "$stored"
+    else
+      printf "<volume type='file'><name>%s</name><capacity unit='bytes'>21474836480</capacity><target><path>%s/%s</path><format type='qcow2'/><permissions><mode>0644</mode><owner>0</owner><group>0</group></permissions></target><backingStore><path>%s</path><format type='qcow2'/></backingStore></volume>\n" \
+        "$volume" "$target" "$volume" "${VM_BASE_IMAGE_PATH:?VM_BASE_IMAGE_PATH required}"
+    fi
+    ;;
+  vol-download)
+    volume="${1:?volume required}"
+    output="${2:?output required}"
+    shift 2
+    [ "${1:-}" = --pool ]
+    pool="${2:?pool required}"
+    target="$(cat "$state_dir/pools/$pool/target")"
+    cp "$target/$volume" "$output"
     ;;
   net-info)
     if [ -f "$state_dir/network.active" ]; then
@@ -147,6 +231,12 @@ case "${1:-}" in
     ;;
   info)
     image="${@: -1}"
+    case "$image" in
+      */vm-sets/*/libvirt/disks/*)
+        printf 'libvirt-managed volume inspected directly: %s\n' "$image" >&2
+        exit 49
+        ;;
+    esac
     [ -s "$image" ] || exit 1
     if printf '%s\n' "$*" | grep -Fq -- '--output=json'; then
       if [ -f "$image.backing" ]; then
@@ -261,6 +351,8 @@ PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
 grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready" "$tmp_dir/create.out"
 marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-set.env"
 grep -Fq "vm_set_id=$vm_set_id" "$marker"
+grep -Fq 'ownership_schema_version=5' "$marker"
+grep -Fq 'disk_ownership=libvirt-managed' "$marker"
 grep -Fq 'VM_PROVISIONING_MODEL=cloud-image-clone' "$generated_root/$run_id/host/rendered/harness.runtime.env"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
@@ -273,6 +365,14 @@ for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/disks/$machine.qcow2" ]
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine-seed.iso" ]
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env" ]
+  grep -Fq 'disk_ownership=libvirt-managed' \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+  grep -Fq "volume_name=$machine.qcow2" \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+  grep -Fq "<disk type='file' device='disk'>" \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.xml"
+  grep -Fq "<source file='$generated_root/vm-sets/$vm_set_id/libvirt/disks/$machine.qcow2'/>" \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.xml"
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
 done
 
