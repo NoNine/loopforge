@@ -392,8 +392,8 @@ require_doc_text simulation/vm/design.md \
   'simulation/vm/libvirt-refactor.md`' \
   'VM design must name the accepted libvirt refactor companion'
 require_doc_text simulation/vm/libvirt-refactor.md \
-  'This decision is accepted for implementation.' \
-  'VM libvirt refactor companion must record its accepted status'
+  'This decision is implemented.' \
+  'VM libvirt refactor companion must record its implemented status'
 require_doc_text simulation/vm/libvirt-refactor.md \
   '`lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`' \
   'VM libvirt refactor companion must define the target dependency direction'

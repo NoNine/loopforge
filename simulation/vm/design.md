@@ -349,10 +349,10 @@ The M4 and M5 implementation activated the `vm_set.sh`, `seed_media.sh`,
 libvirt-managed storage work also established two substantial boundaries that
 the initial table did not anticipate.
 
-The accepted target keeps `libvirt.sh` as the logical libvirt entrypoint and
-splits implementation into capability-shaped modules:
+The implemented layout keeps `libvirt.sh` as the logical libvirt entrypoint
+and splits implementation into capability-shaped modules:
 
-| Target module | Owns |
+| Module | Owns |
 | --- | --- |
 | `libvirt.sh` | Constants, explicit implementation loading, and the logical libvirt API boundary |
 | `libvirt-core.sh` | Preflight, resource identity, live queries, domain runtime control, addresses, and status |
@@ -363,12 +363,16 @@ splits implementation into capability-shaped modules:
 | `snapshots.sh` | Snapshot status, records, capture, verification, and restore coordination |
 | `vm-set.sh` | VM-set marker identity, live ownership validation, create composition, teardown, and audit |
 
-The target dependency direction is
+The implemented dependency direction is
 `lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`.
 `state.sh` must not query live libvirt resources, and the `libvirt-*.sh`
 implementation files must not call target SSH or state functions. Detailed
 rationale, current anatomy, API policy, migration slices, and verification are
 owned by `simulation/vm/libvirt-refactor.md`.
+
+Snapshot capture and restore additionally depend on baseline readiness, and
+snapshot restore and audit depend on VM-set ownership verification before any
+libvirt mutation.
 
 ## Shared Helper Boundary
 

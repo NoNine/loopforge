@@ -98,7 +98,7 @@ vm_cmd_blocked_m1() {
 
 vm_cmd_preflight_readonly_checks() {
   libvirt_summary="$(vm_libvirt_preflight_readonly)" || return 1
-  vm_set_summary="$(vm_state_validate_vm_set_ownership_readonly)" || return 1
+  vm_set_summary="$(vm_set_validate_ownership_readonly)" || return 1
   printf '%s\n' "$libvirt_summary"
   printf '%s\n' "$vm_set_summary"
 }
@@ -138,8 +138,8 @@ vm_cmd_init_run() {
 vm_cmd_status() {
   local status_label ldap_status
   vm_config_load_runtime
-  vm_state_validate_vm_set_ownership_readonly >/dev/null
-  ldap_status="$(vm_state_baseline_prereqs_status)"
+  vm_set_validate_ownership_readonly >/dev/null
+  ldap_status="$(vm_baseline_status)"
   status_label="initialized"
   if [ "$(vm_libvirt_domain_state gerrit)" = "running" ] &&
     [ "$(vm_libvirt_domain_state jenkins-controller)" = "running" ] &&
@@ -174,14 +174,17 @@ vm_cmd_audit_state() {
   local evidence log summary libvirt_status ssh_status vm_set_status
   vm_config_load_runtime
   vm_state_audit_readonly
+  vm_set_validate_ownership_readonly >/dev/null
+  vm_baseline_audit_readonly
+  vm_snapshots_audit_readonly
   summary="$(vm_state_read_summary)"
   libvirt_status="$(vm_libvirt_status_readonly)"
-  vm_set_status="$(vm_state_validate_vm_set_ownership_readonly)"
+  vm_set_status="$(vm_set_validate_ownership_readonly)"
   ssh_status="$(vm_ssh_status_readonly)"
   log="$(vm_path_bounded_log audit-state)"
   {
     printf '%s\n' "$summary"
-    printf 'baseline-prereqs=%s\n' "$(vm_state_baseline_prereqs_status)"
+    printf 'baseline-prereqs=%s\n' "$(vm_baseline_status)"
     printf '%s\n' "$libvirt_status"
     printf '%s\n' "$vm_set_status"
     printf '%s\n' "$ssh_status"
@@ -197,25 +200,12 @@ vm_cmd_run() {
 vm_cmd_create_steps() {
   VM_CREATE_BASELINE_INVALIDATED=0
   VM_CREATE_BASELINE_REUSED=0
-  vm_state_validate_vm_set_ownership_readonly || return $?
-  vm_libvirt_require_base_image || return $?
-  vm_libvirt_select_baked_base_image || return $?
-  vm_state_write_or_verify_vm_set_marker || return $?
-  if vm_libvirt_existing_disks_present; then
-    vm_libvirt_require_existing_baked_base_image || return $?
-    vm_libvirt_require_existing_storage_pool || return $?
-    vm_libvirt_verify_existing_disk_identities || return $?
-  else
-    vm_libvirt_ensure_ssh_key || return $?
-    vm_libvirt_define_network || return $?
-    vm_libvirt_ensure_baked_base_image || return $?
-    vm_libvirt_ensure_storage_pool || return $?
-  fi
-  case "$(vm_state_baseline_snapshot_status)" in
+  vm_set_prepare || return $?
+  case "$(vm_snapshots_status)" in
     ready)
-      vm_state_require_baseline_prereqs_marker || return $?
-      vm_libvirt_verify_selected_set_ownership || return $?
-      vm_libvirt_verify_baseline_snapshots || return $?
+      vm_baseline_require_ready || return $?
+      vm_set_verify_selected_ownership || return $?
+      vm_snapshots_verify || return $?
       VM_CREATE_BASELINE_REUSED=1
       printf 'baseline-snapshot=ready source=existing\n'
       vm_libvirt_status_table
@@ -225,14 +215,14 @@ vm_cmd_create_steps() {
       die "Incomplete or mismatched VM baseline snapshot state; destroy the selected VM set before retrying create"
       ;;
   esac
-  vm_state_invalidate_baseline_prereqs_marker || return $?
+  vm_baseline_invalidate || return $?
   VM_CREATE_BASELINE_INVALIDATED=1
-  vm_libvirt_create_set || return $?
+  vm_set_create || return $?
   vm_libvirt_start_set || return $?
   vm_ssh_prepare_all || return $?
-  vm_libvirt_verify_baseline_prereqs || return $?
+  vm_baseline_verify_prereqs || return $?
   vm_libvirt_shutdown_set || return $?
-  vm_libvirt_capture_baseline || return $?
+  vm_snapshots_capture || return $?
   vm_libvirt_status_table
 }
 
@@ -242,7 +232,7 @@ vm_cmd_create() {
   log="$(vm_path_bounded_log create)"
   vm_cmd_create_steps >"$log" 2>&1 || {
     if [ "${VM_CREATE_BASELINE_INVALIDATED:-0}" -eq 1 ]; then
-      vm_state_invalidate_baseline_prereqs_marker
+      vm_baseline_invalidate
     fi
     evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 VM-set creation or baseline prerequisite proof failed")"
     print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
@@ -250,7 +240,7 @@ vm_cmd_create() {
   }
   if [ "${VM_CREATE_BASELINE_REUSED:-0}" -eq 0 ]; then
     vm_write_ldap_evidence "$log" >/dev/null || {
-      vm_state_invalidate_baseline_prereqs_marker
+      vm_baseline_invalidate
       evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 LDAP evidence generation failed after runtime proof")"
       print_command_failure create "" "failed reason=ldap-evidence" "$log" "$evidence"
       return 1
@@ -265,7 +255,7 @@ vm_cmd_up() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log up)"
   {
-    vm_state_verify_run_and_vm_set
+    vm_set_verify_run_and_set
     vm_libvirt_start_set
     vm_ssh_prepare_all
     vm_libvirt_status_table
@@ -283,7 +273,7 @@ vm_cmd_ssh() {
   local role machine
   role="${1:?role required}"
   vm_config_load_runtime
-  vm_state_verify_run_and_vm_set
+  vm_set_verify_run_and_set
   machine="$(vm_ssh_role_machine "$role")"
   vm_libvirt_require_running "$machine"
   vm_ssh_interactive_role "$role"
@@ -332,7 +322,7 @@ vm_cmd_down() {
   log="$(vm_path_bounded_log down)"
   {
     vm_state_verify_run_marker
-    vm_state_verify_vm_set_marker_for_teardown
+    vm_set_verify_marker_for_teardown
     vm_libvirt_shutdown_set
     vm_libvirt_status_table
   } >"$log" 2>&1 || {
@@ -349,8 +339,8 @@ vm_cmd_clean() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log clean)"
   {
-    vm_state_verify_run_and_vm_set
-    vm_libvirt_restore_baseline
+    vm_set_verify_run_and_set
+    vm_snapshots_restore
     vm_state_clean_mutable_run_state
   } >"$log" 2>&1 || {
     evidence="$(vm_write_harness_evidence clean fail "simulate.sh clean" "$log" "M5 baseline rollback failed ownership or snapshot validation")"
@@ -367,8 +357,8 @@ vm_cmd_destroy() {
   log="$(vm_path_bounded_log destroy)"
   {
     vm_state_verify_run_marker
-    vm_libvirt_destroy_set
-    vm_state_remove_vm_set_metadata
+    vm_set_destroy
+    vm_set_remove_metadata
   } >"$log" 2>&1 || {
     evidence="$(vm_write_harness_evidence destroy fail "simulate.sh destroy" "$log" "M5 selected VM-set destruction failed ownership validation or removal")"
     print_command_failure destroy "" "failed reason=vm-set-destroy" "$log" "$evidence"

@@ -46,11 +46,37 @@ mapfile -t vm_impl_files < <(
   printf 'Missing executable VM M5 lifecycle test\n' >&2
   exit 1
 }
+[ -x "$repo_root/tests/fixtures/vm-libvirt-stub.sh" ] || {
+  printf 'Missing executable shared VM libvirt test fixture\n' >&2
+  exit 1
+}
 
 if [ -f "$vm_root/simulate.sh" ]; then
   require_in_file "$vm_root/simulate.sh" 'simulation/lib|/lib/' \
     'VM public CLI must source shared or VM-local helper libraries'
+  for module in baseline vm-set snapshots; do
+    require_in_file "$vm_root/simulate.sh" "/$module.sh" \
+      "VM public CLI must load the $module capability module"
+  done
 fi
+
+for module in core storage domain image; do
+  require_in_file "$vm_root/lib/libvirt.sh" "/libvirt-$module.sh" \
+    "VM libvirt loader must load the $module implementation module"
+done
+
+reject_in_file "$vm_root/lib/state.sh" 'vm_libvirt_' \
+  'VM run-state foundation must not query libvirt'
+
+for file in "$vm_root"/lib/libvirt-*.sh; do
+  reject_in_file "$file" 'vm_(state|ssh)_' \
+    'VM libvirt implementation must not call state or target SSH modules'
+done
+
+for file in "$vm_root"/lib/{baseline,vm-set,snapshots,lifecycle,ssh,state}.sh; do
+  reject_in_file "$file" '__vm_libvirt_' \
+    'VM libvirt package-private helpers must not escape the package'
+done
 
 for file in "${vm_impl_files[@]}"; do
   reject_in_file "$file" 'simulation/docker/lib|/docker/lib/' \

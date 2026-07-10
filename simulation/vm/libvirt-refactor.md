@@ -2,8 +2,8 @@
 
 ## Status And Authority
 
-This decision is accepted for implementation. The refactor has not yet been
-implemented.
+This decision is implemented. The accepted module boundaries, dependency
+rules, and compatibility policy below describe the current VM harness.
 
 `simulation/vm/README.md` remains the public VM simulation command contract.
 `simulation/vm/design.md` owns VM harness module boundaries. This document is
@@ -226,6 +226,8 @@ flowchart TD
   BASE --> STATE
   SNAP --> LV
   SNAP --> STATE
+  SNAP --> BASE
+  SNAP --> SET
   LV --> CFG
   LV --> PATHS
   SSH --> LV
@@ -236,7 +238,7 @@ flowchart TD
   CFG --> PATHS
 ```
 
-The target dependency rules are:
+The implemented dependency rules are:
 
 - `state.sh` handles run-scoped state and generic marker mechanics; it does not
   query libvirt or validate live VM resources.
@@ -318,7 +320,8 @@ stable.
 Every production refactor slice must run:
 
 ```bash
-bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh
+bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh \
+  tests/fixtures/vm-libvirt-stub.sh
 tests/vm-docs-contract-test.sh
 tests/vm-harness-layout-test.sh
 tests/vm-harness-terminal-summary-test.sh
@@ -363,7 +366,7 @@ simulation interchangeable.
 
 ## Completion Criteria
 
-The decision is implemented when:
+The implementation satisfies these criteria:
 
 - the target modules exist with the responsibilities above;
 - `libvirt.sh` is a small logical loader rather than the implementation

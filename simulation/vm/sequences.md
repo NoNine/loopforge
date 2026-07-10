@@ -54,23 +54,24 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
-  participant ST as state.sh
+  participant SET as vm-set.sh
+  participant BASE as baseline.sh
+  participant SNAP as snapshots.sh
   participant LV as libvirt.sh
   participant SSH as ssh.sh
 
   CLI->>LC: vm_cmd_create(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_validate_vm_set_ownership_readonly()
-  LC->>LV: vm_libvirt_select_baked_base_image()
-  LC->>ST: vm_state_write_or_verify_vm_set_marker()
-  LC->>LV: verify or ensure image, network, and storage
-  LC->>LV: vm_libvirt_create_set()
+  LC->>SET: vm_set_prepare()
+  LC->>SNAP: vm_snapshots_status()
+  Note over LC,SNAP: reuse only matching ready baseline state; fail on stale state
+  LC->>SET: vm_set_create()
   LC->>LV: vm_libvirt_start_set()
   LC->>SSH: vm_ssh_prepare_all()
-  LC->>LV: vm_libvirt_verify_baseline_prereqs()
-  Note over LC,LV: verify role OS dependency baselines and LDAP proof
+  LC->>BASE: vm_baseline_verify_prereqs()
+  Note over LC,BASE: verify role OS dependency baselines and LDAP proof
   LC->>LV: vm_libvirt_shutdown_set()
-  LC->>LV: vm_libvirt_capture_baseline()
+  LC->>SNAP: vm_snapshots_capture()
   LC-->>CLI: compact create summary
 ```
 
@@ -81,16 +82,15 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
-  participant ST as state.sh
+  participant SET as vm-set.sh
   participant LV as libvirt.sh
   participant SSH as ssh.sh
 
   CLI->>LC: vm_cmd_up(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_run_and_vm_set()
+  LC->>SET: vm_set_verify_run_and_set()
   LC->>LV: vm_libvirt_start_set()
-  LC->>SSH: vm_ssh_wait_ready(all VMs)
-  LC->>SSH: vm_ssh_verify_known_hosts()
+  LC->>SSH: vm_ssh_prepare_all()
   LC-->>CLI: compact up summary
 ```
 
@@ -101,13 +101,17 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
-  participant ST as state.sh
+  participant SET as vm-set.sh
+  participant BASE as baseline.sh
   participant LV as libvirt.sh
+  participant SSH as ssh.sh
 
   CLI->>LC: vm_cmd_status(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_read_selection()
-  LC->>LV: vm_libvirt_status_readonly()
+  LC->>SET: vm_set_validate_ownership_readonly()
+  LC->>BASE: vm_baseline_status()
+  LC->>LV: vm_libvirt_domain_state(service VMs)
+  LC->>SSH: vm_ssh_status_readonly()
   LC-->>CLI: compact status summary
 ```
 
@@ -118,17 +122,15 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
-  participant ST as state.sh
+  participant SET as vm-set.sh
   participant LV as libvirt.sh
   participant SSH as ssh.sh
 
   CLI->>LC: vm_cmd_ssh(role)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_run_and_vm_set()
+  LC->>SET: vm_set_verify_run_and_set()
   LC->>LV: vm_libvirt_require_running(role)
-  LC->>SSH: vm_ssh_wait_ready(role)
-  LC->>SSH: vm_ssh_verify_known_hosts(role)
-  LC->>SSH: vm_ssh_interactive(role)
+  LC->>SSH: vm_ssh_interactive_role(role)
   SSH-->>LC: interactive session exit
   LC-->>CLI: ssh exit status
 ```
@@ -288,7 +290,7 @@ sequenceDiagram
 
   CLI->>LC: vm_cmd_reboot(role or all)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_run_and_vm_set()
+  LC->>ST: vm_set_verify_run_and_set()
   LC->>SSH: vm_ssh_run(targets, delegated reboot)
   LC->>SSH: vm_ssh_wait_ready(targets)
   LC->>SSH: vm_ssh_verify_known_hosts(targets)
@@ -303,15 +305,20 @@ sequenceDiagram
   participant LC as lifecycle.sh
   participant CFG as config.sh
   participant ST as state.sh
+  participant SET as vm-set.sh
+  participant BASE as baseline.sh
+  participant SNAP as snapshots.sh
   participant LV as libvirt.sh
   participant SSH as ssh.sh
 
   CLI->>LC: vm_cmd_audit_state(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_audit_readonly()
+  LC->>SET: vm_set_validate_ownership_readonly()
+  LC->>BASE: vm_baseline_audit_readonly()
+  LC->>SNAP: vm_snapshots_audit_readonly()
   LC->>ST: vm_state_read_summary()
   LC->>LV: vm_libvirt_status_readonly()
-  LC->>ST: vm_state_validate_vm_set_ownership_readonly()
   LC->>SSH: vm_ssh_status_readonly()
   LC-->>CLI: compact audit-state summary
 ```
@@ -323,12 +330,12 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
-  participant ST as state.sh
+  participant SET as vm-set.sh
   participant LV as libvirt.sh
 
   CLI->>LC: vm_cmd_down(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_vm_set_marker()
+  LC->>SET: vm_set_verify_marker_for_teardown()
   LC->>LV: vm_libvirt_shutdown_set()
   LC-->>CLI: compact down summary
 ```
@@ -341,12 +348,13 @@ sequenceDiagram
   participant LC as lifecycle.sh
   participant CFG as config.sh
   participant ST as state.sh
-  participant LV as libvirt.sh
+  participant SET as vm-set.sh
+  participant SNAP as snapshots.sh
 
   CLI->>LC: vm_cmd_clean(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>ST: vm_state_verify_run_and_vm_set()
-  LC->>LV: vm_libvirt_restore_baseline()
+  LC->>SET: vm_set_verify_run_and_set()
+  LC->>SNAP: vm_snapshots_restore()
   LC->>ST: vm_state_clean_mutable_run_state()
   LC-->>CLI: compact clean summary
 ```
@@ -359,13 +367,13 @@ sequenceDiagram
   participant LC as lifecycle.sh
   participant CFG as config.sh
   participant ST as state.sh
-  participant LV as libvirt.sh
+  participant SET as vm-set.sh
 
   CLI->>LC: vm_cmd_destroy(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_marker()
-  LC->>LV: vm_libvirt_destroy_set()
-  LC->>ST: vm_state_remove_vm_set_metadata()
+  LC->>SET: vm_set_destroy()
+  LC->>SET: vm_set_remove_metadata()
   LC-->>CLI: compact destroy summary
 ```
 
