@@ -1016,6 +1016,7 @@ start_real_gerrit() {
   verify_war_artifact "$GERRIT_SITE_PATH/bin/gerrit.war"
   require_command java
   require_command ps
+  require_command setsid
   check_runtime_account_readiness
   prepare_gerrit_runtime_directories
   log="$(gerrit_runtime_log)"
@@ -1045,7 +1046,8 @@ start_real_gerrit() {
   clear_stale_gerrit_runtime_state
   prepare_gerrit_runtime_ownership
   append_gerrit_runtime_log "command=$GERRIT_SITE_PATH/bin/gerrit.sh run runtime_account=$GERRIT_RUNTIME_ACCOUNT"
-  run_as_gerrit_runtime "$(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.sh") run >> $(shell_quote "$log") 2>&1" &
+  run_as_gerrit_runtime \
+    "setsid -f $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.sh") run </dev/null >> $(shell_quote "$log") 2>&1"
   rc=1
   startup_deadline=$((SECONDS + 180))
   while [ "$SECONDS" -lt "$startup_deadline" ]; do

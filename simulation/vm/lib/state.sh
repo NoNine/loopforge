@@ -69,3 +69,36 @@ vm_state_audit_readonly() {
 vm_state_clean_mutable_run_state() {
   rm -rf -- "$HARNESS_HOST_DIR/state"
 }
+
+vm_state_write_role_checkpoint() {
+  local role checkpoint boot_id marker
+  role="${1:?role required}"
+  checkpoint="${2:?checkpoint required}"
+  boot_id="${3:?boot ID required}"
+  marker="$(vm_path_role_checkpoint_marker "$role" "$checkpoint")"
+  write_checkpoint_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$HARNESS_RUNTIME_ENV"
+  printf 'boot_id=%s\n' "$boot_id" >>"$marker"
+}
+
+vm_state_verify_role_checkpoint() {
+  local role checkpoint marker
+  role="${1:?role required}"
+  checkpoint="${2:?checkpoint required}"
+  marker="$(vm_path_role_checkpoint_marker "$role" "$checkpoint")"
+  verify_checkpoint_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$HARNESS_RUNTIME_ENV" \
+    "$role $checkpoint checkpoint"
+}
+
+vm_state_invalidate_role_validation() {
+  rm -f -- "$(vm_path_role_checkpoint_marker "${1:?role required}" validated)"
+}

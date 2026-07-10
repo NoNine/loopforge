@@ -456,13 +456,11 @@ for_each_csv_value() {
   done
 }
 
-require_docker_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-simulation" ] ||
-    die "Controller runtime proof is supported only in Docker simulation mode"
-  [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-controller-target" ] ||
-    die "Controller runtime proof is supported only in the Jenkins controller Docker harness target"
-  [ "$JENKINS_VERIFICATION_MODE" = "docker-simulation" ] ||
-    die "JENKINS_VERIFICATION_MODE must be docker-simulation for controller runtime proof"
+require_simulation_runtime() {
+  case "${HARNESS_MODE:-}:${HARNESS_ENVIRONMENT:-}:$JENKINS_VERIFICATION_MODE" in
+    docker-simulation:jenkins-controller-target:docker-simulation|vm-simulation:jenkins-controller:vm-simulation) ;;
+    *) die "Harness and Jenkins verification modes must select the same supported simulation backend" ;;
+  esac
 }
 
 is_docker_simulation() {
@@ -1024,7 +1022,7 @@ jenkins_process_running() {
 
 start_real_jenkins() {
   local pidfile log_file pid deadline response
-  require_docker_simulation
+  require_simulation_runtime
   runtime_account_exists
   pidfile="$JENKINS_HOME/run/jenkins.pid"
   log_file="$JENKINS_HOME/logs/jenkins-controller.log"

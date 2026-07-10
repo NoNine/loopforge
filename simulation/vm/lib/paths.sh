@@ -40,6 +40,7 @@ vm_paths_apply_canonical() {
   HARNESS_TARGET_SSH_DIR="$HARNESS_HOST_DIR/target-ssh"
   HARNESS_TARGET_SSH_IDENTITY_FILE="$HARNESS_TARGET_SSH_DIR/ci-operator"
   HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$HARNESS_TARGET_SSH_DIR/known_hosts"
+  HARNESS_ROLE_STATE_DIR="$HARNESS_HOST_DIR/state/roles"
   HARNESS_GERRIT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/gerrit"
   HARNESS_GERRIT_LOG_DIR="$HARNESS_TARGET_DIR/logs/gerrit"
   HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-controller"
@@ -57,10 +58,18 @@ vm_paths_apply_canonical() {
   export HARNESS_EXPORTED_ARTIFACT_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
   export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
   export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
+  export HARNESS_ROLE_STATE_DIR
   export HARNESS_GERRIT_EVIDENCE_DIR HARNESS_GERRIT_LOG_DIR
   export HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR
   export HARNESS_JENKINS_CONTROLLER_LOG_DIR
   export HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
+}
+
+vm_path_role_checkpoint_marker() {
+  local role checkpoint
+  role="${1:?role required}"
+  checkpoint="${2:?checkpoint required}"
+  printf '%s/%s/%s.env\n' "$HARNESS_ROLE_STATE_DIR" "$role" "$checkpoint"
 }
 
 vm_path_runtime_inputs() {

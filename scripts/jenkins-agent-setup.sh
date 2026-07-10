@@ -246,13 +246,11 @@ for_each_csv_value() {
   done
 }
 
-require_docker_simulation() {
-  [ "${HARNESS_MODE:-}" = "docker-simulation" ] ||
-    die "Target-local SSH readiness is supported only in Docker simulation mode"
-  [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-agent-target" ] ||
-    die "Target-local SSH readiness is supported only in the Jenkins agent Docker harness target"
-  [ "$JENKINS_AGENT_VERIFICATION_MODE" = "docker-simulation" ] ||
-    die "JENKINS_AGENT_VERIFICATION_MODE must be docker-simulation for agent readiness validation"
+require_simulation_runtime() {
+  case "${HARNESS_MODE:-}:${HARNESS_ENVIRONMENT:-}:$JENKINS_AGENT_VERIFICATION_MODE" in
+    docker-simulation:jenkins-agent-target:docker-simulation|vm-simulation:jenkins-agent:vm-simulation) ;;
+    *) die "Harness and Jenkins agent verification modes must select the same supported simulation backend" ;;
+  esac
 }
 
 is_docker_simulation() {
@@ -835,7 +833,7 @@ cmd_configure_runtime() {
   load_env normal
   require_env_values
   validate_agent_render_inputs
-  require_docker_simulation
+  require_simulation_runtime
   check_agent_runtime_account_readiness
   confirm_mutation configure-runtime || return 0
   verify_staged_artifacts
@@ -894,6 +892,7 @@ sshd_process_running() {
 }
 
 check_runtime_readiness() {
+  local sshd_pid
   verify_staged_artifacts
   validate_agent_render_inputs
   check_os_dependency_expectations
@@ -902,9 +901,11 @@ check_runtime_readiness() {
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" ] || die "Agent bootstrap marker is missing"
   check_runtime_account
   check_remote_fs_ownership
-  [ -f "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" ] || die "Target OS sshd pid marker is missing"
-  sshd_process_running "$(cat "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid")" ||
+  sshd_pid="$(pgrep -x sshd | sed -n '1p')" ||
     die "Target OS sshd process is not running"
+  sshd_process_running "$sshd_pid" ||
+    die "Target OS sshd process is not running"
+  write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/run/os-sshd.pid" "$sshd_pid"
   check_ssh_reachability >/dev/null
 }
 

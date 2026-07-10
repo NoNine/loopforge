@@ -317,11 +317,47 @@ vm_cmd_stage_artifacts() {
 }
 
 vm_cmd_configure_role() {
-  vm_roles_blocked_m1 configure-role "${1:-}"
+  local role selected log evidence rc status
+  selected="${1:-}"
+  vm_config_load_runtime
+  for role in ${selected:-${roles[*]}}; do
+    log="$(vm_path_bounded_log "configure-role-$role")"
+    rc=0
+    vm_roles_configure "$role" >"$log" 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && { ! vm_roles_assert_no_placeholder_success "$log" || ! vm_roles_assert_no_contradictory_failure "$log"; }; then
+      rc=1
+    fi
+    if [ "$rc" -ne 0 ]; then
+      status="$(vm_roles_failure_status "$log")"
+      evidence="$(vm_write_role_evidence configure-role "$role" "$status" "$log" "Role configuration failed or emitted forbidden success markers")"
+      print_command_failure configure-role "$role" "$status" "$log" "$evidence"
+      return "$rc"
+    fi
+    evidence="$(vm_write_role_evidence configure-role "$role" pass "$log" "Role helper completed target-local installation and configuration")"
+    print_command_summary configure-role "$role" ok
+  done
 }
 
 vm_cmd_validate_role() {
-  vm_roles_blocked_m1 validate-role "${1:-}"
+  local role selected log evidence rc status
+  selected="${1:-}"
+  vm_config_load_runtime
+  for role in ${selected:-${roles[*]}}; do
+    log="$(vm_path_bounded_log "validate-role-$role")"
+    rc=0
+    vm_roles_validate "$role" >"$log" 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ] && { ! vm_roles_assert_no_placeholder_success "$log" || ! vm_roles_assert_no_contradictory_failure "$log"; }; then
+      rc=1
+    fi
+    if [ "$rc" -ne 0 ]; then
+      status="$(vm_roles_failure_status "$log")"
+      evidence="$(vm_write_role_evidence validate-role "$role" "$status" "$log" "Real role readiness or evidence collection failed")"
+      print_command_failure validate-role "$role" "$status" "$log" "$evidence"
+      return "$rc"
+    fi
+    evidence="$(vm_write_role_evidence validate-role "$role" pass "$log" "Real role service/runtime readiness and copied target evidence passed")"
+    print_command_summary validate-role "$role" ok
+  done
 }
 
 vm_cmd_configure_integration() {
@@ -337,12 +373,74 @@ vm_cmd_prove_integration() {
 }
 
 vm_cmd_reboot() {
-  local role all target
+  local role all target machine log evidence rc targets
   role="${1:-}"
   all="${2:-0}"
   target="$role"
   [ "$all" -eq 0 ] || target="all"
-  vm_cmd_blocked_m1 reboot "$target"
+  vm_config_load_runtime
+  vm_set_verify_run_and_set
+  if [ "$all" -eq 1 ]; then
+    targets="${vm_machines[*]}"
+  else
+    targets="$(vm_ssh_role_machine "$role")"
+  fi
+  for machine in $targets; do
+    vm_libvirt_require_running "$machine"
+  done
+  log="$(vm_path_bounded_log "reboot-$target")"
+  rc=0
+  {
+    for machine in $targets; do
+      vm_ssh_reboot_machine "$machine"
+      case "$machine" in
+        gerrit|jenkins-controller|jenkins-agent)
+          vm_state_invalidate_role_validation "$machine"
+          ;;
+      esac
+    done
+  } >"$log" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(vm_write_reboot_evidence fail "$targets" "$log" "Delegated guest reboot, SSH return, or boot-ID proof failed")"
+    print_command_failure reboot "$target" failed "$log" "$evidence"
+    return "$rc"
+  fi
+  evidence="$(vm_write_reboot_evidence pass "$targets" "$log" "Delegated guest reboot changed boot IDs and restored SSH/system readiness")"
+  print_command_summary reboot "$target" ok
+}
+
+vm_write_reboot_evidence() {
+  local status targets log_ref message file
+  status="${1:?status required}"
+  targets="${2:?targets required}"
+  log_ref="${3:?bounded log required}"
+  message="${4:-}"
+  mkdir -p "$HARNESS_EVIDENCE_DIR"
+  file="$(evidence_record_path "$HARNESS_EVIDENCE_DIR" reboot harness)"
+  cat >"$file" <<EOF
+{
+  "verification_mode": "vm-simulation",
+  "timestamp": $(json_quote "$(iso_timestamp_utc)"),
+  "package_version": "gerrit-jenkins-setup",
+  "helper_command_version": "simulation/vm/simulate.sh",
+  "role_or_environment": "harness",
+  "checkpoint": "reboot",
+  "command": "reboot",
+  "status": $(json_quote "$status"),
+  "run_id": $(json_quote "$HARNESS_RUN_ID"),
+  "vm_set_id": $(json_quote "$LOOPFORGE_VM_SET_ID"),
+  "selected_vm_targets": $(json_quote "$targets"),
+  "reboot_path": "target-os-ssh delegated-operator-account",
+  "ssh_return": $(json_quote "$([ "$status" = pass ] && printf pass || printf not-proven)"),
+  "boot_id_change": $(json_quote "$([ "$status" = pass ] && printf pass || printf not-proven)"),
+  "post_reboot_system_readiness": $(json_quote "$([ "$status" = pass ] && printf pass || printf not-proven)"),
+  "bounded_log": $(json_quote "$log_ref"),
+  "message": $(json_quote "$message"),
+  "redaction": "secrets-not-recorded"
+}
+EOF
+  chmod 0600 "$file"
+  printf '%s\n' "$file"
 }
 
 vm_cmd_down() {

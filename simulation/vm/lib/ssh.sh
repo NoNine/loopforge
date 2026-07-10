@@ -148,6 +148,55 @@ vm_ssh_wait_ready() {
   die "Timed out waiting for target OS SSH on $machine ($host)"
 }
 
+vm_ssh_boot_id() {
+  vm_ssh_run_machine "${1:?machine required}" \
+    'set -eu; cat /proc/sys/kernel/random/boot_id'
+}
+
+vm_ssh_wait_unavailable() {
+  local machine host deadline
+  machine="${1:?machine required}"
+  host="$(vm_ssh_machine_host "$machine")"
+  deadline=$((SECONDS + VM_OPERATOR_SSH_TIMEOUT_SECONDS))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if ! ssh $(vm_ssh_common_options) "$VM_OPERATOR_USER@$host" 'true' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$VM_OPERATOR_SSH_POLL_SECONDS"
+  done
+  die "Timed out waiting for target OS SSH to stop during reboot: $machine"
+}
+
+vm_ssh_wait_system_ready() {
+  local machine output
+  machine="${1:?machine required}"
+  vm_ssh_wait_ready "$machine"
+  vm_ssh_wait_cloud_init "$machine"
+  output="$(vm_ssh_run_machine "$machine" 'set -eu; sudo -n systemctl is-system-running --wait')" || return $?
+  [ "$output" = running ] ||
+    die "Target OS did not reach running system state after reboot: $machine ($output)"
+}
+
+vm_ssh_reboot_machine() {
+  local machine before after rc
+  machine="${1:?machine required}"
+  before="$(vm_ssh_boot_id "$machine")" || return $?
+  rc=0
+  vm_ssh_run_machine "$machine" 'set -eu; sudo -n systemctl reboot' >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0|255) ;;
+    *) die "Delegated guest reboot failed for $machine (ssh exit $rc)" ;;
+  esac
+  vm_ssh_wait_unavailable "$machine" || return $?
+  vm_ssh_wait_system_ready "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
+  after="$(vm_ssh_boot_id "$machine")" || return $?
+  [ -n "$before" ] && [ -n "$after" ] && [ "$before" != "$after" ] ||
+    die "Guest boot ID did not change after reboot: $machine"
+  printf 'reboot=ready machine=%s boot-id-before=%s boot-id-after=%s ssh-return=ready system=running\n' \
+    "$machine" "$before" "$after"
+}
+
 vm_ssh_wait_cloud_init() {
   local machine host
   machine="${1:?machine required}"

@@ -63,9 +63,8 @@ Options:
   --all             Select all VM targets for reboot.
   -h, --help        Show this help.
 
-This is the VM simulation CLI. M1 implements local read-only run state only;
-commands that require VM or libvirt mutation report blocked until later
-milestones implement them.
+This is the VM simulation CLI. Commands that are not implemented by the
+current milestone fail closed without claiming readiness.
 USAGE
 }
 

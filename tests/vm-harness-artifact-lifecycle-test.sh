@@ -21,6 +21,9 @@ HARNESS_MODE=vm-simulation
 HARNESS_RUN_ID=vm-m6-test
 LOOPFORGE_VM_SET_ID=m6-test
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=simulation-only
+HARNESS_LDAP_DOMAIN=example.test
+HARNESS_LDAP_HOST=ldap.example.test
+HARNESS_LDAP_PORT=389
 HARNESS_UBUNTU_BASELINE_RELEASE=24.04
 HARNESS_UBUNTU_BASELINE_CODENAME=noble
 HARNESS_JAVA_BASELINE=21
@@ -256,6 +259,20 @@ for role in "${roles[@]}"; do
     [ -f "$env_path" ]
     [ "$(stat -c %a "$env_path")" = 600 ]
     grep -Fq 'vm-simulation' "$env_path"
+    grep -Fq 'HARNESS_MODE=vm-simulation' "$env_path"
+    case "$role" in
+      gerrit)
+        grep -Fq 'GERRIT_HOST=gerrit.example.test' "$env_path"
+        grep -Fq 'LDAP_URL=ldap://ldap.example.test:389' "$env_path"
+        ;;
+      jenkins-controller)
+        grep -Fq 'JENKINS_HOST=jenkins-controller.example.test' "$env_path"
+        grep -Fq 'LDAP_URL=ldap://ldap.example.test:389' "$env_path"
+        ;;
+      jenkins-agent)
+        grep -Fq 'JENKINS_AGENT_HOST=jenkins-agent.example.test' "$env_path"
+        ;;
+    esac
     [ -x "$(guest_path "$env_machine" "$(vm_path_guest_role_helper "$role")")" ]
   done
   prepare_evidence="$(find "$HARNESS_EVIDENCE_DIR" -name "prepare-artifacts-$role-*.json" | sort | tail -1)"

@@ -29,6 +29,25 @@ vm_artifacts_render_role_env() {
   file="$(mktemp "$HARNESS_HOST_DIR/.${role}-vm-env.XXXXXX")"
   cp -- "$source" "$file"
   set_env_file_value "$file" "$key" vm-simulation
+  set_env_file_value "$file" HARNESS_MODE vm-simulation
+  case "$role" in
+    gerrit)
+      set_env_file_value "$file" HARNESS_ENVIRONMENT gerrit
+      set_env_file_value "$file" GERRIT_HOST "gerrit.$HARNESS_LDAP_DOMAIN"
+      set_env_file_value "$file" GERRIT_CANONICAL_WEB_URL "http://gerrit.$HARNESS_LDAP_DOMAIN:8080/"
+      set_env_file_value "$file" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
+      ;;
+    jenkins-controller)
+      set_env_file_value "$file" HARNESS_ENVIRONMENT jenkins-controller
+      set_env_file_value "$file" JENKINS_HOST "jenkins-controller.$HARNESS_LDAP_DOMAIN"
+      set_env_file_value "$file" JENKINS_URL "http://jenkins-controller.$HARNESS_LDAP_DOMAIN:8080/"
+      set_env_file_value "$file" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
+      ;;
+    jenkins-agent)
+      set_env_file_value "$file" HARNESS_ENVIRONMENT jenkins-agent
+      set_env_file_value "$file" JENKINS_AGENT_HOST "jenkins-agent.$HARNESS_LDAP_DOMAIN"
+      ;;
+  esac
   chmod 0600 "$file"
   printf '%s\n' "$file"
 }
@@ -250,6 +269,62 @@ vm_artifacts_stage_role() {
   vm_ssh_copy_file_to_machine_atomic "$machine" "$archive" "$remote_archive" 0644 || return $?
   vm_ssh_copy_file_to_machine_atomic "$machine" "$checksum" "$remote_checksum" 0644 || return $?
   script="$(vm_artifacts_target_validation_script "$role")"
+  vm_ssh_run_machine "$machine" "$script"
+}
+
+vm_artifacts_verify_staged_role() {
+  local role machine payload bundle gerrit jenkins plugin_manager script
+  role="${1:?role required}"
+  machine="$(vm_artifacts_role_machine "$role")"
+  payload="$(vm_artifacts_target_payload "$role")"
+  bundle="$(bundle_name_for_role "$role")"
+  case "$role" in
+    gerrit)
+      gerrit="$HARNESS_GERRIT_BASELINE"
+      jenkins=not-applicable
+      plugin_manager=not-applicable
+      ;;
+    jenkins-controller)
+      gerrit=not-applicable
+      jenkins="$HARNESS_JENKINS_BASELINE"
+      plugin_manager="$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE"
+      ;;
+    jenkins-agent)
+      gerrit=not-applicable
+      jenkins=not-applicable
+      plugin_manager=not-applicable
+      ;;
+  esac
+  script=$(cat <<EOF
+set -eu
+payload=$(shell_quote "$payload")
+. /etc/os-release
+test "\$VERSION_ID" = $(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
+test "\$VERSION_CODENAME" = $(shell_quote "$HARNESS_UBUNTU_BASELINE_CODENAME")
+test -d "\$payload" || { printf 'missing_staged_artifacts payload=%s\\n' "\$payload"; exit 1; }
+test -f "\$payload/manifest.txt" || { printf 'missing_staged_artifacts manifest=%s\\n' "\$payload/manifest.txt"; exit 1; }
+test -f "\$payload/checksums.sha256" || { printf 'missing_staged_artifacts checksums=%s\\n' "\$payload/checksums.sha256"; exit 1; }
+cd "\$payload"
+sha256sum -c checksums.sha256
+expect_manifest() {
+  key="\$1"
+  expected="\$2"
+  actual="\$(awk -F= -v key="\$key" '\$1 == key { print substr(\$0, length(key) + 2); found=1; exit } END { if (!found) exit 1 }' manifest.txt)"
+  test "\$actual" = "\$expected" || { printf 'baseline_drift field=%s expected=%s actual=%s\\n' "\$key" "\$expected" "\$actual"; exit 1; }
+}
+expect_manifest harness_manifest_version 1
+expect_manifest role $(shell_quote "$role")
+expect_manifest bundle_name $(shell_quote "$bundle")
+expect_manifest ubuntu_release $(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
+expect_manifest ubuntu_codename $(shell_quote "$HARNESS_UBUNTU_BASELINE_CODENAME")
+expect_manifest java_version $(shell_quote "$HARNESS_JAVA_BASELINE")
+expect_manifest gerrit_version $(shell_quote "$gerrit")
+expect_manifest jenkins_version $(shell_quote "$jenkins")
+expect_manifest jenkins_plugin_manager_version $(shell_quote "$plugin_manager")
+test "\$(cat /etc/loopforge-source-boundary)" = $(shell_quote "public_internet_fallback=$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
+printf 'staged-artifacts=ready role=%s payload=%s\\n' $(shell_quote "$role") "\$payload"
+EOF
+)
   vm_ssh_run_machine "$machine" "$script"
 }
 
