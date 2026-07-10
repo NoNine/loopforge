@@ -46,6 +46,10 @@ mapfile -t vm_impl_files < <(
   printf 'Missing executable VM M5 lifecycle test\n' >&2
   exit 1
 }
+[ -x "$repo_root/tests/vm-harness-artifact-lifecycle-test.sh" ] || {
+  printf 'Missing executable VM M6 artifact lifecycle test\n' >&2
+  exit 1
+}
 [ -x "$repo_root/tests/fixtures/vm-libvirt-stub.sh" ] || {
   printf 'Missing executable shared VM libvirt test fixture\n' >&2
   exit 1
@@ -64,6 +68,23 @@ for module in core storage domain image; do
   require_in_file "$vm_root/lib/libvirt.sh" "/libvirt-$module.sh" \
     "VM libvirt loader must load the $module implementation module"
 done
+
+grep -Fq -- 'vm_artifacts_prepare_role' "$vm_root/lib/artifacts.sh" || {
+  printf 'VM artifact module must implement bundle-factory preparation\n' >&2
+  exit 1
+}
+grep -Fq -- 'vm_artifacts_stage_role' "$vm_root/lib/artifacts.sh" || {
+  printf 'VM artifact module must implement target SSH staging\n' >&2
+  exit 1
+}
+grep -Fq -- '/loopforge-inputs' "$vm_root/lib/paths.sh" || {
+  printf 'VM harness must define operator input custody for role env files\n' >&2
+  exit 1
+}
+grep -Fq -- 'chmod -R u+w' "$vm_root/lib/ssh.sh" || {
+  printf 'VM harness must make temporary read-only packages removable before cleanup\n' >&2
+  exit 1
+}
 
 reject_in_file "$vm_root/lib/state.sh" 'vm_libvirt_' \
   'VM run-state foundation must not query libvirt'

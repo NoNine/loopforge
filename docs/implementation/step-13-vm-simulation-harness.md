@@ -80,7 +80,7 @@ mutation requires explicit approval for the specific target and action.
 | M3 | Run `create`, `up`, `status`, `ssh --role ROLE`, and `down`; verify target OS SSH access without role mutation. |
 | M4 | Add `tests/vm-harness-ldap-seed-test.sh`; verify role OS dependency baseline readiness, LDAP readiness, seed, bind/search, and consumer reachability before baseline snapshot capture. |
 | M5 | Run `clean`, `destroy`, and `audit-state`; verify rollback and destruction ownership checks after baseline prerequisites are proven. |
-| M6 | Run `prepare-artifacts` and `stage-artifacts`; verify target-side manifests and checksums. |
+| M6 | Add `tests/vm-harness-artifact-lifecycle-test.sh`; run `prepare-artifacts` and `stage-artifacts`; verify target-side manifests and checksums. |
 | M7 | Run `configure-role`, `validate-role`, `reboot --all`, and validation after reboot. |
 | M8 | Run `configure-integration`, `validate-integration`, `prove-integration`, and `run`; verify proof marker rules. |
 

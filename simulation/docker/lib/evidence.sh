@@ -67,53 +67,6 @@ checksum_reference_for_evidence() {
       ;;
   esac
 }
-validate_role_baseline_manifest() {
-  local role manifest log
-  role="${1:?role required}"
-  manifest="${2:?manifest required}"
-  log="${3:?log required}"
-
-  if [ ! -f "$manifest" ]; then
-    printf 'baseline_drift role=%s field=manifest expected=present actual=missing manifest=%s\n' \
-      "$role" "$manifest" >>"$log"
-    return 1
-  fi
-
-  validate_manifest_value "$role" "$manifest" "$log" "harness_manifest_version" "1" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "role" "$role" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "bundle_name" "$(bundle_name_for_role "$role")" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "ubuntu_release" "$HARNESS_UBUNTU_BASELINE_RELEASE" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "ubuntu_codename" "$HARNESS_UBUNTU_BASELINE_CODENAME" || return 1
-  validate_manifest_value "$role" "$manifest" "$log" "java_version" "$HARNESS_JAVA_BASELINE" || return 1
-
-  case "$role" in
-    gerrit)
-      validate_manifest_value "$role" "$manifest" "$log" "gerrit_version" "$HARNESS_GERRIT_BASELINE" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "jenkins_version" "not-applicable" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "jenkins_plugin_manager_version" "not-applicable" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "war" "gerrit-$HARNESS_GERRIT_BASELINE.war" || return 1
-      ;;
-    jenkins-controller)
-      validate_manifest_value "$role" "$manifest" "$log" "gerrit_version" "not-applicable" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "jenkins_version" "$HARNESS_JENKINS_BASELINE" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "jenkins_plugin_manager_version" "$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "war" "jenkins-$HARNESS_JENKINS_BASELINE.war" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "plugin_manager" "jenkins-plugin-manager-$HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE.jar" || return 1
-      ;;
-    jenkins-agent)
-      validate_manifest_value "$role" "$manifest" "$log" "gerrit_version" "not-applicable" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "jenkins_version" "not-applicable" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "jenkins_plugin_manager_version" "not-applicable" || return 1
-      validate_manifest_value "$role" "$manifest" "$log" "bootstrap" "jenkins-agent-bootstrap.txt" || return 1
-      ;;
-    *)
-      die "Unknown role '$role'; expected gerrit, jenkins-controller, or jenkins-agent"
-      ;;
-  esac
-
-  printf 'baseline_ok role=%s manifest=%s\n' "$role" "$manifest" >>"$log"
-}
-
 validate_role_baseline_manifest_in_target() {
   local role service manifest log gerrit_version jenkins_version plugin_manager_version bundle script
   role="${1:?role required}"

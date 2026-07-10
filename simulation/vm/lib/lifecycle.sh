@@ -280,11 +280,39 @@ vm_cmd_ssh() {
 }
 
 vm_cmd_prepare_artifacts() {
-  vm_artifacts_blocked_m1 prepare-artifacts "${1:-}"
+  local role selected log evidence rc
+  selected="${1:-}"
+  vm_config_load_runtime
+  for role in ${selected:-${roles[*]}}; do
+    log="$(vm_path_bounded_log "prepare-artifacts-$role")"
+    rc=0
+    vm_artifacts_prepare_role "$role" >"$log" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      evidence="$(vm_write_artifact_evidence prepare-artifacts "$role" fail "$log" "Bundle-factory helper execution or artifact verification failed")"
+      print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
+      return "$rc"
+    fi
+    evidence="$(vm_write_artifact_evidence prepare-artifacts "$role" pass "$log" "Bundle-factory helper produced and exported a verified artifact archive pair")"
+    print_command_summary prepare-artifacts "$role" "ok artifact-export=$(basename "$(vm_artifacts_exported_archive "$role")")"
+  done
 }
 
 vm_cmd_stage_artifacts() {
-  vm_artifacts_blocked_m1 stage-artifacts "${1:-}"
+  local role selected log evidence rc
+  selected="${1:-}"
+  vm_config_load_runtime
+  for role in ${selected:-${roles[*]}}; do
+    log="$(vm_path_bounded_log "stage-artifacts-$role")"
+    rc=0
+    vm_artifacts_stage_role "$role" >"$log" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      evidence="$(vm_write_artifact_evidence stage-artifacts "$role" fail "$log" "SSH transfer or target-side artifact verification failed")"
+      print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+      return "$rc"
+    fi
+    evidence="$(vm_write_artifact_evidence stage-artifacts "$role" pass "$log" "Target OS SSH transfer and guest-local manifest/checksum verification passed")"
+    print_command_summary stage-artifacts "$role" ok
+  done
 }
 
 vm_cmd_configure_role() {

@@ -240,6 +240,8 @@ flowchart TD
 
 The implemented dependency rules are:
 
+`lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`
+
 - `state.sh` handles run-scoped state and generic marker mechanics; it does not
   query libvirt or validate live VM resources.
 - `libvirt-*.sh` implementation files do not call `vm_ssh_*` or `vm_state_*`.

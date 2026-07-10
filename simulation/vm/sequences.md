@@ -149,9 +149,12 @@ sequenceDiagram
   CLI->>LC: vm_cmd_prepare_artifacts(role)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_marker()
-  LC->>ART: vm_artifacts_prepare(role)
+  LC->>ART: vm_artifacts_prepare_role(role)
+  ART->>SSH: copy role env to operator input path
+  ART->>SSH: copy temporary read-only helper package
   ART->>SSH: vm_ssh_run(bundle-factory, helper prepare-artifacts)
-  ART->>SSH: vm_ssh_copy_from(bundle-factory, archives)
+  ART->>SSH: copy archive pair from bundle-factory
+  ART->>ART: verify exported manifest and checksums
   ART-->>LC: artifact preparation summary
   LC-->>CLI: compact prepare-artifacts summary
 ```
@@ -170,11 +173,14 @@ sequenceDiagram
   CLI->>LC: vm_cmd_stage_artifacts(role)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_marker()
-  LC->>ART: vm_artifacts_stage(role)
+  LC->>ART: vm_artifacts_stage_role(role)
+  ART->>ART: verify exported manifest and checksums
+  ART->>SSH: copy role env to operator input path
+  ART->>SSH: run helper prepare-target-workspace
   ART->>SSH: vm_ssh_copy_to(target role, archive and checksum)
   ART->>SSH: vm_ssh_run(target role, verify checksum)
   ART->>SSH: vm_ssh_run(target role, unpack to staging)
-  ART->>SSH: vm_ssh_run(target role, verify manifest)
+  ART->>SSH: vm_ssh_run(target role, verify manifest and source label)
   LC-->>CLI: compact stage-artifacts summary
 ```
 

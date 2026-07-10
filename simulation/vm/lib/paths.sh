@@ -71,6 +71,23 @@ vm_path_bounded_log() {
   bounded_log_path_in_dir "$HARNESS_LOG_DIR" "${1:?log name required}"
 }
 
+vm_path_guest_input_root() {
+  printf '/home/%s/loopforge-inputs\n' "$VM_OPERATOR_USER"
+}
+
+vm_path_guest_role_env() {
+  printf '%s/%s.env\n' \
+    "$(vm_path_guest_input_root)" \
+    "${1:?role required}"
+}
+
+vm_path_guest_package_dir() {
+  printf '/home/%s/.loopforge-package-%s-%s\n' \
+    "$VM_OPERATOR_USER" \
+    "$HARNESS_RUN_ID" \
+    "${1:?role required}"
+}
+
 vm_path_vm_set_libvirt_dir() {
   printf '%s/libvirt\n' "$HARNESS_VM_SET_DIR"
 }

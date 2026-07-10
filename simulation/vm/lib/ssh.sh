@@ -27,6 +27,7 @@ vm_ssh_common_options() {
     -o "UserKnownHostsFile=$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" \
     -o StrictHostKeyChecking=yes \
     -o BatchMode=yes \
+    -o IdentitiesOnly=yes \
     -o ConnectTimeout=10 \
     -o LogLevel=ERROR
 }
@@ -42,8 +43,8 @@ vm_ssh_run_machine() {
   local machine script
   machine="${1:?machine required}"
   script="${2:?script required}"
-  vm_libvirt_require_running "$machine"
-  vm_ssh_verify_known_host "$machine"
+  vm_libvirt_require_running "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
   printf '%s\n' "$script" |
     ssh $(vm_ssh_common_options) "$(vm_ssh_target "$machine")" bash -s ||
     return $?
@@ -53,14 +54,71 @@ vm_ssh_run_machine_with_ldap_password() {
   local machine script
   machine="${1:?machine required}"
   script="${2:?script required}"
-  vm_libvirt_require_running "$machine"
-  vm_ssh_verify_known_host "$machine"
+  vm_libvirt_require_running "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
   {
     printf 'LDAP_BIND_PASSWORD=%s\n' "$(shell_quote "$VM_RUNTIME_LDAP_BIND_PASSWORD")"
     printf 'export LDAP_BIND_PASSWORD\n'
     printf '%s\n' "$script"
   } | ssh $(vm_ssh_common_options) "$(vm_ssh_target "$machine")" bash -s ||
     return $?
+}
+
+vm_ssh_copy_file_to_machine_atomic() {
+  local machine local_file remote_file mode remote_tmp
+  machine="${1:?machine required}"
+  local_file="${2:?local file required}"
+  remote_file="${3:?remote file required}"
+  mode="${4:-0600}"
+  [ -f "$local_file" ] || die "Missing SSH transfer source: $local_file"
+  vm_libvirt_require_running "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
+  remote_tmp="$remote_file.loopforge-tmp-$$"
+  scp -q $(vm_ssh_common_options) "$local_file" \
+    "$(vm_ssh_target "$machine"):$remote_tmp" || return $?
+  vm_ssh_run_machine "$machine" \
+    "set -eu; test -d $(shell_quote "$(dirname "$remote_file")"); chmod $(shell_quote "$mode") $(shell_quote "$remote_tmp"); mv -f -- $(shell_quote "$remote_tmp") $(shell_quote "$remote_file")"
+}
+
+vm_ssh_copy_file_from_machine() {
+  local machine remote_file local_file
+  machine="${1:?machine required}"
+  remote_file="${2:?remote file required}"
+  local_file="${3:?local file required}"
+  vm_libvirt_require_running "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
+  mkdir -p "$(dirname "$local_file")"
+  scp -q $(vm_ssh_common_options) \
+    "$(vm_ssh_target "$machine"):$remote_file" "$local_file" || return $?
+  chmod 0600 "$local_file"
+}
+
+vm_ssh_copy_role_package() {
+  local machine role helper template_dir remote_dir
+  machine="${1:?machine required}"
+  role="${2:?role required}"
+  helper="$(helper_for_role "$role")"
+  template_dir="templates/$role"
+  remote_dir="$(vm_path_guest_package_dir "$role")"
+  [ -f "$repo_root/$helper" ] || die "Missing role helper: $repo_root/$helper"
+  [ -f "$repo_root/scripts/common.sh" ] || die "Missing shared role helper library"
+  [ -d "$repo_root/$template_dir" ] || die "Missing role template directory: $repo_root/$template_dir"
+  vm_libvirt_require_running "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
+  vm_ssh_run_machine "$machine" \
+    "set -eu; if test -e $(shell_quote "$remote_dir"); then chmod -R u+w $(shell_quote "$remote_dir"); rm -rf -- $(shell_quote "$remote_dir"); fi; install -d -m 0700 $(shell_quote "$remote_dir")" || return $?
+  tar -C "$repo_root" -cf - scripts/common.sh "$helper" "$template_dir" |
+    ssh $(vm_ssh_common_options) "$(vm_ssh_target "$machine")" \
+      "set -eu; tar -xf - -C $(shell_quote "$remote_dir"); find $(shell_quote "$remote_dir") -type d -exec chmod 0500 {} +; find $(shell_quote "$remote_dir") -type f -exec chmod 0400 {} +; chmod 0500 $(shell_quote "$remote_dir/$helper")"
+}
+
+vm_ssh_remove_role_package() {
+  local machine role remote_dir
+  machine="${1:?machine required}"
+  role="${2:?role required}"
+  remote_dir="$(vm_path_guest_package_dir "$role")"
+  vm_ssh_run_machine "$machine" \
+    "set -eu; if test -e $(shell_quote "$remote_dir"); then chmod -R u+w $(shell_quote "$remote_dir"); rm -rf -- $(shell_quote "$remote_dir"); fi"
 }
 
 vm_ssh_wait_host() {
