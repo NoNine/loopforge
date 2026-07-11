@@ -30,6 +30,18 @@ is not authority for native target-host baselines. See
 Docker-specific service names, host loopback browser URLs, and target SSH
 inventory values follow `docs/endpoint-identity.md`.
 
+Docker does not run a guest init system. Its target containers retain the
+existing direct-process lifecycle: the container entrypoint starts `sshd`, and
+Gerrit and Jenkins use the existing role-process mechanism. Do not add
+systemd, a container supervisor, restart policies, or Compose lifecycle work
+as part of the guest service lifecycle contract. Docker does not claim
+guest-reboot persistence.
+
+`configure-role` must establish a role runtime before `validate-role` runs.
+`validate-role` is observational and must fail for a missing or inactive
+process rather than start or repair it. Current Docker helper alignment with
+this phase boundary is pending implementation.
+
 ## Command Reference
 
 This section owns Docker command behavior. The command-to-checkpoint mapping
@@ -52,8 +64,8 @@ Phase and lifecycle commands:
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/var/lib/loopforge/staging/gerrit`, `/var/lib/loopforge/staging/jenkins`, or `/var/lib/loopforge/staging/jenkins-agent`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
-| `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
-| `validate-role [--env FILE] [--role ROLE]` | Runs one role-local validation phase, or all Docker roles when `--role` is omitted, against the target container and records evidence. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all Docker roles when `--role` is omitted, against the target container, establishes the applicable Gerrit or Jenkins process, and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `validate-role [--env FILE] [--role ROLE]` | Observes one role-local runtime, or all Docker roles when `--role` is omitted, against the target container and records evidence. It does not start or repair a process. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
 | `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server. Success prints a short `configure-integration: ok` summary. |
 | `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
 | `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |

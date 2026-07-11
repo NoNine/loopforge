@@ -40,6 +40,38 @@ as package installation, protected path creation, service management, or
 ownership changes. Runtime accounts own and run their services; they are not
 the default orchestration identity.
 
+## Service Lifecycle Contract
+
+Role configuration and role validation have separate responsibilities.
+
+- Role configuration installs or updates role-local runtime state and
+  establishes the role runtime. For Gerrit and the Jenkins controller this
+  includes starting or restarting the service after its configuration is
+  complete.
+- Role validation is observational. It may collect evidence, but it must not
+  start, restart, enable, or repair a role process or service.
+- In `vm-simulation` and `target-deployment`, Gerrit and the Jenkins
+  controller are guest-OS systemd services. The Jenkins SSH build agent is an
+  outbound SSH node, so its durable guest service is `ssh.service` or
+  `sshd.service`; no separate Jenkins agent daemon is implied.
+- In `docker-simulation`, the existing container/direct-process model remains
+  the lifecycle implementation. Docker does not claim guest-OS reboot
+  persistence or provide systemd units.
+- After a VM or target-host reboot, a role is ready only when its expected
+  service has recovered before validation begins. A later validation failure
+  must remain a failure; it must not repair the service and then report a
+  passing reboot result.
+
+### Service Lifecycle By Simulation Backend
+
+| Concern | Docker simulation | VM simulation |
+| --- | --- | --- |
+| Environment lifecycle | Docker Compose starts and stops containers. | The VM harness starts, stops, and reboots guest machines. |
+| Gerrit and Jenkins controller | Existing direct role processes inside the target container. | Guest systemd services. |
+| Jenkins SSH agent | Container entrypoint starts the direct `sshd` daemon. | Guest `ssh.service` or `sshd.service`. |
+| Role validation | Observes an existing process and endpoint. | Observes enabled/active units, runtime ownership, and endpoints. |
+| Reboot persistence | Not claimed. | Required: guest services recover before post-reboot validation. |
+
 ## Lifecycle Checkpoints
 
 The setup system moves through checkpoints. Each checkpoint has an owner, a
@@ -54,8 +86,8 @@ they must preserve the checkpoint semantics defined here.
 | Input review | Human operator or machine runner | Prepare reviewed env files and remove placeholders. No target mutation. |
 | Artifact preparation | Bundle factory through role helpers | Prepare application artifacts, manifests, checksums, and source-boundary labels. Target hosts are not mutated. |
 | Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target environments and verify target-side manifests/checksums before service mutation. |
-| Role-local setup | Role helpers | Install/configure only the role-local target state for Gerrit, Jenkins controller, or Jenkins agent. |
-| Role-local validation | Role helpers | Prove role readiness without cross-role integration claims. |
+| Role-local setup | Role helpers or native operator procedure | Install/configure role-local target state and establish its runtime for Gerrit, Jenkins controller, or Jenkins agent. |
+| Role-local validation | Role helpers or native operator procedure | Observe role readiness without cross-role integration claims or service repair. |
 | Shared integration setup | `scripts/integration-setup.sh` | Create or validate cross-role keys, ACL workflow, credentials, node registration, trigger server, jobs, and shared storage. |
 | Cross-role validation | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove Jenkins-to-Gerrit SSH, `stream-events`, effective Gerrit label/access state, Jenkins-to-agent SSH, node readiness, and scheduling. |
 | End-to-end trigger verification | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove disposable Gerrit change, event delivery, Jenkins build, agent execution, REST vote posting, and Gerrit review state. |
@@ -77,9 +109,9 @@ transcript. Operator manuals own exact commands and role-specific procedure.
 | Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed role env files, removes all `CHANGE_ME` values, keeps secrets out of committed examples, reviews cross-role values, and confirms browser-visible URLs for simulation. | None beyond local env-file creation. | Reviewed env files exist for Gerrit, Jenkins controller, Jenkins agent, and shared integration values; preflight failures are resolved before mutation. |
 | Artifacts | Bundle factory | `prepare-artifacts` | Consumes reviewed role env files and produces role artifact directories, manifests, checksums, and source-boundary records. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
 | Artifact staging | Bundle factory and target hosts | Operator-managed file transfer or simulation utility; target-side checksum verification | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
-| Gerrit readiness | Gerrit host | Gerrit role helper install/configure/validate phases | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit. | Gerrit starts, uses LDAP, exposes HTTP/SSH, records bounded logs, and stops before Jenkins integration mutation. |
-| Jenkins controller readiness | Jenkins controller | Jenkins controller role helper install/configure/validate phases | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files, installs plugins, and starts or restarts Jenkins. | Jenkins starts, uses LDAP/JCasC, has required plugins, records bounded logs, and stops before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
-| Jenkins agent readiness | Jenkins agent | Jenkins agent role helper install/configure/validate phases | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Installs packages from approved sources and creates or updates agent-host runtime files and SSH service state. | The agent host proves OS/tooling, SSH daemon, runtime account, filesystem, staged artifact, bounded log, and evidence readiness, and stops before credential transfer, controller node registration, or scheduling proof. |
+| Gerrit readiness | Gerrit host | Gerrit role helper or native procedure | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit during configuration. | Validation observes a running Gerrit service, LDAP, HTTP/SSH, and bounded logs before Jenkins integration mutation. |
+| Jenkins controller readiness | Jenkins controller | Jenkins controller role helper or native procedure | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files and plugins, then starts or restarts Jenkins after configuration. | Validation observes a running Jenkins service, LDAP/JCasC, required plugins, and bounded logs before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
+| Jenkins agent readiness | Jenkins agent | Jenkins agent role helper or native procedure | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Installs packages from approved sources and creates or updates agent-host runtime files and SSH service state. | Validation observes the enabled/active SSH service, OS/tooling, runtime account, filesystem, staged artifact, bounded log, and evidence readiness before credential transfer, controller node registration, or scheduling proof. |
 | Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/integration-setup-manual.md` for the cross-role command sequence and stop/review points. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
@@ -107,6 +139,8 @@ transcript. Operator manuals own exact commands and role-specific procedure.
   `validate-integration` and `prove-integration` as later cross-role
   acceptance for Gerrit SSH, event streaming, Jenkins agent scheduling, REST
   vote posting, and Gerrit review state.
+- Treat a service started by configuration as a prerequisite for role
+  validation. Validation does not supply missing lifecycle work.
 
 ## Simulation Command Relationship
 
@@ -149,5 +183,8 @@ replaying verbose runtime logs:
   readiness and end-to-end trigger proof.
 - Simulation evidence must be labeled as `docker-simulation` or
   `vm-simulation` and must not imply target-deployment acceptance.
+- VM and target-deployment evidence for Gerrit, Jenkins controller, or SSH
+  agent readiness must identify the expected systemd unit state. Docker
+  evidence identifies its direct process state instead.
 - Evidence records must never include private keys, passwords, tokens, LDAP
   bind secrets, or full secret-bearing env values.

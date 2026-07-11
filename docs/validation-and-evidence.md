@@ -32,6 +32,9 @@ Every evidence record must include:
 - Artifact manifest reference.
 - Checksum reference and checksum verification result.
 - Service startup checks where applicable.
+- For VM and target deployment, systemd unit name, enabled state, active
+  state, MainPID, runtime-account ownership, and a bounded journal reference
+  where applicable.
 - Endpoint checks where applicable.
 - LDAP checks where applicable.
 - SSH checks where applicable.
@@ -128,6 +131,13 @@ own scope.
 - Jenkins agent evidence covers SSH readiness, runtime-account ownership, and
   remote filesystem readiness.
 
+For `vm-simulation` and `target-deployment`, Gerrit and Jenkins controller
+role evidence records the guest systemd unit state in addition to application
+checks. Jenkins agent evidence records the enabled and active guest
+`ssh.service` or `sshd.service` state. `docker-simulation` records its
+direct process and endpoint checks instead, because it has no guest systemd
+manager and does not claim reboot persistence.
+
 These records are the primary inputs to global aggregation.
 
 ## Integration-Local Evidence
@@ -158,7 +168,8 @@ VM LDAP evidence must record LDAP service readiness, seeded account/group
 presence, bind/search proof, LDAP endpoint identity, simulation/test LDAP
 labeling, and redaction status without LDAP passwords or bind secrets.
 `reboot` evidence must record the selected VM targets, delegated
-operator-account reboot path, SSH return, and post-reboot readiness checks. VM shared storage
+operator-account reboot path, SSH return, and pre-validation post-reboot
+systemd recovery checks. VM shared storage
 evidence must prove the VM-set-owned NFS-backed Jenkins shared storage path is
 mounted into both the Jenkins controller and Jenkins agent VMs and that
 controller and agent runtime accounts can perform the required read/write

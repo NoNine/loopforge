@@ -252,12 +252,13 @@ stateDiagram-v2
 ```
 
 `reboot` is a VM lifecycle operation, not readiness proof by itself. It may
-run only against running VM targets. Any role or integration readiness claim
-that matters after reboot must be re-established by rerunning the matching
-validation or proof command. The `reboot + validate-role` edge is diagram
-layout shorthand for the M7 sequence `reboot --all` followed by a separate
-`validate-role`; it is not a combined command. M8 or final acceptance may
-require integration validation and proof after reboot.
+run only against running VM targets. Before a later validation begins, the
+harness must prove that enabled guest systemd services recovered on their own.
+`validate-role` then observes that state; it never starts or repairs a role
+service. The `reboot + validate-role` edge is diagram layout shorthand for the
+M7 sequence `reboot --all` followed by a separate `validate-role`; it is not a
+combined command. M8 or final acceptance may require integration validation
+and proof after reboot.
 
 `prove-integration` must require a matching `validate-integration` marker for
 the same run. `run` is a composite over normal workflow commands only; it must

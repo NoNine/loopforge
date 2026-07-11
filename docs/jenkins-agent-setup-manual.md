@@ -223,12 +223,19 @@ Mutation side effects:
 - Verifies the dedicated local runtime account and role-local runtime group
   from `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`.
 - Creates or updates the remote filesystem.
-- Validates the harness- or target-OS-managed OpenSSH daemon and the rendered
-  SSH policy without taking ownership of the daemon lifecycle.
+- Requires the guest OS to manage OpenSSH as `ssh.service` or `sshd.service`
+  in VM simulation and target deployment. The agent remains an outbound SSH
+  node and does not need a separate Jenkins agent daemon.
+- Validates the existing OpenSSH daemon and the rendered SSH policy without
+  taking ownership of controller-held key material or node scheduling.
 - Leaves `authorized_keys` creation and Jenkins public-key installation to
   integration-native operations or the shared helper workflow.
 - Leaves the shared Jenkins integration group and shared storage path to
   `scripts/integration-setup.sh` with `examples/integration.env.example`.
+
+Docker simulation keeps its direct `sshd` process and does not claim guest-OS
+service or reboot behavior. Operator-interface parity rules are defined in
+`docs/operator-execution-contract.md`.
 
 Helper:
 

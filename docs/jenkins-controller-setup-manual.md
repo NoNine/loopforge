@@ -267,7 +267,14 @@ Produced outputs:
 Mutation side effects:
 
 - Creates or updates Jenkins role-local runtime service settings.
-- `target-deployment` service management remains an operator-controlled action.
+- Installs or updates the runtime lifecycle definition; Jenkins starts or
+  restarts only after the plugin and JCasC configuration phases are complete.
+- Uses guest systemd for VM simulation and target deployment. Docker retains
+  its existing direct-process model.
+
+Validation is observational: it checks an already-running Jenkins runtime and
+must fail rather than start or repair it. The operator-interface parity rules
+are defined in `docs/operator-execution-contract.md`.
 
 Helper:
 

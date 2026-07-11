@@ -27,6 +27,8 @@ Use this order when deciding where a product or process fact belongs:
 4. Topic authority docs own detailed cross-cutting contracts:
    `docs/account-model.md` for accounts and credential custody,
    `docs/directory-model.md` for path ownership and generated state,
+   `docs/operator-execution-contract.md` for native and helper operator
+   interface parity,
    `docs/version-baseline.md` for default component versions,
    `docs/package-requirements.md` for host and package prerequisites,
    `docs/artifact-bundle-contract.md` for artifact contents and source

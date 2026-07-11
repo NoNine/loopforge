@@ -53,8 +53,7 @@ unprivileged user alone. Package installation, `/etc`, `/opt`,
 `/var/lib/jenkins`, file ownership, systemd overrides, service restarts, and
 protected system secret files require delegated administrator privilege from
 the operator account. Root may own OS-reserved files, but root is not a
-Loopforge account, helper execution identity, runtime identity, or supported
-direct login identity.
+Loopforge account, runtime identity, or supported direct login identity.
 
 Manual authority: this manual is the reference procedure. It intentionally
 contains only native OS and Jenkins operations. Do not add repository
@@ -400,6 +399,10 @@ journalctl -u jenkins -n 100 --no-pager
 ```
 
 If setup wizard is used instead of JCasC, remove `-Djenkins.install.runSetupWizard=false` until initial setup is complete.
+
+After plugin and JCasC changes, restart Jenkins explicitly through systemd.
+Validation observes the enabled and active unit, its runtime owner, endpoints,
+LDAP/JCasC, and bounded logs; it does not start or repair Jenkins.
 
 ### 3.3 Install Jenkins Plugins
 

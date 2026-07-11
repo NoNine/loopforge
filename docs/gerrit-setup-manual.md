@@ -246,8 +246,14 @@ Mutation side effects:
 - Creates or updates Gerrit role-local config files.
 - Records non-secret LDAP metadata and writes `secure.config` from reviewed
   secret input without committing the secret to evidence.
-- Does not start a local responder or any synthetic substitute for Gerrit.
-  Real daemon startup is part of validation.
+- Establishes the real Gerrit runtime after configuration is complete. In VM
+  simulation and target deployment, that means the guest systemd service;
+  Docker retains its existing direct-process model.
+- Does not use a local responder or any synthetic substitute for Gerrit.
+
+Validation is observational: it checks an already-running Gerrit runtime and
+must fail rather than start or repair it. The operator-interface parity rules
+are defined in `docs/operator-execution-contract.md`.
 
 Helper:
 

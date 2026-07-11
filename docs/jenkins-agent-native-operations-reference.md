@@ -50,8 +50,8 @@ Privilege warning: agent setup cannot be completed by an unprivileged user
 alone. Package installation, local runtime accounts, SSH service control, and
 remote filesystem ownership require delegated administrator privilege from
 the operator account on the build server. Root may own OS-reserved files, but
-root is not a Loopforge account, helper execution identity, runtime identity,
-or supported direct login identity.
+root is not a Loopforge account, runtime identity, or supported direct login
+identity.
 
 Manual authority: this manual is the reference procedure. It intentionally
 contains only native OS, OpenSSH, and Jenkins UI/application operations. Do not
@@ -136,11 +136,9 @@ v1 does not support installing OS dependencies from locally bundled Ubuntu
 packages. Use approved internal Ubuntu/OS package repositories for OS packages
 on target hosts.
 
-The Jenkins agent role helper requires this account and group to already exist
-and fails clearly if either is missing or if the passwd HOME is not
-`/var/lib/jenkins-agent`. Native account and group provisioning is outside the
-helper; perform it with administrator-controlled OS procedures before running
-the helper.
+The Jenkins agent runtime account and group must already exist, and its passwd
+HOME must be `/var/lib/jenkins-agent`. Create the account and group through
+administrator-controlled OS procedures before continuing.
 
 ### 2.2 Create the Agent Artifact Bundle
 
@@ -270,6 +268,7 @@ Run on the agent host:
 ```bash
 java -version
 getent passwd jenkins-agent
+systemctl is-enabled ssh || systemctl is-enabled sshd
 systemctl is-active ssh || systemctl is-active sshd
 ```
 
@@ -278,12 +277,15 @@ Acceptance checks:
 - OpenJDK 21 is active on the build server.
 - The `jenkins-agent` runtime account exists.
 - The agent remote FS exists and is owned by `jenkins-agent`.
-- SSH service is active on the build server.
+- SSH service is enabled and active on the build server.
 - The SSH daemon returns a real OpenSSH banner on the agent port.
 - Jenkins controller node registration, controller-side SSH launch,
   scheduling-label proof, later integration validation jobs, Gerrit Trigger
   execution, and `Verified` vote proof are deferred to the later shared
   integration workflow.
+
+This guest OpenSSH service is the lifecycle owner for the outbound SSH agent.
+There is no separate `jenkins-agent.service`.
 
 ## 5. Backup and Operations
 

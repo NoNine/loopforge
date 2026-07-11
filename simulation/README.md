@@ -186,8 +186,8 @@ When a layer uses these command names, the shared simulation semantics are:
 | `ssh` | Operator-account target OS control-plane SSH, not Gerrit service SSH. |
 | `prepare-artifacts` | Artifact preparation through role helpers in the bundle factory. |
 | `stage-artifacts` | Artifact transfer plus target-side manifest/checksum verification before service mutation. |
-| `configure-role` | Role-local setup for one or all service roles. |
-| `validate-role` | Role-local readiness validation only; no cross-role success claim. |
+| `configure-role` | Role-local setup for one or all service roles, including establishing the role runtime. |
+| `validate-role` | Observational role-local readiness validation only; it does not start, restart, enable, or repair a role runtime and makes no cross-role success claim. |
 | `configure-integration` | Shared integration setup through `scripts/integration-setup.sh`. |
 | `validate-integration` | Passive cross-role readiness validation. |
 | `prove-integration` | Active end-to-end trigger proof after matching validation passed. |

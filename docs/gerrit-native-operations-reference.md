@@ -46,8 +46,8 @@ Privilege warning: a production Gerrit install cannot be completed by an
 unprivileged user alone. Package installation, `/etc`, `/srv/gerrit`, file
 ownership, systemd units, service restarts, and protected secret files require
 delegated administrator privilege from the operator account. Root may own
-OS-reserved files, but root is not a Loopforge account, helper execution
-identity, runtime identity, or supported direct login identity.
+OS-reserved files, but root is not a Loopforge account, runtime identity, or
+supported direct login identity.
 
 Manual authority: this manual is the reference procedure. It intentionally
 contains only native OS and Gerrit operations. Do not add repository automation
@@ -427,6 +427,9 @@ systemctl status gerrit
 journalctl -u gerrit -n 100 --no-pager
 tail -n 100 /srv/gerrit/logs/gerrit.log
 ```
+
+Subsequent validation observes the enabled and active unit, its runtime owner,
+the endpoints, LDAP, and bounded logs. It does not start or repair Gerrit.
 
 ## 4. Shared Integration Handoff
 

@@ -88,6 +88,13 @@ edits, post-baseline cloud-init, host-side injection into guest helper or
 product paths, generated target sideband staging, or modeled success without
 runtime evidence to complete lifecycle checkpoints.
 
+VM guest service lifecycle follows the target-deployment contract. Gerrit and
+Jenkins controller use guest systemd units; the outbound Jenkins agent relies
+on the guest `ssh.service` or `sshd.service`. `configure-role` establishes
+these runtimes, while `validate-role` only observes enabled/active units,
+runtime ownership, endpoints, and bounded logs. The VM harness manages VM
+lifecycle, not application service lifecycle.
+
 ## Milestone Verification Gates
 
 VM milestone completion requires fail-closed runtime proof. Terminal summaries,
@@ -111,8 +118,8 @@ behavior follows these rules:
   checksums, source-boundary labels, transfer, and target-side staging are
   proven.
 - `validate-role`, `validate-integration`, and `prove-integration` fail closed
-  unless the real service, product API, scheduling, trigger, build, or vote
-  behavior claimed by the command is proven.
+  unless the already-running real service, product API, scheduling, trigger,
+  build, or vote behavior claimed by the command is proven.
 
 ## Command Reference
 
@@ -137,12 +144,12 @@ Phase and lifecycle commands:
 | `status [--env FILE]` | Requires the selected VM set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, VM simulation login accounts, and baseline prerequisite state. LDAP prerequisite state is `pending`, `ready`, or `stale`; malformed or mismatched proof is never reported as ready. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Transfers prepared artifact archives from the bundle factory VM to the target VM, verifies archive manifests and checksums on the target side, and stages them under the helper-visible staging path before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
-| `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all VM roles when `--role` is omitted, against target VMs and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
-| `validate-role [--env FILE] [--role ROLE]` | Runs one role-local validation phase, or all VM roles when `--role` is omitted, against target VMs and records evidence. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all VM roles when `--role` is omitted, against target VMs, installs or updates required guest service state, establishes the role runtime, and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
+| `validate-role [--env FILE] [--role ROLE]` | Observes one role-local runtime, or all VM roles when `--role` is omitted, against target VMs and records evidence. It must not start, restart, enable, or repair a service. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
 | `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server through `scripts/integration-setup.sh`. Success prints a short `configure-integration: ok` summary. |
 | `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
 | `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
-| `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, and records reboot evidence. It does not rerun configuration or validation phases implicitly. |
+| `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, then proves required guest services recovered before any later validation. It does not rerun configuration or validation phases implicitly. |
 | `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected VM set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
 | `down [--env FILE]` | Gracefully shuts down selected VM set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. A hard libvirt stop is a bounded recovery fallback, not the normal path. |
 | `clean [--env FILE]` | Restores the selected VM set to its clean baseline snapshot and deletes only mutable generated runtime data for the selected run. It preserves exported artifacts, evidence, and logs. It does not delete VMs. |
@@ -414,6 +421,7 @@ simulation/vm/simulate.sh --env FILE configure-integration
 simulation/vm/simulate.sh --env FILE validate-integration
 simulation/vm/simulate.sh --env FILE prove-integration
 simulation/vm/simulate.sh --env FILE reboot --all
+# Prove unit recovery before the following observational checks.
 simulation/vm/simulate.sh --env FILE validate-role
 simulation/vm/simulate.sh --env FILE validate-integration
 simulation/vm/simulate.sh --env FILE down
