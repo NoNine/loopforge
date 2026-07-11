@@ -114,7 +114,7 @@ contract with the default simulation operator and product runtime accounts.
 Docker realizes Jenkins shared storage by bind-mounting one run-local
 `target/shared-jenkins-storage` directory into both the Jenkins controller and
 Jenkins agent containers at `JENKINS_SHARED_STORAGE_PATH`, normally
-`/mnt/jenkins-shared`. `configure-integration` applies the shared
+`/data/jenkins-shared`. `configure-integration` applies the shared
 `jenkins-share` group, setgid group-writable permissions, and read/write proof
 inside those containers.
 

@@ -24,10 +24,10 @@ VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
 mechanics only; VM lifecycle and transport stay in the VM harness. VM-specific
 libvirt/KVM domains, VM sets, snapshots, guest reboot, guest SSH readiness,
-NFS-backed shared storage, and `create`/`clean`/`destroy` behavior must not
-copy Docker backend assumptions such as Compose project names, Docker service
-names, Docker bind-mount checks, loopback port ownership, or Docker transfer
-waivers.
+guest-owned NFS-backed shared storage, and `create`/`clean`/`destroy` behavior
+must not copy Docker backend assumptions such as Compose project names, Docker
+service names, Docker bind-mount checks, loopback port ownership, or Docker
+transfer waivers.
 
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
@@ -69,7 +69,7 @@ infrastructure work: libvirt/KVM provisioning, seed media or cloud-init base
 OS bootstrap before the clean baseline snapshot, automatic baked base-image
 preparation for simulation-owned OS dependencies, baseline snapshot
 capture/rollback, VM start/stop/destruction, VM-set ownership inspection, and
-VM-set-owned NFS setup.
+guest-owned NFS setup.
 
 VM provisioning must satisfy the role target OS dependency baselines before
 the clean baseline snapshot is captured. The `create` command may bake or
@@ -267,13 +267,14 @@ is defined in `simulation/README.md`. VM provisioning realizes that contract
 with the default simulation operator and product runtime accounts unless a
 reviewed VM config overrides them.
 
-VM simulation models Jenkins shared storage as a VM-set-owned NFS-backed
-shared storage resource. It is simulation infrastructure, not a Jenkins
-runtime home and not a sixth product role. The Jenkins controller and Jenkins
-agent VMs mount it at `JENKINS_SHARED_STORAGE_PATH`, normally
-`/mnt/jenkins-shared`, before `configure-integration`. That integration phase
-applies the shared `jenkins-share` group, setgid group-writable permissions,
-and read/write proof.
+VM simulation models Jenkins shared storage as a Jenkins-agent-hosted
+NFS-backed shared storage resource. It is target-like guest state, not a
+Jenkins runtime home and not a sixth product role. The Jenkins agent VM runs
+the NFS server and exports `JENKINS_SHARED_STORAGE_PATH`, normally
+`/data/jenkins-shared`; the Jenkins controller VM mounts that export at the
+same path before `configure-integration`. That integration phase applies the
+shared `jenkins-share` group, setgid group-writable permissions, export and
+mount validation, and read/write proof.
 
 Privileged VM operations are delegated from the operator account only when
 needed for narrow OS work, such as package installation, protected path

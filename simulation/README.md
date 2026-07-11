@@ -37,8 +37,8 @@ Layer lifecycle and transport stay local to each harness until real VM code
 proves a stable boundary. Docker-specific Compose, container, bind-mount,
 `docker cp`, loopback-port, and cleanup behavior belongs in the Docker
 harness. VM-specific libvirt/KVM domains, VM sets, snapshots, guest reboot,
-guest SSH readiness, NFS-backed shared storage, and `create`/`clean`/`destroy`
-behavior belongs in the VM harness.
+guest SSH readiness, guest-owned NFS-backed shared storage, and
+`create`/`clean`/`destroy` behavior belongs in the VM harness.
 
 Docker simulation may use explicit simulation-only waivers where containers
 cannot naturally model target hosts. VM simulation is expected to be stricter:
@@ -71,7 +71,14 @@ Product runtime accounts own and run their simulated services: `gerrit` owns
 `/srv/gerrit`, `jenkins` owns `/var/lib/jenkins`, and `jenkins-agent` owns
 `/var/lib/jenkins-agent`. Jenkins controller and agent shared storage uses the
 separate `jenkins-share` integration group from
-`examples/integration.env.example`, not a shared controller/agent UID.
+`examples/integration.env.example`, not a shared controller/agent UID. The
+default shared group is `jenkins-share` with no UID and GID `61040`. The
+default shared path is `/data/jenkins-shared`; Docker models it with a
+run-local bind mount, while VM simulation must model the target-deployment
+shape by exporting it from the Jenkins agent VM and mounting it on the Jenkins
+controller VM. `scripts/integration-setup.sh` owns creating or validating the
+shared group, shared storage permissions, export or mount state, and
+read/write proof.
 
 Simulation LDAP seeds these human-style login accounts and groups for test
 use only:

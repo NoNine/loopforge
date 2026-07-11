@@ -154,6 +154,7 @@ apt install -y \
   ca-certificates \
   curl \
   fontconfig \
+  nfs-common \
   openjdk-21-jre \
   openssh-client \
   rsync \

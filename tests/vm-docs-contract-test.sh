@@ -76,8 +76,8 @@ require_doc_text docs/directory-model.md \
   '`vm-sets/<vm-set-id>/snapshots/`' \
   'Directory model must document VM baseline snapshot records'
 require_doc_text docs/directory-model.md \
-  'VM-set-owned Jenkins shared storage' \
-  'Directory model must document VM-set-owned Jenkins shared storage'
+  'Jenkins-agent-hosted shared storage exported to the controller VM' \
+  'Directory model must document Jenkins-agent-hosted VM shared storage'
 require_doc_text docs/directory-model.md \
   '`host/artifacts/exported/`' \
   'Directory model must document VM host-owned artifact review copies'
@@ -137,8 +137,14 @@ require_doc_text docs/package-requirements.md \
   'cloud-init or seed media tooling' \
   'Package requirements must document VM seed media tooling'
 require_doc_text docs/package-requirements.md \
-  'NFS utilities for shared Jenkins storage' \
-  'Package requirements must document VM shared-storage tooling'
+  'NFS packages for shared Jenkins storage are guest VM dependencies' \
+  'Package requirements must place VM NFS packages in guests'
+require_doc_text docs/package-requirements.md \
+  '`nfs-kernel-server`' \
+  'Package requirements must document Jenkins agent NFS server package'
+require_doc_text docs/package-requirements.md \
+  '`nfs-common`' \
+  'Package requirements must document Jenkins controller NFS client package'
 require_doc_text docs/package-requirements.md \
   '| VM LDAP guest | `slapd` for the simulation-owned LDAP service' \
   'Package requirements must document the VM LDAP guest service package'
@@ -168,7 +174,7 @@ require_doc_text docs/validation-and-evidence.md \
   '`reboot` evidence' \
   'Evidence contract must require VM reboot evidence'
 require_doc_text docs/validation-and-evidence.md \
-  'NFS-backed Jenkins shared storage' \
+  'agent VM hosts the NFS-backed `/data/jenkins-shared` export' \
   'Evidence contract must require VM shared storage proof'
 require_doc_text docs/validation-and-evidence.md \
   'VM LDAP evidence must record LDAP service readiness' \

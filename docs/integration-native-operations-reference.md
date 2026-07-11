@@ -58,6 +58,7 @@ loopback URLs into target-deployment inventory.
 | Gerrit project/ref scope | reviewed project and ref pattern |
 | Jenkins Gerrit credential ID | reviewed Jenkins credential ID |
 | Jenkins agent credential ID | reviewed Jenkins credential ID |
+| Jenkins shared storage path | `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` |
 
 Prerequisites:
 
@@ -80,6 +81,10 @@ Prerequisites:
 - The operator has Jenkins administrator access sufficient to create credentials,
   configure Gerrit Trigger, register SSH nodes, and create disposable validation
   jobs.
+- The Jenkins agent host has approved NFS server packages and the Jenkins
+  controller host has approved NFS client packages.
+- The Jenkins shared integration group and GID are reserved on both Jenkins
+  hosts. The example group is `jenkins-share` with GID `61040`.
 
 Credential custody:
 
@@ -328,7 +333,73 @@ sudo -u jenkins ssh -p JENKINS_AGENT_SSH_PORT \
 Expected result: the remote command prints the reviewed Jenkins agent runtime
 account.
 
-## 6. Jenkins Agent Node Registration
+## 6. Jenkins Shared Storage
+
+Configure shared Jenkins integration storage after controller-to-agent SSH is
+ready and before Jenkins node registration proof. In v1, the Jenkins agent host
+runs the NFS server and exports `JENKINS_SHARED_STORAGE_PATH`, normally
+`/data/jenkins-shared`. The Jenkins controller mounts that export at the same
+path. Keep `root_squash` enabled unless an approved site policy explicitly
+requires different export semantics.
+
+On both Jenkins hosts, create or validate the shared integration group with the
+same numeric GID:
+
+```bash
+getent group jenkins-share || sudo groupadd -g 61040 jenkins-share
+```
+
+Add only the relevant runtime account to the shared group on each host. On the
+Jenkins controller host:
+
+```bash
+sudo usermod -a -G jenkins-share jenkins
+```
+
+On the Jenkins agent host:
+
+```bash
+sudo usermod -a -G jenkins-share jenkins-agent
+```
+
+On the Jenkins agent host, create the exported directory with agent-runtime
+ownership and shared group write:
+
+```bash
+sudo install -d -m 2775 -o jenkins-agent -g jenkins-share /data/jenkins-shared
+sudo chmod 2775 /data/jenkins-shared
+```
+
+Configure the NFS export for the Jenkins controller client using the site's
+approved host identity, network, or IP allowlist. The export must preserve
+numeric GID behavior for the shared group and should keep `root_squash`
+enabled.
+
+On the Jenkins controller host, mount the Jenkins agent export at the same
+path:
+
+```bash
+sudo install -d -m 2775 -o jenkins -g jenkins-share /data/jenkins-shared
+sudo mount -t nfs JENKINS_AGENT_HOST:/data/jenkins-shared /data/jenkins-shared
+```
+
+Persist the mount through the site's approved `/etc/fstab`, automount, or
+configuration-management policy only after the manual mount and permission
+checks pass.
+
+Validate shared storage through the runtime accounts:
+
+```bash
+sudo -u jenkins sh -c 'printf shared-storage-proof > /data/jenkins-shared/controller-proof.txt'
+sudo -u jenkins-agent grep -Fx shared-storage-proof /data/jenkins-shared/controller-proof.txt
+```
+
+Evidence should record the shared group name and GID, export path, controller
+mount source, export options, bounded command references, and the runtime
+account read/write proof. Do not store integration keys, scripts, credentials,
+or helper status under shared storage.
+
+## 7. Jenkins Agent Node Registration
 
 On the Jenkins controller, create an SSH build-agent node with:
 
@@ -367,7 +438,7 @@ In the Jenkins Web UI, verify `Manage Jenkins` > `Nodes` shows the reviewed
 node online. Open the node page and confirm the label string, executor count,
 remote root directory, and recent launch log.
 
-## 7. End-To-End Proof
+## 8. End-To-End Proof
 
 Create a disposable Gerrit change in the reviewed verification project/ref
 scope. Use a disposable Jenkins job or reviewed existing validation job that:
@@ -419,7 +490,7 @@ ran on `JENKINS_AGENT_NODE_NAME` or the reviewed scheduling label. In the Gerrit
 Web UI, open the disposable change and confirm the latest patch set shows the
 expected `Verified +1` vote from the Jenkins Gerrit integration account.
 
-## 8. Evidence And Failure Classification
+## 9. Evidence And Failure Classification
 
 Collect an integration evidence record with:
 
@@ -458,7 +529,7 @@ Classify failures at the point where proof breaks:
 Failed `Verified` voting must not be collapsed into SSH, stream-events, or job
 scheduling failures.
 
-## 9. Recovery And Rotation
+## 10. Recovery And Rotation
 
 For Jenkins-to-Gerrit key rotation:
 
@@ -491,7 +562,7 @@ For Gerrit access or `Verified` label recovery, create reviewed Gerrit config
 changes and wait for approved submission before rerunning integration proof.
 Do not use direct apply in target deployment.
 
-## 10. References
+## 11. References
 
 - Gerrit native operations:
   `gerrit-native-operations-reference.md`

@@ -62,7 +62,7 @@ helper-owned `/var/lib/loopforge/` state.
 
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/mnt/jenkins-shared` | Jenkins controller target and Jenkins agent target | Shared integration helper | Runtime owner for each host, group `JENKINS_SHARED_GROUP` | Setgid group-write storage, normally `2775` | Shared integration proof storage only | Review-sensitive; not a credential store | Evidence records group name, GID, path, and read/write proof |
+| `/data/jenkins-shared` | Jenkins agent target export and Jenkins controller target mount | Shared integration helper | Jenkins agent runtime owner on the export, group `JENKINS_SHARED_GROUP` on both hosts | NFS-backed setgid group-write storage, normally `2775` | Shared integration proof storage only | Review-sensitive; not a credential store | Evidence records group name, GID, path, export source, mount target, and read/write proof |
 | `/tmp` transient files | Targets | Role helpers and integration helper | Creating process | Temporary only | REST payloads, public-key handoff files, generated Groovy scripts, transfer scratch | Potentially sensitive while present | Must not bypass reviewed helper inputs; do not retain as evidence |
 
 ## Operator Input Custody
@@ -171,7 +171,7 @@ generated/simulation/docker/<run-id>/
 | `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs |
 | `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Host-owned backups of retained outputs before active dirs are cleared |
 | `target/helper-state/integration/` | Shared integration helper state | Target-dominated | Cross-role integration status and helper state for the host-orchestrated integration utility |
-| `target/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | Target-dominated | Shared Jenkins controller/agent integration storage |
+| `target/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Shared Jenkins controller/agent integration storage |
 | `target/ldap/data/` | `/var/lib/ldap` in LDAP container | Target-dominated | Simulation-owned LDAP data |
 | `target/ldap/config/` | `/etc/ldap/slapd.d` in LDAP container | Target-dominated | Simulation-owned LDAP configuration |
 | `target/product-homes/gerrit/` | `/srv/gerrit` in Gerrit target | Target-dominated | Docker-backed Gerrit product home |
@@ -219,7 +219,7 @@ generated/simulation/vm/<run-id>/
 | `base-images/<fingerprint>/volumes/` | Shared libvirt directory-pool target | Libvirt-dominated | Dependency-prepared qcow2 base volume managed, hashed, and inspected through libvirt after publication |
 | `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
 | `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
-| `vm-sets/<vm-set-id>/shared-jenkins-storage/` | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/mnt/jenkins-shared` | VM-set dominated | VM-set-owned Jenkins shared storage backing for controller and agent VMs |
+| Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, and manifest contract |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, normally written with mode `0600` |
 | `host/target-ssh/` | Host-side target SSH material | Host-dominated | Target OS SSH identity and known-hosts material for VM control-plane access |
@@ -242,8 +242,10 @@ to one `HARNESS_RUN_ID` and may be cleaned independently. `clean` rolls the
 selected VM set back to the clean baseline snapshot and removes mutable
 selected-run state, while preserving exported artifacts, evidence, bounded
 logs, and retained-output backups. `destroy` is the only command that removes
-simulation-owned VM domains, disks, snapshots, seed media, networks, or
-VM-set-owned shared storage after ownership validation.
+simulation-owned VM domains, disks, snapshots, seed media, or networks after
+ownership validation. VM shared Jenkins storage is not VM-host state; it is
+guest-local data on the Jenkins agent VM and is removed only as part of owned
+VM disk destruction.
 
 The host operator owns VM control metadata but does not own adopted qcow2
 content. Libvirt volume APIs provide format, capacity, backing-store, hashing,

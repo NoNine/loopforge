@@ -65,24 +65,27 @@ require_doc_text docs/account-model.md \
   'The shared GID is the cross-host contract for NFS-backed sharing' \
   'Account model must document the shared GID storage contract'
 require_doc_text docs/account-model.md \
+  'normally `/data/jenkins-shared`. The Jenkins agent host owns the v1 NFS server' \
+  'Account model must document agent-hosted Jenkins shared storage'
+require_doc_text docs/account-model.md \
   'For NFS-backed storage, keep `root_squash` enabled' \
   'Account model must document NFS root_squash guidance'
 
 require_doc_text simulation/README.md \
-  'The simulation model derives account usage from `docs/account-model.md`.' \
+  'The simulation model derives account roles and numeric identity policy from' \
   'Simulation README must point to the shared account model'
 require_doc_text simulation/README.md \
-  '| Jenkins shared integration group | `jenkins-share` | no UID / `61040` |' \
+  'default shared group is `jenkins-share` with no UID and GID `61040`.' \
   'Simulation README must document the Jenkins shared group example GID'
 require_doc_text simulation/README.md \
-  '`jenkins-share` integration group, not a shared controller/agent UID.' \
+  'separate `jenkins-share` integration group from' \
   'Simulation README must document shared storage as group-based access'
 require_doc_text simulation/README.md \
   '`scripts/integration-setup.sh` owns creating or' \
   'Simulation README must assign shared storage setup to integration setup'
 
 require_doc_text simulation/docker/README.md \
-  'The shared simulation account contract is defined in `simulation/README.md`.' \
+  'The shared simulation account contract, including seeded LDAP login accounts,' \
   'Docker README must point to the shared simulation account contract'
 require_doc_text simulation/docker/README.md \
   'Docker realizes Jenkins shared storage by bind-mounting one run-local' \
@@ -95,13 +98,13 @@ reject_doc_text simulation/docker/README.md \
   'Docker README must not call target ci-operator the local host account'
 
 require_doc_text simulation/vm/README.md \
-  'The shared simulation account contract is defined in `simulation/README.md`.' \
+  'The shared simulation account contract, including seeded LDAP login accounts,' \
   'VM README must point to the shared simulation account contract'
 require_doc_text simulation/vm/README.md \
-  'VM simulation models Jenkins shared storage as a VM-set-owned NFS-backed' \
+  'VM simulation models Jenkins shared storage as a Jenkins-agent-hosted' \
   'VM README must document VM shared storage realization'
 require_doc_text simulation/vm/README.md \
-  'runtime home and not a sixth product role.' \
+  'Jenkins runtime home and not a sixth product role.' \
   'VM README must document VM shared storage is not a product role'
 
 for native_reference in \

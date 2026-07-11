@@ -24,9 +24,9 @@ not be presented as `target-deployment` support.
 
 The shared integration helper owns cross-role work only: Jenkins-to-Gerrit SSH,
 Jenkins-to-agent SSH, Gerrit Trigger configuration, Jenkins node readiness,
-trigger verification, `Verified` voting, and integration evidence. It does not
-replace the role setup manuals and it does not provide native OS operation
-instructions.
+trigger verification, `Verified` voting, Jenkins shared storage, and
+integration evidence. It does not replace the role setup manuals and it does
+not provide native OS operation instructions.
 
 `target-deployment` workflow defaults to a global `Verified` CI label in
 reviewed `All-Projects` configuration. Jenkins read access and
@@ -67,6 +67,9 @@ Before running the shared helper:
   group other than the default example `ci-operator:ci-operator`.
 - The shared integration env defines OS SSH access for the Gerrit target,
   Jenkins controller target, and Jenkins agent target.
+- The Jenkins agent host can run the NFS server for
+  `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared`, and the
+  Jenkins controller host can mount that agent export at the same path.
 - Operators have confirmed that any public internet fallback on target hosts is
   simulation-only and will be labeled that way in docs, logs, and evidence.
 
@@ -90,6 +93,9 @@ Required operator inputs include:
   grants.
 - Jenkins agent node name, scheduling label, executor policy, and remote
   filesystem values.
+- Jenkins shared storage group, GID, and path. The v1 default path is
+  `/data/jenkins-shared`; the Jenkins agent host exports it over NFS and the
+  Jenkins controller mounts the export at the same path.
 - Disposable verification project, branch, job, and run ID values.
 - Target OS SSH inventory for Gerrit, Jenkins controller, and Jenkins agent:
   host, port, user, identity file, and known-hosts file.
@@ -164,6 +170,15 @@ through the same SSH and service interfaces used by VM simulation and
 Service API calls may originate from the control node or from a target over
 SSH when network reachability requires it. Evidence must record the selected
 origin when that origin affects interpretation of the proof.
+
+Shared Jenkins storage is a target OS concern prepared during shared
+integration. In v1 the Jenkins agent host is the NFS server for
+`JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared`. The controller
+mounts the agent export at that same path. The helper must validate the shared
+group/GID on both Jenkins hosts, create or validate the agent-hosted export
+directory with setgid group-write permissions, keep `root_squash` enabled by
+default, validate the controller mount source, and prove controller-write plus
+agent-read behavior through runtime accounts.
 
 ## Gerrit ACL Modes
 
@@ -252,6 +267,9 @@ the global label and scoped vote permission checks below.
   reviewed project and ref scope.
 - Jenkins-to-agent SSH authentication from the controller to the agent runtime
   account.
+- Jenkins shared storage is exported by the Jenkins agent host, mounted by the
+  controller at `JENKINS_SHARED_STORAGE_PATH`, and writable/readable through
+  the reviewed runtime accounts and shared group.
 - Jenkins node readiness for the reviewed node name and executor policy.
 - Jenkins job scheduling on the selected scheduling label.
 - Gerrit REST review API posts `Verified +1` for the disposable verification

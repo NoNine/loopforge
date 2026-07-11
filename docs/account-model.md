@@ -100,31 +100,37 @@ own role-local files only; they are not the cross-role sharing mechanism.
 
 Cross-role Jenkins controller and agent sharing uses a separate integration
 group from `examples/integration.env.example`. That file is the source of
-truth for the shared group name, shared group GID, and shared storage path.
-The shared GID is the cross-host contract for NFS-backed sharing and must
-exist with the same numeric value on the Jenkins controller host, Jenkins
-agent host, and any NFS server or export that owns or displays the shared
-path. `scripts/integration-setup.sh` owns creating or validating that group,
-adding the Jenkins controller runtime account and the Jenkins agent runtime
-account to it, setting group-writable shared storage permissions, and
-recording read/write proof. Role-local helpers must not own this shared group
-or shared storage setup.
+truth for the shared group name, shared group GID, and shared storage path,
+normally `/data/jenkins-shared`. The Jenkins agent host owns the v1 NFS server
+and exports that path. The Jenkins controller host mounts the agent export at
+the same path, while the Jenkins agent host uses its local export directory
+directly.
 
-The shared storage path should be owned by an approved runtime owner and the
-shared integration group with group write and setgid enabled, normally mode
-`2775`. The setgid bit keeps new children in the shared group on typical
-Linux filesystems, but process umask can still remove group write bits. Use
-default ACLs only when setgid plus reviewed umask policy is insufficient, and
-validate ACL behavior consistently on the storage server and clients.
+The shared GID is the cross-host contract for NFS-backed sharing and must
+exist with the same numeric value on the Jenkins controller host and Jenkins
+agent host. The exported directory must be owned by the Jenkins agent runtime
+account and shared integration group with group write and setgid enabled,
+normally mode `2775`. `scripts/integration-setup.sh` owns creating or
+validating that group, adding the Jenkins controller runtime account and the
+Jenkins agent runtime account to it, preparing or validating the agent-hosted
+export and controller mount, setting group-writable shared storage
+permissions, and recording read/write proof. Role-local helpers must not own
+this shared group or shared storage setup.
+
+The setgid bit keeps new children in the shared group on typical Linux
+filesystems, but process umask can still remove group write bits. Use default
+ACLs only when setgid plus reviewed umask policy is insufficient, and validate
+ACL behavior consistently on the Jenkins agent NFS server and controller
+client.
 
 For NFS-backed storage, keep `root_squash` enabled unless an approved
 site-specific storage policy says otherwise. With `root_squash`, client-side
 privileged ownership changes may fail or map to anonymous IDs, so target
-deployment storage should be pre-provisioned server-side or through an
-approved storage-admin workflow and then validated by Loopforge. Do not use
-`all_squash` as the v1 default; if a site intentionally maps all client
-identities to anonymous IDs, document explicit `anonuid` and `anongid` values
-and the resulting audit tradeoff.
+deployment ownership and mode for `/data/jenkins-shared` must be established
+on the Jenkins agent host before or during shared integration and then
+validated from both Jenkins hosts. Do not use `all_squash` as the v1 default;
+if a site intentionally maps all client identities to anonymous IDs, document
+explicit `anonuid` and `anongid` values and the resulting audit tradeoff.
 
 Human admin accounts are LDAP-backed human accounts or LDAP-backed groups.
 The Gerrit admin account administers Gerrit and can configure integration

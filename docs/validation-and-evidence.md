@@ -169,12 +169,12 @@ presence, bind/search proof, LDAP endpoint identity, simulation/test LDAP
 labeling, and redaction status without LDAP passwords or bind secrets.
 `reboot` evidence must record the selected VM targets, delegated
 operator-account reboot path, SSH return, and pre-validation post-reboot
-systemd recovery checks. VM shared storage
-evidence must prove the VM-set-owned NFS-backed Jenkins shared storage path is
-mounted into both the Jenkins controller and Jenkins agent VMs and that
-controller and agent runtime accounts can perform the required read/write
-proof. VM records must use `vm-simulation` and `simulation-only` labels and
-must not imply `target-deployment` acceptance.
+systemd recovery checks. VM shared storage evidence must prove the Jenkins
+agent VM hosts the NFS-backed `/data/jenkins-shared` export, the Jenkins
+controller VM mounts that export at the same path, the shared group/GID and
+export options were validated, and controller and agent runtime accounts can
+perform the required read/write proof. VM records must use `vm-simulation` and
+`simulation-only` labels and must not imply `target-deployment` acceptance.
 
 ACL planning records must include:
 

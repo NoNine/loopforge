@@ -334,7 +334,7 @@ files:
 | `seed_media.sh` | `libvirt.sh` | Seed rendering, cloud-init, or LDIF handling becomes substantial. |
 | `snapshots.sh` | `libvirt.sh` | Baseline capture and rollback require enough checks to obscure libvirt primitives. |
 | `ldap.sh` | `lifecycle.sh` during `create` | LDAP seed verification and bind/search proof become a substantial verifier. |
-| `nfs.sh` | `lifecycle.sh` or `integration.sh` | NFS setup and shared-storage proof need independent lifecycle handling. |
+| `nfs.sh` | `lifecycle.sh` or `integration.sh` | Jenkins-agent-hosted NFS export setup and shared-storage proof need independent lifecycle handling. |
 | `transfer.sh` | `ssh.sh` | Non-SSH VM transfer mechanisms become necessary and approved. |
 | `status.sh` | `lifecycle.sh` | Status grows into a substantial read-only reporting surface. |
 | `clean.sh` | `lifecycle.sh` | Cleanup and destruction orchestration becomes too large for lifecycle command flow. |
@@ -397,7 +397,7 @@ VM-specific behavior must remain under `simulation/vm/`:
   fulfillment
 - guest boot, reboot, shutdown, and SSH readiness
 - target OS SSH command execution and file transfer
-- NFS-backed shared storage realization
+- guest-owned NFS-backed shared storage realization
 - VM cleanup, rollback, and destruction behavior
 
 Do not introduce a Docker/VM backend abstraction until the VM harness has

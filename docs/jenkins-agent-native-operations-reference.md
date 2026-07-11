@@ -118,6 +118,7 @@ apt update
 apt install -y \
   ca-certificates \
   curl \
+  nfs-kernel-server \
   openjdk-21-jre-headless \
   openssh-server \
   rsync \

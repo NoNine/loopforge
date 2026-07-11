@@ -20,7 +20,7 @@ installation is simulation-only.
 | Mode | Minimum host prerequisites | Notes |
 | --- | --- | --- |
 | `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
-| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, `flock`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, NFS utilities for shared Jenkins storage, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. `flock` serializes shared baked-image cache publication for one fingerprint. VM provisioning satisfies role target OS dependency baselines before the clean baseline snapshot. LDAP service packages such as `slapd` and proof tools such as `ldap-utils` are guest VM dependencies, not control-node host prerequisites. |
+| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, `flock`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. `flock` serializes shared baked-image cache publication for one fingerprint. VM provisioning satisfies role target OS dependency baselines before the clean baseline snapshot. LDAP service packages such as `slapd`, proof tools such as `ldap-utils`, and NFS packages for shared Jenkins storage are guest VM dependencies, not control-node host prerequisites. |
 | `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
 
 ## Package Matrix
@@ -28,11 +28,11 @@ installation is simulation-only.
 | Context | Product/runtime packages | Helper-script packages | Simulation-only packages | Notes |
 | --- | --- | --- | --- | --- |
 | Gerrit target | `openjdk-21-jre-headless` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar` | Shared Docker image also carries `git`, `ldap-utils`, `procps`, `unzip`, and `wget` for helper/runtime proof paths | Native Gerrit service needs Java. Docker validation also proves LDAP and Gerrit runtime behavior. |
-| Jenkins controller target | `fontconfig`, `openjdk-21-jre` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins `.deb` is staged as an application artifact, not installed from an apt repository setup path. |
-| Jenkins agent target | `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access. Workload-specific build tools are out of scope. |
+| Jenkins controller target | `fontconfig`, `nfs-common`, `openjdk-21-jre` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins `.deb` is staged as an application artifact, not installed from an apt repository setup path. The controller mounts the Jenkins-agent-hosted shared storage export at `JENKINS_SHARED_STORAGE_PATH`. |
+| Jenkins agent target | `nfs-kernel-server`, `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access and hosts the NFS export for shared Jenkins storage. Workload-specific build tools are out of scope. |
 | Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
 | Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
-| VM simulation host | None: not a product target runtime | `python3`, SSH client tools, checksum/archive tooling, and `flock` used by the harness | libvirt/KVM tooling such as `virsh`, image or install tooling, cloud-init or seed media tooling, and NFS utilities for VM-set-owned shared Jenkins storage | VM tooling provisions and inspects simulation-owned VMs; it is not a native target package baseline. |
+| VM simulation host | None: not a product target runtime | `python3`, SSH client tools, checksum/archive tooling, and `flock` used by the harness | libvirt/KVM tooling such as `virsh`, image or install tooling, and cloud-init or seed media tooling | VM tooling provisions and inspects simulation-owned VMs; it is not a native target package baseline. NFS server/client packages for shared Jenkins storage are installed in the Jenkins agent and controller VMs, not on the VM control host. |
 | VM LDAP guest | `slapd` for the simulation-owned LDAP service | `ldap-utils` for LDAP bind/search readiness and seed proof | Simulation-owned LDAP seed data and test credentials | Applies only to the LDAP VM in `vm-simulation`; native target deployment uses approved target-owned LDAP instead. |
 
 ## Layer Rules
@@ -60,8 +60,8 @@ document owns the layered rationale.
 | Target role | Native install packages |
 | --- | --- |
 | Gerrit | `ca-certificates`, `curl`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`, `tar` |
-| Jenkins controller | `ca-certificates`, `curl`, `fontconfig`, `openjdk-21-jre`, `openssh-client`, `rsync`, `tar`, `wget` |
-| Jenkins agent | `ca-certificates`, `curl`, `openjdk-21-jre-headless`, `openssh-server`, `rsync`, `tar`, `wget` |
+| Jenkins controller | `ca-certificates`, `curl`, `fontconfig`, `nfs-common`, `openjdk-21-jre`, `openssh-client`, `rsync`, `tar`, `wget` |
+| Jenkins agent | `ca-certificates`, `curl`, `nfs-kernel-server`, `openjdk-21-jre-headless`, `openssh-server`, `rsync`, `tar`, `wget` |
 
 ## Evidence Map
 
@@ -77,7 +77,7 @@ document owns the layered rationale.
 | Docker `procps` layer | `simulation/docker/simulate.sh`, Gerrit helper runtime checks, and Jenkins agent SSH readiness checks use process inspection inside slim containers. |
 | Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
 | Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
-| VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, SSH client tools, and NFS utilities when shared storage is used. |
+| VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, and SSH client tools. |
 | VM LDAP guest service | `simulation/vm/README.md` documents the real LDAP service and seeded directory contract; VM evidence proves service readiness, seeded entries, and bind/search behavior. |
 | Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
 
