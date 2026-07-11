@@ -396,6 +396,7 @@ vm_cmd_reboot() {
       case "$machine" in
         gerrit|jenkins-controller|jenkins-agent)
           vm_state_invalidate_role_validation "$machine"
+          vm_roles_assert_reboot_recovery "$machine"
           ;;
       esac
     done
@@ -405,7 +406,7 @@ vm_cmd_reboot() {
     print_command_failure reboot "$target" failed "$log" "$evidence"
     return "$rc"
   fi
-  evidence="$(vm_write_reboot_evidence pass "$targets" "$log" "Delegated guest reboot changed boot IDs and restored SSH/system readiness")"
+  evidence="$(vm_write_reboot_evidence pass "$targets" "$log" "Delegated guest reboot changed boot IDs and restored SSH plus required guest service readiness")"
   print_command_summary reboot "$target" ok
 }
 

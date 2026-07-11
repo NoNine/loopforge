@@ -106,6 +106,10 @@ EOF
 vm_libvirt_require_running() { :; }
 vm_ssh_reboot_machine() { printf 'reboot %s\n' "$1" >>"$calls"; }
 
+vm_roles_assert_reboot_recovery gerrit
+vm_roles_assert_reboot_recovery jenkins-controller
+grep -Fq 'exec 3<>"/dev/tcp/$1/$2"' "$calls"
+
 vm_cmd_configure_role "" >"$tmp_dir/configure.out"
 grep -Fxq 'configure-role[gerrit]: ok' "$tmp_dir/configure.out"
 grep -Fxq 'configure-role[jenkins-controller]: ok' "$tmp_dir/configure.out"

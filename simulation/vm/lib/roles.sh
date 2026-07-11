@@ -247,3 +247,60 @@ vm_roles_validate() {
   vm_state_write_role_checkpoint "$role" validated "$boot_id" || return $?
   printf 'role-validated=ready role=%s machine=%s boot-id=%s\n' "$role" "$machine" "$boot_id"
 }
+
+vm_roles_assert_reboot_recovery() {
+  local role machine env script
+  role="${1:?role required}"
+  machine="$(vm_ssh_role_machine "$role")"
+  env="$(vm_path_guest_role_env "$role")"
+  case "$role" in
+    gerrit)
+      script=$(cat <<EOF
+set -eu
+. $(shell_quote "$env")
+sudo -n systemctl is-enabled --quiet gerrit.service
+sudo -n systemctl is-active --quiet gerrit.service
+pid="\$(sudo -n systemctl show gerrit.service --property=MainPID --value)"
+test -n "\$pid" && test "\$pid" != 0
+owner="\$(ps -o user= -p "\$pid" | awk '{print \$1}')"
+test "\$owner" = "\$GERRIT_RUNTIME_ACCOUNT"
+timeout 5 bash -c 'exec 3<>"/dev/tcp/\$1/\$2"' _ "\$GERRIT_HOST" "\$GERRIT_HTTP_PORT"
+printf 'reboot-service=ready role=gerrit unit=gerrit.service pid=%s\n' "\$pid"
+EOF
+)
+      ;;
+    jenkins-controller)
+      script=$(cat <<EOF
+set -eu
+. $(shell_quote "$env")
+sudo -n systemctl is-enabled --quiet jenkins.service
+sudo -n systemctl is-active --quiet jenkins.service
+pid="\$(sudo -n systemctl show jenkins.service --property=MainPID --value)"
+test -n "\$pid" && test "\$pid" != 0
+owner="\$(ps -o user= -p "\$pid" | awk '{print \$1}')"
+test "\$owner" = "\$JENKINS_RUNTIME_ACCOUNT"
+timeout 5 bash -c 'exec 3<>"/dev/tcp/\$1/\$2"' _ "\$JENKINS_HOST" "\$JENKINS_HTTP_PORT"
+printf 'reboot-service=ready role=jenkins-controller unit=jenkins.service pid=%s\n' "\$pid"
+EOF
+)
+      ;;
+    jenkins-agent)
+      script=$(cat <<'EOF'
+set -eu
+for unit in ssh.service sshd.service; do
+  if sudo -n systemctl is-enabled --quiet "$unit" 2>/dev/null; then
+    sudo -n systemctl is-active --quiet "$unit"
+    pid="$(sudo -n systemctl show "$unit" --property=MainPID --value)"
+    test -n "$pid" && test "$pid" != 0
+    printf 'reboot-service=ready role=jenkins-agent unit=%s pid=%s\n' "$unit" "$pid"
+    exit 0
+  fi
+done
+exit 1
+EOF
+)
+      ;;
+    *) die "Unknown role for reboot recovery: $role" ;;
+  esac
+  vm_ssh_run_machine "$machine" "$script"
+}

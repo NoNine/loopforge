@@ -323,6 +323,13 @@ is_docker_simulation() {
     [ "$GERRIT_VERIFICATION_MODE" = "docker-simulation" ]
 }
 
+is_systemd_runtime() {
+  case "$GERRIT_VERIFICATION_MODE" in
+    vm-simulation|target-deployment) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 confirm_mutation() {
   local command_name
   command_name="${1:?command required}"
@@ -381,6 +388,9 @@ render_template() {
   text="${text//\{\{LDAP_USER_BASE\}\}/$LDAP_USER_BASE}"
   text="${text//\{\{LDAP_GROUP_BASE\}\}/$LDAP_GROUP_BASE}"
   text="${text//\{\{GERRIT_ADMIN_GROUP\}\}/$GERRIT_ADMIN_GROUP}"
+  text="${text//\{\{GERRIT_RUNTIME_ACCOUNT\}\}/$GERRIT_RUNTIME_ACCOUNT}"
+  text="${text//\{\{GERRIT_RUNTIME_GROUP\}\}/$GERRIT_RUNTIME_GROUP}"
+  text="${text//\{\{GERRIT_SITE_PATH\}\}/$GERRIT_SITE_PATH}"
   text="${text//\{\{GERRIT_REF_PATTERN\}\}/$GERRIT_VERIFICATION_REF_PATTERN}"
   text="${text//\{\{GERRIT_VERIFICATION_REF_PATTERN\}\}/$GERRIT_VERIFICATION_REF_PATTERN}"
   mkdir -p "$(dirname "$target")"
@@ -685,6 +695,7 @@ cmd_prepare_artifacts() {
   rm -f "$GERRIT_ARTIFACT_OUTPUT_DIR/jenkins-gerrit.pub"
   cp "$repo_root/templates/gerrit/gerrit.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/gerrit.config.template"
   cp "$repo_root/templates/gerrit/secure.config.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/secure.config.template"
+  cp "$repo_root/templates/gerrit/gerrit.service.template" "$GERRIT_ARTIFACT_OUTPUT_DIR/gerrit.service.template"
   write_manifest
   assert_no_artifact_key_material "$GERRIT_ARTIFACT_OUTPUT_DIR"
   (
@@ -728,7 +739,12 @@ cmd_configure() {
   render_template_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit.config.template" "$GERRIT_SITE_PATH/etc/gerrit.config"
   write_secure_config_as_runtime
   assert_no_unresolved_placeholders "$GERRIT_SITE_PATH/etc/gerrit.config"
-  printf 'status=pass command=configure site=%s ldap=configured secure_config=written_from_reviewed_secret real_gerrit_start=deferred-to-validate\n' "$GERRIT_SITE_PATH"
+  if is_systemd_runtime; then
+    start_systemd_gerrit
+  else
+    start_real_gerrit
+  fi
+  printf 'status=pass command=configure site=%s ldap=configured runtime=started\n' "$GERRIT_SITE_PATH"
 }
 
 ensure_git_identity() {
@@ -915,6 +931,9 @@ prepare_gerrit_runtime_log() {
 
 stop_gerrit_for_install_reset() {
   local pid pids
+  if is_systemd_runtime; then
+    run_with_privilege "systemctl stop gerrit.service >/dev/null 2>&1 || true"
+  fi
   pids="$(ps -eo pid=,args= | awk -v site="$GERRIT_SITE_PATH" 'index($0, site) && (index($0, "GerritCodeReview") || index($0, "gerrit.war")) {print $1}')"
   if [ -n "$pids" ]; then
     run_with_privilege "kill $pids 2>/dev/null || true"
@@ -1001,6 +1020,52 @@ record_step7_deferred_integration_status() {
     "jenkins_integration_prerequisites=deferred role_local_config_mutation=none"
 }
 
+initialize_gerrit_site() {
+  local log java_opts
+  [ -x "$GERRIT_SITE_PATH/bin/gerrit.sh" ] && return 0
+  log="$(gerrit_runtime_log)"
+  java_opts="-Xms128m -Xmx512m"
+  prepare_gerrit_runtime_log
+  append_gerrit_runtime_log "timestamp=$(iso_timestamp_utc)"
+  append_gerrit_runtime_log "command=java -jar gerrit.war init --batch runtime_account=$GERRIT_RUNTIME_ACCOUNT"
+  run_as_gerrit_runtime "java $java_opts -jar $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.war") init --batch --no-auto-start -d $(shell_quote "$GERRIT_SITE_PATH") >> $(shell_quote "$log") 2>&1" ||
+    die "BLOCKED: Gerrit init failed; artifact or config cannot support real startup; log=$log"
+  record_step7_deferred_integration_status
+}
+
+install_gerrit_systemd_unit() {
+  local rendered
+  rendered="$(mktemp)"
+  register_cleanup_path "$rendered"
+  render_template "$GERRIT_STAGED_ARTIFACT_DIR/gerrit.service.template" "$rendered"
+  assert_no_unresolved_placeholders "$rendered"
+  run_with_privilege "install -D -m 0644 -o root -g root $(shell_quote "$rendered") /etc/systemd/system/gerrit.service"
+  run_with_privilege "systemctl daemon-reload"
+}
+
+start_systemd_gerrit() {
+  local deadline
+  initialize_gerrit_site
+  install_gerrit_systemd_unit
+  run_with_privilege "systemctl enable gerrit.service"
+  if systemctl is-active --quiet gerrit.service; then
+    run_with_privilege "systemctl restart gerrit.service"
+  else
+    run_with_privilege "systemctl start gerrit.service"
+  fi
+  deadline=$((SECONDS + 180))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if systemctl is-active --quiet gerrit.service &&
+      check_tcp_connect "$GERRIT_HOST" "$GERRIT_HTTP_PORT" >/dev/null 2>&1 &&
+      check_tcp_connect "$GERRIT_HOST" "$GERRIT_SSH_PORT" >/dev/null 2>&1; then
+      assert_gerrit_daemon_owner
+      return 0
+    fi
+    sleep 3
+  done
+  die "BLOCKED: Gerrit systemd service did not become ready"
+}
+
 assert_gerrit_daemon_owner() {
   local pid owner
   pid="$(gerrit_daemon_pid)" ||
@@ -1012,7 +1077,8 @@ assert_gerrit_daemon_owner() {
 }
 
 start_real_gerrit() {
-  local log java_opts rc startup_deadline
+  local log rc startup_deadline
+  is_docker_simulation || die "Detached Gerrit startup is supported only in Docker simulation"
   verify_war_artifact "$GERRIT_SITE_PATH/bin/gerrit.war"
   require_command java
   require_command ps
@@ -1025,20 +1091,7 @@ start_real_gerrit() {
     assert_gerrit_daemon_owner
     return 0
   fi
-  java_opts="-Xms128m -Xmx512m"
-  if [ ! -x "$GERRIT_SITE_PATH/bin/gerrit.sh" ]; then
-    prepare_gerrit_runtime_log
-    append_gerrit_runtime_log "timestamp=$(iso_timestamp_utc)"
-    append_gerrit_runtime_log "command=java -jar gerrit.war init --batch runtime_account=$GERRIT_RUNTIME_ACCOUNT"
-    if ! run_as_gerrit_runtime "java $java_opts -jar $(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.war") init --batch --no-auto-start -d $(shell_quote "$GERRIT_SITE_PATH") >> $(shell_quote "$log") 2>&1"; then
-      printf 'BLOCKED: Gerrit init failed; artifact or config cannot support real startup; log=%s\n' "$log" >&2
-      return 1
-    fi
-    record_step7_deferred_integration_status
-    if is_gerrit_running; then
-      assert_gerrit_daemon_owner
-    fi
-  fi
+  initialize_gerrit_site
   if is_gerrit_running; then
     assert_gerrit_daemon_owner
     return 0
@@ -1109,7 +1162,13 @@ verify_readiness_facts() {
   [ -s "$GERRIT_SITE_PATH/etc/gerrit.config" ] || die "Gerrit config is empty"
   [ -s "$GERRIT_SITE_PATH/etc/secure.config" ] || die "Gerrit secure config is empty"
   check_installed_artifact_freshness
-  start_real_gerrit
+  if is_systemd_runtime; then
+    systemctl is-enabled --quiet gerrit.service || die "Gerrit systemd service is not enabled"
+    systemctl is-active --quiet gerrit.service || die "Gerrit systemd service is not active"
+  else
+    is_gerrit_running || die "Gerrit Docker runtime is not active"
+  fi
+  assert_gerrit_daemon_owner
   check_http_endpoint
   check_ssh_endpoint
   check_secure_config_secret_handling
@@ -1140,7 +1199,12 @@ cmd_collect_evidence() {
   local q_runtime_account q_checks q_log q_service_log q_redaction
   evidence="$GERRIT_EVIDENCE_DIR/gerrit-readiness-$(timestamp_utc).json"
   bounded_log="$GERRIT_LOG_DIR/gerrit-collect-evidence-$(timestamp_utc).log"
-  service_log="$(gerrit_runtime_log)"
+  if is_systemd_runtime; then
+    service_log="$GERRIT_LOG_DIR/gerrit-systemd-$(timestamp_utc).log"
+    run_with_privilege "{ systemctl show gerrit.service --property=Id --property=LoadState --property=ActiveState --property=SubState --property=MainPID; journalctl -u gerrit.service -n 100 --no-pager; } >$(shell_quote "$service_log")"
+  else
+    service_log="$(gerrit_runtime_log)"
+  fi
   helper_version="gerrit-setup.sh $(git -C "$repo_root" rev-parse --short=12 HEAD 2>/dev/null || printf 'unknown')"
   input_fingerprint="$(printf '%s\n%s\n%s\n%s\n' "$GERRIT_HOST" "$GERRIT_HTTP_PORT" "$GERRIT_SSH_PORT" "$LDAP_URL" | sha256sum | awk '{print $1}')"
   manifest="$GERRIT_STAGED_ARTIFACT_DIR/manifest.txt"
@@ -1151,7 +1215,7 @@ cmd_collect_evidence() {
     printf 'verification_mode=%s\n' "$GERRIT_VERIFICATION_MODE"
     printf 'artifact_manifest=%s\n' "$manifest"
     printf 'checksum_reference=%s\n' "$checksum"
-    printf 'observed=real-gerrit-daemon,http-runtime,ssh-banner,ldap-bind-search\n'
+    printf 'observed=real-gerrit-daemon,http-runtime,ssh-banner,ldap-bind-search,service-manager\n'
     printf 'integration_prerequisites=deferred-to-later-integration-step\n'
     printf 'redaction=secrets-not-recorded\n'
   } >"$bounded_log"
@@ -1170,7 +1234,7 @@ cmd_collect_evidence() {
   q_input="$(json_quote "$input_fingerprint")"
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
-  q_startup="$(json_quote "pass: real Gerrit daemon started under runtime account $GERRIT_RUNTIME_ACCOUNT")"
+  q_startup="$(json_quote "pass: real Gerrit daemon started under runtime account $GERRIT_RUNTIME_ACCOUNT manager=$(if is_systemd_runtime; then printf systemd; else printf docker-process; fi)")"
   q_endpoint="$(json_quote "pass: Gerrit HTTP runtime endpoint responded on $GERRIT_HOST:$GERRIT_HTTP_PORT")"
   q_ldap="$(json_quote "pass: LDAP bind/search succeeded for configured user/group bases")"
   q_ssh="$(json_quote "pass: Gerrit SSH banner responded on $GERRIT_HOST:$GERRIT_SSH_PORT")"

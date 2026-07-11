@@ -1,0 +1,18 @@
+[Unit]
+Description=Gerrit Code Review
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User={{GERRIT_RUNTIME_ACCOUNT}}
+Group={{GERRIT_RUNTIME_GROUP}}
+Environment=GERRIT_SITE={{GERRIT_SITE_PATH}}
+ExecStart={{GERRIT_SITE_PATH}}/bin/gerrit.sh start
+ExecStop={{GERRIT_SITE_PATH}}/bin/gerrit.sh stop
+ExecReload={{GERRIT_SITE_PATH}}/bin/gerrit.sh restart
+Restart=on-failure
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

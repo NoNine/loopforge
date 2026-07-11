@@ -249,7 +249,8 @@ for_each_csv_value() {
 require_simulation_runtime() {
   case "${HARNESS_MODE:-}:${HARNESS_ENVIRONMENT:-}:$JENKINS_AGENT_VERIFICATION_MODE" in
     docker-simulation:jenkins-agent-target:docker-simulation|vm-simulation:jenkins-agent:vm-simulation) ;;
-    *) die "Harness and Jenkins agent verification modes must select the same supported simulation backend" ;;
+    ::target-deployment) ;;
+    *) die "Harness and Jenkins agent verification modes must select a supported backend or target-deployment" ;;
   esac
 }
 
@@ -889,12 +890,17 @@ sshd_process_running() {
 }
 
 systemd_sshd_main_pid() {
-  local unit load_state pid
+  local require_enabled unit load_state pid
+  require_enabled="${1:-0}"
   for unit in ssh.service sshd.service; do
     load_state="$(systemctl show "$unit" --property=LoadState --value 2>/dev/null || true)"
     [ "$load_state" = "loaded" ] || continue
     systemctl is-active --quiet "$unit" ||
       die "Target OS SSH service is not active: $unit"
+    if [ "$require_enabled" = "1" ]; then
+      systemctl is-enabled --quiet "$unit" ||
+        die "Target OS SSH service is not enabled: $unit"
+    fi
     pid="$(systemctl show "$unit" --property=MainPID --value 2>/dev/null || true)"
     case "$pid" in
       ''|0|*[!0-9]*)
@@ -908,11 +914,12 @@ systemd_sshd_main_pid() {
 }
 
 check_os_sshd_process() {
-  local sshd_pid
+  local require_enabled sshd_pid
+  require_enabled="${1:-0}"
   require_simulation_runtime
   case "$JENKINS_AGENT_VERIFICATION_MODE" in
-    vm-simulation)
-      sshd_pid="$(systemd_sshd_main_pid)"
+    vm-simulation|target-deployment)
+      sshd_pid="$(systemd_sshd_main_pid "$require_enabled")"
       ;;
     docker-simulation)
       sshd_pid="$(pgrep -xo -u 0 sshd)" ||
@@ -935,7 +942,7 @@ check_runtime_readiness() {
   [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" ] || die "Agent bootstrap marker is missing"
   check_runtime_account
   check_remote_fs_ownership
-  check_os_sshd_process
+  check_os_sshd_process 1
   check_ssh_reachability >/dev/null
 }
 

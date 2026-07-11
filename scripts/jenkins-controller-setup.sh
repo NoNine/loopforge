@@ -459,7 +459,8 @@ for_each_csv_value() {
 require_simulation_runtime() {
   case "${HARNESS_MODE:-}:${HARNESS_ENVIRONMENT:-}:$JENKINS_VERIFICATION_MODE" in
     docker-simulation:jenkins-controller-target:docker-simulation|vm-simulation:jenkins-controller:vm-simulation) ;;
-    *) die "Harness and Jenkins verification modes must select the same supported simulation backend" ;;
+    ::target-deployment) ;;
+    *) die "Harness and Jenkins verification modes must select a supported backend or target-deployment" ;;
   esac
 }
 
@@ -467,6 +468,13 @@ is_docker_simulation() {
   [ "${HARNESS_MODE:-}" = "docker-simulation" ] &&
     [ "${HARNESS_ENVIRONMENT:-}" = "jenkins-controller-target" ] &&
     [ "$JENKINS_VERIFICATION_MODE" = "docker-simulation" ]
+}
+
+is_systemd_runtime() {
+  case "$JENKINS_VERIFICATION_MODE" in
+    vm-simulation|target-deployment) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 confirm_mutation() {
@@ -499,6 +507,7 @@ render_template() {
   text="${text//\{\{JENKINS_HOME\}\}/$JENKINS_HOME}"
   text="${text//\{\{JENKINS_HTTP_PORT\}\}/$JENKINS_HTTP_PORT}"
   text="${text//\{\{JENKINS_RUNTIME_ACCOUNT\}\}/$JENKINS_RUNTIME_ACCOUNT}"
+  text="${text//\{\{JENKINS_RUNTIME_GROUP\}\}/$JENKINS_RUNTIME_GROUP}"
   text="${text//\{\{JENKINS_URL\}\}/$JENKINS_URL}"
   text="${text//\{\{LDAP_URL\}\}/$LDAP_URL}"
   text="${text//\{\{LDAP_BIND_DN\}\}/$LDAP_BIND_DN}"
@@ -960,6 +969,7 @@ cmd_prepare_artifacts() {
   prepare_plugin_manager
   prepare_plugins
   cp "$repo_root/templates/jenkins-controller/jenkins-service.env.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-service.env.template"
+  cp "$repo_root/templates/jenkins-controller/jenkins.service.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins.service.template"
   cp "$repo_root/templates/jenkins-controller/jenkins-jcasc.yaml.template" "$JENKINS_ARTIFACT_OUTPUT_DIR/templates/jenkins-jcasc.yaml.template"
   write_manifest
   assert_no_artifact_key_material "$JENKINS_ARTIFACT_OUTPUT_DIR"
@@ -1022,7 +1032,7 @@ jenkins_process_running() {
 
 start_real_jenkins() {
   local pidfile log_file pid deadline response
-  require_simulation_runtime
+  is_docker_simulation || die "Detached Jenkins startup is supported only in Docker simulation"
   runtime_account_exists
   pidfile="$JENKINS_HOME/run/jenkins.pid"
   log_file="$JENKINS_HOME/logs/jenkins-controller.log"
@@ -1054,6 +1064,63 @@ start_real_jenkins() {
   die "Jenkins controller did not become ready before timeout; log=$log_file"
 }
 
+install_jenkins_systemd_unit() {
+  local rendered
+  rendered="$(mktemp)"
+  render_template "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins.service.template" "$rendered"
+  assert_no_unresolved_placeholders "$rendered"
+  run_with_privilege "install -D -m 0644 -o root -g root $(shell_quote "$rendered") /etc/systemd/system/jenkins.service"
+  run_with_privilege "systemctl daemon-reload"
+  rm -f "$rendered"
+}
+
+start_systemd_jenkins() {
+  local pid deadline response
+  install_jenkins_systemd_unit
+  run_with_privilege "systemctl enable jenkins.service"
+  if systemctl is-active --quiet jenkins.service; then
+    run_with_privilege "systemctl restart jenkins.service"
+  else
+    run_with_privilege "systemctl start jenkins.service"
+  fi
+  deadline=$((SECONDS + 240))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if systemctl is-active --quiet jenkins.service; then
+      response="$(check_http_endpoint || true)"
+      if printf '%s' "$response" | grep -Fq "X-Jenkins: 2.555.3"; then
+        pid="$(systemctl show jenkins.service --property=MainPID --value)"
+        case "$pid" in ''|0|*[!0-9]*) die "Jenkins systemd service has no MainPID" ;; esac
+        jenkins_process_running "$pid" || die "Jenkins systemd MainPID is not the controller runtime"
+        write_text_file_as_runtime "$JENKINS_HOME/run/jenkins.pid" "$pid"
+        write_text_file_as_runtime "$JENKINS_HOME/state/runtime.status" "pid=$pid endpoint=http://$JENKINS_HOST:$JENKINS_HTTP_PORT/ manager=systemd"
+        return 0
+      fi
+    fi
+    sleep 3
+  done
+  die "Jenkins systemd service did not become ready before timeout"
+}
+
+start_jenkins_runtime() {
+  if is_systemd_runtime; then
+    start_systemd_jenkins
+  else
+    start_real_jenkins
+  fi
+}
+
+assert_jenkins_runtime() {
+  local pid
+  if is_systemd_runtime; then
+    systemctl is-enabled --quiet jenkins.service || die "Jenkins systemd service is not enabled"
+    systemctl is-active --quiet jenkins.service || die "Jenkins systemd service is not active"
+    pid="$(systemctl show jenkins.service --property=MainPID --value)"
+  else
+    pid="$(cat "$JENKINS_HOME/run/jenkins.pid" 2>/dev/null || true)"
+  fi
+  jenkins_process_running "$pid" || die "Jenkins controller runtime is not active"
+}
+
 cmd_configure_service() {
   load_env normal
   require_env_values
@@ -1065,6 +1132,9 @@ cmd_configure_service() {
   prepare_jenkins_runtime_dirs
   render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-service.env.template" "$JENKINS_HOME/etc/jenkins-service.env" 0644
   assert_no_unresolved_placeholders "$JENKINS_HOME/etc/jenkins-service.env"
+  if is_systemd_runtime; then
+    install_jenkins_systemd_unit
+  fi
   write_text_file_as_runtime "$JENKINS_HOME/state/service-configured.status" \
     "runtime_account=$JENKINS_RUNTIME_ACCOUNT port=$JENKINS_HTTP_PORT controller_executors=0"
   printf 'status=pass command=configure-service service_env=%s runtime_account=%s\n' \
@@ -1100,6 +1170,7 @@ cmd_configure_jcasc() {
   runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'ldap:' || die "JCasC LDAP security realm is missing"
   runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
   write_text_file_as_runtime "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
+  start_jenkins_runtime
   printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$JENKINS_HOME/jcasc/jenkins.yaml"
 }
 
@@ -1179,16 +1250,33 @@ check_plugin_readiness() {
 }
 
 check_runtime_plugin_load_log() {
-  local log_file markers_file
-  log_file="$JENKINS_HOME/logs/jenkins-controller.log"
-  [ -s "$log_file" ] || die "Jenkins controller startup log is missing: $log_file"
+  local log_file markers_file transient_log
+  transient_log=0
+  if is_systemd_runtime; then
+    log_file="$(mktemp "$JENKINS_LOG_DIR/jenkins-systemd-plugin-load.XXXXXX")"
+    transient_log=1
+    if ! run_with_privilege "journalctl -u jenkins.service -n 100 --no-pager >$(shell_quote "$log_file")"; then
+      rm -f "$log_file"
+      die "Jenkins systemd journal capture failed"
+    fi
+    if [ ! -s "$log_file" ]; then
+      rm -f "$log_file"
+      die "Jenkins systemd journal capture is missing: $log_file"
+    fi
+  else
+    log_file="$JENKINS_HOME/logs/jenkins-controller.log"
+    [ -s "$log_file" ] || die "Jenkins controller startup log is missing: $log_file"
+  fi
   markers_file="$log_file.plugin-load-failures"
   grep -En 'Failed Loading plugin|Update required:|Failed to load:' "$log_file" >"$markers_file" || true
   if [ -s "$markers_file" ]; then
     sed -n '1,20p' "$markers_file" >&2
+    rm -f "$markers_file"
+    [ "$transient_log" -eq 0 ] || rm -f "$log_file"
     die "Jenkins runtime log contains plugin load failure marker: $log_file"
   fi
   rm -f "$markers_file"
+  [ "$transient_log" -eq 0 ] || rm -f "$log_file"
 }
 
 check_jcasc_readiness() {
@@ -1201,6 +1289,7 @@ check_jcasc_readiness() {
 verify_base_readiness_facts() {
   runtime_account_exists
   verify_staged_artifacts
+  assert_jenkins_runtime
   [ -s "$JENKINS_HOME/state/install.status" ] || die "Install marker missing"
   [ -s "$JENKINS_HOME/state/service-configured.status" ] || die "Service configuration marker missing"
   [ -s "$JENKINS_HOME/war/jenkins.war" ] || die "Jenkins WAR is not installed"
@@ -1215,7 +1304,6 @@ verify_base_readiness_facts() {
 cmd_validate() {
   load_env normal
   require_env_values
-  start_real_jenkins
   verify_base_readiness_facts
   check_http_endpoint >/dev/null
   check_jenkins_api
@@ -1233,7 +1321,12 @@ cmd_collect_evidence() {
   local q_mode q_time q_role q_checkpoint q_command q_status q_input q_manifest q_checksum q_checks q_log q_service_log q_runtime_status q_redaction q_proof q_real q_step11
   evidence="$JENKINS_EVIDENCE_DIR/jenkins-controller-readiness-$(timestamp_utc).json"
   bounded_log="$JENKINS_LOG_DIR/jenkins-controller-collect-evidence-$(timestamp_utc).log"
-  service_log="$JENKINS_HOME/logs/jenkins-controller.log"
+  if is_systemd_runtime; then
+    service_log="$JENKINS_LOG_DIR/jenkins-systemd-$(timestamp_utc).log"
+    run_with_privilege "{ systemctl show jenkins.service --property=Id --property=LoadState --property=ActiveState --property=SubState --property=MainPID; journalctl -u jenkins.service -n 100 --no-pager; } >$(shell_quote "$service_log")"
+  else
+    service_log="$JENKINS_HOME/logs/jenkins-controller.log"
+  fi
   runtime_status="$JENKINS_HOME/state/runtime.status"
   jenkins_pid="$JENKINS_HOME/run/jenkins.pid"
   input_fingerprint="$(printf '%s\n%s\n%s\n%s\n' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$LDAP_URL" "$JENKINS_HOME" | sha256sum | awk '{print $1}')"
@@ -1248,7 +1341,7 @@ cmd_collect_evidence() {
     printf 'step11_required_for_real_execution=false\n'
     printf 'artifact_manifest=%s\n' "$manifest"
     printf 'checksum_reference=%s\n' "$checksum"
-    printf 'observed=staged-artifacts,real-jenkins-startup,http-endpoint,api-json,ldap,plugins,JCasC\n'
+    printf 'observed=staged-artifacts,real-jenkins-startup,http-endpoint,api-json,ldap,plugins,JCasC,service-manager\n'
     printf 'redaction=secrets-not-recorded\n'
   } >"$bounded_log"
   [ -s "$bounded_log" ] || die "Bounded evidence log was not written: $bounded_log"
