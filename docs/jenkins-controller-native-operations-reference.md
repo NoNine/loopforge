@@ -380,7 +380,7 @@ User=jenkins
 Group=jenkins
 Environment=JENKINS_HOME=/var/lib/jenkins
 Environment=CASC_JENKINS_CONFIG=/var/lib/jenkins/jcasc/jenkins.yaml
-Environment=JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config=/var/lib/jenkins/jcasc/jenkins.yaml
+Environment="JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"
 ExecStart=/usr/bin/java $JAVA_OPTS -jar /var/lib/jenkins/war/jenkins.war --httpPort=8080 --webroot=/var/lib/jenkins/war-cache
 Restart=on-failure
 TimeoutStartSec=300

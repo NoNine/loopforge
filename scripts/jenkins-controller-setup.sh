@@ -211,6 +211,7 @@ JENKINS_RUNTIME_GROUP
 LOOPFORGE_OPERATOR_ACCOUNT
 LOOPFORGE_OPERATOR_GROUP
 JENKINS_HOME
+CASC_JENKINS_CONFIG
 JENKINS_STAGED_ARTIFACT_DIR
 JENKINS_ARTIFACT_OUTPUT_DIR
 JENKINS_DIRECT_PLUGIN_NAMES
@@ -311,6 +312,7 @@ apply_env_defaults() {
   LOOPFORGE_OPERATOR_ACCOUNT="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
   LOOPFORGE_OPERATOR_GROUP="${LOOPFORGE_OPERATOR_GROUP:-$LOOPFORGE_OPERATOR_ACCOUNT}"
   JENKINS_HOME="${JENKINS_HOME:-$JENKINS_NATIVE_HOME}"
+  CASC_JENKINS_CONFIG="$JENKINS_HOME/jcasc/jenkins.yaml"
   JENKINS_STAGED_ARTIFACT_DIR="${JENKINS_STAGED_ARTIFACT_DIR:-$JENKINS_STAGED_BUNDLE_PAYLOAD_DIR}"
   JENKINS_ARTIFACT_OUTPUT_DIR="${JENKINS_ARTIFACT_OUTPUT_DIR:-$JENKINS_BUNDLE_FACTORY_WORK_DIR}"
   JENKINS_EVIDENCE_DIR="${JENKINS_EVIDENCE_DIR:-/var/lib/loopforge/evidence}"
@@ -505,6 +507,7 @@ render_template() {
   text="$(cat "$source")"
   ldap_bind_password="$(ldap_bind_password_value)"
   text="${text//\{\{JENKINS_HOME\}\}/$JENKINS_HOME}"
+  text="${text//\{\{CASC_JENKINS_CONFIG\}\}/$CASC_JENKINS_CONFIG}"
   text="${text//\{\{JENKINS_HTTP_PORT\}\}/$JENKINS_HTTP_PORT}"
   text="${text//\{\{JENKINS_RUNTIME_ACCOUNT\}\}/$JENKINS_RUNTIME_ACCOUNT}"
   text="${text//\{\{JENKINS_RUNTIME_GROUP\}\}/$JENKINS_RUNTIME_GROUP}"
@@ -1042,8 +1045,8 @@ start_real_jenkins() {
     return 0
   fi
   export JENKINS_HOME
-  export CASC_JENKINS_CONFIG="$JENKINS_HOME/jcasc/jenkins.yaml"
-  export JAVA_OPTS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config=$JENKINS_HOME/jcasc/jenkins.yaml"
+  export CASC_JENKINS_CONFIG
+  export JAVA_OPTS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"
   prepare_jenkins_home_ownership
   run_as_runtime "JENKINS_HOME=$(shell_quote "$JENKINS_HOME") CASC_JENKINS_CONFIG=$(shell_quote "$CASC_JENKINS_CONFIG") nohup java $JAVA_OPTS -jar $(shell_quote "$JENKINS_HOME/war/jenkins.war") --httpPort=$(shell_quote "$JENKINS_HTTP_PORT") --webroot=$(shell_quote "$JENKINS_HOME/war-cache") >$(shell_quote "$log_file") 2>&1 & echo \$! >$(shell_quote "$pidfile")"
   pid="$(cat "$pidfile")"
@@ -1164,14 +1167,14 @@ cmd_configure_jcasc() {
   verify_staged_artifacts
   prepare_jenkins_runtime_dirs
   run_with_privilege "install -d -m 0700 -o $(shell_quote "$JENKINS_RUNTIME_ACCOUNT") -g $(shell_quote "$JENKINS_RUNTIME_GROUP") $(shell_quote "$JENKINS_HOME/jcasc")"
-  render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$JENKINS_HOME/jcasc/jenkins.yaml"
-  runtime_file_has_no_unresolved_placeholders "$JENKINS_HOME/jcasc/jenkins.yaml"
-  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'numExecutors: 0' || die "JCasC must keep built-in node executors at zero"
-  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'ldap:' || die "JCasC LDAP security realm is missing"
-  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
+  render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$CASC_JENKINS_CONFIG"
+  runtime_file_has_no_unresolved_placeholders "$CASC_JENKINS_CONFIG"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'numExecutors: 0' || die "JCasC must keep built-in node executors at zero"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'ldap:' || die "JCasC LDAP security realm is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
   write_text_file_as_runtime "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
   start_jenkins_runtime
-  printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$JENKINS_HOME/jcasc/jenkins.yaml"
+  printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$CASC_JENKINS_CONFIG"
 }
 
 ldap_host_port() {
@@ -1280,10 +1283,10 @@ check_runtime_plugin_load_log() {
 }
 
 check_jcasc_readiness() {
-  [ -s "$JENKINS_HOME/jcasc/jenkins.yaml" ] || die "JCasC file is missing"
-  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'ldap:' || die "JCasC LDAP realm is missing"
-  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
-  runtime_file_contains "$JENKINS_HOME/jcasc/jenkins.yaml" 'numExecutors: 0' || die "JCasC built-in executor policy is missing"
+  [ -s "$CASC_JENKINS_CONFIG" ] || die "JCasC file is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'ldap:' || die "JCasC LDAP realm is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'numExecutors: 0' || die "JCasC built-in executor policy is missing"
 }
 
 verify_base_readiness_facts() {

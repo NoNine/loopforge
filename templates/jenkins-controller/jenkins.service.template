@@ -8,8 +8,8 @@ Type=simple
 User={{JENKINS_RUNTIME_ACCOUNT}}
 Group={{JENKINS_RUNTIME_GROUP}}
 Environment=JENKINS_HOME={{JENKINS_HOME}}
-Environment=CASC_JENKINS_CONFIG={{JENKINS_HOME}}/jcasc/jenkins.yaml
-Environment=JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config={{JENKINS_HOME}}/jcasc/jenkins.yaml
+Environment=CASC_JENKINS_CONFIG={{CASC_JENKINS_CONFIG}}
+Environment="JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"
 ExecStart=/usr/bin/java $JAVA_OPTS -jar {{JENKINS_HOME}}/war/jenkins.war --httpPort={{JENKINS_HTTP_PORT}} --webroot={{JENKINS_HOME}}/war-cache
 Restart=on-failure
 TimeoutStartSec=300

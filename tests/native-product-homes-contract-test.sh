@@ -377,8 +377,44 @@ require_pattern scripts/jenkins-controller-setup.sh \
   'install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war" 0644' \
   'Jenkins controller install must place the WAR through delegated runtime-owned install'
 require_pattern scripts/jenkins-controller-setup.sh \
-  'render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$JENKINS_HOME/jcasc/jenkins.yaml"' \
+  'render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$CASC_JENKINS_CONFIG"' \
   'Jenkins controller JCasC must render through delegated runtime-owned install'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'CASC_JENKINS_CONFIG="$JENKINS_HOME/jcasc/jenkins.yaml"' \
+  'Jenkins controller helper must derive the JCasC path once from JENKINS_HOME'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'text="${text//\{\{CASC_JENKINS_CONFIG\}\}/$CASC_JENKINS_CONFIG}"' \
+  'Jenkins controller template rendering must use the derived JCasC path'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'export CASC_JENKINS_CONFIG' \
+  'Jenkins controller runtime must export the derived JCasC path'
+require_pattern scripts/jenkins-controller-setup.sh \
+  'export JAVA_OPTS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"' \
+  'Jenkins controller runtime JAVA_OPTS must not duplicate the JCasC path'
+reject_pattern scripts/jenkins-controller-setup.sh \
+  '-Dcasc.jenkins.config=$JENKINS_HOME/jcasc/jenkins.yaml' \
+  'Jenkins controller runtime must not set a duplicate JCasC Java property'
+require_pattern templates/jenkins-controller/jenkins.service.template \
+  'Environment=CASC_JENKINS_CONFIG={{CASC_JENKINS_CONFIG}}' \
+  'Jenkins systemd unit must use CASC_JENKINS_CONFIG as the JCasC path source'
+require_pattern templates/jenkins-controller/jenkins.service.template \
+  'Environment="JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"' \
+  'Jenkins systemd unit must quote JAVA_OPTS without duplicating the JCasC path'
+reject_pattern templates/jenkins-controller/jenkins.service.template \
+  'Environment=JAVA_OPTS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false -Dcasc.jenkins.config={{JENKINS_HOME}}/jcasc/jenkins.yaml' \
+  'Jenkins systemd unit must not use an unquoted JAVA_OPTS assignment'
+reject_pattern templates/jenkins-controller/jenkins.service.template \
+  '-Dcasc.jenkins.config={{JENKINS_HOME}}/jcasc/jenkins.yaml' \
+  'Jenkins systemd unit must not set a duplicate JCasC Java property'
+require_pattern templates/jenkins-controller/jenkins-service.env.template \
+  'CASC_JENKINS_CONFIG={{CASC_JENKINS_CONFIG}}' \
+  'Jenkins service env template must use CASC_JENKINS_CONFIG as the JCasC path source'
+require_pattern templates/jenkins-controller/jenkins-service.env.template \
+  'JAVA_ARGS=-Djenkins.install.runSetupWizard=false' \
+  'Jenkins service env template JAVA_ARGS must not duplicate the JCasC path'
+reject_pattern templates/jenkins-controller/jenkins-service.env.template \
+  '-Dcasc.jenkins.config={{JENKINS_HOME}}/jcasc/jenkins.yaml' \
+  'Jenkins service env template must not set a duplicate JCasC Java property'
 reject_pattern scripts/jenkins-controller-setup.sh \
   'JENKINS_RUNTIME_ACCOUNT must be $JENKINS_NATIVE_RUNTIME_ACCOUNT' \
   'Jenkins helper must not require a fixed literal runtime account name'
