@@ -7,6 +7,7 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 . "$repo_root/simulation/lib/common.sh"
+. "$repo_root/simulation/lib/permissions.sh"
 . "$repo_root/simulation/vm/lib/ssh.sh"
 
 VM_OPERATOR_SSH_TIMEOUT_SECONDS=5

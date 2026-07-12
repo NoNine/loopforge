@@ -368,12 +368,12 @@ grep -Fq -- 'stage_role_helpers_for_all_services "$log"' "${docker_harness_sourc
   printf 'Docker up must stage the shared role-helper tree\n' >&2
   exit 1
 }
-grep -Fq -- 'find $(shell_quote "$tmp") -type d -exec chmod 0700' "${docker_harness_sources[@]}" || {
-  printf 'Docker role-helper directories must remain operator-writable\n' >&2
+grep -Fq -- 'find $(shell_quote "$tmp") -type d -exec chmod $LF_MODE_PUBLIC_DIR' "${docker_harness_sources[@]}" || {
+  printf 'Docker role-helper directories must be public/read-only staged control-plane input\n' >&2
   exit 1
 }
-grep -Fq -- 'find $(shell_quote "$tmp") -type f -exec chmod 0600' "${docker_harness_sources[@]}" || {
-  printf 'Docker role-helper files must remain operator-writable\n' >&2
+grep -Fq -- 'find $(shell_quote "$tmp") -type f -exec chmod $LF_MODE_PUBLIC_FILE' "${docker_harness_sources[@]}" || {
+  printf 'Docker role-helper files must be public/read-only staged control-plane input\n' >&2
   exit 1
 }
 if grep -Fq -- '"/workspace/$helper"' "${docker_harness_sources[@]}"; then

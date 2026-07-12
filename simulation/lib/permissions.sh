@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+# Shared simulation permission classes. Keep these aligned with
+# docs/directory-model.md.
+LF_MODE_PRIVATE_DIR=0700
+LF_MODE_PRIVATE_FILE=0600
+LF_MODE_REVIEW_DIR=0750
+LF_MODE_REVIEW_FILE=0640
+LF_MODE_PUBLIC_DIR=0755
+LF_MODE_PUBLIC_FILE=0644
+LF_MODE_EXECUTABLE_FILE=0755
+LF_MODE_SHARED_SETGID_DIR=2775

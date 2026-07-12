@@ -11,6 +11,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 . "$repo_root/simulation/lib/roles.sh"
 . "$repo_root/simulation/lib/env.sh"
 . "$repo_root/simulation/lib/state.sh"
+. "$repo_root/simulation/lib/permissions.sh"
 . "$repo_root/simulation/lib/logs.sh"
 . "$repo_root/simulation/lib/evidence.sh"
 . "$repo_root/simulation/vm/lib/paths.sh"

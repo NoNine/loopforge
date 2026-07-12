@@ -42,7 +42,7 @@ vm_write_harness_evidence() {
   "redaction": $q_redaction
 }
 EOF
-  chmod 0600 "$file"
+  chmod "$LF_MODE_REVIEW_FILE" "$file"
   printf '%s\n' "$file"
 }
 
@@ -82,7 +82,7 @@ vm_write_ldap_evidence() {
   "redaction": "secrets-not-recorded"
 }
 EOF
-  chmod 0600 "$tmp"
+  chmod "$LF_MODE_REVIEW_FILE" "$tmp"
   mv -- "$tmp" "$file"
   printf '%s\n' "$file"
 }
@@ -502,7 +502,7 @@ vm_write_reboot_evidence() {
   "redaction": "secrets-not-recorded"
 }
 EOF
-  chmod 0600 "$file"
+  chmod "$LF_MODE_REVIEW_FILE" "$file"
   printf '%s\n' "$file"
 }
 

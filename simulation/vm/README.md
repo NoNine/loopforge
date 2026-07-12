@@ -202,6 +202,8 @@ before operating.
 
 The rendered harness record is written for inspection. Private runtime env
 files retain lifecycle values and point at the runtime input copies.
+Non-secret run markers and manifest contracts are public/read-only metadata,
+not secret material.
 
 ## Libvirt/KVM Lifecycle
 

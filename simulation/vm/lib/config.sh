@@ -219,7 +219,7 @@ vm_config_ensure_m1_dirs() {
     "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" \
     "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" \
     "$HARNESS_JENKINS_AGENT_LOG_DIR"
-  chmod 0700 "$HARNESS_TARGET_SSH_DIR"
+  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_TARGET_SSH_DIR"
 }
 
 vm_config_copy_runtime_inputs() {
@@ -269,7 +269,7 @@ VM_GERRIT_TARGET_SSH_HOST=pending-create
 VM_JENKINS_CONTROLLER_TARGET_SSH_HOST=pending-create
 VM_JENKINS_AGENT_TARGET_SSH_HOST=pending-create
 EOF
-  chmod 0600 "$HARNESS_VM_INVENTORY_FILE"
+  chmod "$LF_MODE_REVIEW_FILE" "$HARNESS_VM_INVENTORY_FILE"
 }
 
 vm_config_write_manifest_contract() {
@@ -299,7 +299,7 @@ gerrit_version=not-applicable
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
 EOF
-  chmod 0600 "$HARNESS_MANIFEST_CONTRACT"
+  chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_MANIFEST_CONTRACT"
 }
 
 vm_config_write_rendered_env() {
@@ -346,7 +346,7 @@ HARNESS_VM_BASELINE_PREREQS_MARKER=$(shell_quote "$HARNESS_VM_BASELINE_PREREQS_M
 HARNESS_VM_SNAPSHOT_DIR=$(shell_quote "$HARNESS_VM_SNAPSHOT_DIR")
 public_internet_fallback=simulation-only
 EOF
-  chmod 0600 "$HARNESS_RENDERED_ENV"
+  chmod "$LF_MODE_REVIEW_FILE" "$HARNESS_RENDERED_ENV"
 }
 
 vm_config_write_runtime_env() {
@@ -417,7 +417,7 @@ HARNESS_ROLE_STATE_DIR=$(shell_quote "$HARNESS_ROLE_STATE_DIR")
 public_internet_fallback=simulation-only
 EOF
   umask "$old_umask"
-  chmod 0600 "$HARNESS_RUNTIME_ENV"
+  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_ENV"
 }
 
 vm_config_init_run() {

@@ -93,12 +93,12 @@ grep -Fq -- 'vm_ssh_stage_role_helpers_all' "$vm_root/lib/lifecycle.sh" || {
   printf 'VM up must stage role helpers for the environment run\n' >&2
   exit 1
 }
-grep -Fq -- 'find $(shell_quote "$remote_tmp") -type d -exec chmod 0700' "$vm_root/lib/ssh.sh" || {
-  printf 'VM role-helper directories must remain operator-writable\n' >&2
+grep -Fq -- 'find $(shell_quote "$remote_tmp") -type d -exec chmod $LF_MODE_PUBLIC_DIR' "$vm_root/lib/ssh.sh" || {
+  printf 'VM role-helper directories must be public/read-only staged control-plane input\n' >&2
   exit 1
 }
-grep -Fq -- 'find $(shell_quote "$remote_tmp") -type f -exec chmod 0600' "$vm_root/lib/ssh.sh" || {
-  printf 'VM role-helper files must remain operator-writable\n' >&2
+grep -Fq -- 'find $(shell_quote "$remote_tmp") -type f -exec chmod $LF_MODE_PUBLIC_FILE' "$vm_root/lib/ssh.sh" || {
+  printf 'VM role-helper files must be public/read-only staged control-plane input\n' >&2
   exit 1
 }
 

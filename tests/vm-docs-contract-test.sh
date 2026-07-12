@@ -112,8 +112,11 @@ require_doc_text docs/directory-model.md \
   '`/home/ci-operator/loopforge/`' \
   'Directory model must name the default role-helper root'
 require_doc_text docs/directory-model.md \
-  'Root and directories `0700`; regular files `0600`; role helper scripts `0700`' \
-  'Directory model must keep role helpers operator-writable and executable'
+  'Root and directories `0755`; regular files `0644`; role helper scripts `0755`' \
+  'Directory model must keep role helpers executable non-secret control-plane input'
+require_doc_text docs/directory-model.md \
+  'Loopforge permissions are classified by data sensitivity' \
+  'Directory model must document sensitivity-based permission classes'
 require_doc_text docs/directory-model.md \
   'Run IDs and role-specific package directories are not part of the' \
   'Directory model must require one shared role-helper tree'

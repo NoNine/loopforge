@@ -37,7 +37,7 @@ repo_root=$repo_root
 generated_run_dir=$generated_run_dir
 runtime_env_fingerprint=$fingerprint
 EOF
-  chmod 0600 "$marker"
+  chmod "${LF_MODE_PUBLIC_FILE:-0644}" "$marker"
 }
 
 verify_runtime_marker() {
@@ -82,7 +82,7 @@ run_id=$run_id
 project_name=$project_name
 runtime_env_fingerprint=$fingerprint
 EOF
-  chmod 0600 "$marker"
+  chmod "${LF_MODE_PUBLIC_FILE:-0644}" "$marker"
 }
 
 verify_checkpoint_marker() {

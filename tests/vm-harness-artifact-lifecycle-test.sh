@@ -11,6 +11,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 . "$repo_root/simulation/lib/roles.sh"
 . "$repo_root/simulation/lib/artifacts.sh"
 . "$repo_root/simulation/lib/env.sh"
+. "$repo_root/simulation/lib/permissions.sh"
 . "$repo_root/simulation/lib/logs.sh"
 . "$repo_root/simulation/lib/evidence.sh"
 . "$repo_root/simulation/vm/lib/paths.sh"
@@ -182,7 +183,7 @@ case "$role" in
     mkdir -p "$dir/templates"
     printf 'runtime profile template\n' >"$dir/templates/agent-runtime-profile.env.template"
     printf 'SSH policy template\n' >"$dir/templates/sshd-policy.conf.template"
-    chmod 0600 "$dir/templates/agent-runtime-profile.env.template" \
+    chmod 0644 "$dir/templates/agent-runtime-profile.env.template" \
       "$dir/templates/sshd-policy.conf.template"
     extra='bootstrap=jenkins-agent-bootstrap.txt'
     ;;
@@ -203,10 +204,10 @@ EOF
 (cd "$preparing/$bundle" && tar -czf "$preparing/$bundle.tar.gz" "$payload")
 (cd "$preparing" && sha256sum "$bundle.tar.gz" >"$bundle.tar.gz.sha256")
 HELPER
-    chmod 0700 "$mapped/$helper"
+    chmod 0755 "$mapped/$helper"
   done
-  find "$mapped" -type d -exec chmod 0700 {} +
-  find "$mapped" -type f ! -name '*-setup.sh' -exec chmod 0600 {} +
+  find "$mapped" -type d -exec chmod 0755 {} +
+  find "$mapped" -type f ! -name '*-setup.sh' -exec chmod 0644 {} +
   printf 'role-helpers machine=%s path=%s\n' "$machine" "$root" >>"$calls"
 }
 
@@ -227,10 +228,10 @@ vm_cmd_stage_artifacts "" >"$tmp_dir/stage.out"
 
 for machine in bundle-factory gerrit jenkins-controller jenkins-agent; do
   helper_root="$(guest_path "$machine" "$(vm_path_guest_role_helpers_root)")"
-  [ "$(stat -c %a "$helper_root")" = 700 ]
-  [ "$(stat -c %a "$helper_root/scripts/common.sh")" = 600 ]
+  [ "$(stat -c %a "$helper_root")" = 755 ]
+  [ "$(stat -c %a "$helper_root/scripts/common.sh")" = 644 ]
   for role in "${roles[@]}"; do
-    [ "$(stat -c %a "$helper_root/$(helper_for_role "$role")")" = 700 ]
+    [ "$(stat -c %a "$helper_root/$(helper_for_role "$role")")" = 755 ]
   done
 done
 
@@ -251,7 +252,7 @@ for role in "${roles[@]}"; do
         printf 'VM staged Jenkins agent template must remain operator-readable: %s\n' "$template" >&2
         exit 1
       }
-      [ "$(stat -c %a "$staged_template")" = 600 ]
+      [ "$(stat -c %a "$staged_template")" = 644 ]
     done
   fi
   for env_machine in bundle-factory "$machine"; do

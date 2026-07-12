@@ -6,7 +6,7 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 docker_harness="$repo_root/simulation/docker/simulate.sh"
 lib_dir="$repo_root/simulation/lib"
 
-for module in common quote roles artifacts env state logs evidence; do
+for module in common quote roles artifacts env state permissions logs evidence; do
   [ -f "$lib_dir/$module.sh" ] || {
     printf 'Missing shared simulation library module: %s.sh\n' "$module" >&2
     exit 1
@@ -83,9 +83,20 @@ usage() {
 # shellcheck source=/dev/null
 . "$lib_dir/state.sh"
 # shellcheck source=/dev/null
+. "$lib_dir/permissions.sh"
+# shellcheck source=/dev/null
 . "$lib_dir/logs.sh"
 # shellcheck source=/dev/null
 . "$lib_dir/evidence.sh"
+
+[ "$LF_MODE_PRIVATE_DIR" = 0700 ]
+[ "$LF_MODE_PRIVATE_FILE" = 0600 ]
+[ "$LF_MODE_REVIEW_DIR" = 0750 ]
+[ "$LF_MODE_REVIEW_FILE" = 0640 ]
+[ "$LF_MODE_PUBLIC_DIR" = 0755 ]
+[ "$LF_MODE_PUBLIC_FILE" = 0644 ]
+[ "$LF_MODE_EXECUTABLE_FILE" = 0755 ]
+[ "$LF_MODE_SHARED_SETGID_DIR" = 2775 ]
 
 [ "$(helper_for_role gerrit)" = "scripts/gerrit-setup.sh" ]
 [ "$(helper_for_role jenkins-controller)" = "scripts/jenkins-controller-setup.sh" ]

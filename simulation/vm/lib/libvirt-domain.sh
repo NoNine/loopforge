@@ -235,7 +235,7 @@ __vm_libvirt_render_seed_media() {
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
   dns_gateway="$(__vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
-  chmod 0700 "$work_dir"
+  chmod "$LF_MODE_PRIVATE_DIR" "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
 users:
@@ -281,8 +281,8 @@ EOF
     (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
       user-data meta-data network-config)
   fi
-  chmod 0600 "$user_data" "$meta_data" "$network_config"
-  chmod 0644 "$seed_iso"
+  chmod "$LF_MODE_PRIVATE_FILE" "$user_data" "$meta_data" "$network_config"
+  chmod "$LF_MODE_PUBLIC_FILE" "$seed_iso"
 }
 
 __vm_libvirt_render_bake_seed_media() {
@@ -296,7 +296,7 @@ __vm_libvirt_render_bake_seed_media() {
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
   dns_gateway="$(__vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
-  chmod 0700 "$work_dir"
+  chmod "$LF_MODE_PRIVATE_DIR" "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
 users:
@@ -342,18 +342,18 @@ EOF
     (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
       user-data meta-data network-config)
   fi
-  chmod 0600 "$user_data" "$meta_data" "$network_config"
-  chmod 0644 "$seed_iso"
+  chmod "$LF_MODE_PRIVATE_FILE" "$user_data" "$meta_data" "$network_config"
+  chmod "$LF_MODE_PUBLIC_FILE" "$seed_iso"
 }
 
 vm_libvirt_ensure_ssh_key() {
   mkdir -p "$HARNESS_TARGET_SSH_DIR"
-  chmod 0700 "$HARNESS_TARGET_SSH_DIR"
+  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_TARGET_SSH_DIR"
   if [ ! -f "$HARNESS_TARGET_SSH_IDENTITY_FILE" ]; then
     ssh-keygen -q -t ed25519 -N '' -f "$HARNESS_TARGET_SSH_IDENTITY_FILE"
   fi
-  chmod 0600 "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  chmod 0644 "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
+  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
 }
 
 vm_libvirt_define_network() {

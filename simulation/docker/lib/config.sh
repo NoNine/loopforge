@@ -602,17 +602,17 @@ load_harness_integration_env() {
 ensure_target_ssh_keypair() {
   require_command ssh-keygen
   mkdir -p "$HARNESS_TARGET_SSH_DIR"
-  chmod 0700 "$HARNESS_TARGET_SSH_DIR"
+  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_TARGET_SSH_DIR"
   if [ ! -s "$HARNESS_TARGET_SSH_IDENTITY_FILE" ]; then
     ssh-keygen -q -t ed25519 -N '' -C "loopforge-$HARNESS_RUN_ID-target-ssh" \
       -f "$HARNESS_TARGET_SSH_IDENTITY_FILE"
   fi
-  chmod 0600 "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
   ssh-keygen -y -f "$HARNESS_TARGET_SSH_IDENTITY_FILE" >"$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
-  chmod 0644 "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
+  chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
   if [ ! -e "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" ]; then
     : >"$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-    chmod 0600 "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+    chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
   fi
 }
 
@@ -745,7 +745,7 @@ ensure_dirs() {
     "$HARNESS_STAGING_DIR/gerrit" \
     "$HARNESS_STAGING_DIR/jenkins-controller" \
     "$HARNESS_STAGING_DIR/jenkins-agent"
-  chmod 0700 "$HARNESS_GERRIT_VALIDATION_SECRET_DIR"
+  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_GERRIT_VALIDATION_SECRET_DIR"
 }
 
 prepare_init_run() {
@@ -938,7 +938,7 @@ jenkins_controller_env=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
 jenkins_agent_env=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
 integration_env=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 EOF
-  chmod 0600 "$HARNESS_RUNTIME_ENV"
+  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_ENV"
 }
 
 write_manifest_contract() {
@@ -970,4 +970,5 @@ gerrit_version=not-applicable
 jenkins_version=not-applicable
 jenkins_plugin_manager_version=not-applicable
 EOF
+  chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_BASELINE_CONTRACT"
 }

@@ -171,6 +171,7 @@ vm_artifacts_export_from_guest() {
   }
   mv -f -- "$tmp_archive" "$export_archive"
   mv -f -- "$tmp_checksum" "$export_checksum"
+  chmod "$LF_MODE_PUBLIC_FILE" "$export_archive" "$export_checksum"
   vm_artifacts_validate_archive_pair "$role" "$export_archive" "$export_checksum" || return $?
   printf 'artifact-export=ready role=%s archive=%s transfer=target-os-ssh\n' \
     "$role" "$(basename "$export_archive")"

@@ -90,7 +90,7 @@ vm_ssh_copy_file_from_machine() {
   mkdir -p "$(dirname "$local_file")"
   scp -q $(vm_ssh_common_options) \
     "$(vm_ssh_target "$machine"):$remote_file" "$local_file" || return $?
-  chmod 0600 "$local_file"
+  chmod "$LF_MODE_PRIVATE_FILE" "$local_file"
 }
 
 vm_ssh_stage_role_helpers() {
@@ -106,10 +106,10 @@ vm_ssh_stage_role_helpers() {
   vm_libvirt_require_running "$machine" || return $?
   vm_ssh_verify_known_host "$machine" || return $?
   vm_ssh_run_machine "$machine" \
-    "set -eu; rm -rf -- $(shell_quote "$remote_tmp"); install -d -m 0700 $(shell_quote "$remote_tmp")" || return $?
+    "set -eu; rm -rf -- $(shell_quote "$remote_tmp"); install -d -m $LF_MODE_PUBLIC_DIR $(shell_quote "$remote_tmp")" || return $?
   tar -C "$repo_root" -cf - "${source_paths[@]}" |
     ssh $(vm_ssh_common_options) "$(vm_ssh_target "$machine")" \
-      "set -eu; tar -xf - -C $(shell_quote "$remote_tmp"); find $(shell_quote "$remote_tmp") -type d -exec chmod 0700 {} +; find $(shell_quote "$remote_tmp") -type f -exec chmod 0600 {} +; chmod 0700 $(shell_quote "$remote_tmp/scripts/gerrit-setup.sh") $(shell_quote "$remote_tmp/scripts/jenkins-controller-setup.sh") $(shell_quote "$remote_tmp/scripts/jenkins-agent-setup.sh"); rm -rf -- $(shell_quote "$remote_dir"); mv -- $(shell_quote "$remote_tmp") $(shell_quote "$remote_dir"); test -x $(shell_quote "$remote_dir/scripts/gerrit-setup.sh"); test -x $(shell_quote "$remote_dir/scripts/jenkins-controller-setup.sh"); test -x $(shell_quote "$remote_dir/scripts/jenkins-agent-setup.sh")"
+      "set -eu; tar -xf - -C $(shell_quote "$remote_tmp"); find $(shell_quote "$remote_tmp") -type d -exec chmod $LF_MODE_PUBLIC_DIR {} +; find $(shell_quote "$remote_tmp") -type f -exec chmod $LF_MODE_PUBLIC_FILE {} +; chmod $LF_MODE_EXECUTABLE_FILE $(shell_quote "$remote_tmp/scripts/gerrit-setup.sh") $(shell_quote "$remote_tmp/scripts/jenkins-controller-setup.sh") $(shell_quote "$remote_tmp/scripts/jenkins-agent-setup.sh"); rm -rf -- $(shell_quote "$remote_dir"); mv -- $(shell_quote "$remote_tmp") $(shell_quote "$remote_dir"); test -x $(shell_quote "$remote_dir/scripts/gerrit-setup.sh"); test -x $(shell_quote "$remote_dir/scripts/jenkins-controller-setup.sh"); test -x $(shell_quote "$remote_dir/scripts/jenkins-agent-setup.sh")"
 }
 
 vm_ssh_stage_role_helpers_all() {
@@ -211,7 +211,7 @@ vm_ssh_capture_known_host() {
   host="$(vm_ssh_wait_host "$machine")"
   mkdir -p "$(dirname "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE")"
   touch "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-  chmod 0600 "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
   if ssh-keygen -F "$host" -f "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" >/dev/null 2>&1; then
     return 0
   fi
@@ -245,7 +245,7 @@ vm_ssh_update_machine_metadata() {
   tmp="$(mktemp "${file}.XXXXXX")"
   grep -v '^ssh_host=' "$file" >"$tmp" || true
   printf 'ssh_host=%s\n' "$host" >>"$tmp"
-  chmod 0600 "$tmp"
+  chmod "$LF_MODE_REVIEW_FILE" "$tmp"
   mv -- "$tmp" "$file"
 }
 

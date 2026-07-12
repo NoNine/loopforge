@@ -11,12 +11,12 @@ ensure_gerrit_validation_key() {
     rm -rf "$secret_dir"
   fi
   mkdir -p "$secret_dir" "$(dirname "$bundle_public_key")"
-  chmod 0700 "$secret_dir"
+  chmod "$LF_MODE_PRIVATE_DIR" "$secret_dir"
   if [ ! -s "$private_key" ]; then
     ssh-keygen -q -t ed25519 -N '' -C jenkins-gerrit-validation-simulation \
       -f "$private_key" >>"$log" 2>&1
   fi
-  chmod 0600 "$private_key"
+  chmod "$LF_MODE_PRIVATE_FILE" "$private_key"
   ssh-keygen -y -f "$private_key" >"$public_key"
   cp "$public_key" "$bundle_public_key"
   printf 'validation_secret_ready role=gerrit private_key_path=redacted public_key_path=%s custody=harness-owned-simulation-not-gerrit-artifact\n' \
@@ -106,7 +106,7 @@ render_container_role_env() {
     canonical_web_url="http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"
     set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"
   fi
-  chmod 0600 "$host_env_file"
+  chmod "$LF_MODE_PRIVATE_FILE" "$host_env_file"
   printf '%s\n' "$container_env_file"
 }
 
@@ -119,7 +119,7 @@ render_gerrit_bundle_factory_env() {
   mkdir -p "$(dirname "$host_env_file")"
   cp -- "$src" "$host_env_file"
   set_env_file_value "$host_env_file" GERRIT_DOWNLOAD_ARTIFACTS "1"
-  chmod 0600 "$host_env_file"
+  chmod "$LF_MODE_PRIVATE_FILE" "$host_env_file"
   printf '%s\n' "$env_file"
 }
 
@@ -132,7 +132,7 @@ render_jenkins_controller_bundle_factory_env() {
   mkdir -p "$(dirname "$host_env_file")"
   cp -- "$src" "$host_env_file"
   set_env_file_value "$host_env_file" JENKINS_DOWNLOAD_ARTIFACTS "1"
-  chmod 0600 "$host_env_file"
+  chmod "$LF_MODE_PRIVATE_FILE" "$host_env_file"
   printf '%s\n' "$env_file"
 }
 
@@ -171,12 +171,12 @@ refresh_target_ssh_known_hosts() {
   log="${1:?log required}"
   mkdir -p "$HARNESS_TARGET_SSH_DIR"
   tmp="$(mktemp "$HARNESS_TARGET_SSH_DIR/known_hosts.XXXXXX")"
-  chmod 0600 "$tmp"
+  chmod "$LF_MODE_PRIVATE_FILE" "$tmp"
   ssh-keyscan -T 5 -p "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT" 127.0.0.1 >>"$tmp" 2>>"$log"
   ssh-keyscan -T 5 -p "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT" 127.0.0.1 >>"$tmp" 2>>"$log"
   ssh-keyscan -T 5 -p "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT" 127.0.0.1 >>"$tmp" 2>>"$log"
   mv -- "$tmp" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-  chmod 0600 "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
   printf 'target_ssh_known_hosts=ready file=%s scope=docker-simulation\n' "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" >>"$log"
 }
 
@@ -191,7 +191,7 @@ stage_target_ssh_authorized_key_for_service() {
   command="$(owned_directory_command ci-operator ci-operator 0700 /home/ci-operator/.ssh 0)"
   command="$command && cp $(shell_quote "$container_public_key") /home/ci-operator/.ssh/authorized_keys"
   command="$command && chown ci-operator:ci-operator /home/ci-operator/.ssh/authorized_keys"
-  command="$command && chmod 0600 /home/ci-operator/.ssh/authorized_keys"
+  command="$command && chmod $LF_MODE_PRIVATE_FILE /home/ci-operator/.ssh/authorized_keys"
   if ! compose exec -T -u root "$service" sh -c "$command" >>"$log" 2>&1; then
     return 1
   fi

@@ -99,7 +99,8 @@ load the private runtime config and verify that marker before operating.
 
 `harness.env` is the rendered harness record for inspection. The private
 `harness.runtime.env` retains lifecycle values and points at the runtime input
-copies.
+copies. Non-secret run markers and manifest contracts are public/read-only
+metadata, not secret material.
 
 For v1, Docker simulation does not support arbitrary generated/output roots.
 All lifecycle and cleanup commands use the repo-local

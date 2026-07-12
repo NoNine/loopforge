@@ -32,6 +32,39 @@ Directory entries use these properties:
 | Evidence and cleanup | What may be recorded and what cleanup may remove. |
 | Simulation backing | Docker or VM backing path notes when simulation realizes the path differently. |
 
+## Permission Classes
+
+Loopforge permissions are classified by data sensitivity, not by whether a
+path is produced by a harness. A harness does not inherently own secrets.
+Harness-managed paths are secret-bearing only when they contain credentials,
+private keys, full reviewed env inputs, or payloads that include those values.
+
+| Class | Default mode | Use |
+| --- | --- | --- |
+| Secret/private directory | `0700` | Private key directories, SSH directories, operator input roots, Jenkins secret/JCasC directories, and validation key directories. |
+| Secret/private file | `0600` | Private keys, full env inputs, Gerrit `secure.config`, Jenkins JCasC with secrets, cloud-init user-data with credentials, and secret-bearing payloads. |
+| Review-sensitive directory | `0750` | Evidence, bounded logs, inventories, and status directories intended for operator or reviewer access but not public sharing. |
+| Review-sensitive file | `0640` | Bounded logs, evidence records, inventories, status markers, and rendered non-secret config snapshots. |
+| Public/read-only directory | `0755` | Non-secret helper trees, artifact review directories, and published bundle directories. |
+| Public/read-only file | `0644` | Archives, checksums, public keys, manifest contracts, non-secret run/checkpoint markers, helper libraries, and templates. |
+| Executable helper file | `0755` | Role helper scripts staged as non-secret control-plane input. |
+| Shared setgid directory | `2775` | Jenkins controller/agent shared integration storage. |
+
+Official source guidance informs these classes. Gerrit recommends a dedicated
+Unix account for the Gerrit site and ownership of that site by that account:
+<https://gerrit-review.googlesource.com/Documentation/install.html>.
+Jenkins documents `$JENKINS_HOME/secrets` and the controller key as sensitive
+credential material, and recommends `0600` for secret-bearing systemd
+drop-ins when in doubt:
+<https://www.jenkins.io/doc/book/system-administration/backing-up/> and
+<https://www.jenkins.io/doc/book/system-administration/systemd-services/>.
+Docker documents that bind mounts are writable by default and supports
+read-only mounts when host mutation is not intended:
+<https://docs.docker.com/engine/storage/bind-mounts/>. Libvirt documents
+directory pools and volumes as libvirt-managed VM storage, so Loopforge uses
+libvirt APIs and metadata instead of repairing VM disk ownership directly:
+<https://libvirt.org/storage.html>.
+
 ## Product Homes
 
 Product homes are service-owned runtime directories. They are separate from
@@ -89,7 +122,7 @@ execution and retains it until environment cleanup:
 
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/home/<operator-account>/loopforge/` | Bundle factory and targets | Human operator, machine runner, or simulation transfer utility | Selected operator account and group | Root and directories `0700`; regular files `0600`; role helper scripts `0700` | `scripts/common.sh`, all three role helper scripts, and all three role template trees | Executable control-plane input; no secrets | Stage as a complete tree before execution; retain across lifecycle commands until environment teardown; remove directly during cleanup without delegated privilege or permission repair |
+| `/home/<operator-account>/loopforge/` | Bundle factory and targets | Human operator, machine runner, or simulation transfer utility | Selected operator account and group | Root and directories `0755`; regular files `0644`; role helper scripts `0755` | `scripts/common.sh`, all three role helper scripts, and all three role template trees | Executable control-plane input; no secrets | Stage as a complete tree before execution; retain across lifecycle commands until environment teardown; remove directly during cleanup without delegated privilege or permission repair |
 
 The default operator account resolves the root to
 `/home/ci-operator/loopforge/`. Role helpers execute from its `scripts/`
@@ -159,16 +192,16 @@ generated/simulation/docker/<run-id>/
 
 | Docker run path | Canonical or container-visible path | Content dominance | Purpose |
 | --- | --- | --- | --- |
-| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env and manifest contract |
-| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, normally written with mode `0600` |
+| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, run markers, and public manifest contract; rendered env files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
+| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
 | `host/bundle-factory/rendered/` | Host-side reviewed bundle-factory input copies | Host-dominated | Operator review copy before Docker `cp` input transfer |
 | `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
 | `host/target-ssh/` | Host-side target SSH material | Host-dominated | Host-generated target SSH identity, public key, and known hosts; Docker simulation copies only the public key into targets through `/home/ci-operator/loopforge-inputs` as control-plane input |
 | `host/validation-secrets/gerrit/` | Host-side Docker simulation validation key material | Host-dominated | Docker simulation-only SSH validation key material; not used for LDAP bind secrets; host directory is `0700` |
-| `host/evidence/harness/` | Harness evidence output | Host-dominated | Harness checkpoint evidence |
-| `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs |
-| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence |
-| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs |
+| `host/evidence/harness/` | Harness evidence output | Host-dominated | Harness checkpoint evidence, review-sensitive and redacted |
+| `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs, review-sensitive and bounded |
+| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
+| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
 | `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Host-owned backups of retained outputs before active dirs are cleared |
 | `target/helper-state/integration/` | Shared integration helper state | Target-dominated | Cross-role integration status and helper state for the host-orchestrated integration utility |
 | `target/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Shared Jenkins controller/agent integration storage |
@@ -220,13 +253,13 @@ generated/simulation/vm/<run-id>/
 | `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
 | `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
 | Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
-| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, and manifest contract |
-| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, normally written with mode `0600` |
+| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, run markers, and manifest contract; rendered env and inventory files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
+| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
 | `host/target-ssh/` | Host-side target SSH material | Host-dominated | Target OS SSH identity and known-hosts material for VM control-plane access |
-| `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence |
-| `host/logs/harness/` | Harness bounded log output | Host-dominated | VM harness command logs |
-| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence |
-| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs |
+| `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence, review-sensitive and redacted |
+| `host/logs/harness/` | Harness bounded log output | Host-dominated | VM harness command logs, review-sensitive and bounded |
+| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
+| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
 | `host/artifacts/exported/` | Operator-facing artifact review copies | Host-dominated | Exported bundle archives and checksums copied back for review; not a target transfer path |
 | `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Backups of retained outputs before active dirs are cleared |
 | `target/evidence/<role>/` | `/var/lib/loopforge/evidence` on one target VM | Target-dominated | Retained role-local VM simulation evidence |
