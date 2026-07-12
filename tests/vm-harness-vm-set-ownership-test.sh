@@ -19,7 +19,7 @@ mkdir -p "$stub_bin"
 sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$run_id/" \
   -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$vm_set_id/" \
-  "$repo_root/simulation/vm/example.env" >"$env_file"
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$env_file"
 
 cat >"$stub_bin/virsh" <<'STUB'
 #!/usr/bin/env bash

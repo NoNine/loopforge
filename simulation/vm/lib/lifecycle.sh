@@ -135,8 +135,23 @@ vm_cmd_init_run() {
   print_command_summary init-run "" "ok run-id=$HARNESS_RUN_ID"
 }
 
+vm_status_http_url() {
+  local machine path host
+  machine="${1:?machine required}"
+  path="${2:?path required}"
+  if [ "$(vm_libvirt_domain_state "$machine")" != "running" ]; then
+    printf 'pending-up\n'
+    return 0
+  fi
+  if host="$(vm_ssh_machine_host "$machine" 2>/dev/null)"; then
+    printf 'http://%s:8080%s\n' "$host" "$path"
+  else
+    printf 'pending-up\n'
+  fi
+}
+
 vm_cmd_status() {
-  local status_label ldap_status
+  local status_label ldap_status gerrit_url jenkins_url
   vm_config_load_runtime
   vm_set_validate_ownership_readonly >/dev/null
   ldap_status="$(vm_baseline_status)"
@@ -146,13 +161,15 @@ vm_cmd_status() {
     [ "$(vm_libvirt_domain_state jenkins-agent)" = "running" ]; then
     status_label="running"
   fi
+  gerrit_url="$(vm_status_http_url gerrit /)"
+  jenkins_url="$(vm_status_http_url jenkins-controller /login)"
   printf 'status: %s\n\n' "$status_label"
   printf 'Run\n'
   printf '  %-13s %s\n' 'Run ID' "$HARNESS_RUN_ID"
   printf '  %-13s %s\n' 'VM set' "$LOOPFORGE_VM_SET_ID"
   printf '  %-13s %s\n' 'Project' "$HARNESS_PROJECT_NAME"
-  printf '  %-13s %s\n' 'Gerrit URL' 'pending-role-configuration'
-  printf '  %-13s %s\n' 'Jenkins URL' 'pending-role-configuration'
+  printf '  %-13s %s\n' 'Gerrit URL' "$gerrit_url"
+  printf '  %-13s %s\n' 'Jenkins URL' "$jenkins_url"
   printf '  %-13s %s\n' 'LDAP' "$ldap_status"
   printf '\n'
   printf 'Target SSH\n'

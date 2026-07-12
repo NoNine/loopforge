@@ -63,10 +63,10 @@ tests/vm-harness-layout-test.sh
 tests/vm-harness-status-output-test.sh
 bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh
 simulation/vm/simulate.sh --help
-simulation/vm/simulate.sh preflight --env simulation/vm/example.env
-simulation/vm/simulate.sh --env simulation/vm/example.env init-run
-simulation/vm/simulate.sh --env simulation/vm/example.env status
-simulation/vm/simulate.sh --env simulation/vm/example.env audit-state
+simulation/vm/simulate.sh preflight --env simulation/vm/examples/vm.env.example
+simulation/vm/simulate.sh --env simulation/vm/examples/vm.env.example init-run
+simulation/vm/simulate.sh --env simulation/vm/examples/vm.env.example status
+simulation/vm/simulate.sh --env simulation/vm/examples/vm.env.example audit-state
 git diff --check
 ```
 

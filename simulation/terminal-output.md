@@ -103,8 +103,8 @@ Run
   Run ID        step13-m3-202607082136
   VM set        step13-m3-202607082136
   Project       lf-m3-202607082136
-  Gerrit URL    pending-role-configuration
-  Jenkins URL   pending-role-configuration
+  Gerrit URL    http://192.168.126.133:8080/
+  Jenkins URL   http://192.168.126.87:8080/login
 
 Target SSH
   Role                User          Host             State

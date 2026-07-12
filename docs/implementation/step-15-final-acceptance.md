@@ -40,7 +40,7 @@ scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-
 scripts/collect-evidence.sh
 simulation/docker/simulate.sh down
 simulation/vm/simulate.sh --help
-simulation/vm/simulate.sh preflight --env simulation/vm/example.env
+simulation/vm/simulate.sh preflight --env simulation/vm/examples/vm.env.example
 ```
 
 When Step 13 is in scope for the release, also run the VM lifecycle through
@@ -62,4 +62,3 @@ Final acceptance criteria:
 - Step 12 shared library extraction preserves Docker behavior.
 - Step 13 VM simulation either passes in an approved VM environment or is
   explicitly documented as out of scope without claiming VM readiness.
-

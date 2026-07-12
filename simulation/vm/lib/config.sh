@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 vm_dir="$script_dir"
-vm_env_example="$vm_dir/example.env"
+vm_env_example="$vm_dir/examples/vm.env.example"
 VM_HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
 VM_LOOPFORGE_VM_SET_ID_OPERATOR_SET="${LOOPFORGE_VM_SET_ID+x}"
 VM_HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"

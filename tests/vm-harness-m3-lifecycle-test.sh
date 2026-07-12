@@ -30,7 +30,7 @@ sed \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-  "$repo_root/simulation/vm/example.env" >"$env_file"
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$env_file"
 
 cp "$repo_root/tests/fixtures/vm-libvirt-stub.sh" "$stub_bin/virsh"
 chmod +x "$stub_bin/virsh"
@@ -328,7 +328,7 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
     -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
     -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
     -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-    "$repo_root/simulation/vm/example.env" >"$prune_skip_env"
+    "$repo_root/simulation/vm/examples/vm.env.example" >"$prune_skip_env"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" init-run >"$tmp_dir/init-run-prune-skip.out"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
@@ -353,7 +353,7 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
     -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
     -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
     -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-    "$repo_root/simulation/vm/example.env" >"$prune_remove_env"
+    "$repo_root/simulation/vm/examples/vm.env.example" >"$prune_remove_env"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" init-run >"$tmp_dir/init-run-prune-remove.out"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \

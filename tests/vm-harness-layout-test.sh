@@ -31,6 +31,14 @@ require_in_file() {
   printf 'Missing VM simulation directory\n' >&2
   exit 1
 }
+[ -f "$vm_root/examples/vm.env.example" ] || {
+  printf 'Missing VM simulation env example at examples/vm.env.example\n' >&2
+  exit 1
+}
+[ ! -e "$vm_root/example.env" ] || {
+  printf 'Old VM env example path should be removed\n' >&2
+  exit 1
+}
 
 mapfile -t vm_impl_files < <(
   find "$vm_root" -type f \

@@ -33,7 +33,7 @@ sed \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-  "$repo_root/simulation/vm/example.env" >"$env_file"
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$env_file"
 
 cp "$repo_root/tests/fixtures/vm-libvirt-stub.sh" "$stub_bin/virsh"
 chmod +x "$stub_bin/virsh"
@@ -418,7 +418,7 @@ sed \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-  "$repo_root/simulation/vm/example.env" >"$cache_hit_env"
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$cache_hit_env"
 
 before_cache_hit_apt_count="$(grep -R -l -F 'apt-get install' "$stub_state"/ssh-*.sh | wc -l)"
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
@@ -459,7 +459,7 @@ sed \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-  "$repo_root/simulation/vm/example.env" >"$lock_env"
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$lock_env"
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$lock_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$lock_env" init-run >"$tmp_dir/init-run-lock.out"
 fingerprint="$(cat "$generated_root/$run_id/host/rendered/base-image-fingerprint.txt")"
@@ -514,7 +514,7 @@ run_fail_closed_case() {
     -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$case_base_image|" \
     -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
     -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-    "$repo_root/simulation/vm/example.env" >"$case_env"
+    "$repo_root/simulation/vm/examples/vm.env.example" >"$case_env"
 
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$case_env" init-run >"$tmp_dir/init-run-$mode.out"
@@ -561,7 +561,7 @@ sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$tamper_run_id/" \
   -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$tamper_vm_set_id/" \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
-  "$repo_root/simulation/vm/example.env" >"$tamper_env"
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$tamper_env"
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$tamper_env" init-run >"$tmp_dir/init-run-tamper.out"
 if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \

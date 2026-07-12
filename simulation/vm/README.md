@@ -189,7 +189,8 @@ simulation evidence records both `vm_set_id` and `run_id`.
 
 ## Input Model
 
-If `--env FILE` is omitted, the harness uses the committed VM example env file
+If `--env FILE` is omitted, the harness uses the committed
+`simulation/vm/examples/vm.env.example` file
 defined by the VM harness. Copy committed examples outside the examples tree
 before using real operator values.
 
