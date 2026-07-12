@@ -71,6 +71,16 @@ HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
 HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 EOF
 
+grep -Fq 'org.loopforge.resource="${LOOPFORGE_RESOURCE}"' "$repo_root/simulation/docker/target/Dockerfile"
+grep -Fq 'org.loopforge.service="${LOOPFORGE_SERVICE}"' "$repo_root/simulation/docker/target/Dockerfile"
+grep -Fq 'org.loopforge.resource="${LOOPFORGE_RESOURCE}"' "$repo_root/simulation/docker/ldap/Dockerfile"
+grep -Fq 'LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"' "$repo_root/simulation/docker/compose.yaml"
+for service in bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target; do
+  grep -Fq "LOOPFORGE_SERVICE: \"$service\"" "$repo_root/simulation/docker/compose.yaml"
+  grep -Fq "org.loopforge.service: \"$service\"" "$repo_root/simulation/docker/compose.yaml"
+done
+grep -Fq 'org.loopforge.network: "harness"' "$repo_root/simulation/docker/compose.yaml"
+
 PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   DOCKER_CONTAINERS_FILE="$containers" \

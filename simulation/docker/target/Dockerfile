@@ -38,3 +38,14 @@ RUN printf 'public_internet_fallback=%s\n' "$HARNESS_PUBLIC_INTERNET_FALLBACK_LA
     chmod 0440 /etc/sudoers.d/harness-ci-operator && \
     visudo -cf /etc/sudoers.d/harness-ci-operator && \
     rm -rf /var/lib/apt/lists/*
+
+ARG LOOPFORGE_RESOURCE=docker-simulation
+ARG LOOPFORGE_SCHEMA_VERSION=1
+ARG LOOPFORGE_PROJECT=unknown
+ARG LOOPFORGE_RUN_ID=unknown
+ARG LOOPFORGE_SERVICE=unknown
+LABEL org.loopforge.resource="${LOOPFORGE_RESOURCE}" \
+      org.loopforge.schema-version="${LOOPFORGE_SCHEMA_VERSION}" \
+      org.loopforge.project="${LOOPFORGE_PROJECT}" \
+      org.loopforge.run-id="${LOOPFORGE_RUN_ID}" \
+      org.loopforge.service="${LOOPFORGE_SERVICE}"

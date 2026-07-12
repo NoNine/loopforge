@@ -6,10 +6,21 @@ services:
       args:
         HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
+        LOOPFORGE_RESOURCE: "docker-simulation"
+        LOOPFORGE_SCHEMA_VERSION: "1"
+        LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
+        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SERVICE: "bundle-factory"
     container_name: "${HARNESS_PROJECT_NAME}-bundle-factory"
     hostname: bundle-factory
     init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
+    labels:
+      org.loopforge.resource: "docker-simulation"
+      org.loopforge.schema-version: "1"
+      org.loopforge.project: "${HARNESS_PROJECT_NAME}"
+      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.service: "bundle-factory"
     environment:
       HARNESS_ENVIRONMENT: bundle-factory
       HARNESS_MODE: "${HARNESS_MODE}"
@@ -28,8 +39,19 @@ services:
       dockerfile: ldap/Dockerfile
       args:
         HARNESS_LDAP_IMAGE: "${HARNESS_LDAP_IMAGE}"
+        LOOPFORGE_RESOURCE: "docker-simulation"
+        LOOPFORGE_SCHEMA_VERSION: "1"
+        LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
+        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SERVICE: "ldap"
     container_name: "${HARNESS_PROJECT_NAME}-ldap"
     hostname: ldap
+    labels:
+      org.loopforge.resource: "docker-simulation"
+      org.loopforge.schema-version: "1"
+      org.loopforge.project: "${HARNESS_PROJECT_NAME}"
+      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.service: "ldap"
     environment:
       LDAP_ORGANISATION: "Gerrit Jenkins Harness"
       LDAP_DOMAIN: "${HARNESS_LDAP_DOMAIN}"
@@ -52,10 +74,21 @@ services:
       args:
         HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
+        LOOPFORGE_RESOURCE: "docker-simulation"
+        LOOPFORGE_SCHEMA_VERSION: "1"
+        LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
+        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SERVICE: "gerrit-target"
     container_name: "${HARNESS_PROJECT_NAME}-gerrit-target"
     hostname: gerrit-target
     init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
+    labels:
+      org.loopforge.resource: "docker-simulation"
+      org.loopforge.schema-version: "1"
+      org.loopforge.project: "${HARNESS_PROJECT_NAME}"
+      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.service: "gerrit-target"
     environment:
       HARNESS_ENVIRONMENT: gerrit-target
       HARNESS_ROLE: gerrit
@@ -80,10 +113,21 @@ services:
       args:
         HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
+        LOOPFORGE_RESOURCE: "docker-simulation"
+        LOOPFORGE_SCHEMA_VERSION: "1"
+        LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
+        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SERVICE: "jenkins-controller-target"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-controller-target"
     hostname: jenkins-controller-target
     init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
+    labels:
+      org.loopforge.resource: "docker-simulation"
+      org.loopforge.schema-version: "1"
+      org.loopforge.project: "${HARNESS_PROJECT_NAME}"
+      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.service: "jenkins-controller-target"
     environment:
       HARNESS_ENVIRONMENT: jenkins-controller-target
       HARNESS_ROLE: jenkins-controller
@@ -109,10 +153,21 @@ services:
       args:
         HARNESS_UBUNTU_IMAGE: "${HARNESS_UBUNTU_IMAGE}"
         HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL: "${HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL}"
+        LOOPFORGE_RESOURCE: "docker-simulation"
+        LOOPFORGE_SCHEMA_VERSION: "1"
+        LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
+        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SERVICE: "jenkins-agent-target"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-agent-target"
     hostname: jenkins-agent-target
     init: true
     command: ["/usr/local/bin/harness-sleep.sh"]
+    labels:
+      org.loopforge.resource: "docker-simulation"
+      org.loopforge.schema-version: "1"
+      org.loopforge.project: "${HARNESS_PROJECT_NAME}"
+      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.service: "jenkins-agent-target"
     environment:
       HARNESS_ENVIRONMENT: jenkins-agent-target
       HARNESS_ROLE: jenkins-agent
@@ -132,3 +187,9 @@ services:
 
 networks:
   harness:
+    labels:
+      org.loopforge.resource: "docker-simulation"
+      org.loopforge.schema-version: "1"
+      org.loopforge.project: "${HARNESS_PROJECT_NAME}"
+      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.network: "harness"

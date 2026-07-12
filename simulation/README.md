@@ -189,11 +189,13 @@ the layer README, then use a fresh run identity for new validation.
 
 Docker recovery uses `down` or `clean` for the selected run and a fresh
 `HARNESS_RUN_ID` for follow-up validation. Docker `destroy` is separate image
-cleanup for selected project-built images. VM recovery uses `down`,
-`clean`, or `destroy` for the selected VM set and run; when resource
-identity is suspect, select both a fresh `HARNESS_RUN_ID` and a fresh
-`LOOPFORGE_VM_SET_ID` for follow-up validation. VM host-wide libvirt
-cleanup is a separate operator recovery path and is not selected-run
+cleanup for selected project-built images. Docker host-wide cleanup is a
+separate operator recovery path for Compose-labeled LoopForge containers,
+networks, and project-built images; it is not selected-run cleanup. VM
+recovery uses `down`, `clean`, or `destroy` for the selected VM set and run;
+when resource identity is suspect, select both a fresh `HARNESS_RUN_ID` and a
+fresh `LOOPFORGE_VM_SET_ID` for follow-up validation. VM host-wide libvirt
+cleanup is also a separate operator recovery path and is not selected-run
 cleanup.
 
 `audit-state` is read-only inspection. `run`, role phases, integration
