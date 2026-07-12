@@ -136,18 +136,14 @@ vm_cmd_init_run() {
 }
 
 vm_status_http_url() {
-  local machine path host
+  local machine path
   machine="${1:?machine required}"
   path="${2:?path required}"
   if [ "$(vm_libvirt_domain_state "$machine")" != "running" ]; then
     printf 'pending-up\n'
     return 0
   fi
-  if host="$(vm_ssh_machine_host "$machine" 2>/dev/null)"; then
-    printf 'http://%s:8080%s\n' "$host" "$path"
-  else
-    printf 'pending-up\n'
-  fi
+  printf 'http://%s.%s:8080%s\n' "$machine" "$HARNESS_LDAP_DOMAIN" "$path"
 }
 
 vm_cmd_status() {
@@ -168,9 +164,11 @@ vm_cmd_status() {
   printf '  %-13s %s\n' 'Run ID' "$HARNESS_RUN_ID"
   printf '  %-13s %s\n' 'VM set' "$LOOPFORGE_VM_SET_ID"
   printf '  %-13s %s\n' 'Project' "$HARNESS_PROJECT_NAME"
+  printf '  %-13s %s\n' 'LDAP' "$ldap_status"
   printf '  %-13s %s\n' 'Gerrit URL' "$gerrit_url"
   printf '  %-13s %s\n' 'Jenkins URL' "$jenkins_url"
-  printf '  %-13s %s\n' 'LDAP' "$ldap_status"
+  printf '\n'
+  printf '  %s\n' '*For host DNS, run simulation/vm/tools/configure-systemd-resolved.sh --help'
   printf '\n'
   printf 'Target SSH\n'
   printf '  %-18s  %-12s  %-15s  %-19s\n' 'Role' 'User' 'Host' 'State'

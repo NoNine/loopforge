@@ -232,6 +232,10 @@ grep -Fq 'ssh_host=192.168.126.' "$generated_root/vm-sets/$vm_set_id/libvirt/mac
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status.out"
 grep -Fq 'status: running' "$tmp_dir/status.out"
+grep -Fq 'LDAP          ready' "$tmp_dir/status.out"
+grep -Fq 'Gerrit URL    http://gerrit.example.test:8080/' "$tmp_dir/status.out"
+grep -Fq 'Jenkins URL   http://jenkins-controller.example.test:8080/login' "$tmp_dir/status.out"
+grep -Fq '  *For host DNS, run simulation/vm/tools/configure-systemd-resolved.sh --help' "$tmp_dir/status.out"
 grep -Fq 'Target SSH' "$tmp_dir/status.out"
 grep -Fq 'gerrit              ci-operator   192.168.126.' "$tmp_dir/status.out"
 grep -Fq 'jenkins-controller  ci-operator   192.168.126.' "$tmp_dir/status.out"

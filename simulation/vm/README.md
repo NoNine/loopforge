@@ -289,6 +289,29 @@ Use `simulate.sh status --env FILE` after `up` to inspect the selected running
 VM simulation. The status command prints the run ID, VM set ID, browser URLs,
 SSH endpoints, and seeded VM simulation login accounts.
 
+When the VM browser URLs use FQDNs such as
+`http://gerrit.example.test:8080/`, the libvirt network DNS owns those names
+inside the VM network. The KVM host may still need a temporary split-DNS route
+so host-side browsers and tools resolve the VM domain through the selected
+libvirt gateway. The helper below discovers the selected VM network from the
+same env defaults as `simulate.sh`, checks libvirt DNS, and can apply or undo
+runtime-only `systemd-resolved` link settings:
+
+```bash
+simulation/vm/tools/configure-systemd-resolved.sh --check
+simulation/vm/tools/configure-systemd-resolved.sh --env FILE --apply
+simulation/vm/tools/configure-systemd-resolved.sh --env FILE --revert
+```
+
+If `--env FILE` is omitted, the helper uses
+`simulation/vm/examples/vm.env.example`, matching the VM simulation CLI
+default. `--check` is read-only and does not require privileged access.
+`--apply` and `--revert` require non-interactive sudo, fail fast when it is
+unavailable, and mutate only systemd-resolved's temporary per-link runtime
+state for the selected bridge. The helper does not edit `/etc/hosts`,
+`/etc/resolv.conf`, NetworkManager profiles, dnsmasq configuration, systemd
+unit files, or persistent network files.
+
 Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The
 command uses the rendered `INTEGRATION_*_TARGET_SSH_*` values and the

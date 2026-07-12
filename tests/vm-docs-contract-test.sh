@@ -399,6 +399,21 @@ require_doc_text simulation/vm/README.md \
   'host-wide recovery tool' \
   'VM README must distinguish host cleanup from selected VM-set destroy'
 require_doc_text simulation/vm/README.md \
+  'configure-systemd-resolved.sh --check' \
+  'VM README must document the systemd-resolved split-DNS helper'
+require_doc_text simulation/vm/README.md \
+  '`simulation/vm/examples/vm.env.example`, matching the VM simulation CLI' \
+  'VM systemd-resolved helper must document default --env behavior'
+require_doc_text simulation/vm/README.md \
+  '`--apply` and `--revert` require non-interactive sudo' \
+  'VM systemd-resolved helper must document no-sudo fail-fast behavior'
+require_doc_text simulation/vm/README.md \
+  'mutate only systemd-resolved'\''s temporary per-link runtime' \
+  'VM systemd-resolved helper must document temporary-only runtime behavior'
+require_doc_text simulation/vm/README.md \
+  'does not edit `/etc/hosts`' \
+  'VM systemd-resolved helper must not be documented as persistent host DNS mutation'
+require_doc_text simulation/vm/README.md \
   'Exported artifact review copies' \
   'VM README must document exported artifacts as review copies'
 require_doc_text simulation/vm/README.md \
