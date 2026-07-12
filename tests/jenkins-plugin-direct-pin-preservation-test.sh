@@ -17,6 +17,27 @@ if rg -q "$old_validator_pattern|$old_lock_pattern|$old_lock_diff_pattern" "$rep
   exit 1
 fi
 
+for path in "$repo_root/scripts/jenkins-controller-setup.sh" "$repo_root/examples/jenkins-controller.env.example"; do
+  rg -q 'configuration-as-code:2100\.vb_fd699d2a_09c' "$path" || {
+    printf 'Updated configuration-as-code direct pin is missing from %s\n' "$path" >&2
+    exit 1
+  }
+  rg -q 'credentials:1506\.v948b_b_b_7dec44' "$path" || {
+    printf 'Updated credentials direct pin is missing from %s\n' "$path" >&2
+    exit 1
+  }
+  rg -q 'gerrit-trigger:3\.1983\.v57096fe9923c' "$path" || {
+    printf 'Updated gerrit-trigger direct pin is missing from %s\n' "$path" >&2
+    exit 1
+  }
+done
+
+if rg -q 'configuration-as-code:2088\.ve3b_42c663c80|credentials:1502\.v5c95e620ddfe|gerrit-trigger:3\.1971\.v217d381e3a_5a_' \
+  "$repo_root/scripts/jenkins-controller-setup.sh" "$repo_root/examples/jenkins-controller.env.example"; then
+  printf 'Stale Jenkins direct plugin pin remains in product defaults\n' >&2
+  exit 1
+fi
+
 test_script="$tmp_dir/scripts/jenkins-plugin-direct-pin-lib-test.sh"
 sed '${/^main "\$@"$/d;}' "$repo_root/scripts/jenkins-controller-setup.sh" >"$test_script"
 cat >>"$test_script" <<'TEST_BODY'

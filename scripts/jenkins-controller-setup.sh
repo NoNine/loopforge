@@ -322,7 +322,7 @@ apply_env_defaults() {
   JENKINS_PLUGIN_SOURCE_DIR="${JENKINS_PLUGIN_SOURCE_DIR:-}"
   JENKINS_OS_DEPENDENCIES="${JENKINS_OS_DEPENDENCIES:-ca-certificates,curl,fontconfig,openjdk-21-jre,openssh-client,rsync,tar,wget}"
   JENKINS_DIRECT_PLUGIN_NAMES="${JENKINS_DIRECT_PLUGIN_NAMES:-configuration-as-code,credentials,git,gerrit-trigger,ldap,matrix-auth,ssh-credentials,ssh-slaves,workflow-aggregator,job-dsl,timestamper,ws-cleanup}"
-  JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2088.ve3b_42c663c80,credentials:1502.v5c95e620ddfe,git:5.10.1,gerrit-trigger:3.1971.v217d381e3a_5a_,ldap:807.809.vd3a_4e5e4ec98,matrix-auth:3.2.10,ssh-credentials:372.va_250881b_08cd,ssh-slaves:3.1097.v868116049892,workflow-aggregator:608.v67378e9d3db_1,job-dsl:3654.vdf58f53e2d15,timestamper:1.30,ws-cleanup:0.49}"
+  JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2100.vb_fd699d2a_09c,credentials:1506.v948b_b_b_7dec44,git:5.10.1,gerrit-trigger:3.1983.v57096fe9923c,ldap:807.809.vd3a_4e5e4ec98,matrix-auth:3.2.10,ssh-credentials:372.va_250881b_08cd,ssh-slaves:3.1097.v868116049892,workflow-aggregator:608.v67378e9d3db_1,job-dsl:3654.vdf58f53e2d15,timestamper:1.30,ws-cleanup:0.49}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
   LDAP_BIND_DN="${LDAP_BIND_DN:-cn=readonly,dc=example,dc=test}"
   LDAP_BIND_PASSWORD="${LDAP_BIND_PASSWORD:-}"
