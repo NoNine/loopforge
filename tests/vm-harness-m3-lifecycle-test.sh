@@ -9,7 +9,10 @@ vm_set_id="m3-$$"
 generated_root="$repo_root/generated/simulation/vm"
 cleanup() {
   [ "${VM_TEST_KEEP_TMP:-0}" -eq 1 ] ||
-    rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id"
+    rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" \
+      "$generated_root/vm-sets/cache-user-$$" \
+      "$generated_root/vm-prune-skip-$$" "$generated_root/vm-sets/prune-skip-$$" \
+      "$generated_root/vm-prune-remove-$$" "$generated_root/vm-sets/prune-remove-$$"
 }
 trap cleanup EXIT
 
@@ -302,8 +305,11 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   [ ! -e "$generated_root/vm-sets/$vm_set_id" ]
   [ ! -e "$stub_state/network.name" ]
   [ ! -d "$stub_state/pools/loopforge-vm-$run_id-$vm_set_id-images" ]
-  find "$stub_state/pools" -mindepth 1 -maxdepth 1 -type d \
-    -name 'loopforge-vm-base-*' -print -quit | grep -q .
+  base_fingerprint="$(cat "$generated_root/$run_id/host/rendered/base-image-fingerprint.txt")"
+  base_cache_dir="$generated_root/base-images/$base_fingerprint"
+  base_pool="$(sed -n 's/^storage_pool_name=//p' "$base_cache_dir/.loopforge-vm-base-image.env")"
+  [ -d "$stub_state/pools/$base_pool" ]
+  [ -d "$base_cache_dir" ]
   [ -f "$generated_root/$run_id/host/artifacts/exported/m5.txt" ]
   [ -f "$generated_root/$run_id/target/evidence/gerrit/m5.txt" ]
 
@@ -312,4 +318,50 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   grep -Fxq 'audit-state: ok' "$tmp_dir/audit-destroy.out"
   audit_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'audit-state-*.log' -print | sort | tail -1)"
   grep -Fq 'vm-set=absent vm-resources=absent' "$audit_log"
+
+  prune_skip_run_id="vm-prune-skip-$$"
+  prune_skip_vm_set_id="prune-skip-$$"
+  prune_skip_env="$tmp_dir/harness-prune-skip.env"
+  sed \
+    -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$prune_skip_run_id/" \
+    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$prune_skip_vm_set_id/" \
+    -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+    -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
+    -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+    "$repo_root/simulation/vm/example.env" >"$prune_skip_env"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" init-run >"$tmp_dir/init-run-prune-skip.out"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" create >"$tmp_dir/create-prune-skip.out"
+  mkdir -p "$generated_root/vm-sets/cache-user-$$"
+  cp "$generated_root/vm-sets/$prune_skip_vm_set_id/.loopforge-vm-set.env" \
+    "$generated_root/vm-sets/cache-user-$$/.loopforge-vm-set.env"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" destroy --prune-cache >"$tmp_dir/destroy-prune-skip.out"
+  grep -Fxq "destroy: ok vm-set=$prune_skip_vm_set_id removed cache-prune=skipped reason=in-use fingerprint=$base_fingerprint" \
+    "$tmp_dir/destroy-prune-skip.out"
+  [ -d "$stub_state/pools/$base_pool" ]
+  [ -d "$base_cache_dir" ]
+  rm -rf "$generated_root/vm-sets/cache-user-$$"
+
+  prune_remove_run_id="vm-prune-remove-$$"
+  prune_remove_vm_set_id="prune-remove-$$"
+  prune_remove_env="$tmp_dir/harness-prune-remove.env"
+  sed \
+    -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$prune_remove_run_id/" \
+    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$prune_remove_vm_set_id/" \
+    -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
+    -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
+    -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+    "$repo_root/simulation/vm/example.env" >"$prune_remove_env"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" init-run >"$tmp_dir/init-run-prune-remove.out"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" create >"$tmp_dir/create-prune-remove.out"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" destroy --prune-cache >"$tmp_dir/destroy-prune-remove.out"
+  grep -Fxq "destroy: ok vm-set=$prune_remove_vm_set_id removed cache-prune=removed fingerprint=$base_fingerprint" \
+    "$tmp_dir/destroy-prune-remove.out"
+  [ ! -d "$stub_state/pools/$base_pool" ]
+  [ ! -d "$base_cache_dir" ]
 fi

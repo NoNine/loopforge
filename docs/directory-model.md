@@ -276,9 +276,12 @@ selected VM set back to the clean baseline snapshot and removes mutable
 selected-run state, while preserving exported artifacts, evidence, bounded
 logs, and retained-output backups. `destroy` is the only command that removes
 simulation-owned VM domains, disks, snapshots, seed media, or networks after
-ownership validation. VM shared Jenkins storage is not VM-host state; it is
-guest-local data on the Jenkins agent VM and is removed only as part of owned
-VM disk destruction.
+ownership validation. Baked base-image cache entries under
+`base-images/<fingerprint>/` are shared host infrastructure and survive normal
+`destroy`; `destroy --prune-cache` removes one only after selected VM-set
+deletion and unused-cache proof. VM shared Jenkins storage is not VM-host
+state; it is guest-local data on the Jenkins agent VM and is removed only as
+part of owned VM disk destruction.
 
 The host operator owns VM control metadata but does not own adopted qcow2
 content. Libvirt volume APIs provide format, capacity, backing-store, hashing,

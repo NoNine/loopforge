@@ -168,7 +168,9 @@ For VM simulation, `down`, `clean`, and `destroy` are the only commands
 allowed to recover from inconsistent VM lifecycle state. Other commands must
 report inconsistent state and stop. `clean` must preserve review artifacts
 and must not delete the reusable VM set. Only `destroy` removes
-simulation-owned VM resources.
+simulation-owned VM resources. `destroy --prune-cache` may also remove the
+selected VM set's associated baked base-image cache, but only after selected
+VM-set deletion and only when the cache is proven unused.
 
 ## Evidence Obligations
 

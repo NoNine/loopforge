@@ -374,12 +374,19 @@ sequenceDiagram
   participant CFG as config.sh
   participant ST as state.sh
   participant SET as vm-set.sh
+  participant IMG as libvirt-image.sh
 
-  CLI->>LC: vm_cmd_destroy(env)
+  CLI->>LC: vm_cmd_destroy(env, prune_cache)
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_marker()
+  opt prune_cache
+    LC->>SET: vm_set_capture_destroy_cache_identity()
+  end
   LC->>SET: vm_set_destroy()
   LC->>SET: vm_set_remove_metadata()
+  opt prune_cache
+    LC->>IMG: vm_libvirt_prune_baked_base_image_cache_after_destroy()
+  end
   LC-->>CLI: compact destroy summary
 ```
 

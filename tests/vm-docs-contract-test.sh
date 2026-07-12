@@ -381,6 +381,18 @@ require_doc_text simulation/vm/README.md \
   'Use `destroy` only when the reusable VM set should be permanently removed.' \
   'VM README must document destroy as permanent VM-set removal'
 require_doc_text simulation/vm/README.md \
+  '`destroy [--env FILE] [--prune-cache]`' \
+  'VM README must document destroy cache pruning flag'
+require_doc_text simulation/vm/README.md \
+  'skipped, not repaired, when cache identity is missing' \
+  'VM README must document guarded destroy cache pruning'
+require_doc_text docs/lifecycle-contract.md \
+  '`destroy --prune-cache` may also remove' \
+  'Lifecycle contract must define guarded VM base-image cache pruning'
+require_doc_text docs/directory-model.md \
+  '`destroy --prune-cache` removes one only after selected VM-set' \
+  'Directory model must define baked base-image cache prune boundary'
+require_doc_text simulation/vm/README.md \
   'cleanup-libvirt-resources.sh --dry-run' \
   'VM README must document host cleanup dry-run'
 require_doc_text simulation/vm/README.md \

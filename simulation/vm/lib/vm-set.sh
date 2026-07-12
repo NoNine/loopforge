@@ -404,6 +404,59 @@ vm_set_verify_run_and_set() {
   vm_set_verify_marker
 }
 
+vm_set_capture_destroy_cache_identity() {
+  local actual expected fingerprint key schema
+  VM_DESTROY_CACHE_FINGERPRINT=
+  VM_DESTROY_CACHE_IMAGE=
+  VM_DESTROY_CACHE_POOL=
+  VM_DESTROY_CACHE_TARGET=
+  VM_DESTROY_CACHE_VOLUME=
+  VM_DESTROY_CACHE_SKIP_REASON=
+  [ -f "$HARNESS_VM_SET_MARKER" ] || {
+    VM_DESTROY_CACHE_SKIP_REASON=missing-vm-set-marker
+    return 0
+  }
+  schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
+  [ "$schema" = 5 ] || {
+    VM_DESTROY_CACHE_SKIP_REASON=unsupported-schema
+    return 0
+  }
+  fingerprint="$(marker_value "$HARNESS_VM_SET_MARKER" base_image_fingerprint 2>/dev/null || true)"
+  [ -n "$fingerprint" ] || {
+    VM_DESTROY_CACHE_SKIP_REASON=missing-cache-identity
+    return 0
+  }
+  VM_DESTROY_CACHE_FINGERPRINT="$fingerprint"
+  VM_DESTROY_CACHE_IMAGE="$(marker_value "$HARNESS_VM_SET_MARKER" base_image 2>/dev/null || true)"
+  VM_DESTROY_CACHE_POOL="$(marker_value "$HARNESS_VM_SET_MARKER" base_image_pool_name 2>/dev/null || true)"
+  VM_DESTROY_CACHE_TARGET="$(vm_path_baked_base_image_volume_dir "$fingerprint")"
+  VM_DESTROY_CACHE_VOLUME="$(marker_value "$HARNESS_VM_SET_MARKER" base_image_volume_name 2>/dev/null || true)"
+  for key in image pool volume; do
+    case "$key" in
+      image)
+        actual="$VM_DESTROY_CACHE_IMAGE"
+        expected="$(vm_path_baked_base_image "$fingerprint")"
+        ;;
+      pool)
+        actual="$VM_DESTROY_CACHE_POOL"
+        expected="$(vm_libvirt_baked_base_image_pool_name_for_fingerprint "$fingerprint")"
+        ;;
+      volume)
+        actual="$VM_DESTROY_CACHE_VOLUME"
+        expected="$(vm_libvirt_baked_base_image_volume_name)"
+        ;;
+    esac
+    [ -n "$actual" ] || {
+      VM_DESTROY_CACHE_SKIP_REASON=missing-cache-identity
+      return 0
+    }
+    [ "$actual" = "$expected" ] || {
+      VM_DESTROY_CACHE_SKIP_REASON=identity-mismatch
+      return 0
+    }
+  done
+}
+
 vm_set_remove_metadata() {
   rm -rf -- "$HARNESS_VM_SET_DIR"
 }
