@@ -239,7 +239,7 @@ vm_baseline_invalidate() {
   rm -f "$HARNESS_VM_BASELINE_PREREQS_MARKER"
 }
 
-__vm_baseline_marker_valid() {
+__vm_baseline_marker_fields_valid() {
   local baked_marker fingerprint_file key expected actual
   [ -r "$HARNESS_VM_BASELINE_PREREQS_MARKER" ] || return 1
   fingerprint_file="$(vm_libvirt_baked_base_image_fingerprint_file)"
@@ -277,6 +277,10 @@ __vm_baseline_marker_valid() {
     actual="$(marker_value "$HARNESS_VM_BASELINE_PREREQS_MARKER" "$key" 2>/dev/null || true)"
     [ "$actual" = "$expected" ] || return 1
   done
+}
+
+__vm_baseline_marker_valid() {
+  __vm_baseline_marker_fields_valid || return 1
   vm_libvirt_baked_base_image_ready || return 1
 }
 
@@ -289,6 +293,16 @@ vm_baseline_status() {
   if [ ! -f "$HARNESS_VM_BASELINE_PREREQS_MARKER" ]; then
     printf 'pending'
   elif __vm_baseline_marker_valid; then
+    printf 'ready'
+  else
+    printf 'stale'
+  fi
+}
+
+vm_baseline_status_summary() {
+  if [ ! -f "$HARNESS_VM_BASELINE_PREREQS_MARKER" ]; then
+    printf 'pending'
+  elif __vm_baseline_marker_fields_valid; then
     printf 'ready'
   else
     printf 'stale'

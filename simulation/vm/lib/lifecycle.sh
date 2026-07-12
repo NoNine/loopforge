@@ -150,7 +150,7 @@ vm_cmd_status() {
   local status_label ldap_status gerrit_url jenkins_url
   vm_config_load_runtime
   vm_set_validate_ownership_readonly >/dev/null
-  ldap_status="$(vm_baseline_status)"
+  ldap_status="$(vm_baseline_status_summary)"
   status_label="initialized"
   if [ "$(vm_libvirt_domain_state gerrit)" = "running" ] &&
     [ "$(vm_libvirt_domain_state jenkins-controller)" = "running" ] &&
