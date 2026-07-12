@@ -350,10 +350,9 @@ EOF
 }
 
 vm_config_write_runtime_env() {
-  local old_umask
-  old_umask="$(umask)"
-  umask 077
-  cat >"$HARNESS_RUNTIME_ENV" <<EOF
+  local tmp
+  tmp="$(mktemp "${HARNESS_RUNTIME_ENV}.XXXXXX")"
+  cat >"$tmp" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
@@ -416,8 +415,8 @@ HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE=$(shell_quote "$HARNESS_TARGET_SSH_KNOWN_HOS
 HARNESS_ROLE_STATE_DIR=$(shell_quote "$HARNESS_ROLE_STATE_DIR")
 public_internet_fallback=simulation-only
 EOF
-  umask "$old_umask"
-  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_ENV"
+  chmod "$LF_MODE_PRIVATE_FILE" "$tmp"
+  mv -- "$tmp" "$HARNESS_RUNTIME_ENV"
 }
 
 vm_config_init_run() {

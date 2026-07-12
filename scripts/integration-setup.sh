@@ -11,6 +11,11 @@ dry_run=0
 assume_yes=0
 command_name=""
 
+LF_MODE_PRIVATE_DIR=0700
+LF_MODE_PRIVATE_FILE=0600
+LF_MODE_REVIEW_DIR=0750
+LF_MODE_REVIEW_FILE=0640
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -513,7 +518,6 @@ require_runtime_mode_supported_for_mutation() {
     docker-simulation|vm-simulation|target-deployment) ;;
     *) die "Unsupported INTEGRATION_MODE: $INTEGRATION_MODE" ;;
   esac
-  umask 077
 }
 
 confirm_mutation() {
@@ -551,8 +555,8 @@ integration_evidence_dir() {
 }
 
 ensure_dirs() {
-  mkdir -p "$(integration_host_state_dir)/status" "$(integration_log_dir)" "$(integration_evidence_dir)"
-  chmod 0700 "$(integration_host_state_dir)" "$(integration_host_state_dir)/status"
+  install -d -m "$LF_MODE_PRIVATE_DIR" "$(integration_host_state_dir)" "$(integration_host_state_dir)/status"
+  install -d -m "$LF_MODE_REVIEW_DIR" "$(integration_log_dir)" "$(integration_evidence_dir)"
 }
 
 jenkins_ops_dir() {
@@ -883,9 +887,15 @@ prove_shared_storage_rw() {
 }
 
 bounded_log_path() {
-  local name
+  local name file
   name="${1:?name required}"
-  printf '%s/%s-%s.log\n' "$(integration_log_dir)" "$name" "$(timestamp_utc)"
+  file="$(integration_log_dir)/$name-$(timestamp_utc).log"
+  install -m "$LF_MODE_REVIEW_FILE" /dev/null "$file"
+  printf '%s\n' "$file"
+}
+
+set_review_file_mode() {
+  chmod "$LF_MODE_REVIEW_FILE" "$@"
 }
 
 status_file() {
@@ -894,14 +904,19 @@ status_file() {
   printf '%s/status/%s.status\n' "$(integration_host_state_dir)" "$name"
 }
 
+set_private_file_mode() {
+  chmod "$LF_MODE_PRIVATE_FILE" "$@"
+}
+
 write_evidence() {
-  local checkpoint status observed log_ref extra file q_mode q_time q_checkpoint q_status q_observed q_log q_redaction q_extra
+  local checkpoint status observed log_ref extra file tmp q_mode q_time q_checkpoint q_status q_observed q_log q_redaction q_extra
   checkpoint="${1:?checkpoint required}"
   status="${2:?status required}"
   observed="${3:?observed required}"
   log_ref="${4:-not-applicable}"
   extra="${5:-not-applicable}"
   file="$(integration_evidence_dir)/integration-${checkpoint}-$(timestamp_utc).json"
+  tmp="$(mktemp "${file}.XXXXXX")"
   q_mode="$(json_quote "$INTEGRATION_MODE")"
   q_time="$(json_quote "$(iso_timestamp_utc)")"
   q_checkpoint="$(json_quote "$checkpoint")"
@@ -910,7 +925,7 @@ write_evidence() {
   q_log="$(json_quote "$log_ref")"
   q_redaction="$(json_quote "secrets-not-recorded; private keys, passwords, tokens, and LDAP bind secrets omitted")"
   q_extra="$(json_quote "$extra")"
-  cat >"$file" <<EOF
+  cat >"$tmp" <<EOF
 {
   "verification_mode": $q_mode,
   "timestamp": $q_time,
@@ -929,6 +944,8 @@ write_evidence() {
   "mode_labels": [$q_mode]
 }
 EOF
+  chmod "$LF_MODE_REVIEW_FILE" "$tmp"
+  mv -- "$tmp" "$file"
   printf '%s\n' "$file"
 }
 
@@ -1059,6 +1076,7 @@ ensure_gerrit_integration_account() {
   "display_name": $q_display_name
 }
 EOF
+  set_private_file_mode "$account_json"
   target_write_file gerrit "$account_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     PUT "/accounts/$account" "$target_json" >>"$log" 2>&1
@@ -1080,6 +1098,7 @@ generate_gerrit_integration_token() {
   "id": "$JENKINS_GERRIT_TOKEN_ID"
 }
 EOF
+  set_private_file_mode "$token_json"
   target_write_file gerrit "$token_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     DELETE "/accounts/$account/tokens/$token_id" >/dev/null 2>&1; then
@@ -1187,6 +1206,7 @@ ensure_gerrit_verification_project() {
   "create_empty_commit": true
 }
 EOF
+  set_private_file_mode "$project_json"
   target_write_file gerrit "$project_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if ! gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/projects/$project" >>"$log" 2>&1; then
     gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" PUT "/projects/$project" "$target_json" >>"$log" 2>&1
@@ -1220,6 +1240,7 @@ ensure_verified_label_and_access() {
   }
 }
 EOF
+  set_private_file_mode "$label_json"
   target_write_file gerrit "$label_json" /tmp/verified-label.json "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     PUT "/projects/$all_projects_id/labels/Verified" "/tmp/verified-label.json" >>"$log" 2>&1
@@ -1254,6 +1275,7 @@ EOF
   }
 }
 EOF
+  set_private_file_mode "$global_access_json"
   target_write_file gerrit "$global_access_json" /tmp/integration-global-access.json "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     POST "/projects/$all_projects_id/access" "/tmp/integration-global-access.json" >>"$log" 2>&1
@@ -1297,6 +1319,7 @@ EOF
   }
 }
 EOF
+  set_private_file_mode "$project_access_json"
   target_write_file gerrit "$project_access_json" /tmp/integration-project-access.json "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" \
     POST "/projects/$project_id/access" "/tmp/integration-project-access.json" >>"$log" 2>&1
@@ -1342,6 +1365,7 @@ submit_review_change_number() {
   "wait_for_merge": true
 }
 EOF
+  set_private_file_mode "$submit_json"
   target_write_file gerrit "$submit_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" POST "/changes/$change/submit" "$target_json" >>"$log" 2>&1
   printf 'submitted_reviewed_config_change=%s\n' "$change" >>"$log"
@@ -1428,14 +1452,16 @@ controller_public_key_fingerprint() {
 }
 
 copy_controller_public_key_to_target() {
-  local public_path target_role target_path log
+  local public_path target_role target_path log tmp_file
   public_path="${1:?public key path required}"
   target_role="${2:?target role required}"
   target_path="${3:?target path required}"
   log="${4:?log required}"
-  target_read_text jenkins-controller "$public_path" >"$(integration_host_state_dir)/status/$(basename "$target_path").tmp"
-  target_write_file "$target_role" "$(integration_host_state_dir)/status/$(basename "$target_path").tmp" "$target_path" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0644 "$log"
-  rm -f "$(integration_host_state_dir)/status/$(basename "$target_path").tmp"
+  tmp_file="$(integration_host_state_dir)/status/$(basename "$target_path").tmp"
+  target_read_text jenkins-controller "$public_path" >"$tmp_file"
+  set_private_file_mode "$tmp_file"
+  target_write_file "$target_role" "$tmp_file" "$target_path" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0644 "$log"
+  rm -f "$tmp_file"
 }
 
 register_gerrit_public_key() {
@@ -1475,6 +1501,7 @@ configure_gerrit_ssh_impl() {
   key_status="$(status_file jenkins-gerrit-key)"
   printf 'account=%s public_key_fingerprint=%s token_id=%s\n' "$JENKINS_GERRIT_INTEGRATION_ACCOUNT" "$fp" "$JENKINS_GERRIT_TOKEN_ID" >"$account_status"
   printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s\n' "$fp" "$private" >"$key_status"
+  set_private_file_mode "$account_status" "$key_status"
 
   case "$INTEGRATION_GERRIT_ACL_MODE" in
     apply-direct)
@@ -1489,12 +1516,13 @@ configure_gerrit_ssh_impl() {
   esac
   acl_status="$(status_file gerrit-acl)"
   printf 'apply_mode=simulation-only-direct-rest acl_scope=verification-project group=%s mode=%s\n' "$JENKINS_GERRIT_INTEGRATION_GROUP" "$INTEGRATION_MODE" >"$acl_status"
+  set_private_file_mode "$acl_status"
   write_evidence jenkins-to-gerrit-ssh configured "Jenkins-owned key generated, Gerrit auth token generated, public key registered through Gerrit REST, and simulation-only integration ACLs applied through labeled direct Gerrit REST test automation" "$log" "public_key_fingerprint=$fp token_id=$JENKINS_GERRIT_TOKEN_ID apply_mode=simulation-only-direct-rest" >/dev/null
   printf 'status=pass component=jenkins-gerrit-ssh public_key_fingerprint=%s acl_apply=simulation-only-direct-rest log=%s\n' "$fp" "$log"
 }
 
 configure_agent_ssh_impl() {
-  local log private public fp groovy known_hosts q_credential q_account q_key_file q_node q_remote_fs q_host q_labels
+  local log private public fp groovy known_hosts agent_key_status q_credential q_account q_key_file q_node q_remote_fs q_host q_labels
   require_command ssh-keygen
   require_command ssh
   require_command scp
@@ -1577,13 +1605,15 @@ println('configured_agent_node=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LA
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
-  printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s known_hosts_path=%s node=%s\n' "$fp" "$private" "$known_hosts" "$JENKINS_AGENT_NODE_NAME" >"$(status_file jenkins-agent-key)"
+  agent_key_status="$(status_file jenkins-agent-key)"
+  printf 'private_key_custody=jenkins-controller-integration-ops public_key_fingerprint=%s key_path=%s known_hosts_path=%s node=%s\n' "$fp" "$private" "$known_hosts" "$JENKINS_AGENT_NODE_NAME" >"$agent_key_status"
+  set_private_file_mode "$agent_key_status"
   write_evidence agent-connection configured "Agent public key authorized, Jenkins SSH credential and node configured through Jenkins runtime script API" "$log" "agent_public_key_fingerprint=$fp" >/dev/null
   printf 'status=pass component=jenkins-agent-ssh public_key_fingerprint=%s node=%s labels=%s log=%s\n' "$fp" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$log"
 }
 
 configure_trigger_server_impl() {
-  local log groovy q_gerrit_trigger_server q_gerrit_host q_gerrit_user q_gerrit_url q_gerrit_key q_gerrit_http_user q_gerrit_http_password
+  local log groovy trigger_status q_gerrit_trigger_server q_gerrit_host q_gerrit_user q_gerrit_url q_gerrit_key q_gerrit_http_user q_gerrit_http_password
   ensure_dirs
   [ -n "${JENKINS_GERRIT_REST_TOKEN:-}" ] ||
     die "Missing generated Gerrit auth token; run configure_gerrit_ssh_impl before configuring Gerrit Trigger"
@@ -1640,13 +1670,15 @@ println('configured_gerrit_trigger_server=' + $q_gerrit_trigger_server + ' host=
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
-  printf 'trigger_server=%s mode=real-gerrit-trigger-plugin\n' "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file trigger-server)"
+  trigger_status="$(status_file trigger-server)"
+  printf 'trigger_server=%s mode=real-gerrit-trigger-plugin\n' "$GERRIT_TRIGGER_SERVER_NAME" >"$trigger_status"
+  set_private_file_mode "$trigger_status"
   write_evidence trigger-server configured "Jenkins Gerrit Trigger server configured through the Jenkins runtime plugin API with generated Gerrit auth token" "$log" "trigger_server=$GERRIT_TRIGGER_SERVER_NAME token_id=$JENKINS_GERRIT_TOKEN_ID" >/dev/null
   printf 'status=pass component=trigger-server log=%s\n' "$log"
 }
 
 cmd_configure_integration() {
-  local log
+  local log configure_status
   load_inputs
   require_runtime_mode_supported_for_mutation
   confirm_mutation configure-integration || return 0
@@ -1655,7 +1687,9 @@ cmd_configure_integration() {
   configure_agent_ssh_impl
   ensure_shared_integration_storage "$log"
   configure_trigger_server_impl
-  printf 'status=pass command=configure-integration\n' >"$(status_file configure-integration)"
+  configure_status="$(status_file configure-integration)"
+  printf 'status=pass command=configure-integration\n' >"$configure_status"
+  set_private_file_mode "$configure_status"
   printf 'status=pass command=configure-integration log=%s\n' "$log"
 }
 
@@ -1732,7 +1766,7 @@ EOF
 }
 
 configure_verification_job() {
-  local log groovy q_gerrit_trigger_server q_job q_label q_project
+  local log groovy job_status q_gerrit_trigger_server q_job q_label q_project
   log="${1:?log required}"
   groovy="$(mktemp "${TMPDIR:-/tmp}/configure-verification-job.XXXXXX.groovy")"
   q_gerrit_trigger_server="$(groovy_quote "$GERRIT_TRIGGER_SERVER_NAME")"
@@ -1785,7 +1819,9 @@ println('configured_verification_job=' + $q_job + ' scheduling_label=' + $q_labe
 EOF
   jenkins_script "$groovy" "$log"
   rm -f "$groovy"
-  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=gerrit-trigger-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$(status_file verification-job)"
+  job_status="$(status_file verification-job)"
+  printf 'job=%s scheduling_label=%s trigger_server=%s mode=real-gerrit-trigger-plugin review_apply=gerrit-trigger-rest\n' "$JENKINS_VERIFICATION_JOB" "$JENKINS_AGENT_SCHEDULING_LABEL" "$GERRIT_TRIGGER_SERVER_NAME" >"$job_status"
+  set_private_file_mode "$job_status"
   write_evidence verification-job configured "Disposable Jenkins verification job configured for active integration proof" "$log" "job=$JENKINS_VERIFICATION_JOB scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL review_apply=gerrit-trigger-rest" >/dev/null
 }
 
@@ -1816,6 +1852,7 @@ EOF
   "subject": "Loopforge stream-events validation"
 }
 EOF
+  set_private_file_mode "$project_json" "$event_json"
   ensure_gerrit_test_account_provisioned "$log"
   target_write_file gerrit "$project_json" "$target_project_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   target_write_file gerrit "$event_json" "$target_json" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
@@ -1826,6 +1863,7 @@ EOF
 
   copy_stream_events_listener_log() {
     target_exec jenkins-controller "sudo cat '$target_listener_log'" >"$listener_log" 2>/dev/null || true
+    [ ! -e "$listener_log" ] || set_review_file_mode "$listener_log"
   }
 
   cleanup_stream_events_listener() {
@@ -1860,9 +1898,11 @@ EOF
   " >>"$log" 2>&1
   sleep 2
   if ! gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" POST "/changes/" "$target_json" >"$change_file"; then
+    [ ! -e "$change_file" ] || set_private_file_mode "$change_file"
     cleanup_stream_events_listener
     die "Gerrit REST could not create stream-events validation change"
   fi
+  set_private_file_mode "$change_file"
   for _ in $(seq 1 20); do
     copy_stream_events_listener_log
     if grep -Eq '"type":"patchset-created"|"type": "patchset-created"' "$listener_log"; then
@@ -1879,7 +1919,7 @@ EOF
 }
 
 validate_integration_impl() {
-  local log evidence
+  local log evidence validate_status
   ensure_dirs
   ensure_target_integration_dirs
   log="$(bounded_log_path validate-integration)"
@@ -1902,7 +1942,9 @@ validate_integration_impl() {
   write_evidence jenkins-to-gerrit-ssh pass "Jenkins-to-Gerrit key material and Gerrit access configuration are present" "$log" "account=$JENKINS_GERRIT_INTEGRATION_ACCOUNT" >/dev/null
   write_evidence agent-connection pass "Jenkins agent node configuration is present" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL" >/dev/null
   evidence="$(write_evidence scheduling pass "Jenkins scheduling label configuration is present" "$log" "node=$JENKINS_AGENT_NODE_NAME scheduling_label=$JENKINS_AGENT_SCHEDULING_LABEL")"
-  printf 'status=pass command=validate-integration evidence=%s log=%s\n' "$evidence" "$log" >"$(status_file validate-integration)"
+  validate_status="$(status_file validate-integration)"
+  printf 'status=pass command=validate-integration evidence=%s log=%s\n' "$evidence" "$log" >"$validate_status"
+  set_private_file_mode "$validate_status"
   printf 'status=pass command=validate-integration proof=passive shared_storage=pass jenkins_to_gerrit_config=pass agent_connection_config=pass scheduling_config=pass evidence=%s log=%s\n' "$evidence" "$log"
 }
 
@@ -1933,6 +1975,7 @@ EOF
   "subject": "Loopforge integration verification"
 }
 EOF
+  set_private_file_mode "$(integration_host_state_dir)/status/create-project.json" "$(integration_host_state_dir)/status/create-change.json"
   target_write_file gerrit "$(integration_host_state_dir)/status/create-project.json" "$project_file" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   target_write_file gerrit "$(integration_host_state_dir)/status/create-change.json" "$json_file" "$LOOPFORGE_OPERATOR_ACCOUNT" "$LOOPFORGE_OPERATOR_GROUP" 0600 "$log"
   if ! gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" PUT "/projects/$GERRIT_VERIFICATION_PROJECT" "$project_file" >>"$log" 2>&1; then
@@ -1943,6 +1986,7 @@ EOF
   ensure_gerrit_test_account_provisioned "$log"
   gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" GET "/accounts/self" >/dev/null
   gerrit_curl "$INTEGRATION_TEST_ACCOUNT" "$INTEGRATION_TEST_PASSWORD" POST "/changes/" "$json_file" >"$result_file"
+  set_private_file_mode "$result_file"
   python3 - "$result_file" <<'PY'
 import json, pathlib, sys
 text = pathlib.Path(sys.argv[1]).read_text()
@@ -1997,6 +2041,7 @@ wait_for_verified_vote() {
   review_json="$(integration_host_state_dir)/status/review.json"
   for _ in $(seq 1 30); do
     if gerrit_curl "$INTEGRATION_GERRIT_ADMIN_ACCOUNT" "$INTEGRATION_GERRIT_ADMIN_PASSWORD" GET "/changes/$change/revisions/current/review" >"$review_json" 2>>"$log"; then
+      set_private_file_mode "$review_json"
       vote_result="$(python3 - "$review_json" <<'PY'
 import json, pathlib, sys
 text = pathlib.Path(sys.argv[1]).read_text()
@@ -2015,6 +2060,7 @@ PY
         return 0
       fi
     fi
+    [ ! -e "$review_json" ] || set_private_file_mode "$review_json"
     sleep 2
   done
   die "Verified +1 vote was not present on Gerrit change after Jenkins build completion"

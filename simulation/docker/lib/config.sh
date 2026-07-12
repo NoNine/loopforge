@@ -868,8 +868,9 @@ EOF
 }
 
 write_runtime_env() {
-  umask 077
-  cat >"$HARNESS_RUNTIME_ENV" <<EOF
+  local tmp
+  tmp="$(mktemp "${HARNESS_RUNTIME_ENV}.XXXXXX")"
+  cat >"$tmp" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
@@ -938,7 +939,8 @@ jenkins_controller_env=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
 jenkins_agent_env=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
 integration_env=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 EOF
-  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_ENV"
+  chmod "$LF_MODE_PRIVATE_FILE" "$tmp"
+  mv -- "$tmp" "$HARNESS_RUNTIME_ENV"
 }
 
 write_manifest_contract() {
