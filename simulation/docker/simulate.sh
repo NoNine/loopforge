@@ -35,6 +35,7 @@ Commands:
 Phases:
   preflight
   init-run
+  create
   up
   status
   ssh --role <gerrit|jenkins-controller|jenkins-agent>
@@ -48,6 +49,7 @@ Phases:
   audit-state
   down
   clean
+  destroy
 
 Options:
   --env FILE        Harness env file for bootstrap and init-run.
@@ -171,6 +173,11 @@ main() {
       parse_env_only_args "$@"
       cmd_init_run
       ;;
+    create)
+      shift
+      parse_env_only_args "$@"
+      cmd_create
+      ;;
     up)
       shift
       parse_env_only_args "$@"
@@ -235,6 +242,11 @@ main() {
       shift
       parse_env_only_args "$@"
       cmd_clean
+      ;;
+    destroy)
+      shift
+      parse_env_only_args "$@"
+      cmd_destroy
       ;;
     "")
       usage

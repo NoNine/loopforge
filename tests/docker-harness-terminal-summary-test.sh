@@ -15,7 +15,8 @@ cat >"$fake_bin/docker" <<'SH'
 set -euo pipefail
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
-  *"compose up -d --build"*) exit 0 ;;
+  *"compose build"*) exit 0 ;;
+  *"compose up -d"*) exit 0 ;;
   *"compose down"*) exit 0 ;;
   *" ps -q gerrit-target"*) printf 'gerrit-container\n' ;;
   *" ps -q jenkins-controller-target"*) printf 'jenkins-container\n' ;;
@@ -49,6 +50,10 @@ PATH="$fake_bin:$PATH" \
 grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/init-run.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/init-run.out"
+
+PATH="$fake_bin:$PATH" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" create >"$tmp_dir/create.out"
+grep -Fq "create: ok images=project-built" "$tmp_dir/create.out"
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"

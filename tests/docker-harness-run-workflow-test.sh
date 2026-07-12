@@ -55,6 +55,13 @@ set -e
 grep -Fq 'run: mode=fresh run-id='"$run_id" "$tmp_dir/fresh.out"
 grep -Fq 'preflight' "$fresh_workflow_calls"
 grep -Fq 'init-run' "$fresh_workflow_calls"
+grep -Fq 'create' "$fresh_workflow_calls"
+awk '
+  $0 == "init-run" { init = NR }
+  $0 == "create" { create = NR }
+  $0 == "up" { up = NR }
+  END { exit !(init && create && up && init < create && create < up) }
+' "$fresh_workflow_calls"
 
 PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$resume_calls" \
   HARNESS_RUN_ID="$run_id" HARNESS_PROJECT_NAME="$run_id" \
@@ -73,6 +80,7 @@ set -e
   exit 1
 }
 grep -Fq 'run: mode=resume run-id='"$run_id" "$tmp_dir/resume.out"
+grep -Fq '==> create' "$tmp_dir/resume.out"
 grep -Fq '==> up' "$tmp_dir/resume.out"
 if grep -Eq '^==> (preflight|init-run)$' "$tmp_dir/resume.out"; then
   printf 'resume workflow should not rerun preflight or init-run\n' >&2
@@ -103,8 +111,10 @@ set -e
 grep -Fq 'run: mode=fresh run-id='"$partial_run_id" "$tmp_dir/partial.out"
 grep -Fq '==> preflight' "$tmp_dir/partial.out"
 grep -Fq '==> init-run' "$tmp_dir/partial.out"
+grep -Fq '==> create' "$tmp_dir/partial.out"
 grep -Fq 'preflight' "$partial_workflow_calls"
 grep -Fq 'init-run' "$partial_workflow_calls"
+grep -Fq 'create' "$partial_workflow_calls"
 
 post_clean_run_id="run-workflow-post-clean-$$"
 post_clean_dir="$repo_root/generated/simulation/docker/$post_clean_run_id"
@@ -128,5 +138,7 @@ set -e
 grep -Fq 'run: mode=fresh run-id='"$post_clean_run_id" "$tmp_dir/post-clean.out"
 grep -Fq '==> preflight' "$tmp_dir/post-clean.out"
 grep -Fq '==> init-run' "$tmp_dir/post-clean.out"
+grep -Fq '==> create' "$tmp_dir/post-clean.out"
 grep -Fq 'preflight' "$post_clean_workflow_calls"
 grep -Fq 'init-run' "$post_clean_workflow_calls"
+grep -Fq 'create' "$post_clean_workflow_calls"

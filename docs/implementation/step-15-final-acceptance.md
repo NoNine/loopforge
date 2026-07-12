@@ -27,9 +27,10 @@ scripts/integration-setup.sh --help
 scripts/collect-evidence.sh --help
 simulation/docker/simulate.sh preflight
 simulation/docker/simulate.sh init-run
+simulation/docker/simulate.sh create
+simulation/docker/simulate.sh up
 simulation/docker/simulate.sh prepare-artifacts
 simulation/docker/simulate.sh stage-artifacts
-simulation/docker/simulate.sh up
 simulation/docker/simulate.sh configure-role
 simulation/docker/simulate.sh validate-role
 simulation/docker/simulate.sh configure-integration
@@ -39,6 +40,7 @@ scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes prove-integration
 scripts/collect-evidence.sh
 simulation/docker/simulate.sh down
+simulation/docker/simulate.sh destroy
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/examples/vm.env.example
 ```

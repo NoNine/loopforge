@@ -35,7 +35,7 @@ existing direct-process lifecycle: the container entrypoint starts `sshd`, and
 Gerrit and Jenkins use the existing role-process mechanism. Do not add
 systemd, a container supervisor, restart policies, or Compose lifecycle work
 as part of the guest service lifecycle contract. Docker does not claim
-guest-reboot persistence.
+guest-reboot persistence and does not expose a `reboot` command.
 
 `configure-role` must establish a role runtime before `validate-role` runs.
 `validate-role` is observational and must fail for a missing or inactive
@@ -51,7 +51,7 @@ Composite command:
 
 | Command | Purpose |
 | --- | --- |
-| `run [--env FILE]` | Runs the normal Docker simulation workflow. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, or `audit-state`. |
+| `run [--env FILE]` | Runs the normal Docker simulation workflow. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, `destroy`, or `audit-state`. |
 | `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
@@ -60,7 +60,8 @@ Phase and lifecycle commands:
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `init-run: ok run-id=...` summary. |
-| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers. Success prints one short `up: started ...` summary. |
+| `create [--env FILE]` | Builds the selected Docker simulation project images after rendered runtime config exists. It does not start containers or create checkpoint evidence beyond the harness image-build record. Success prints `create: ok images=project-built`. |
+| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers from the selected project images. It does not build images; run `create` first after `init-run`. Success prints one short `up: started ...` summary. |
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/var/lib/loopforge/staging/gerrit`, `/var/lib/loopforge/staging/jenkins`, or `/var/lib/loopforge/staging/jenkins-agent`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
@@ -72,6 +73,7 @@ Phase and lifecycle commands:
 | `audit-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 | `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
+| `destroy [--env FILE]` | Removes images built for the selected Docker simulation project. It does not remove containers, networks, generated state, base images, artifacts, evidence, or logs. If selected containers still exist, it fails and tells the operator to run `down` first. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
@@ -272,6 +274,7 @@ Typical flows:
 
 ```bash
 simulation/docker/simulate.sh --env FILE init-run
+simulation/docker/simulate.sh --env FILE create
 simulation/docker/simulate.sh --env FILE up
 simulation/docker/simulate.sh --env FILE configure-role
 simulation/docker/simulate.sh --env FILE validate-role
@@ -280,6 +283,7 @@ simulation/docker/simulate.sh --env FILE validate-integration
 simulation/docker/simulate.sh --env FILE prove-integration
 simulation/docker/simulate.sh --env FILE down
 simulation/docker/simulate.sh --env FILE clean
+simulation/docker/simulate.sh --env FILE destroy
 ```
 
 Use `configure-role` and `validate-role` for role-local work only. Use
@@ -288,6 +292,12 @@ Use `configure-role` and `validate-role` for role-local work only. Use
 the same initialized run.
 Use `audit-state` when you need the slower bind-mount audit for an existing
 run. Normal lifecycle phases keep the cheap runtime-config check only.
+
+`destroy` is deliberately narrower than VM `destroy`. Docker `destroy`
+removes only images built for the selected Compose project, normally after
+`down` has removed selected containers. It leaves upstream/base images such as
+`HARNESS_UBUNTU_IMAGE` and `HARNESS_LDAP_IMAGE` intact and leaves generated
+run output for review or explicit `clean`.
 
 ## Integration Boundary
 

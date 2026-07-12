@@ -161,8 +161,10 @@ phases or claim checkpoint success without checkpoint evidence.
 
 For Docker simulation, `down` and `clean` are the only commands allowed to
 recover from stale existing containers. Other commands must report
-inconsistent state and stop. `simulation/docker/README.md` owns the detailed
-Docker generated-state, stale-container, and cleanup rules.
+inconsistent state and stop. Docker `destroy` removes selected project-built
+images only; it is not container or generated-state recovery.
+`simulation/docker/README.md` owns the detailed Docker generated-state,
+stale-container, image lifecycle, and cleanup rules.
 
 For VM simulation, `down`, `clean`, and `destroy` are the only commands
 allowed to recover from inconsistent VM lifecycle state. Other commands must

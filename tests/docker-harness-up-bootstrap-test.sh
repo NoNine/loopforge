@@ -17,7 +17,8 @@ set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
-  *"compose up -d --build"*) exit 0 ;;
+  *"compose build"*) exit 0 ;;
+  *"compose up -d"*) exit 0 ;;
   *" ps -q "*) printf 'container-id\n' ;;
   *"/etc/os-release"*) printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n' ;;
   *"inspect -f"*) printf 'true\n' ;;
@@ -30,7 +31,7 @@ cat >"$fake_bin/docker-compose" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
 case "$*" in
-  *"up -d --build"*)
+  *"up -d"*)
     printf "ERROR: for gerrit-target  'ContainerConfig'\n" >&2
     exit 1
     ;;
@@ -63,10 +64,20 @@ PATH="$fake_bin:$PATH" \
 PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" \
+  --env "$tmp_dir/harness.env" create >"$tmp_dir/create.out"
+grep -Fq "create: ok images=project-built" "$tmp_dir/create.out"
+
+PATH="$fake_bin:$PATH" \
+  DOCKER_CALLS_LOG="$calls" \
+  "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"
 
 grep -Fq "HARNESS_RUN_ID=$run_id" "$rendered_dir/harness.runtime.env"
 grep -Fq "up: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/up.out"
+if grep -Fq -- 'up -d --build' "$calls"; then
+  printf 'up must not build images; create owns image build\n' >&2
+  exit 1
+fi
 for service in bundle-factory gerrit-target jenkins-controller-target jenkins-agent-target; do
   grep -F -- "exec -T -u root $service sh -c" "$calls" | \
     grep -Fq -- '/home/ci-operator/loopforge.loopforge-tmp-' || {
@@ -82,6 +93,12 @@ PATH="$fake_bin:$PATH" \
   HARNESS_FORCE_COMPOSE_V1_FOR_TESTS=1 \
   "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" init-run >/dev/null
+
+PATH="$fake_bin:$PATH" \
+  DOCKER_CALLS_LOG="$calls" \
+  HARNESS_FORCE_COMPOSE_V1_FOR_TESTS=1 \
+  "$repo_root/simulation/docker/simulate.sh" \
+  --env "$tmp_dir/harness.env" create >/dev/null
 
 set +e
 PATH="$fake_bin:$PATH" \

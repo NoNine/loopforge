@@ -34,10 +34,10 @@ loading, runtime input custody, command summaries, quoting helpers, artifact
 manifest/checksum helpers, evidence helpers, and lifecycle marker utilities.
 
 Layer lifecycle and transport stay local to each harness until real VM code
-proves a stable boundary. Docker-specific Compose, container, bind-mount,
-`docker cp`, loopback-port, and cleanup behavior belongs in the Docker
-harness. VM-specific libvirt/KVM domains, VM sets, snapshots, guest reboot,
-guest SSH readiness, guest-owned NFS-backed shared storage, and
+proves a stable boundary. Docker-specific Compose, image, container,
+bind-mount, `docker cp`, loopback-port, and cleanup behavior belongs in the
+Docker harness. VM-specific libvirt/KVM domains, VM sets, snapshots, guest
+reboot, guest SSH readiness, guest-owned NFS-backed shared storage, and VM
 `create`/`clean`/`destroy` behavior belongs in the VM harness.
 
 Docker simulation may use explicit simulation-only waivers where containers
@@ -188,7 +188,8 @@ the selected run. Recover with the explicit cleanup commands owned by
 the layer README, then use a fresh run identity for new validation.
 
 Docker recovery uses `down` or `clean` for the selected run and a fresh
-`HARNESS_RUN_ID` for follow-up validation. VM recovery uses `down`,
+`HARNESS_RUN_ID` for follow-up validation. Docker `destroy` is separate image
+cleanup for selected project-built images. VM recovery uses `down`,
 `clean`, or `destroy` for the selected VM set and run; when resource
 identity is suspect, select both a fresh `HARNESS_RUN_ID` and a fresh
 `LOOPFORGE_VM_SET_ID` for follow-up validation. VM host-wide libvirt
@@ -209,6 +210,7 @@ When a layer uses these command names, the shared simulation semantics are:
 | `run` | Normal workflow composite for the selected run. It does not run cleanup, teardown, destruction, or audit commands. |
 | `preflight` | Read-only prerequisite check before service mutation. |
 | `init-run` | Input review/rendering, private runtime input copy creation, and selected run marker creation. |
+| `create` | Optional layer-specific environment preparation before startup, such as Docker project image builds or VM set creation. |
 | `up` | Start or attach the selected simulation environment after rendered run state exists. |
 | `status` | Read-only inspection of selected live simulation state. |
 | `ssh` | Operator-account target OS control-plane SSH, not Gerrit service SSH. |
@@ -222,10 +224,12 @@ When a layer uses these command names, the shared simulation semantics are:
 | `audit-state` | Explicit read-only generated-state and environment consistency inspection. |
 | `down` | Stop the selected simulation environment while retaining review output. |
 | `clean` | Reset mutable selected-run state while preserving retained artifacts, evidence, and logs. |
+| `destroy` | Layer-specific destructive cleanup outside normal checkpoint progression, such as Docker project-built image removal or VM resource deletion. |
 
-Layers may add simulation-specific lifecycle commands, such as VM `create`,
-`reboot`, or `destroy`, but unsupported or unavailable proof must fail closed
-or report blocked rather than produce synthetic success.
+Layers may add simulation-specific lifecycle commands, such as VM `reboot`,
+but unsupported or unavailable proof must fail closed or report blocked rather
+than produce synthetic success. Docker does not expose `reboot` because it
+does not claim guest reboot persistence.
 
 ## Terminal Output Convention
 

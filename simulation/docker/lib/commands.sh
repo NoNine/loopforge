@@ -77,6 +77,7 @@ workflow_step() {
 }
 
 workflow_downstream_steps() {
+  workflow_step create cmd_create
   workflow_step up cmd_up
   workflow_step status cmd_status
   workflow_step prepare-artifacts cmd_prepare_artifacts ""
@@ -137,6 +138,32 @@ cmd_init_run() {
   printf 'init-run: ok run-id=%s\n' "$HARNESS_RUN_ID"
 }
 
+cmd_create() {
+  local log rc evidence
+  bootstrap_harness_env
+  ensure_runtime_config
+  require_command docker
+  detect_compose
+  require_baseline_label
+  [ -f "$compose_file" ] || die "Missing Compose file: $compose_file"
+  [ -f "$docker_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
+  [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
+  [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
+  log="$(bounded_log_path create)"
+  if compose build >"$log" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(write_evidence create harness fail "simulate.sh create" "$log" "Compose image build failed")"
+    print_command_failure create "" failed "$log" "$evidence"
+    return "$rc"
+  fi
+  evidence="$(write_evidence create harness pass "simulate.sh create" "$log" "Built selected Docker simulation project images without starting containers")"
+  print_command_summary create "" "ok images=project-built"
+}
+
 cmd_up() {
   local log rc evidence
   bootstrap_harness_env
@@ -154,7 +181,7 @@ cmd_up() {
   [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
   [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
   log="$(bounded_log_path up)"
-  if compose up -d --build >"$log" 2>&1; then
+  if compose up -d >"$log" 2>&1; then
     rc=0
   else
     rc=$?
@@ -192,6 +219,64 @@ cmd_up() {
   require_running_service ldap
   evidence="$(write_evidence up harness pass "simulate.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
   print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
+}
+
+docker_project_image_refs() {
+  local service ref
+  for service in "${services[@]}"; do
+    for ref in "$HARNESS_PROJECT_NAME-$service" "$HARNESS_PROJECT_NAME"_"$service"; do
+      if docker image inspect "$ref" >/dev/null 2>&1; then
+        printf '%s\n' "$ref"
+      fi
+    done
+  done
+}
+
+docker_project_image_ids() {
+  docker images -q --filter "label=com.docker.compose.project=$HARNESS_PROJECT_NAME" 2>/dev/null || true
+}
+
+docker_destroy_image_targets() {
+  local refs
+  refs="$(docker_project_image_refs)"
+  if [ -n "$refs" ]; then
+    printf '%s\n' "$refs" | awk 'NF && !seen[$0]++'
+    return 0
+  fi
+  docker_project_image_ids | awk 'NF && !seen[$0]++'
+}
+
+cmd_destroy() {
+  local log rc evidence target removed_count
+  bootstrap_harness_env
+  require_command docker
+  detect_compose
+  if selected_containers_exist; then
+    die "Selected Docker simulation containers still exist; run down before destroy"
+  fi
+  log="$(bounded_log_path destroy)"
+  rc=0
+  removed_count=0
+  : >"$log"
+  while IFS= read -r target; do
+    [ -n "$target" ] || continue
+    if docker image rm "$target" >>"$log" 2>&1; then
+      removed_count=$((removed_count + 1))
+    else
+      rc=$?
+      printf 'image_remove_failed target=%s\n' "$target" >>"$log"
+      break
+    fi
+  done <<EOF
+$(docker_destroy_image_targets)
+EOF
+  if [ "$rc" -ne 0 ]; then
+    evidence="$(write_evidence destroy harness fail "simulate.sh destroy" "$log" "Docker project-built image removal failed")"
+    print_command_failure destroy "" failed "$log" "$evidence"
+    return "$rc"
+  fi
+  evidence="$(write_evidence destroy harness pass "simulate.sh destroy" "$log" "Removed selected Docker simulation project-built images only; base images and generated state were not removed")"
+  print_command_summary destroy "" "ok images-removed=$removed_count"
 }
 
 cmd_status() {

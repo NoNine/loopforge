@@ -70,6 +70,7 @@ run_lifecycle_without_render() {
 }
 
 run_lifecycle_without_render up up
+run_lifecycle_without_render create create
 run_lifecycle_without_render prepare prepare-artifacts
 run_lifecycle_without_render stage stage-artifacts
 run_lifecycle_without_render configure-role configure-role --role gerrit
