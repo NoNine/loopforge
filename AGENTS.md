@@ -14,6 +14,12 @@ changing product, process, or implementation facts. Use
   the user for input; ask directly and wait, unless higher-priority system or
   developer instructions require otherwise.
 
+## State Handling
+
+Do not add backward-compatibility guards or fallback paths to fix stale or
+broken state. Stale or broken state should fail clearly and be repaired
+through explicit cleanup, migration, or operator action.
+
 ## Commit Messages
 
 Use standard Git-style commit messages. Treat these as hard requirements, not
@@ -120,9 +126,26 @@ available. Do not run separate Compose discovery probes before every Docker
 simulation; let `simulation/docker/simulate.sh` perform its own internal
 Compose selection unless a failure specifically points at Compose.
 
-Never repair a stale or inconsistent Docker simulation run in place. Use a
-fresh `HARNESS_RUN_ID`/generated run root for new validation; run `down` and
-`clean` for the old run first.
+## Simulation Cleanup And Recovery
+
+Never repair stale or inconsistent simulation state in place. Use
+explicit inspection and cleanup commands, then start new validation from
+fresh selected state.
+
+- Use `audit-state` for read-only state inspection, not recovery.
+- Do not hide recovery inside `run`, role phases, integration phases, or
+  verification commands.
+- Treat `down`, `clean`, and VM `destroy` as explicit cleanup/recovery
+  commands with their documented side effects.
+- For Docker simulation, use a fresh `HARNESS_RUN_ID`/generated run root
+  for new validation after running `down` or `clean` for the old run.
+- For VM simulation, use a fresh `HARNESS_RUN_ID` and, when resource
+  identity is suspect, a fresh `LOOPFORGE_VM_SET_ID`; clean up old VM
+  sets only with their retained env file.
+- VM host-wide libvirt cleanup must run
+  `simulation/vm/tools/cleanup-libvirt-resources.sh --dry-run` first.
+  Actual host-wide cleanup requires explicit approval for that target
+  and action.
 
 ## Remote Access Safety
 

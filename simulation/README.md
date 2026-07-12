@@ -172,11 +172,32 @@ These paths are generated runtime output unless a file in the tree states
 otherwise. Keep them ignored or documented as generated when created by
 simulation steps.
 
-Simulation cleanup is manual and conservative. Cleanup commands remove or
-reset mutable generated runtime state for the selected run while preserving
-exported artifact archives, evidence, and logs. Layer-specific cleanup
-commands may additionally stop containers, roll back VMs, or use retained
-output backup snapshots, but they must not silently discard review evidence.
+## Cleanup And Recovery
+
+Simulation cleanup is manual and conservative. Cleanup commands remove
+or reset mutable generated runtime state for the selected run while
+preserving exported artifact archives, evidence, and logs.
+Layer-specific cleanup commands may additionally stop containers, roll
+back VMs, destroy selected VM sets, or use retained output backup
+snapshots, but they must not silently discard review evidence.
+
+Never repair stale or inconsistent simulation state in place. Lifecycle
+commands must fail clearly when selected generated state, container bind
+mounts, VM-set metadata, snapshots, or libvirt resources do not match
+the selected run. Recover with the explicit cleanup commands owned by
+the layer README, then use a fresh run identity for new validation.
+
+Docker recovery uses `down` or `clean` for the selected run and a fresh
+`HARNESS_RUN_ID` for follow-up validation. VM recovery uses `down`,
+`clean`, or `destroy` for the selected VM set and run; when resource
+identity is suspect, select both a fresh `HARNESS_RUN_ID` and a fresh
+`LOOPFORGE_VM_SET_ID` for follow-up validation. VM host-wide libvirt
+cleanup is a separate operator recovery path and is not selected-run
+cleanup.
+
+`audit-state` is read-only inspection. `run`, role phases, integration
+phases, and verification commands must not call cleanup, teardown,
+destruction, or recovery implicitly.
 
 ## Shared Command Semantics
 
