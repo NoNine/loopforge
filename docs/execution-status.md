@@ -15,14 +15,37 @@ Keep entries concise. Record only status, commit, verification logs, and facts
 needed to resume or audit work. Do not paste command output or subagent
 transcripts here.
 
+Ledger compression rule: each entry is a compressed resume snapshot, not a
+chronology. Keep status, commit IDs, verification log paths, active blockers or
+waivers, next action, and at most three resume-critical notes. Replace
+superseded details with the latest audit fact; put command details, failure
+investigation, and repeated history in bounded logs.
+For each active step, `Verification` keeps only one proof log: the latest and
+most specific log that proves the stated status. Do not list setup, cleanup,
+wrapper, historical, or investigation logs unless that log is the only proof.
+
+Update trigger rule: update this ledger before ending a turn whenever the
+durable resume state changes. Required triggers include a new accepted commit
+or HEAD premise, completed or retired milestone work, a new latest proof log,
+a changed blocker or waiver, a changed active guardrail, or a changed next
+authorized work item. Do not update it for transient investigation details
+that belong only in bounded logs.
+
 ## Current State
 
-- Branch: `0616`
-- Current HEAD: `758b409`
+- Branch: `main`
+- Current HEAD: `18f4b89`
 - Current implementation stage: Step 13 VM simulation harness implementation
-  completed M2 and is ready for M3.
-- Next authorized work state: implement Step 13 M3, or another follow-up
-  explicitly authorized by the user.
+  has M8 integration workflow implemented and verified on a fresh restored
+  clean-baseline VM run; follow-up commits through `18f4b89` hardened state
+  permissions, documented explicit recovery, added guarded VM destroy cache
+  pruning, and fixed VM status/env-example paths.
+- Next authorized work state: Step 13 needs final acceptance/retirement review
+  before Step 14. Before any further remote VM mutation, inspect current remote
+  state and use explicit cleanup/recovery commands with a fresh run identity.
+- Active lifecycle follow-up: helper-based `target-deployment` support is
+  required but not yet implemented; the native target procedure remains the
+  currently executable path.
 - Ledger policy: this file is mutable execution state and remains unstaged
   unless the user explicitly requests a ledger snapshot commit.
 - Active guardrail: do not run another end-to-end Docker simulation until the
@@ -108,9 +131,7 @@ transcripts here.
 
 - Status: Accepted
 - Commit: `04fc810`
-- Verification: `logs/key-contract-fast-20260618104059.log`;
-  `logs/key-contract-harness-foreground-20260618105240.log`;
-  `logs/key-contract-final-scans-20260618105555.log`
+- Verification: `logs/key-contract-harness-foreground-20260618105240.log`
 - Notes: Role application artifact bundles are key-free. Jenkins keypair
   generation and public-key handoff belong to shared integration.
 
@@ -144,11 +165,7 @@ transcripts here.
 
 - Status: Accepted
 - Commit: `fed60a6`
-- Verification: `logs/execution-step-11-fresh-secretfix-sequence-20260618203909.log`;
-  `logs/execution-step-11-final-scans-20260618202746.log`;
-  `logs/execution-step-11-refined-scans-20260618202923.log`;
-  `logs/step11-secret-perms-fast2-20260618203803.log`;
-  `logs/step11-secret-perms-scan2-20260618203803.log`
+- Verification: `logs/execution-step-11-fresh-secretfix-sequence-20260618203909.log`
 - Notes: Added `simulation/docker/docker-verify.sh` and proved real Gerrit,
   Jenkins controller, Jenkins agent, shared integration, scheduling, triggered
   build, and Gerrit `Verified +1` behavior through the Docker harness.
@@ -173,10 +190,7 @@ transcripts here.
 
 - Status: Accepted after dynamic-port correction
 - Commit: `df2492b`; follow-up `bcbf97e`
-- Verification: `logs/simulation-contract-docs-verify-20260620030330.log`;
-  `logs/focused-all-no-e2e-20260620123518.log`;
-  `logs/docker-browser-port-test-green-20260620123144.log`;
-  `logs/docker-browser-port-render-verify-20260620123209.log`
+- Verification: `logs/docker-browser-port-render-verify-20260620123209.log`
 - Notes: Docker simulation browser access is simulation-only loopback.
   Follow-up `bcbf97e` replaced fixed bindings with available per-run loopback
   ports, persists rendered values, and prints Gerrit/Jenkins browser URLs. No
@@ -186,9 +200,7 @@ transcripts here.
 
 - Status: Accepted after rework
 - Commit: `bd46247`
-- Verification: `logs/focused-all-no-e2e-20260620123518.log`;
-  `logs/spec-compliance-rereview-20260620122254.log`;
-  `logs/plugin-manager-align-local-20260620121546.log`
+- Verification: `logs/plugin-manager-align-local-20260620121546.log`
 - Notes: Jenkins Plugin Installation Manager handles dependency resolution.
   Exact direct pins are verified from resolved plugin artifact manifests, and
   runtime plugin-load failures remain fatal. Jenkins Web UI behavior is
@@ -237,31 +249,21 @@ transcripts here.
 
 ### Step 13: Implement VM Simulation Harness
 
-- Status: In progress, M3 implemented locally; remote M3 validation pending
-  explicit approval
-- Commit: none
-- Verification: `logs/step13-m1-verification-20260708171720.log`;
-  `logs/step13-m2-local-focused-20260708194208.log`;
-  `logs/step13-m2-remote-verification-20260708194524.log`;
-  `logs/step13-m2-remote-verification-20260708194526.log`;
-  `logs/step13-m2-summary-followup-final-local-20260708200756.log`;
-  `logs/step13-m2-summary-followup-remote-verification-20260708200831.log`;
-  `logs/step13-m2-summary-followup-remote-verification-20260708200833.log`;
-  `logs/step13-m3-local-focused-20260708212448.log`
-- Notes: M1 added the VM CLI skeleton, runtime input custody, canonical
-  generated run paths, run marker handling, read-only `preflight`,
-  `init-run`, `status`, and `audit-state`, plus fail-closed summaries for
-  later lifecycle commands. M2 added read-only libvirt/KVM preflight,
-  VM-set ownership marker validation, and inconsistent-state failure checks.
-  M2 was verified on the approved KVM control node
-  `ssh -p 42729 localhost` using `/data/gerrit-jenkins-vms/loopforge-step13-m2`
-  without mutating VM or libvirt resources. A follow-up aligned M2 terminal
-  summaries with the Docker harness shape and corrected verification order so
-  `preflight` runs before `init-run`. M3 documents Cloud Image Clone as the
-  selected provisioning design, adds local implementation for `create`, `up`,
-  `status`, `ssh --role ROLE`, and `down`, and verifies those paths with
-  local stubs only. Real KVM `create`, `up`, target SSH, and `down`
-  validation remains pending because it mutates the remote KVM control node.
+- Status: In progress; M8 implemented and proved on a fresh clean-baseline
+  remote VM run, with follow-up hardening/fixes through current `HEAD`
+- Commit: M7 implementation `708c3b1`; M8 storage contract `80b2a23`;
+  M8 workflow/follow-ups `cf1df2e`..`18f4b89`
+- Verification: `logs/vm-run-clean-baseline-20260712131019.log`
+- Notes:
+  1. The M8 proof run `step13-m8-clean-20260712T051019Z` used VM set
+     `m8clean-131019` and reached `configure-integration`,
+     `validate-integration`, `prove-integration`, and final `run: ok`.
+  2. The VM integration path now uses Jenkins-agent-hosted NFS shared storage
+     at `/data/jenkins-shared`; permission handling follows documented
+     sensitivity classes and explicit file modes.
+  3. Recovery remains explicit: stale or suspect VM/libvirt/cache state must be
+     inspected, cleaned, destroyed, or pruned through documented commands, then
+     resumed with fresh selected state rather than compatibility fallback.
 
 ### Step 14: Add Boundary Checks
 
