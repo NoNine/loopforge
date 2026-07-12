@@ -40,7 +40,7 @@ HARNESS_GERRIT_BASELINE=3.13.6
 HARNESS_JENKINS_BASELINE=2.555.3
 HARNESS_JENKINS_PLUGIN_MANAGER_BASELINE=2.15.0
 VM_OPERATOR_USER=ci-operator
-VM_RUNTIME_LDAP_BIND_PASSWORD='m7-test-secret'
+HARNESS_LDAP_BIND_PASSWORD='m7-test-secret'
 roles=(gerrit jenkins-controller jenkins-agent)
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 calls="$tmp_dir/calls.log"
@@ -124,7 +124,7 @@ grep -Fq ' configure-runtime' "$calls"
 grep -Fq 'groupadd --gid' "$calls"
 grep -Fq 'useradd --uid' "$calls"
 [ "$(grep -c '^ldap machine=' "$calls")" -eq 6 ]
-! grep -Fq "$VM_RUNTIME_LDAP_BIND_PASSWORD" "$calls"
+! grep -Fq "$HARNESS_LDAP_BIND_PASSWORD" "$calls"
 
 for role in "${roles[@]}"; do
   marker="$(vm_path_role_checkpoint_marker "$role" configured)"

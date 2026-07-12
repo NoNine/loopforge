@@ -82,7 +82,7 @@ case "$*" in
                 fi
                 ;;
               jenkins-controller-target:*"/var/lib/jenkins") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/jenkins-controller" ;;
-              jenkins-controller-target:*"/mnt/jenkins-shared"|jenkins-agent-target:*"/mnt/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/target/shared-jenkins-storage" ;;
+              jenkins-controller-target:*"/data/jenkins-shared"|jenkins-agent-target:*"/data/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/target/shared-jenkins-storage" ;;
               jenkins-agent-target:*"/var/lib/jenkins-agent") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/jenkins-agent" ;;
               *)
                 printf 'unexpected stat target service=%s command=%s\n' "$service" "$*" >&2
@@ -128,12 +128,12 @@ case "$*" in
       *-jenkins-controller-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
         printf '%s\t%s\n' "$RUN_DIR/target/product-homes/jenkins-controller" /var/lib/jenkins
-        printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /mnt/jenkins-shared
+        printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /data/jenkins-shared
         ;;
       *-jenkins-agent-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
         printf '%s\t%s\n' "$RUN_DIR/target/product-homes/jenkins-agent" /var/lib/jenkins-agent
-        printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /mnt/jenkins-shared
+        printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /data/jenkins-shared
         ;;
     esac
     ;;

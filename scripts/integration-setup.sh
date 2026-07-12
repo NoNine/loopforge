@@ -160,11 +160,15 @@ apply_defaults() {
   JENKINS_HTTP_PORT="${JENKINS_HTTP_PORT:-8080}"
   JENKINS_RUNTIME_ACCOUNT="${JENKINS_RUNTIME_ACCOUNT:-jenkins}"
   JENKINS_RUNTIME_GROUP="${JENKINS_RUNTIME_GROUP:-jenkins}"
+  JENKINS_RUNTIME_UID="${JENKINS_RUNTIME_UID:-}"
+  JENKINS_RUNTIME_GID="${JENKINS_RUNTIME_GID:-}"
   JENKINS_HOME="${JENKINS_HOME:-/var/lib/jenkins}"
   JENKINS_AGENT_HOST="${JENKINS_AGENT_HOST:-jenkins-agent-target}"
   JENKINS_AGENT_SSH_PORT="${JENKINS_AGENT_SSH_PORT:-22}"
   JENKINS_AGENT_ACCOUNT="${JENKINS_AGENT_ACCOUNT:-jenkins-agent}"
   JENKINS_AGENT_GROUP="${JENKINS_AGENT_GROUP:-jenkins-agent}"
+  JENKINS_AGENT_UID="${JENKINS_AGENT_UID:-}"
+  JENKINS_AGENT_GID="${JENKINS_AGENT_GID:-}"
   JENKINS_AGENT_REMOTE_FS="${JENKINS_AGENT_REMOTE_FS:-/var/lib/jenkins-agent}"
   JENKINS_AGENT_NODE_NAME="${JENKINS_AGENT_NODE_NAME:-build-linux-x86-01}"
   JENKINS_AGENT_LABELS="${JENKINS_AGENT_LABELS:-linux x86_64 general-build gerrit-ci}"
@@ -378,14 +382,6 @@ validate_shared_storage_path() {
       die "$name must not target root, system, harness, workspace, or other reserved paths"
       ;;
   esac
-  case "$value" in
-    /mnt/*)
-      [ "$value" != "/mnt/" ] || die "$name must include a directory below /mnt"
-      ;;
-    *)
-      die "$name must use the approved /mnt/... prefix for v1 shared integration storage"
-      ;;
-  esac
 }
 
 validate_shell_embedded_secret() {
@@ -464,6 +460,12 @@ validate_inputs() {
   esac
   [ "$JENKINS_SHARED_GROUP_GID" -ge 1 ] && [ "$JENKINS_SHARED_GROUP_GID" -le 65533 ] ||
     die "JENKINS_SHARED_GROUP_GID must be between 1 and 65533"
+  case "$INTEGRATION_MODE" in
+    vm-simulation|target-deployment)
+      case "$JENKINS_RUNTIME_UID" in ""|*[!0-9]*) die "JENKINS_RUNTIME_UID must be numeric for NFS-backed shared storage" ;; esac
+      case "$JENKINS_RUNTIME_GID" in ""|*[!0-9]*) die "JENKINS_RUNTIME_GID must be numeric for NFS-backed shared storage" ;; esac
+      ;;
+  esac
   validate_shared_storage_path JENKINS_SHARED_STORAGE_PATH "$JENKINS_SHARED_STORAGE_PATH"
   validate_simple_token JENKINS_GERRIT_CREDENTIAL_ID "$JENKINS_GERRIT_CREDENTIAL_ID"
   validate_simple_token GERRIT_TRIGGER_SERVER_NAME "$GERRIT_TRIGGER_SERVER_NAME"
@@ -738,6 +740,38 @@ ensure_user_in_group() {
   "
 }
 
+ensure_peer_account_with_ids() {
+  local role user group uid gid
+  role="${1:?role required}"
+  user="${2:?user required}"
+  group="${3:?group required}"
+  uid="${4:?uid required}"
+  gid="${5:?gid required}"
+  target_exec "$role" "
+    set -e
+    case '$uid' in ''|*[!0-9]*) exit 1 ;; esac
+    case '$gid' in ''|*[!0-9]*) exit 1 ;; esac
+    existing_group=\$(getent group '$group' | awk -F: '{print \$3}' || true)
+    if [ -n \"\$existing_group\" ]; then
+      [ \"\$existing_group\" = '$gid' ]
+    elif getent group '$gid' >/dev/null 2>&1; then
+      exit 1
+    else
+      sudo groupadd -g '$gid' '$group'
+    fi
+    existing_uid=\$(getent passwd '$user' | awk -F: '{print \$3}' || true)
+    if [ -n \"\$existing_uid\" ]; then
+      [ \"\$existing_uid\" = '$uid' ]
+    elif getent passwd '$uid' >/dev/null 2>&1; then
+      exit 1
+    else
+      shell=/usr/sbin/nologin
+      [ -x \"\$shell\" ] || shell=/bin/false
+      sudo useradd -u '$uid' -g '$group' -M -s \"\$shell\" '$user'
+    fi
+  "
+}
+
 ensure_shared_storage_on_target() {
   local role owner_user owner_group
   role="${1:?role required}"
@@ -758,6 +792,60 @@ ensure_shared_storage_on_target() {
   "
 }
 
+ensure_shared_storage_export_on_agent() {
+  local export_options exports_file
+  export_options="rw,sync,no_subtree_check,root_squash"
+  exports_file="/etc/exports.d/loopforge-jenkins-shared.exports"
+  target_exec jenkins-agent "
+    set -e
+    sudo install -d -m 2775 -o '$JENKINS_AGENT_ACCOUNT' -g '$JENKINS_SHARED_GROUP' '$JENKINS_SHARED_STORAGE_PATH'
+    sudo chown '$JENKINS_AGENT_ACCOUNT:$JENKINS_SHARED_GROUP' '$JENKINS_SHARED_STORAGE_PATH'
+    sudo chmod 2775 '$JENKINS_SHARED_STORAGE_PATH'
+    sudo install -d -m 0755 /etc/exports.d
+    printf '%s *(%s)\n' '$JENKINS_SHARED_STORAGE_PATH' '$export_options' | sudo tee '$exports_file' >/dev/null
+    sudo exportfs -ra
+    if command -v systemctl >/dev/null 2>&1; then
+      sudo systemctl enable --now nfs-server >/dev/null 2>&1 ||
+        sudo systemctl enable --now nfs-kernel-server >/dev/null 2>&1
+    fi
+    sudo exportfs -v | grep -F '$JENKINS_SHARED_STORAGE_PATH'
+    sudo exportfs -v | grep -F 'root_squash'
+    test \"\$(stat -c '%G' '$JENKINS_SHARED_STORAGE_PATH')\" = '$JENKINS_SHARED_GROUP'
+    case \"\$(stat -c '%a' '$JENKINS_SHARED_STORAGE_PATH')\" in
+      2775|2770|2?7?) ;;
+      *) exit 1 ;;
+    esac
+  "
+}
+
+ensure_shared_storage_mount_on_controller() {
+  target_exec jenkins-controller "
+    set -e
+    expected_source='$JENKINS_AGENT_HOST:$JENKINS_SHARED_STORAGE_PATH'
+    current_source=\$(findmnt -n -T '$JENKINS_SHARED_STORAGE_PATH' -o SOURCE 2>/dev/null || true)
+    if [ \"\$current_source\" != \"\$expected_source\" ]; then
+      if [ -n \"\$current_source\" ]; then
+        printf 'unexpected mount source for %s: %s\n' '$JENKINS_SHARED_STORAGE_PATH' \"\$current_source\" >&2
+        exit 1
+      fi
+      sudo install -d -m 2775 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_SHARED_GROUP' '$JENKINS_SHARED_STORAGE_PATH'
+      sudo mount -t nfs '$JENKINS_AGENT_HOST:$JENKINS_SHARED_STORAGE_PATH' '$JENKINS_SHARED_STORAGE_PATH'
+    fi
+    source=\$(findmnt -n -T '$JENKINS_SHARED_STORAGE_PATH' -o SOURCE)
+    fstype=\$(findmnt -n -T '$JENKINS_SHARED_STORAGE_PATH' -o FSTYPE)
+    test \"\$source\" = \"\$expected_source\"
+    case \"\$fstype\" in
+      nfs|nfs4) ;;
+      *) exit 1 ;;
+    esac
+    test \"\$(stat -c '%G' '$JENKINS_SHARED_STORAGE_PATH')\" = '$JENKINS_SHARED_GROUP'
+    case \"\$(stat -c '%a' '$JENKINS_SHARED_STORAGE_PATH')\" in
+      2775|2770|2?7?) ;;
+      *) exit 1 ;;
+    esac
+  "
+}
+
 ensure_shared_integration_storage() {
   local log
   log="${1:?log required}"
@@ -765,8 +853,21 @@ ensure_shared_integration_storage() {
   ensure_group_with_gid jenkins-agent "$JENKINS_SHARED_GROUP" "$JENKINS_SHARED_GROUP_GID" >>"$log" 2>&1
   ensure_user_in_group jenkins-controller "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_SHARED_GROUP" >>"$log" 2>&1
   ensure_user_in_group jenkins-agent "$JENKINS_AGENT_ACCOUNT" "$JENKINS_SHARED_GROUP" >>"$log" 2>&1
-  ensure_shared_storage_on_target jenkins-controller "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" >>"$log" 2>&1
-  ensure_shared_storage_on_target jenkins-agent "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" >>"$log" 2>&1
+  case "$INTEGRATION_MODE" in
+    docker-simulation)
+      ensure_shared_storage_on_target jenkins-controller "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" >>"$log" 2>&1
+      ensure_shared_storage_on_target jenkins-agent "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" >>"$log" 2>&1
+      ;;
+    vm-simulation|target-deployment)
+      ensure_peer_account_with_ids jenkins-agent "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_RUNTIME_UID" "$JENKINS_RUNTIME_GID" >>"$log" 2>&1
+      ensure_user_in_group jenkins-agent "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_SHARED_GROUP" >>"$log" 2>&1
+      ensure_shared_storage_export_on_agent >>"$log" 2>&1
+      ensure_shared_storage_mount_on_controller >>"$log" 2>&1
+      ;;
+    *)
+      die "Unsupported INTEGRATION_MODE for shared storage: $INTEGRATION_MODE"
+      ;;
+  esac
   printf 'shared_group=ready name=%s gid=%s controller_account=%s agent_account=%s storage_path=%s\n' \
     "$JENKINS_SHARED_GROUP" "$JENKINS_SHARED_GROUP_GID" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_SHARED_STORAGE_PATH" >>"$log"
 }

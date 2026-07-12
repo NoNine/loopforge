@@ -139,6 +139,8 @@ check_package_command() {
     fontconfig) command -v fc-cache >/dev/null ;;
     git) command -v git >/dev/null ;;
     ldap-utils) command -v ldapsearch >/dev/null ;;
+    nfs-common) command -v mount.nfs >/dev/null ;;
+    nfs-kernel-server) command -v exportfs >/dev/null ;;
     openjdk-21-jre|openjdk-21-jre-headless) command -v java >/dev/null ;;
     openssh-client) command -v ssh >/dev/null ;;
     openssh-server) command -v sshd >/dev/null ;;
@@ -353,6 +355,7 @@ __vm_libvirt_bake_base_image() {
     return 1
   fi
   mkdir -p "$(dirname "$final_image")" "$(__vm_libvirt_bake_work_dir)" || return $?
+  vm_libvirt_make_storage_path_searchable "$(dirname "$final_image")" || return $?
   __vm_libvirt_cleanup_bake_domain || return $?
   rm -f "$tmp_image" || return $?
   qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$tmp_image" >/dev/null || return $?
@@ -383,6 +386,7 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
   fi
   __vm_libvirt_cleanup_bake_domain || return $?
   mv "$tmp_image" "$final_image" || return $?
+  chmod 0644 "$final_image" || return $?
   __vm_libvirt_ensure_baked_base_image_pool || return $?
   __vm_libvirt_baked_base_image_volume_ready || {
     printf 'ERROR: VM baked base image is not a valid libvirt-managed qcow2 volume: %s\n' \
@@ -447,10 +451,10 @@ __vm_libvirt_service_packages_for_machine() {
       printf '%s\n' ca-certificates curl openjdk-21-jre-headless openssh-client rsync tar ldap-utils
       ;;
     jenkins-controller)
-      printf '%s\n' ca-certificates curl fontconfig openjdk-21-jre openssh-client rsync tar unzip wget ldap-utils
+      printf '%s\n' ca-certificates curl fontconfig nfs-common openjdk-21-jre openssh-client rsync tar unzip wget ldap-utils
       ;;
     jenkins-agent)
-      printf '%s\n' ca-certificates curl openjdk-21-jre-headless openssh-server rsync tar wget git unzip
+      printf '%s\n' ca-certificates curl nfs-kernel-server openjdk-21-jre-headless openssh-server rsync tar wget git unzip
       ;;
     *)
       die "Unknown VM machine for package baseline: $1"

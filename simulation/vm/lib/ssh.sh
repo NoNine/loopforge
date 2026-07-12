@@ -57,7 +57,7 @@ vm_ssh_run_machine_with_ldap_password() {
   vm_libvirt_require_running "$machine" || return $?
   vm_ssh_verify_known_host "$machine" || return $?
   {
-    printf 'LDAP_BIND_PASSWORD=%s\n' "$(shell_quote "$VM_RUNTIME_LDAP_BIND_PASSWORD")"
+    printf 'LDAP_BIND_PASSWORD=%s\n' "$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")"
     printf 'export LDAP_BIND_PASSWORD\n'
     printf '%s\n' "$script"
   } | ssh $(vm_ssh_common_options) "$(vm_ssh_target "$machine")" bash -s ||

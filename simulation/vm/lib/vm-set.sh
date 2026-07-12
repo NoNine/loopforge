@@ -35,6 +35,9 @@ vm_set_create() {
   mkdir -p "$(vm_path_vm_set_libvirt_dir)" "$(vm_path_vm_set_disk_dir)" \
     "$(vm_path_vm_set_seed_dir)" "$(vm_path_vm_set_machine_dir)" \
     "$(vm_path_vm_set_volume_dir)" || return $?
+  vm_libvirt_make_storage_path_searchable "$HARNESS_VM_SET_DIR" "$(vm_path_vm_set_libvirt_dir)" \
+    "$(vm_path_vm_set_disk_dir)" "$(vm_path_vm_set_seed_dir)" || return $?
+  chmod 0700 "$(vm_path_vm_set_machine_dir)" "$(vm_path_vm_set_volume_dir)" || return $?
   vm_libvirt_ensure_ssh_key || return $?
   vm_libvirt_define_network || return $?
   vm_libvirt_ensure_baked_base_image || return $?

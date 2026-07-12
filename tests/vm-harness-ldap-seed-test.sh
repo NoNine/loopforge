@@ -38,6 +38,17 @@ sed \
 cp "$repo_root/tests/fixtures/vm-libvirt-stub.sh" "$stub_bin/virsh"
 chmod +x "$stub_bin/virsh"
 
+cat >"$stub_bin/getent" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-} ${2:-}" in
+  "passwd libvirt-qemu") printf 'libvirt-qemu:x:64055:131:Libvirt QEMU,,,:/var/lib/libvirt:/usr/sbin/nologin\n' ;;
+  "group kvm") printf 'kvm:x:131:\n' ;;
+  *) /usr/bin/getent "$@" ;;
+esac
+STUB
+chmod +x "$stub_bin/getent"
+
 cat >"$stub_bin/qemu-img" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -329,7 +340,7 @@ grep -Fq 'status=ready' "$baked_marker"
 grep -Fq 'image_ownership=libvirt-managed' "$baked_marker"
 grep -Fq 'volume_name=base.qcow2' "$baked_marker"
 grep -Fq 'disk_size=20G' "$baked_marker"
-grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
+grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,nfs-common,nfs-kernel-server,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
 grep -Eq '/base-images/.*/bake-work-[^/]+/base-build\.qcow2 20G$' "$stub_state/qemu-img-resize"
 
 grep -Fq 'os-baseline' "$stub_state/calls"
@@ -376,10 +387,11 @@ runtime_env="$generated_root/$run_id/host/rendered/harness.runtime.env"
 rendered_env="$generated_root/$run_id/host/rendered/harness.env"
 grep -Fq 'HARNESS_LDAP_HOST=ldap.example.test' "$runtime_env"
 grep -Fq 'HARNESS_LDAP_HOST=ldap.example.test' "$rendered_env"
-grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$runtime_env"
-grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$rendered_env"
-if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id"; then
-  printf 'VM runtime files must not persist the raw LDAP bind password\n' >&2
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$runtime_env"
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$rendered_env"
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id/host/runtime-inputs/harness.env"
+if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$generated_root/$run_id"; then
+  printf 'VM runtime files must not replace the simulation LDAP bind password with a redaction marker\n' >&2
   exit 1
 fi
 

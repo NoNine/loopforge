@@ -200,7 +200,7 @@ harness, role, and integration env files are copied to the run-scoped
 commands load the private runtime config and verify run and VM-set markers
 before operating.
 
-The redacted public record is written for inspection. Private runtime env
+The rendered harness record is written for inspection. Private runtime env
 files retain lifecycle values and point at the runtime input copies.
 
 ## Libvirt/KVM Lifecycle

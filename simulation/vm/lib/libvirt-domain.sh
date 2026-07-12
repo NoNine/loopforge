@@ -235,6 +235,7 @@ __vm_libvirt_render_seed_media() {
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
   dns_gateway="$(__vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
+  chmod 0700 "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
 users:
@@ -280,7 +281,8 @@ EOF
     (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
       user-data meta-data network-config)
   fi
-  chmod 0600 "$user_data" "$meta_data" "$network_config" "$seed_iso"
+  chmod 0600 "$user_data" "$meta_data" "$network_config"
+  chmod 0644 "$seed_iso"
 }
 
 __vm_libvirt_render_bake_seed_media() {
@@ -294,6 +296,7 @@ __vm_libvirt_render_bake_seed_media() {
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
   dns_gateway="$(__vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
+  chmod 0700 "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
 users:
@@ -339,7 +342,8 @@ EOF
     (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
       user-data meta-data network-config)
   fi
-  chmod 0600 "$user_data" "$meta_data" "$network_config" "$seed_iso"
+  chmod 0600 "$user_data" "$meta_data" "$network_config"
+  chmod 0644 "$seed_iso"
 }
 
 vm_libvirt_ensure_ssh_key() {

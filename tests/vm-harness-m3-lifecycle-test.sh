@@ -32,6 +32,17 @@ sed \
 cp "$repo_root/tests/fixtures/vm-libvirt-stub.sh" "$stub_bin/virsh"
 chmod +x "$stub_bin/virsh"
 
+cat >"$stub_bin/getent" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-} ${2:-}" in
+  "passwd libvirt-qemu") printf 'libvirt-qemu:x:64055:131:Libvirt QEMU,,,:/var/lib/libvirt:/usr/sbin/nologin\n' ;;
+  "group kvm") printf 'kvm:x:131:\n' ;;
+  *) /usr/bin/getent "$@" ;;
+esac
+STUB
+chmod +x "$stub_bin/getent"
+
 cat >"$stub_bin/qemu-img" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -182,10 +193,23 @@ grep -Fq "<hostname>ldap.example.test</hostname>" "$network_xml"
 ! grep -Fq "<hostname>ldap</hostname>" "$network_xml"
 ! grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
 grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
+for path in \
+  "$generated_root/vm-sets/$vm_set_id" \
+  "$generated_root/vm-sets/$vm_set_id/libvirt" \
+  "$generated_root/vm-sets/$vm_set_id/libvirt/disks" \
+  "$generated_root/vm-sets/$vm_set_id/libvirt/seeds"; do
+  [ "$(stat -c %a "$path")" = 711 ]
+done
+[ "$(stat -c %a "$generated_root/vm-sets/$vm_set_id/libvirt/machines")" = 700 ]
+[ "$(stat -c %a "$generated_root/vm-sets/$vm_set_id/libvirt/volumes")" = 700 ]
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/disks/$machine.qcow2" ]
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine-seed.iso" ]
   [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env" ]
+  volume_xml="$generated_root/vm-sets/$vm_set_id/libvirt/volumes/$machine.xml"
+  grep -Fq '<permissions><mode>0600</mode><owner>64055</owner><group>131</group></permissions>' "$volume_xml"
+  [ "$(stat -c %a "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine")" = 700 ]
+  [ "$(stat -c %a "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine-seed.iso")" = 644 ]
   grep -Fq 'disk_ownership=libvirt-managed' \
     "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
   grep -Fq "volume_name=$machine.qcow2" \

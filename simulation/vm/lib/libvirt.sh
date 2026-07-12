@@ -2,7 +2,7 @@
 
 VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 VM_BASELINE_SNAPSHOT_NAME="${VM_BASELINE_SNAPSHOT_NAME:-loopforge-clean-baseline}"
-VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=5
+VM_BASE_IMAGE_BAKE_SCHEMA_VERSION=6
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 
 . "$vm_lib_dir/libvirt-core.sh"

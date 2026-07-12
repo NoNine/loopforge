@@ -102,3 +102,33 @@ vm_state_verify_role_checkpoint() {
 vm_state_invalidate_role_validation() {
   rm -f -- "$(vm_path_role_checkpoint_marker "${1:?role required}" validated)"
 }
+
+vm_state_write_integration_checkpoint() {
+  local checkpoint marker
+  checkpoint="${1:?checkpoint required}"
+  marker="$(vm_path_integration_checkpoint_marker "$checkpoint")"
+  mkdir -p "$(dirname "$marker")"
+  write_checkpoint_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$HARNESS_RUNTIME_ENV"
+}
+
+vm_state_verify_integration_checkpoint() {
+  local checkpoint marker
+  checkpoint="${1:?checkpoint required}"
+  marker="$(vm_path_integration_checkpoint_marker "$checkpoint")"
+  verify_checkpoint_marker \
+    "$marker" \
+    "$HARNESS_MODE" \
+    "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" \
+    "$HARNESS_RUNTIME_ENV" \
+    "$checkpoint checkpoint"
+}
+
+vm_state_invalidate_integration_validation() {
+  rm -f -- "$(vm_path_integration_checkpoint_marker validate-integration)"
+}

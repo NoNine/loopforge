@@ -703,14 +703,6 @@ validate_shared_storage_path() {
       die "$name must not target root, system, harness, workspace, or other reserved paths"
       ;;
   esac
-  case "$value" in
-    /mnt/*)
-      [ "$value" != "/mnt/" ] || die "$name must include a directory below /mnt"
-      ;;
-    *)
-      die "$name must use the approved /mnt/... prefix for v1 shared integration storage"
-      ;;
-  esac
 }
 ensure_preflight_dirs() {
   validate_harness_inputs
@@ -825,7 +817,7 @@ HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "<redacted>")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
+HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
@@ -896,7 +888,7 @@ HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_ADMIN_PASSWORD=$(shell_quote "$HARNESS_LDAP_ADMIN_PASSWORD")
 HARNESS_LDAP_CONFIG_PASSWORD=$(shell_quote "$HARNESS_LDAP_CONFIG_PASSWORD")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
+HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL")
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")

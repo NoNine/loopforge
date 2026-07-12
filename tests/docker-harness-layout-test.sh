@@ -225,8 +225,8 @@ grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-
   printf 'Docker simulation must keep a fake LDAP bind password default for simulation-owned LDAP\n' >&2
   exit 1
 }
-grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "${docker_harness_sources[@]}" || {
-  printf 'Docker runtime summaries must redact the simulation-owned LDAP bind password\n' >&2
+grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")' "${docker_harness_sources[@]}" || {
+  printf 'Docker runtime env files must preserve the simulation-owned LDAP bind password\n' >&2
   exit 1
 }
 grep -Fq -- 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$repo_root/simulation/docker/examples/docker.env.example" || {

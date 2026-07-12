@@ -194,7 +194,24 @@ vm_cmd_audit_state() {
 }
 
 vm_cmd_run() {
-  vm_cmd_blocked_m1 run ""
+  if vm_config_runtime_valid; then
+    printf 'run: mode=resume run-id=%s vm-set=%s\n' "$HARNESS_RUN_ID" "$LOOPFORGE_VM_SET_ID"
+  else
+    vm_config_load "$HARNESS_ENV_FILE"
+    printf 'run: mode=fresh run-id=%s vm-set=%s\n' "$HARNESS_RUN_ID" "$LOOPFORGE_VM_SET_ID"
+    vm_cmd_preflight || return $?
+    vm_cmd_init_run || return $?
+  fi
+  vm_cmd_create || return $?
+  vm_cmd_up || return $?
+  vm_cmd_prepare_artifacts "" || return $?
+  vm_cmd_stage_artifacts "" || return $?
+  vm_cmd_configure_role "" || return $?
+  vm_cmd_validate_role "" || return $?
+  vm_cmd_configure_integration || return $?
+  vm_cmd_validate_integration || return $?
+  vm_cmd_prove_integration || return $?
+  print_command_summary run "" "ok run-id=$HARNESS_RUN_ID vm-set=$LOOPFORGE_VM_SET_ID"
 }
 
 vm_cmd_create_steps() {
@@ -361,15 +378,60 @@ vm_cmd_validate_role() {
 }
 
 vm_cmd_configure_integration() {
-  vm_integration_blocked_m1 configure-integration
+  local log evidence rc status
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log configure-integration)"
+  rc=0
+  vm_integration_configure >"$log" 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ] && { ! vm_integration_assert_no_placeholder_success "$log" || ! vm_integration_assert_no_contradictory_failure "$log"; }; then
+    rc=1
+  fi
+  if [ "$rc" -ne 0 ]; then
+    status="$(vm_integration_failure_status "$log")"
+    evidence="$(vm_write_integration_evidence configure-integration "$status" "$log" "Shared integration configuration failed or emitted forbidden success markers")"
+    print_command_failure configure-integration "" "$status" "$log" "$evidence"
+    return "$rc"
+  fi
+  evidence="$(vm_write_integration_evidence configure-integration pass "$log" "Shared integration helper configured cross-role SSH, shared storage, and trigger state")"
+  print_command_summary configure-integration "" ok
 }
 
 vm_cmd_validate_integration() {
-  vm_integration_blocked_m1 validate-integration
+  local log evidence rc status
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log validate-integration)"
+  rc=0
+  vm_integration_validate >"$log" 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ] && { ! vm_integration_assert_no_placeholder_success "$log" || ! vm_integration_assert_no_contradictory_failure "$log"; }; then
+    rc=1
+  fi
+  if [ "$rc" -ne 0 ]; then
+    status="$(vm_integration_failure_status "$log")"
+    evidence="$(vm_write_integration_evidence validate-integration "$status" "$log" "Passive shared integration validation failed or emitted forbidden success markers")"
+    print_command_failure validate-integration "" "$status" "$log" "$evidence"
+    return "$rc"
+  fi
+  evidence="$(vm_write_integration_evidence validate-integration pass "$log" "Passive cross-role integration validation passed")"
+  print_command_summary validate-integration "" ok
 }
 
 vm_cmd_prove_integration() {
-  vm_integration_blocked_m1 prove-integration
+  local log evidence rc status
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log prove-integration)"
+  rc=0
+  vm_integration_prove >"$log" 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ] && { ! vm_integration_assert_no_placeholder_success "$log" || ! vm_integration_assert_no_contradictory_failure "$log"; }; then
+    rc=1
+  fi
+  if [ "$rc" -ne 0 ]; then
+    status="$(vm_integration_failure_status "$log")"
+    evidence="$(vm_write_integration_evidence prove-integration "$status" "$log" "Active integration proof failed or emitted forbidden success markers")"
+    print_command_failure prove-integration "" "$status" "$log" "$evidence"
+    return "$rc"
+  fi
+  evidence="$(vm_write_integration_evidence prove-integration pass "$log" "Active cross-role integration proof passed")"
+  print_command_summary prove-integration "" ok
 }
 
 vm_cmd_reboot() {

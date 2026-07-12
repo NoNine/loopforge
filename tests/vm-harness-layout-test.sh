@@ -50,6 +50,10 @@ mapfile -t vm_impl_files < <(
   printf 'Missing executable VM M6 artifact lifecycle test\n' >&2
   exit 1
 }
+[ -x "$repo_root/tests/vm-harness-integration-lifecycle-test.sh" ] || {
+  printf 'Missing executable VM M8 integration lifecycle test\n' >&2
+  exit 1
+}
 [ -x "$repo_root/tests/fixtures/vm-libvirt-stub.sh" ] || {
   printf 'Missing executable shared VM libvirt test fixture\n' >&2
   exit 1
@@ -124,6 +128,8 @@ for file in "${vm_impl_files[@]}"; do
     'VM harness implementation must not use libvirt console as checkpoint control plane'
   reject_in_file "$file" '(^|[^[:alnum:]_-])(guestfish|guestmount|virt-copy-in|virt-copy-out|virt-customize|virt-rescue|qemu-nbd)([^[:alnum:]_-]|$)' \
     'VM harness implementation must not edit guest disks or images for checkpoint work'
+  reject_in_file "$file" 'chmod[[:space:]]+0666' \
+    'VM harness must not make libvirt storage world-writable'
   reject_in_file "$file" 'cloud-init[^[:cntrl:]]*(stage-artifacts|configure-role|validate-role|configure-integration|validate-integration|prove-integration)' \
     'VM harness implementation must not use post-baseline cloud-init for checkpoint work'
   reject_in_file "$file" 'print_command_failure[^[:cntrl:]]*basename[[:space:]]+"?\$\(?(log|evidence)' \

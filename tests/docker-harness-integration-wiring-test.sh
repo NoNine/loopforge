@@ -18,7 +18,7 @@ for file in gerrit jenkins-controller jenkins-agent integration; do
   printf '%s\n' "SENTINEL=original-$file" >"$tmp_dir/$file.env"
 done
 cat >>"$tmp_dir/integration.env" <<'EOF'
-JENKINS_SHARED_STORAGE_PATH=/mnt/harness-shared
+JENKINS_SHARED_STORAGE_PATH=/data/jenkins-shared
 EOF
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
@@ -110,13 +110,21 @@ grep -Fq -- 'ensure_gerrit_integration_account "$log"' "$repo_root/scripts/integ
 grep -Fq -- 'gerrit_account_provision=simulation-login' "$repo_root/scripts/integration-setup.sh"
 grep -Fq -- 'Gerrit $role account is not provisioned or the credential was rejected; sign in once as' "$repo_root/scripts/integration-setup.sh"
 grep -Fq -- 'review_apply=gerrit-trigger-rest' "$repo_root/scripts/integration-setup.sh"
-if ! sed -n '/prove_stream_events()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
+if ! awk '
+  /^prove_stream_events\(\)/ { in_fn=1 }
+  /^validate_integration_impl\(\)/ { exit }
+  in_fn { print }
+' "$repo_root/scripts/integration-setup.sh" |
   grep -Fq -- 'ensure_gerrit_test_account_provisioned "$log"'
 then
   printf 'stream-events proof must provision/check the Gerrit test account\n' >&2
   exit 1
 fi
-if ! sed -n '/create_gerrit_change()/,/^}/p' "$repo_root/scripts/integration-setup.sh" |
+if ! awk '
+  /^create_gerrit_change\(\)/ { in_fn=1 }
+  /^run_verification_build\(\)/ { exit }
+  in_fn { print }
+' "$repo_root/scripts/integration-setup.sh" |
   grep -Fq -- 'ensure_gerrit_test_account_provisioned "$log"'
 then
   printf 'verification change proof must provision/check the Gerrit test account\n' >&2

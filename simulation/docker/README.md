@@ -97,7 +97,7 @@ mode `0600`. `init-run` also writes a run marker under
 `generated/simulation/docker/<run-id>/`. Later lifecycle and cleanup commands
 load the private runtime config and verify that marker before operating.
 
-`harness.env` is the redacted public record for inspection. The private
+`harness.env` is the rendered harness record for inspection. The private
 `harness.runtime.env` retains lifecycle values and points at the runtime input
 copies.
 

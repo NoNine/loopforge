@@ -31,6 +31,89 @@ print(os.path.abspath(path))
 '
 }
 
+__vm_libvirt_qemu_conf_value() {
+  local key conf
+  key="${1:?key required}"
+  conf="${VM_LIBVIRT_QEMU_CONF:-/etc/libvirt/qemu.conf}"
+  [ -r "$conf" ] || return 1
+  awk -v key="$key" '
+    $0 !~ /^[[:space:]]*#/ && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+      sub(/^[^=]*=[[:space:]]*/, "")
+      sub(/[[:space:]]*#.*/, "")
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+      gsub(/^"|"$/, "")
+      print
+      found = 1
+      exit
+    }
+    END { exit !found }
+  ' "$conf"
+}
+
+__vm_libvirt_user_uid() {
+  local value
+  value="${1:?user required}"
+  case "$value" in
+    *[!0-9]*|'') getent passwd "$value" | awk -F: 'NR == 1 { print $3; found = 1 } END { exit !found }' ;;
+    *) printf '%s\n' "$value" ;;
+  esac
+}
+
+__vm_libvirt_user_gid() {
+  local value
+  value="${1:?user required}"
+  getent passwd "$value" | awk -F: 'NR == 1 { print $4; found = 1 } END { exit !found }'
+}
+
+__vm_libvirt_group_gid() {
+  local value
+  value="${1:?group required}"
+  case "$value" in
+    *[!0-9]*|'') getent group "$value" | awk -F: 'NR == 1 { print $3; found = 1 } END { exit !found }' ;;
+    *) printf '%s\n' "$value" ;;
+  esac
+}
+
+__vm_libvirt_try_qemu_identity() {
+  local user group uid gid
+  user="${1:?user required}"
+  group="${2:-}"
+  uid="$(__vm_libvirt_user_uid "$user")" || return 1
+  if [ -n "$group" ]; then
+    gid="$(__vm_libvirt_group_gid "$group")" || return 1
+  else
+    gid="$(__vm_libvirt_user_gid "$user")" || return 1
+  fi
+  printf '%s %s\n' "$uid" "$gid"
+}
+
+vm_libvirt_qemu_identity() {
+  local configured_user configured_group identity
+  configured_user="$(__vm_libvirt_qemu_conf_value user 2>/dev/null || true)"
+  configured_group="$(__vm_libvirt_qemu_conf_value group 2>/dev/null || true)"
+  if [ -n "$configured_user" ] || [ -n "$configured_group" ]; then
+    if [ -n "$configured_user" ]; then
+      identity="$(__vm_libvirt_try_qemu_identity "$configured_user" "$configured_group")" ||
+        die "Unable to resolve configured libvirt QEMU identity from ${VM_LIBVIRT_QEMU_CONF:-/etc/libvirt/qemu.conf}"
+      printf '%s\n' "$identity"
+      return 0
+    fi
+    identity="$(__vm_libvirt_try_qemu_identity libvirt-qemu "$configured_group" 2>/dev/null ||
+      __vm_libvirt_try_qemu_identity qemu "$configured_group" 2>/dev/null)" ||
+      die "Unable to resolve configured libvirt QEMU group from ${VM_LIBVIRT_QEMU_CONF:-/etc/libvirt/qemu.conf}"
+    printf '%s\n' "$identity"
+    return 0
+  fi
+  identity="$(__vm_libvirt_try_qemu_identity libvirt-qemu kvm 2>/dev/null ||
+    __vm_libvirt_try_qemu_identity qemu qemu 2>/dev/null)" ||
+    die "Unable to resolve libvirt QEMU identity; configure user/group in /etc/libvirt/qemu.conf or provide libvirt-qemu:kvm/qemu:qemu accounts"
+  printf '%s\n' "$identity"
+}
+
+vm_libvirt_make_storage_path_searchable() {
+  chmod 0711 "$@" || return $?
+}
+
 __vm_libvirt_render_directory_pool_xml() {
   local name target xml
   name="${1:?pool name required}"
@@ -45,6 +128,8 @@ pool = ET.Element("pool", {"type": "dir"})
 ET.SubElement(pool, "name").text = sys.argv[1]
 target = ET.SubElement(pool, "target")
 ET.SubElement(target, "path").text = sys.argv[2]
+permissions = ET.SubElement(target, "permissions")
+ET.SubElement(permissions, "mode").text = "0711"
 ET.ElementTree(pool).write(sys.stdout, encoding="unicode")
 print()
 PY
@@ -193,14 +278,17 @@ PY
 }
 
 __vm_libvirt_render_machine_volume_xml() {
-  local machine volume capacity backing xml
+  local machine volume capacity backing xml identity owner group
   machine="${1:?machine required}"
   volume="$(vm_libvirt_machine_volume_name "$machine")"
   capacity="$(__vm_libvirt_disk_size_bytes)" || return $?
   backing="$(vm_libvirt_baked_base_image_path)"
   xml="$(vm_path_vm_volume_xml "$machine")"
+  identity="$(vm_libvirt_qemu_identity)" || return $?
+  owner="${identity%% *}"
+  group="${identity##* }"
   mkdir -p "$(dirname "$xml")" || return $?
-  python3 - "$volume" "$capacity" "$backing" >"$xml" <<'PY'
+  python3 - "$volume" "$capacity" "$backing" "$owner" "$group" >"$xml" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -210,6 +298,10 @@ ET.SubElement(volume, "capacity", {"unit": "bytes"}).text = sys.argv[2]
 ET.SubElement(volume, "allocation", {"unit": "bytes"}).text = "0"
 target = ET.SubElement(volume, "target")
 ET.SubElement(target, "format", {"type": "qcow2"})
+permissions = ET.SubElement(target, "permissions")
+ET.SubElement(permissions, "mode").text = "0600"
+ET.SubElement(permissions, "owner").text = sys.argv[4]
+ET.SubElement(permissions, "group").text = sys.argv[5]
 backing = ET.SubElement(volume, "backingStore")
 ET.SubElement(backing, "path").text = sys.argv[3]
 ET.SubElement(backing, "format", {"type": "qcow2"})

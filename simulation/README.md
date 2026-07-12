@@ -217,7 +217,7 @@ entrypoints.
 
 Simulation harnesses copy selected harness, role, and integration input files
 into private run-scoped runtime input locations during `init-run`. The
-redacted public record is for inspection; private runtime env files retain
+rendered harness record is for inspection; private runtime env files retain
 lifecycle values and point at the runtime input copies. Full reviewed helper
 env files remain operator inputs and are transferred only to helper execution
 input locations. They are not helper-owned state and must not be embedded in
@@ -225,11 +225,9 @@ artifact bundles.
 
 Docker and VM simulation may use simulation-owned fake LDAP bind passwords for
 their own LDAP environments. The default example values are not real
-organization secrets and must not be replaced with real organization LDAP
-secrets. Harnesses redact those values from rendered summaries, runtime input
-copies, helper env files, logs, evidence, and artifact bundles, then inject
-them only into helper command environments for commands that need LDAP proof or
-product runtime configuration. Product runtime config files may still persist
+organization secrets and must not be replaced with real organization secrets.
+They are copied into run-scoped inputs. Logs, evidence, and artifact bundles
+must not expose secrets. Product runtime config files may still persist
 product-required LDAP settings after the relevant role helper writes them.
 
 Both simulation layers must realize LDAP as a simulation-owned directory

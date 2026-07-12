@@ -89,8 +89,11 @@ vm_config_load() {
   file="$(vm_resolve_repo_path "$file")"
   require_readable_file "VM harness env file" "$file"
 
-  vm_reject_output_path_overrides
+  if [ "${VM_OUTPUT_PATHS_CANONICAL_APPLIED:-0}" != "1" ]; then
+    vm_reject_output_path_overrides
+  fi
   vm_unset_output_paths
+  unset VM_OUTPUT_PATHS_CANONICAL_APPLIED
   HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
   HARNESS_JENKINS_AGENT_ENV_FILE="$repo_root/examples/jenkins-agent.env.example"
@@ -126,7 +129,6 @@ vm_config_load() {
   HARNESS_LDAP_BASE_DN="${HARNESS_LDAP_BASE_DN:-dc=example,dc=test}"
   HARNESS_LDAP_BIND_USER="${HARNESS_LDAP_BIND_USER:-readonly}"
   HARNESS_LDAP_BIND_PASSWORD="${HARNESS_LDAP_BIND_PASSWORD:-readonly-password}"
-  VM_RUNTIME_LDAP_BIND_PASSWORD="$HARNESS_LDAP_BIND_PASSWORD"
   HARNESS_LDAP_HOST="${HARNESS_LDAP_HOST:-ldap.$HARNESS_LDAP_DOMAIN}"
   HARNESS_LDAP_PORT="${HARNESS_LDAP_PORT:-389}"
   HARNESS_LDAP_BIND_DN="${HARNESS_LDAP_BIND_DN:-cn=$HARNESS_LDAP_BIND_USER,$HARNESS_LDAP_BASE_DN}"
@@ -162,7 +164,6 @@ vm_config_load() {
   export HARNESS_LDAP_BIND_USER HARNESS_LDAP_BIND_PASSWORD HARNESS_LDAP_HOST
   export HARNESS_LDAP_PORT HARNESS_LDAP_BIND_DN HARNESS_LDAP_USER_BASE
   export HARNESS_LDAP_GROUP_BASE
-  export VM_RUNTIME_LDAP_BIND_PASSWORD
   export HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL
   export VM_BASE_IMAGE_PATH VM_LIBVIRT_URI VM_NETWORK_CIDR
   export VM_OPERATOR_USER VM_OPERATOR_SSH_TIMEOUT_SECONDS
@@ -318,7 +319,7 @@ HARNESS_UBUNTU_APT_MIRROR=$(shell_quote "$HARNESS_UBUNTU_APT_MIRROR")
 HARNESS_LDAP_DOMAIN=$(shell_quote "$HARNESS_LDAP_DOMAIN")
 HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
+HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
 HARNESS_LDAP_HOST=$(shell_quote "$HARNESS_LDAP_HOST")
 HARNESS_LDAP_PORT=$(shell_quote "$HARNESS_LDAP_PORT")
 HARNESS_LDAP_BIND_DN=$(shell_quote "$HARNESS_LDAP_BIND_DN")
@@ -349,6 +350,8 @@ EOF
 }
 
 vm_config_write_runtime_env() {
+  local old_umask
+  old_umask="$(umask)"
   umask 077
   cat >"$HARNESS_RUNTIME_ENV" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
@@ -367,7 +370,7 @@ HARNESS_UBUNTU_APT_MIRROR=$(shell_quote "$HARNESS_UBUNTU_APT_MIRROR")
 HARNESS_LDAP_DOMAIN=$(shell_quote "$HARNESS_LDAP_DOMAIN")
 HARNESS_LDAP_BASE_DN=$(shell_quote "$HARNESS_LDAP_BASE_DN")
 HARNESS_LDAP_BIND_USER=$(shell_quote "$HARNESS_LDAP_BIND_USER")
-HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted
+HARNESS_LDAP_BIND_PASSWORD=$(shell_quote "$HARNESS_LDAP_BIND_PASSWORD")
 HARNESS_LDAP_HOST=$(shell_quote "$HARNESS_LDAP_HOST")
 HARNESS_LDAP_PORT=$(shell_quote "$HARNESS_LDAP_PORT")
 HARNESS_LDAP_BIND_DN=$(shell_quote "$HARNESS_LDAP_BIND_DN")
@@ -413,6 +416,7 @@ HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE=$(shell_quote "$HARNESS_TARGET_SSH_KNOWN_HOS
 HARNESS_ROLE_STATE_DIR=$(shell_quote "$HARNESS_ROLE_STATE_DIR")
 public_internet_fallback=simulation-only
 EOF
+  umask "$old_umask"
   chmod 0600 "$HARNESS_RUNTIME_ENV"
 }
 

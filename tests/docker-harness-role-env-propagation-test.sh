@@ -238,8 +238,9 @@ grep -Fq 'JENKINS_AGENT_STATE_DIR="/custom/jenkins-agent-state"' "$runtime_dir/h
 grep -Fq 'JENKINS_AGENT_STAGED_ARTIFACT_DIR="/custom/staging/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/custom/evidence/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
 grep -Fq 'JENKINS_AGENT_LOG_DIR="/custom/logs/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=' "$runtime_dir"; then
-  printf 'Runtime input/helper env files must not store the LDAP bind password\n' >&2
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$runtime_dir/harness.env"
+if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$runtime_dir"; then
+  printf 'Runtime input/helper env files must not replace the simulation LDAP bind password with a redaction marker\n' >&2
   exit 1
 fi
 if grep -Fq '/harness/evidence' \

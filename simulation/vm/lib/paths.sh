@@ -47,6 +47,7 @@ vm_paths_apply_canonical() {
   HARNESS_JENKINS_CONTROLLER_LOG_DIR="$HARNESS_TARGET_DIR/logs/jenkins-controller"
   HARNESS_JENKINS_AGENT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-agent"
   HARNESS_JENKINS_AGENT_LOG_DIR="$HARNESS_TARGET_DIR/logs/jenkins-agent"
+  VM_OUTPUT_PATHS_CANONICAL_APPLIED=1
 
   export HARNESS_GENERATED_RUN_DIR HARNESS_VM_SET_DIR HARNESS_HOST_DIR
   export HARNESS_TARGET_DIR HARNESS_RENDERED_DIR HARNESS_RUNTIME_INPUT_DIR
@@ -70,6 +71,12 @@ vm_path_role_checkpoint_marker() {
   role="${1:?role required}"
   checkpoint="${2:?checkpoint required}"
   printf '%s/%s/%s.env\n' "$HARNESS_ROLE_STATE_DIR" "$role" "$checkpoint"
+}
+
+vm_path_integration_checkpoint_marker() {
+  local checkpoint
+  checkpoint="${1:?checkpoint required}"
+  printf '%s/integration/%s.env\n' "$HARNESS_HOST_DIR/state" "$checkpoint"
 }
 
 vm_path_runtime_inputs() {
