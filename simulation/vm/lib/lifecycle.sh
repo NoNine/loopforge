@@ -234,6 +234,13 @@ vm_workflow_downstream_steps() {
   vm_workflow_step prove-integration vm_cmd_prove_integration || return $?
 }
 
+vm_cmd_run_logged() {
+  local log
+  log="${1:?bounded log required}"
+  shift
+  ( "$@" ) >"$log" 2>&1
+}
+
 vm_cmd_run() {
   if vm_config_runtime_valid; then
     vm_config_load_runtime
@@ -248,9 +255,44 @@ vm_cmd_run() {
   print_command_summary run "" "ok run-id=$HARNESS_RUN_ID vm-set=$LOOPFORGE_VM_SET_ID"
 }
 
+vm_cmd_create_result_path() {
+  printf '%s.result.env\n' "${1:?bounded log required}"
+}
+
+vm_cmd_create_write_result() {
+  local result_file invalidated reused tmp
+  result_file="${1:-}"
+  [ -n "$result_file" ] || return 0
+  invalidated="${2:?baseline invalidated required}"
+  reused="${3:?baseline reused required}"
+  tmp="$(mktemp "${result_file}.XXXXXX")" || return $?
+  {
+    printf 'baseline_invalidated=%s\n' "$invalidated"
+    printf 'baseline_reused=%s\n' "$reused"
+  } >"$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  chmod 0600 "$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  mv -- "$tmp" "$result_file"
+}
+
+vm_cmd_create_result_value() {
+  local result_file key
+  result_file="${1:?result file required}"
+  key="${2:?result key required}"
+  marker_value "$result_file" "$key" 2>/dev/null || printf '0\n'
+}
+
 vm_cmd_create_steps() {
+  local result_file
+  result_file="${1:-}"
   VM_CREATE_BASELINE_INVALIDATED=0
   VM_CREATE_BASELINE_REUSED=0
+  vm_cmd_create_write_result "$result_file" 0 0 || return $?
   vm_set_prepare || return $?
   case "$(vm_snapshots_status)" in
     ready)
@@ -258,6 +300,7 @@ vm_cmd_create_steps() {
       vm_set_verify_selected_ownership || return $?
       vm_snapshots_verify || return $?
       VM_CREATE_BASELINE_REUSED=1
+      vm_cmd_create_write_result "$result_file" "$VM_CREATE_BASELINE_INVALIDATED" "$VM_CREATE_BASELINE_REUSED" || return $?
       printf 'baseline-snapshot=ready source=existing\n'
       vm_libvirt_status_table
       return 0
@@ -268,6 +311,7 @@ vm_cmd_create_steps() {
   esac
   vm_baseline_invalidate || return $?
   VM_CREATE_BASELINE_INVALIDATED=1
+  vm_cmd_create_write_result "$result_file" "$VM_CREATE_BASELINE_INVALIDATED" "$VM_CREATE_BASELINE_REUSED" || return $?
   vm_set_create || return $?
   vm_libvirt_start_set || return $?
   vm_ssh_prepare_all || return $?
@@ -277,26 +321,40 @@ vm_cmd_create_steps() {
   vm_libvirt_status_table
 }
 
+vm_cmd_create_print_failure() {
+  local evidence log result_file
+  log="${1:?log required}"
+  result_file="${2:-}"
+  if [ -n "$result_file" ] &&
+    [ "$(vm_cmd_create_result_value "$result_file" baseline_invalidated)" -eq 1 ]; then
+    vm_baseline_invalidate || true
+  fi
+  evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 VM-set creation or baseline prerequisite proof failed")" ||
+    evidence=""
+  print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
+}
+
 vm_cmd_create() {
-  local evidence log
+  local evidence log result_file
   vm_config_load_runtime
   log="$(vm_path_bounded_log create)"
-  vm_cmd_create_steps >"$log" 2>&1 || {
-    if [ "${VM_CREATE_BASELINE_INVALIDATED:-0}" -eq 1 ]; then
-      vm_baseline_invalidate
-    fi
-    evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 VM-set creation or baseline prerequisite proof failed")"
-    print_command_failure create "" "failed reason=vm-set-create" "$log" "$evidence"
+  result_file="$(vm_cmd_create_result_path "$log")"
+  rm -f "$result_file"
+  vm_cmd_run_logged "$log" vm_cmd_create_steps "$result_file" || {
+    vm_cmd_create_print_failure "$log" "$result_file"
+    rm -f "$result_file"
     return 1
   }
-  if [ "${VM_CREATE_BASELINE_REUSED:-0}" -eq 0 ]; then
+  if [ "$(vm_cmd_create_result_value "$result_file" baseline_reused)" -eq 0 ]; then
     vm_write_ldap_evidence "$log" >/dev/null || {
       vm_baseline_invalidate
       evidence="$(vm_write_harness_evidence create fail "simulate.sh create" "$log" "M4 LDAP evidence generation failed after runtime proof")"
       print_command_failure create "" "failed reason=ldap-evidence" "$log" "$evidence"
+      rm -f "$result_file"
       return 1
     }
   fi
+  rm -f "$result_file"
   evidence="$(vm_write_harness_evidence create pass "simulate.sh create" "$log" "M5 VM set baseline was captured after prerequisite proof")"
   print_command_summary create "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline-prereqs=ready baseline-snapshot=ready"
 }
@@ -305,20 +363,22 @@ vm_cmd_up() {
   local evidence log
   vm_config_load_runtime
   log="$(vm_path_bounded_log up)"
-  {
-    vm_set_verify_run_and_set
-    vm_libvirt_start_set
-    vm_ssh_prepare_all
-    vm_ssh_stage_role_helpers_all
-    vm_libvirt_status_table
-    vm_ssh_status_readonly
-  } >"$log" 2>&1 || {
+  vm_cmd_run_logged "$log" vm_cmd_up_steps || {
     evidence="$(vm_write_harness_evidence up fail "simulate.sh up" "$log" "M3 VM-set startup or target OS SSH readiness failed")"
     print_command_failure up "" "failed reason=vm-set-up" "$log" "$evidence"
     return 1
   }
   evidence="$(vm_write_harness_evidence up pass "simulate.sh up" "$log" "M3 VM set started and target OS SSH readiness passed")"
   print_command_summary up "" "ok vm-set=$LOOPFORGE_VM_SET_ID ssh=ready"
+}
+
+vm_cmd_up_steps() {
+  vm_set_verify_run_and_set
+  vm_libvirt_start_set
+  vm_ssh_prepare_all
+  vm_ssh_stage_role_helpers_all
+  vm_libvirt_status_table
+  vm_ssh_status_readonly
 }
 
 vm_cmd_ssh() {
@@ -338,7 +398,7 @@ vm_cmd_prepare_artifacts() {
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "prepare-artifacts-$role")"
     rc=0
-    vm_artifacts_prepare_role "$role" >"$log" 2>&1 || rc=$?
+    vm_cmd_run_logged "$log" vm_artifacts_prepare_role "$role" || rc=$?
     if [ "$rc" -ne 0 ]; then
       evidence="$(vm_write_artifact_evidence prepare-artifacts "$role" fail "$log" "Bundle-factory helper execution or artifact verification failed")"
       print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
@@ -356,7 +416,7 @@ vm_cmd_stage_artifacts() {
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "stage-artifacts-$role")"
     rc=0
-    vm_artifacts_stage_role "$role" >"$log" 2>&1 || rc=$?
+    vm_cmd_run_logged "$log" vm_artifacts_stage_role "$role" || rc=$?
     if [ "$rc" -ne 0 ]; then
       evidence="$(vm_write_artifact_evidence stage-artifacts "$role" fail "$log" "SSH transfer or target-side artifact verification failed")"
       print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
@@ -374,7 +434,7 @@ vm_cmd_configure_role() {
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "configure-role-$role")"
     rc=0
-    vm_roles_configure "$role" >"$log" 2>&1 || rc=$?
+    vm_cmd_run_logged "$log" vm_roles_configure "$role" || rc=$?
     if [ "$rc" -eq 0 ] && { ! vm_roles_assert_no_placeholder_success "$log" || ! vm_roles_assert_no_contradictory_failure "$log"; }; then
       rc=1
     fi
@@ -396,7 +456,7 @@ vm_cmd_validate_role() {
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "validate-role-$role")"
     rc=0
-    vm_roles_validate "$role" >"$log" 2>&1 || rc=$?
+    vm_cmd_run_logged "$log" vm_roles_validate "$role" || rc=$?
     if [ "$rc" -eq 0 ] && { ! vm_roles_assert_no_placeholder_success "$log" || ! vm_roles_assert_no_contradictory_failure "$log"; }; then
       rc=1
     fi
@@ -416,7 +476,7 @@ vm_cmd_configure_integration() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log configure-integration)"
   rc=0
-  vm_integration_configure >"$log" 2>&1 || rc=$?
+  vm_cmd_run_logged "$log" vm_integration_configure || rc=$?
   if [ "$rc" -eq 0 ] && { ! vm_integration_assert_no_placeholder_success "$log" || ! vm_integration_assert_no_contradictory_failure "$log"; }; then
     rc=1
   fi
@@ -435,7 +495,7 @@ vm_cmd_validate_integration() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log validate-integration)"
   rc=0
-  vm_integration_validate >"$log" 2>&1 || rc=$?
+  vm_cmd_run_logged "$log" vm_integration_validate || rc=$?
   if [ "$rc" -eq 0 ] && { ! vm_integration_assert_no_placeholder_success "$log" || ! vm_integration_assert_no_contradictory_failure "$log"; }; then
     rc=1
   fi
@@ -454,7 +514,7 @@ vm_cmd_prove_integration() {
   vm_config_load_runtime
   log="$(vm_path_bounded_log prove-integration)"
   rc=0
-  vm_integration_prove >"$log" 2>&1 || rc=$?
+  vm_cmd_run_logged "$log" vm_integration_prove || rc=$?
   if [ "$rc" -eq 0 ] && { ! vm_integration_assert_no_placeholder_success "$log" || ! vm_integration_assert_no_contradictory_failure "$log"; }; then
     rc=1
   fi
@@ -475,28 +535,14 @@ vm_cmd_reboot() {
   target="$role"
   [ "$all" -eq 0 ] || target="all"
   vm_config_load_runtime
-  vm_set_verify_run_and_set
   if [ "$all" -eq 1 ]; then
     targets="${vm_machines[*]}"
   else
     targets="$(vm_ssh_role_machine "$role")"
   fi
-  for machine in $targets; do
-    vm_libvirt_require_running "$machine"
-  done
   log="$(vm_path_bounded_log "reboot-$target")"
   rc=0
-  {
-    for machine in $targets; do
-      vm_ssh_reboot_machine "$machine"
-      case "$machine" in
-        gerrit|jenkins-controller|jenkins-agent)
-          vm_state_invalidate_role_validation "$machine"
-          vm_roles_assert_reboot_recovery "$machine"
-          ;;
-      esac
-    done
-  } >"$log" 2>&1 || rc=$?
+  vm_cmd_run_logged "$log" vm_cmd_reboot_steps "$targets" || rc=$?
   if [ "$rc" -ne 0 ]; then
     evidence="$(vm_write_reboot_evidence fail "$targets" "$log" "Delegated guest reboot, SSH return, or boot-ID proof failed")"
     print_command_failure reboot "$target" failed "$log" "$evidence"
@@ -504,6 +550,24 @@ vm_cmd_reboot() {
   fi
   evidence="$(vm_write_reboot_evidence pass "$targets" "$log" "Delegated guest reboot changed boot IDs and restored SSH plus required guest service readiness")"
   print_command_summary reboot "$target" ok
+}
+
+vm_cmd_reboot_steps() {
+  local machine targets
+  targets="${1:?targets required}"
+  vm_set_verify_run_and_set
+  for machine in $targets; do
+    vm_libvirt_require_running "$machine"
+  done
+  for machine in $targets; do
+    vm_ssh_reboot_machine "$machine"
+    case "$machine" in
+      gerrit|jenkins-controller|jenkins-agent)
+        vm_state_invalidate_role_validation "$machine"
+        vm_roles_assert_reboot_recovery "$machine"
+        ;;
+    esac
+  done
 }
 
 vm_write_reboot_evidence() {
@@ -544,12 +608,7 @@ vm_cmd_down() {
   local evidence log
   vm_config_load_runtime
   log="$(vm_path_bounded_log down)"
-  {
-    vm_state_verify_run_marker
-    vm_set_verify_marker_for_teardown
-    vm_libvirt_shutdown_set
-    vm_libvirt_status_table
-  } >"$log" 2>&1 || {
+  vm_cmd_run_logged "$log" vm_cmd_down_steps || {
     evidence="$(vm_write_harness_evidence down fail "simulate.sh down" "$log" "M3 VM-set graceful shutdown failed")"
     print_command_failure down "" "failed reason=vm-set-down" "$log" "$evidence"
     return 1
@@ -558,16 +617,18 @@ vm_cmd_down() {
   print_command_summary down "" "ok vm-set=$LOOPFORGE_VM_SET_ID"
 }
 
+vm_cmd_down_steps() {
+  vm_state_verify_run_marker
+  vm_set_verify_marker_for_teardown
+  vm_libvirt_shutdown_set
+  vm_libvirt_status_table
+}
+
 vm_cmd_clean() {
   local evidence log reason
   vm_config_load_runtime
   log="$(vm_path_bounded_log clean)"
-  {
-    vm_state_verify_run_marker
-    vm_set_verify_selected_ownership
-    vm_libvirt_require_set_shut_off clean
-    vm_state_clean_mutable_run_state
-  } >"$log" 2>&1 || {
+  vm_cmd_run_logged "$log" vm_cmd_clean_steps || {
     reason=generated-cleanup
     grep -Fq 'vm-set-running operation=clean' "$log" && reason=vm-set-running
     evidence="$(vm_write_harness_evidence clean fail "simulate.sh clean" "$log" "VM generated runtime cleanup failed or VM set was not down")"
@@ -578,15 +639,18 @@ vm_cmd_clean() {
   print_command_summary clean "" "ok vm-set=$LOOPFORGE_VM_SET_ID generated-state=cleaned"
 }
 
+vm_cmd_clean_steps() {
+  vm_state_verify_run_marker
+  vm_set_verify_teardown_ownership
+  vm_libvirt_require_set_shut_off clean
+  vm_state_clean_mutable_run_state
+}
+
 vm_cmd_restore_baseline() {
   local evidence log reason
   vm_config_load_runtime
   log="$(vm_path_bounded_log restore-baseline)"
-  {
-    vm_state_verify_run_marker
-    vm_snapshots_restore
-    vm_libvirt_status_table
-  } >"$log" 2>&1 || {
+  vm_cmd_run_logged "$log" vm_cmd_restore_baseline_steps || {
     reason=baseline-restore
     grep -Fq 'vm-set-running operation=restore-baseline' "$log" && reason=vm-set-running
     evidence="$(vm_write_harness_evidence restore-baseline fail "simulate.sh restore-baseline" "$log" "Baseline restore failed ownership, snapshot validation, or down-state validation")"
@@ -597,6 +661,12 @@ vm_cmd_restore_baseline() {
   print_command_summary restore-baseline "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline=restored"
 }
 
+vm_cmd_restore_baseline_steps() {
+  vm_state_verify_run_marker
+  vm_snapshots_restore
+  vm_libvirt_status_table
+}
+
 vm_cmd_destroy() {
   local detail evidence log
   if vm_config_runtime_valid; then
@@ -605,15 +675,7 @@ vm_cmd_destroy() {
     vm_config_load "$HARNESS_ENV_FILE"
   fi
   log="$(vm_path_bounded_log destroy)"
-  {
-    if [ -f "$HARNESS_RUN_MARKER" ]; then
-      vm_state_verify_run_marker
-    else
-      printf 'recovery-missing-run-marker path=%s\n' "$HARNESS_RUN_MARKER"
-    fi
-    vm_set_destroy
-    vm_set_remove_metadata
-  } >"$log" 2>&1 || {
+  vm_cmd_run_logged "$log" vm_cmd_destroy_steps || {
     evidence="$(vm_write_harness_evidence destroy fail "simulate.sh destroy" "$log" "M5 selected VM-set destruction failed ownership validation or removal")"
     print_command_failure destroy "" "failed reason=vm-set-destroy" "$log" "$evidence"
     return 1
@@ -621,4 +683,14 @@ vm_cmd_destroy() {
   evidence="$(vm_write_harness_evidence destroy pass "simulate.sh destroy" "$log" "M5 permanently removed only the selected owned VM set")"
   detail="ok vm-set=$LOOPFORGE_VM_SET_ID removed"
   print_command_summary destroy "" "$detail"
+}
+
+vm_cmd_destroy_steps() {
+  if [ -f "$HARNESS_RUN_MARKER" ]; then
+    vm_state_verify_run_marker
+  else
+    printf 'recovery-missing-run-marker path=%s\n' "$HARNESS_RUN_MARKER"
+  fi
+  vm_set_destroy
+  vm_set_remove_metadata
 }

@@ -32,6 +32,72 @@ log shows failed commands.
   package, service, SSH, LDAP, artifact, role, and integration readiness must
   be proven from the VM guest or product API path that would fail in real use.
 
+## Canonical Verification Matrix
+
+VM harness changes must be verified against lifecycle state sequences, not
+only individual command success paths. The harness has separate run state and
+VM-set state: a `fresh` run means the selected run marker is absent, but the
+selected reusable VM set can still exist and contain retained libvirt
+resources, seed media, snapshots, metadata, and logs.
+
+Use three verification tiers:
+
+- Static/local checks inspect scripts, docs, shell syntax, and repository
+  formatting without mutating VM, libvirt, host, guest, Gerrit, Jenkins, or
+  agent resources.
+- Stubbed lifecycle checks use deterministic test fixtures such as
+  `tests/fixtures/vm-libvirt-stub.sh` to model command order, generated
+  state, ownership checks, retained artifacts, and failure paths.
+- Approved remote KVM checks run real libvirt/VM lifecycle commands only after
+  explicit operator approval for the target and expected side effects.
+
+Every VM harness code change must either run or explicitly justify skipping
+these local checks:
+
+```bash
+bash -n simulation/vm/simulate.sh simulation/vm/lib/*.sh simulation/lib/*.sh tests/vm-*.sh
+tests/vm-docs-contract-test.sh
+tests/vm-harness-terminal-summary-test.sh
+VM_TEST_INCLUDE_M5=1 tests/vm-harness-m3-lifecycle-test.sh
+tests/vm-harness-ldap-seed-test.sh
+tests/vm-harness-role-lifecycle-test.sh
+tests/vm-harness-reboot-test.sh
+tests/vm-harness-vm-set-ownership-test.sh
+git diff --check
+```
+
+Changes touching artifacts, integration, status output, systemd-resolved
+helpers, or cleanup tooling must also run the matching focused
+`tests/vm-harness-*-test.sh` or `tests/vm-*-test.sh` file.
+
+The stubbed lifecycle gate must cover these command and state sequences where
+the changed subsystem can affect them:
+
+- fresh run with an empty selected VM set;
+- fresh run that reuses a retained selected VM set;
+- resume run with an existing selected run marker;
+- `create -> up -> down -> create` VM-set reuse;
+- `clean -> init-run -> create -> up` with the retained VM-set SSH identity;
+- `down -> restore-baseline -> clean` generated-state cleanup;
+- `clean` after stale metadata that is irrelevant to teardown ownership;
+- `destroy` after partial create or missing VM-set metadata;
+- `reboot` with SSH host-key and guest service readiness diagnostics;
+- `audit-state` before and after `clean` and `destroy`.
+
+Tests should model retained-state side effects when practical. Examples
+include stale target SSH known-host entries, non-teardown metadata drift,
+retained VM-set SSH identity, libvirt-managed disk metadata, unwritable or
+libvirt-owned final seed media, unowned selected-pool volumes, and bounded
+logs that contain runtime failure markers. These are not workaround
+scenarios; they are the normal state boundaries created by reusable VM sets
+and explicit cleanup commands.
+
+Recovery remains explicit. Only `down`, `restore-baseline`, `clean`, and
+`destroy` may recover VM lifecycle state as defined by
+`docs/lifecycle-contract.md` and `simulation/vm/README.md`. Other commands
+must fail clearly on inconsistent state instead of deleting, repairing,
+re-owning, or bypassing stale state.
+
 ## Milestone Gates
 
 | Milestone | Gate |

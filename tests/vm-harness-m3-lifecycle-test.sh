@@ -189,7 +189,15 @@ grep -Fq 'ownership_schema_version=6' "$marker"
 grep -Fq 'disk_ownership=libvirt-managed' "$marker"
 grep -Fq 'VM_PROVISIONING_MODEL=cloud-image-clone' "$generated_root/$run_id/host/rendered/harness.runtime.env"
 base_volume="$generated_root/vm-sets/$vm_set_id/libvirt/disks/base.qcow2"
+vm_set_ssh_dir="$generated_root/vm-sets/$vm_set_id/target-ssh"
+vm_set_ssh_identity="$vm_set_ssh_dir/ci-operator"
 [ -f "$base_volume" ]
+[ -f "$vm_set_ssh_identity" ]
+[ -f "$vm_set_ssh_identity.pub" ]
+[ ! -f "$generated_root/$run_id/host/target-ssh/ci-operator" ]
+[ "$(stat -c %a "$vm_set_ssh_dir")" = 700 ]
+[ "$(stat -c %a "$vm_set_ssh_identity")" = 600 ]
+[ "$(stat -c %a "$vm_set_ssh_identity.pub")" = 644 ]
 [ -f "$generated_root/vm-sets/$vm_set_id/libvirt/base-image.env" ]
 grep -Fq "base_image=$base_volume" "$marker"
 grep -Fq "base_image_pool_name=loopforge-vm-$run_id-$vm_set_id-images" "$marker"
@@ -197,6 +205,7 @@ grep -Fq "base_image_volume_name=base.qcow2" "$marker"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
+grep -Fq "<domain name='example.test' localOnly='yes'/>" "$network_xml"
 grep -Fq "<hostname>ldap.example.test</hostname>" "$network_xml"
 ! grep -Fq "<hostname>ldap</hostname>" "$network_xml"
 ! grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
@@ -288,6 +297,7 @@ grep -Fxq "destroy $stuck_domain" "$virsh_calls"
 grep -Fq 'shut off' "$stub_state/domains/$stuck_domain.state"
 
 if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
+  vm_set_ssh_public_key="$(cat "$vm_set_ssh_identity.pub")"
   snapshot_dir="$generated_root/vm-sets/$vm_set_id/snapshots"
   for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
     record="$snapshot_dir/$machine.env"
@@ -297,10 +307,13 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
     [ -f "$stub_state/snapshots/loopforge-vm-$run_id-$vm_set_id-$machine/loopforge-clean-baseline" ]
   done
 
+  chmod 0444 "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/bundle-factory-seed.iso"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-reuse.out"
   grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" \
     "$tmp_dir/create-reuse.out"
+  [ "$(stat -c %a "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/bundle-factory-seed.iso")" = 644 ]
+  [ "$(cat "$vm_set_ssh_identity.pub")" = "$vm_set_ssh_public_key" ]
   reuse_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
   grep -Fq 'baseline-snapshot=ready source=existing' "$reuse_log"
 
@@ -329,6 +342,8 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   [ "$(grep -c '^snapshot-revert ' "$virsh_calls")" -eq 5 ]
   ! grep -Fq 'shutdown ' "$virsh_calls"
   ! grep -Fq 'destroy ' "$virsh_calls"
+  sed -i 's/^base_image_fingerprint=.*/base_image_fingerprint=clean-must-not-care/' \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/gerrit.env"
 
   : >"$virsh_calls"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_CALLS="$virsh_calls" \
@@ -339,6 +354,8 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   [ ! -e "$generated_root/$run_id/host/rendered" ]
   [ ! -e "$generated_root/$run_id/host/runtime-inputs" ]
   [ ! -e "$generated_root/$run_id/host/target-ssh" ]
+  [ -f "$vm_set_ssh_identity" ]
+  [ "$(cat "$vm_set_ssh_identity.pub")" = "$vm_set_ssh_public_key" ]
   [ -f "$generated_root/$run_id/host/artifacts/exported/m5.txt" ]
   [ -f "$generated_root/$run_id/target/evidence/gerrit/m5.txt" ]
   [ ! -f "$generated_root/$run_id/.loopforge-vm-run.env" ]
@@ -353,6 +370,23 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
     exit 1
   fi
   grep -Fq 'Missing VM harness runtime config' "$tmp_dir/audit-clean.out"
+
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" init-run >"$tmp_dir/init-run-after-clean.out"
+  grep -Fxq "init-run: ok run-id=$run_id" "$tmp_dir/init-run-after-clean.out"
+  grep -Fq "HARNESS_TARGET_SSH_IDENTITY_FILE=$vm_set_ssh_identity" \
+    "$generated_root/$run_id/host/rendered/harness.runtime.env"
+  [ "$(cat "$vm_set_ssh_identity.pub")" = "$vm_set_ssh_public_key" ]
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-after-clean.out"
+  grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" \
+    "$tmp_dir/create-after-clean.out"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/up-after-clean.out"
+  grep -Fxq "up: ok vm-set=$vm_set_id ssh=ready" "$tmp_dir/up-after-clean.out"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" down >"$tmp_dir/down-after-clean.out"
+  grep -Fxq "down: ok vm-set=$vm_set_id" "$tmp_dir/down-after-clean.out"
 
   touch "$generated_root/vm-sets/$vm_set_id/libvirt/disks/unowned.qcow2"
   if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \

@@ -172,3 +172,16 @@ if grep -Fq 'run_as_gerrit_runtime "$(shell_quote "$GERRIT_SITE_PATH/bin/gerrit.
   printf 'Gerrit runtime startup must not leave the helper waiting on a foreground child\n' >&2
   exit 1
 fi
+
+vm_set_verify_run_and_set() { die "forced role phase failure"; }
+if vm_cmd_configure_role gerrit >"$tmp_dir/configure-die.out" 2>&1; then
+  printf 'configure-role must report nested die failures\n' >&2
+  exit 1
+fi
+grep -Fq 'configure-role[gerrit]:' "$tmp_dir/configure-die.out"
+grep -Eq '^log=.*/configure-role-gerrit-[0-9]{8}T[0-9]{6}Z\.log$' \
+  "$tmp_dir/configure-die.out"
+grep -Eq '^evidence=.*/configure-role-gerrit-[0-9]{8}T[0-9]{6}Z\.json$' \
+  "$tmp_dir/configure-die.out"
+configure_die_log="$(sed -n 's/^log=//p' "$tmp_dir/configure-die.out")"
+grep -Fq 'ERROR: forced role phase failure' "$configure_die_log"

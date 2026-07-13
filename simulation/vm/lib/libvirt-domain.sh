@@ -98,6 +98,7 @@ print(f"""<network>
   <name>{name}</name>
   <forward mode='nat'/>
   <bridge name='{bridge_name}' stp='on' delay='0'/>
+  <domain name='{dns_domain}' localOnly='yes'/>
   <dns>
 {dns_hosts}
   </dns>
@@ -223,6 +224,46 @@ EOF
   chmod 0600 "$xml"
 }
 
+__vm_libvirt_write_seed_iso() {
+  local network_config rc seed_iso tmp_seed_iso work_dir
+  seed_iso="${1:?seed ISO required}"
+  work_dir="${2:?seed work dir required}"
+  network_config="${3:?network config required}"
+  tmp_seed_iso="$(mktemp "${seed_iso}.tmp.XXXXXX")" || return $?
+  if command -v cloud-localds >/dev/null 2>&1; then
+    cloud-localds --network-config="$network_config" "$tmp_seed_iso" \
+      "$work_dir/user-data" "$work_dir/meta-data" || {
+      rc=$?
+      rm -f "$tmp_seed_iso"
+      return "$rc"
+    }
+  elif command -v genisoimage >/dev/null 2>&1; then
+    (cd "$work_dir" && genisoimage -quiet -output "$tmp_seed_iso" -volid cidata -joliet -rock \
+      user-data meta-data network-config) || {
+      rc=$?
+      rm -f "$tmp_seed_iso"
+      return "$rc"
+    }
+  else
+    (cd "$work_dir" && mkisofs -quiet -output "$tmp_seed_iso" -volid cidata -joliet -rock \
+      user-data meta-data network-config) || {
+      rc=$?
+      rm -f "$tmp_seed_iso"
+      return "$rc"
+    }
+  fi
+  chmod "$LF_MODE_PUBLIC_FILE" "$tmp_seed_iso" || {
+    rc=$?
+    rm -f "$tmp_seed_iso"
+    return "$rc"
+  }
+  mv -f "$tmp_seed_iso" "$seed_iso" || {
+    rc=$?
+    rm -f "$tmp_seed_iso"
+    return "$rc"
+  }
+}
+
 __vm_libvirt_render_seed_media() {
   local machine work_dir user_data meta_data network_config seed_iso mac public_key dns_gateway
   machine="${1:?machine required}"
@@ -272,17 +313,8 @@ ethernets:
       search:
         - $HARNESS_LDAP_DOMAIN
 EOF
-  if command -v cloud-localds >/dev/null 2>&1; then
-    cloud-localds --network-config="$network_config" "$seed_iso" "$user_data" "$meta_data"
-  elif command -v genisoimage >/dev/null 2>&1; then
-    (cd "$work_dir" && genisoimage -quiet -output "$seed_iso" -volid cidata -joliet -rock \
-      user-data meta-data network-config)
-  else
-    (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
-      user-data meta-data network-config)
-  fi
   chmod "$LF_MODE_PRIVATE_FILE" "$user_data" "$meta_data" "$network_config"
-  chmod "$LF_MODE_PUBLIC_FILE" "$seed_iso"
+  __vm_libvirt_write_seed_iso "$seed_iso" "$work_dir" "$network_config"
 }
 
 __vm_libvirt_render_bake_seed_media() {
@@ -333,22 +365,13 @@ ethernets:
       search:
         - $HARNESS_LDAP_DOMAIN
 EOF
-  if command -v cloud-localds >/dev/null 2>&1; then
-    cloud-localds --network-config="$network_config" "$seed_iso" "$user_data" "$meta_data"
-  elif command -v genisoimage >/dev/null 2>&1; then
-    (cd "$work_dir" && genisoimage -quiet -output "$seed_iso" -volid cidata -joliet -rock \
-      user-data meta-data network-config)
-  else
-    (cd "$work_dir" && mkisofs -quiet -output "$seed_iso" -volid cidata -joliet -rock \
-      user-data meta-data network-config)
-  fi
   chmod "$LF_MODE_PRIVATE_FILE" "$user_data" "$meta_data" "$network_config"
-  chmod "$LF_MODE_PUBLIC_FILE" "$seed_iso"
+  __vm_libvirt_write_seed_iso "$seed_iso" "$work_dir" "$network_config"
 }
 
 vm_libvirt_ensure_ssh_key() {
-  mkdir -p "$HARNESS_TARGET_SSH_DIR"
-  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_TARGET_SSH_DIR"
+  mkdir -p "$HARNESS_VM_SET_TARGET_SSH_DIR"
+  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_VM_SET_TARGET_SSH_DIR"
   if [ ! -f "$HARNESS_TARGET_SSH_IDENTITY_FILE" ]; then
     ssh-keygen -q -t ed25519 -N '' -f "$HARNESS_TARGET_SSH_IDENTITY_FILE"
   fi

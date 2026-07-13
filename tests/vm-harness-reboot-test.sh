@@ -49,3 +49,37 @@ if [ "$rc" -eq 0 ]; then
   exit 1
 fi
 grep -Fq 'Guest boot ID did not change after reboot: jenkins-agent' "$tmp_dir/fail.err"
+
+stub_bin="$tmp_dir/bin"
+mkdir -p "$stub_bin"
+cat >"$stub_bin/ssh" <<'STUB'
+#!/usr/bin/env bash
+printf '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n' >&2
+printf '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n' >&2
+printf '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n' >&2
+printf 'Host key verification failed.\n' >&2
+exit 255
+STUB
+chmod +x "$stub_bin/ssh"
+
+vm_ssh_wait_host() {
+  printf '192.168.126.3\n'
+}
+VM_OPERATOR_SSH_TIMEOUT_SECONDS=1
+VM_OPERATOR_SSH_POLL_SECONDS=1
+VM_OPERATOR_USER=ci-operator
+HARNESS_TARGET_SSH_IDENTITY_FILE="$tmp_dir/ci-operator"
+HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$tmp_dir/known_hosts"
+touch "$HARNESS_TARGET_SSH_IDENTITY_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+set +e
+PATH="$stub_bin:$PATH" vm_ssh_wait_ready bundle-factory >"$tmp_dir/ssh-ready.out" 2>"$tmp_dir/ssh-ready.err"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ]; then
+  printf 'SSH readiness must fail when host-key verification fails\n' >&2
+  exit 1
+fi
+grep -Fq 'Last SSH readiness error for bundle-factory (192.168.126.3):' "$tmp_dir/ssh-ready.err"
+grep -Fq 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$tmp_dir/ssh-ready.err"
+grep -Fq 'Host key verification failed.' "$tmp_dir/ssh-ready.err"
+grep -Fq 'Timed out waiting for target OS SSH on bundle-factory (192.168.126.3)' "$tmp_dir/ssh-ready.err"

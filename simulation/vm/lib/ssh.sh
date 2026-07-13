@@ -135,16 +135,23 @@ vm_ssh_wait_host() {
 }
 
 vm_ssh_wait_ready() {
-  local machine host deadline
+  local machine host deadline output
   machine="${1:?machine required}"
   host="$(vm_ssh_wait_host "$machine")"
+  output="$(mktemp)"
   deadline=$((SECONDS + VM_OPERATOR_SSH_TIMEOUT_SECONDS))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if ssh $(vm_ssh_common_options) "$VM_OPERATOR_USER@$host" 'printf ready' >/dev/null 2>&1; then
+    if ssh $(vm_ssh_common_options) "$VM_OPERATOR_USER@$host" 'printf ready' >"$output" 2>&1; then
+      rm -f "$output"
       return 0
     fi
     sleep "$VM_OPERATOR_SSH_POLL_SECONDS"
   done
+  if [ -s "$output" ]; then
+    printf 'Last SSH readiness error for %s (%s):\n' "$machine" "$host" >&2
+    tail -20 "$output" >&2 || true
+  fi
+  rm -f "$output"
   die "Timed out waiting for target OS SSH on $machine ($host)"
 }
 

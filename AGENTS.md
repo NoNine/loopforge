@@ -20,6 +20,39 @@ Do not add backward-compatibility guards or fallback paths to fix stale or
 broken state. Stale or broken state should fail clearly and be repaired
 through explicit cleanup, migration, or operator action.
 
+## Issue Resolution And Code Fixes
+
+Fix defects by proving and repairing the root cause at the layer that owns the
+broken contract. Do not add workaround paths that make callers tolerate a
+lower-layer defect.
+
+Procedure:
+
+1. Start from the observed failure: bounded log, evidence, failing test, or
+   runtime probe.
+2. Identify the failed contract and owning layer before editing.
+3. If the failing environment is accessible, debug it too. Start read-only; if
+   practical, prove causality with the smallest temporary owning-layer change.
+   Remote or shared mutation still requires explicit approval.
+4. Make the formal fix at the owning layer, keeping code readable and scoped.
+5. Add or update a focused regression test for the broken contract.
+6. Verify narrowly first, then broaden only for shared behavior.
+7. Report root cause, fix location, and verification.
+
+Existing broken environments are diagnostic evidence, not compatibility
+targets. Use them to prove root cause when useful, but keep the formal fix
+scoped to the owning contract for valid new state. Do not add repair paths,
+compatibility behavior, or recovery instructions for already-broken state
+unless the user explicitly asks for recovery.
+
+Do not call these root-cause fixes unless the contract requires them: larger
+timeouts, sleeps, retries, raw-IP DNS bypasses, lower-level state bypasses,
+stale-state fallback paths, service repair inside validation, or compatibility
+with broken generated state.
+
+Temporary environment changes may prove causality; they must not replace the
+formal code fix or become hidden recovery paths.
+
 ## Commit Messages
 
 Use standard Git-style commit messages. Treat these as hard requirements, not

@@ -251,10 +251,11 @@ generated/simulation/vm/<run-id>/
 | `vm-sets/<vm-set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | VM-set-local base image and mutable qcow2 machine volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
 | `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
 | `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
+| `vm-sets/<vm-set-id>/target-ssh/` | VM-set target SSH identity | Host-dominated | Target OS SSH private/public keypair seeded into reusable VM-set disks; removed only with the selected VM set |
 | Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, run markers, and manifest contract; rendered env and inventory files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
-| `host/target-ssh/` | Host-side target SSH material | Host-dominated | Target OS SSH identity and known-hosts material for VM control-plane access |
+| `host/target-ssh/` | Run-scoped target SSH trust state | Host-dominated | Target OS SSH known-hosts material for VM control-plane access during the selected run |
 | `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence, review-sensitive and redacted |
 | `host/logs/harness/` | Harness bounded log output | Host-dominated | VM harness command logs, review-sensitive and bounded |
 | `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |

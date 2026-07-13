@@ -163,3 +163,18 @@ grep -Fq -- '--yes prove-integration' "$calls"
 find "$HARNESS_EVIDENCE_DIR" -name 'configure-integration-integration-*.json' | grep -q .
 find "$HARNESS_EVIDENCE_DIR" -name 'validate-integration-integration-*.json' | grep -q .
 find "$HARNESS_EVIDENCE_DIR" -name 'prove-integration-integration-*.json' | grep -q .
+
+vm_set_verify_run_and_set() { die "forced integration phase failure"; }
+if HARNESS_TEST_INTEGRATION_HELPER="$helper" \
+  HARNESS_TEST_INTEGRATION_CALLS="$calls" \
+  vm_cmd_configure_integration >"$tmp_dir/configure-die.out" 2>&1; then
+  printf 'configure-integration must report nested die failures\n' >&2
+  exit 1
+fi
+grep -Fq 'configure-integration: fail' "$tmp_dir/configure-die.out"
+grep -Eq '^log=.*/configure-integration-[0-9]{8}T[0-9]{6}Z\.log$' \
+  "$tmp_dir/configure-die.out"
+grep -Eq '^evidence=.*/configure-integration-integration-[0-9]{8}T[0-9]{6}Z\.json$' \
+  "$tmp_dir/configure-die.out"
+configure_die_log="$(sed -n 's/^log=//p' "$tmp_dir/configure-die.out")"
+grep -Fq 'ERROR: forced integration phase failure' "$configure_die_log"

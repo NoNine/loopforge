@@ -8,11 +8,23 @@ run_id="vm-summary-$$"
 vm_set_id="summary-$$"
 fresh_run_id="vm-summary-fresh-$$"
 fresh_vm_set_id="summary-fresh-$$"
+create_die_run_id="vm-summary-create-die-$$"
+create_die_vm_set_id="summary-create-die-$$"
 generated_root="$repo_root/generated/simulation/vm"
-trap 'rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" "$generated_root/$fresh_run_id" "$generated_root/vm-sets/$fresh_vm_set_id"' EXIT
+cleanup() {
+  rm -rf "$tmp_dir" \
+    "$generated_root/$run_id" \
+    "$generated_root/vm-sets/$vm_set_id" \
+    "$generated_root/$fresh_run_id" \
+    "$generated_root/vm-sets/$fresh_vm_set_id" \
+    "$generated_root/$create_die_run_id" \
+    "$generated_root/vm-sets/$create_die_vm_set_id"
+}
+trap cleanup EXIT
 
 env_file="$tmp_dir/harness.env"
 fresh_env_file="$tmp_dir/harness-fresh.env"
+create_die_env_file="$tmp_dir/harness-create-die.env"
 fresh_workflow_calls="$tmp_dir/run-fresh-workflow.calls"
 resume_workflow_calls="$tmp_dir/run-resume-workflow.calls"
 stub_bin="$tmp_dir/bin"
@@ -58,6 +70,12 @@ sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$fresh_run_id/" \
   -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$fresh_vm_set_id/" \
   "$repo_root/simulation/vm/examples/vm.env.example" >"$fresh_env_file"
+
+sed \
+  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$create_die_run_id/" \
+  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$create_die_vm_set_id/" \
+  -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$tmp_dir/missing-base.img|" \
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$create_die_env_file"
 
 PATH="$stub_bin:$PATH" HARNESS_TEST_WORKFLOW_CALLS="$fresh_workflow_calls" \
   "$repo_root/simulation/vm/simulate.sh" --env "$fresh_env_file" run \
@@ -125,3 +143,40 @@ grep -Fq 'Target SSH' "$tmp_dir/status.out"
 grep -Fq 'Login accounts' "$tmp_dir/status.out"
 ! grep -Fq 'VM state' "$tmp_dir/status.out"
 ! grep -Fq 'Libvirt' "$tmp_dir/status.out"
+
+if PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" \
+  --env "$env_file" up >"$tmp_dir/up-fail.out" 2>&1; then
+  printf 'up must fail when the VM set marker is missing\n' >&2
+  exit 1
+fi
+grep -Fxq 'up: failed reason=vm-set-up' "$tmp_dir/up-fail.out"
+grep -Eq '^log=.*/up-[0-9]{8}T[0-9]{6}Z\.log$' "$tmp_dir/up-fail.out"
+grep -Eq '^evidence=.*/up-harness-[0-9]{8}T[0-9]{6}Z\.json$' "$tmp_dir/up-fail.out"
+up_fail_log="$(sed -n 's/^log=//p' "$tmp_dir/up-fail.out")"
+grep -Fq 'ERROR: Missing VM-set marker:' "$up_fail_log"
+
+if PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" \
+  --env "$env_file" reboot --role gerrit >"$tmp_dir/reboot-fail.out" 2>&1; then
+  printf 'reboot must fail when the VM set marker is missing\n' >&2
+  exit 1
+fi
+grep -Fxq 'reboot[gerrit]: failed' "$tmp_dir/reboot-fail.out"
+grep -Eq '^log=.*/reboot-gerrit-[0-9]{8}T[0-9]{6}Z\.log$' "$tmp_dir/reboot-fail.out"
+grep -Eq '^evidence=.*/reboot-harness-[0-9]{8}T[0-9]{6}Z\.json$' "$tmp_dir/reboot-fail.out"
+reboot_fail_log="$(sed -n 's/^log=//p' "$tmp_dir/reboot-fail.out")"
+grep -Fq 'ERROR: Missing VM-set marker:' "$reboot_fail_log"
+
+"$repo_root/simulation/vm/simulate.sh" --env "$create_die_env_file" init-run \
+  >"$tmp_dir/init-run-create-die.out"
+if PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" \
+  --env "$create_die_env_file" create >"$tmp_dir/create-die.out" 2>&1; then
+  printf 'create must fail when VM_BASE_IMAGE_PATH is missing\n' >&2
+  exit 1
+fi
+grep -Fxq 'create: failed reason=vm-set-create' "$tmp_dir/create-die.out"
+grep -Eq '^log=.*/create-[0-9]{8}T[0-9]{6}Z\.log$' "$tmp_dir/create-die.out"
+grep -Eq '^evidence=.*/create-harness-[0-9]{8}T[0-9]{6}Z\.json$' "$tmp_dir/create-die.out"
+[ "$(grep -Fc 'create: failed reason=vm-set-create' "$tmp_dir/create-die.out")" -eq 1 ]
+create_die_log="$(sed -n 's/^log=//p' "$tmp_dir/create-die.out")"
+[ -s "$create_die_log" ]
+grep -Fq 'ERROR: VM_BASE_IMAGE_PATH does not exist:' "$create_die_log"

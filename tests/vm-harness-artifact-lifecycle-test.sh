@@ -327,3 +327,16 @@ if vm_cmd_stage_artifacts gerrit >"$tmp_dir/stopped.out" 2>"$tmp_dir/stopped.err
   printf 'stage-artifacts must reject a stopped target VM\n' >&2
   exit 1
 fi
+
+vm_set_verify_run_and_set() { die "forced artifact phase failure"; }
+if vm_cmd_prepare_artifacts gerrit >"$tmp_dir/prepare-die.out" 2>&1; then
+  printf 'prepare-artifacts must report nested die failures\n' >&2
+  exit 1
+fi
+grep -Fq 'prepare-artifacts[gerrit]: failed' "$tmp_dir/prepare-die.out"
+grep -Eq '^log=.*/prepare-artifacts-gerrit-[0-9]{8}T[0-9]{6}Z\.log$' \
+  "$tmp_dir/prepare-die.out"
+grep -Eq '^evidence=.*/prepare-artifacts-gerrit-[0-9]{8}T[0-9]{6}Z\.json$' \
+  "$tmp_dir/prepare-die.out"
+prepare_die_log="$(sed -n 's/^log=//p' "$tmp_dir/prepare-die.out")"
+grep -Fq 'ERROR: forced artifact phase failure' "$prepare_die_log"

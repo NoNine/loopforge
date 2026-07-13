@@ -129,6 +129,10 @@ __vm_set_verify_teardown_ownership() {
   done
 }
 
+vm_set_verify_teardown_ownership() {
+  __vm_set_verify_teardown_ownership
+}
+
 __vm_set_verify_teardown_pool_volumes() {
   local actual allowed kind machine pool volume
   pool="${1:?pool required}"

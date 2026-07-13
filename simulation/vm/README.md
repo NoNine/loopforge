@@ -317,7 +317,7 @@ unit files, or persistent network files.
 Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The
 command uses the rendered `INTEGRATION_*_TARGET_SSH_*` values and the
-run-scoped target SSH key and known-hosts file:
+VM-set target SSH key plus run-scoped known-hosts file:
 
 ```bash
 simulation/vm/simulate.sh ssh --role gerrit
@@ -343,13 +343,18 @@ VM set state persists across runs until `destroy`. Run-scoped output is tied
 to `HARNESS_RUN_ID` and may be cleaned or retained independently. The baked
 base image is stored inside the selected VM set and is removed by `destroy`
 with the rest of that VM set.
+The target OS SSH identity is also VM-set state because its public key is
+seeded into reusable guest disks during cloud-init. SSH `known_hosts` trust
+state remains run-scoped and is recreated for each selected run.
 
 | Output kind | VM generated pattern |
 | --- | --- |
 | VM set registry and ownership metadata | `generated/simulation/vm/vm-sets/<vm-set-id>/` |
 | Libvirt XML, seed metadata, and baseline snapshot records | `generated/simulation/vm/vm-sets/<vm-set-id>/libvirt/` |
+| Target OS SSH identity | `generated/simulation/vm/vm-sets/<vm-set-id>/target-ssh/` |
 | Host-contributed run inputs | `generated/simulation/vm/<run-id>/host/` |
 | Private runtime input copies | `generated/simulation/vm/<run-id>/host/runtime-inputs/` |
+| Target OS SSH known hosts | `generated/simulation/vm/<run-id>/host/target-ssh/` |
 | Harness evidence | `generated/simulation/vm/<run-id>/host/evidence/harness/` |
 | Harness bounded logs | `generated/simulation/vm/<run-id>/host/logs/harness/` |
 | Integration evidence and logs | `generated/simulation/vm/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
@@ -399,10 +404,12 @@ the ownership-checked, selected-VM-set behavior of the M5 `destroy` command.
   debugging.
 - `clean` removes mutable generated state for the selected run only. It
   requires the selected VM set to be down and preserves exported artifacts,
-  evidence, and bounded logs. After `clean`, run `init-run` again before
-  later phases that require rendered runtime config.
+  evidence, bounded logs, and the VM-set target SSH identity. It removes
+  run-scoped SSH known-hosts material. After `clean`, run `init-run` again
+  before later phases that require rendered runtime config.
 - `destroy` permanently deletes the selected simulation-owned VM set and its
-  owned libvirt resources, including the VM-set-local base image.
+  owned libvirt resources, including the VM-set-local base image and target
+  SSH identity.
 
 `restore-baseline` validates the selected run marker, selected VM set marker,
 and baseline snapshot records before rollback. It must fail clearly rather
