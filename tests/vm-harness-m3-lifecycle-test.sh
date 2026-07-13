@@ -19,6 +19,7 @@ trap cleanup EXIT
 env_file="$tmp_dir/harness.env"
 stub_bin="$tmp_dir/bin"
 stub_state="$tmp_dir/state"
+virsh_calls="$tmp_dir/virsh.calls"
 mkdir -p "$stub_bin" "$stub_state"
 
 base_image="$tmp_dir/noble-server-cloudimg-amd64.img"
@@ -249,10 +250,36 @@ PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" ssh --role gerrit
 grep -Fq 'ci-operator@192.168.126.' "$stub_state/interactive-ssh.args"
 
-PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+: >"$virsh_calls"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_CALLS="$virsh_calls" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" down >"$tmp_dir/down.out"
 grep -Fxq "down: ok vm-set=$vm_set_id" "$tmp_dir/down.out"
 grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-gerrit.state"
+down_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'down-*.log' -print | sort | tail -1)"
+[ "$(grep -c '^shutdown-request ' "$down_log")" -eq 5 ]
+awk '
+  /^shutdown-request / { requests++; last_request = NR }
+  /^shutdown-state / && !first_state { first_state = NR }
+  END { exit !(requests == 5 && first_state && last_request < first_state) }
+' "$down_log"
+[ "$(grep -c '^shutdown ' "$virsh_calls")" -eq 5 ]
+! grep -Fq 'destroy ' "$virsh_calls"
+
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/up-after-down.out"
+grep -Fxq "up: ok vm-set=$vm_set_id ssh=ready" "$tmp_dir/up-after-down.out"
+
+stuck_domain="loopforge-vm-$run_id-$vm_set_id-gerrit"
+: >"$virsh_calls"
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_CALLS="$virsh_calls" \
+  VM_STUB_SHUTDOWN_STICKS="$stuck_domain" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" down >"$tmp_dir/down-fallback.out"
+grep -Fxq "down: ok vm-set=$vm_set_id" "$tmp_dir/down-fallback.out"
+fallback_down_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'down-*.log' -print | sort | tail -1)"
+grep -Fq "shutdown-force machine=gerrit domain=$stuck_domain method=destroy" "$fallback_down_log"
+grep -Fxq "destroy $stuck_domain" "$virsh_calls"
+[ "$(grep -c '^destroy ' "$virsh_calls")" -eq 1 ]
+grep -Fq 'shut off' "$stub_state/domains/$stuck_domain.state"
 
 if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   snapshot_dir="$generated_root/vm-sets/$vm_set_id/snapshots"

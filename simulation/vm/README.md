@@ -151,7 +151,7 @@ Phase and lifecycle commands:
 | `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
 | `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, then proves required guest services recovered before any later validation. It does not rerun configuration or validation phases implicitly. |
 | `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected VM set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
-| `down [--env FILE]` | Gracefully shuts down selected VM set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. A hard libvirt stop is a bounded recovery fallback, not the normal path. |
+| `down [--env FILE]` | Gracefully shuts down selected VM set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. It requests shutdown for all running domains before polling; if the set-wide bounded wait expires, a hard libvirt stop is used only for domains still running. |
 | `clean [--env FILE]` | Restores the selected VM set to its clean baseline snapshot and deletes only mutable generated runtime data for the selected run. It preserves exported artifacts, evidence, and logs. It does not delete VMs. |
 | `destroy [--env FILE] [--prune-cache]` | Permanently removes the selected simulation-owned VM set after validating ownership metadata. It undefines domains, removes owned storage, snapshots, seed media, and VM networks, and is the only VM command that deletes VM resources. With `--prune-cache`, it also attempts guarded removal of the associated baked base-image cache after VM-set deletion. |
 
@@ -215,7 +215,7 @@ VM simulation maps Loopforge commands onto libvirt/KVM state deliberately:
 | `create` | Define the reusable VM set, create owned networks/storage/seed media, boot only as needed for base initialization, and capture the clean baseline snapshot. |
 | `up` | Start defined VM domains and wait for control-plane readiness. |
 | `reboot` | Reboot guests from inside the OS to prove machine reboot behavior. |
-| `down` | Gracefully shut down running domains while retaining definitions, disks, and snapshots. |
+| `down` | Shut down running domains set-wide while retaining definitions, disks, and snapshots; hard-stop only domains that remain running after the bounded graceful wait. |
 | `clean` | Revert the selected VM set to the baseline snapshot and clean mutable run state. |
 | `destroy` | Undefine selected VM domains and remove owned storage, snapshots, seed media, and networks. With `--prune-cache`, remove the associated baked base-image cache only when no remaining VM set or libvirt disk depends on it. |
 
@@ -383,10 +383,12 @@ The dry run inventories every `loopforge-vm-*` domain, managed volume, pool,
 and network plus every `lf-*` bridge and prints the ordered removal actions
 without mutation. Actual cleanup requires root, deletes all matching libvirt
 resources through libvirt APIs before removing residual LoopForge bridges, and
-fails if any matching resource remains. It does not remove generated
-workspaces, logs, evidence, test images, or source cloud images. This is a
-host-wide recovery tool, not the ownership-checked, selected-VM-set behavior
-of the M5 `destroy` command.
+fails if any matching resource remains. If an inactive LoopForge directory
+pool still exists in libvirt but its target path has already been removed, the
+tool reports the missing target and undefines the empty pool without
+recreating the path. It does not remove generated workspaces, logs, evidence,
+test images, or source cloud images. This is a host-wide recovery tool, not
+the ownership-checked, selected-VM-set behavior of the M5 `destroy` command.
 
 `down`, `clean`, and `destroy` are deliberately separate:
 

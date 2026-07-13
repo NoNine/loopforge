@@ -6,6 +6,17 @@ if [ "${1:-}" = "-c" ]; then
 fi
 cmd="${1:-}"
 shift || true
+record_call() {
+  [ -z "${VM_STUB_CALLS:-}" ] || printf '%s\n' "$*" >>"$VM_STUB_CALLS"
+}
+domain_in_list() {
+  local needle item
+  needle="${1:?domain required}"
+  for item in ${VM_STUB_SHUTDOWN_STICKS:-}; do
+    [ "$item" != "$needle" ] || return 0
+  done
+  return 1
+}
 case "$cmd" in
   uri)
     printf 'qemu:///system\n'
@@ -187,10 +198,12 @@ case "$cmd" in
     ;;
   shutdown)
     domain="${1:?domain required}"
-    printf 'shut off\n' >"$state_dir/domains/$domain.state"
+    record_call "shutdown $domain"
+    domain_in_list "$domain" || printf 'shut off\n' >"$state_dir/domains/$domain.state"
     ;;
   destroy)
     domain="${1:?domain required}"
+    record_call "destroy $domain"
     printf 'shut off\n' >"$state_dir/domains/$domain.state"
     ;;
   undefine)

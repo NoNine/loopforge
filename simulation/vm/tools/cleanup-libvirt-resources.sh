@@ -92,18 +92,10 @@ list_active_pool_volumes() {
     awk 'NR > 2 && NF { print $1 }'
 }
 
-list_pool_volumes() {
-  local pool pool_type target
+list_inactive_directory_pool_volumes() {
+  local pool target
   pool="${1:?pool required}"
-  if pool_is_active "$pool"; then
-    list_active_pool_volumes "$pool"
-    return 0
-  fi
-  IFS=$'\t' read -r pool_type target < <(pool_type_and_target "$pool")
-  [ "$pool_type" = dir ] ||
-    die "Inactive LoopForge pool is not a directory pool: $pool"
-  [ -d "$target" ] ||
-    die "Inactive LoopForge pool target is missing: $pool ($target)"
+  target="${2:?pool target required}"
   find "$target" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort
 }
 
@@ -139,8 +131,31 @@ append_unique() {
   target_array+=("$value")
 }
 
+pool_has_missing_target() {
+  local pool spec spec_pool target
+  pool="${1:?pool required}"
+  for spec in "${missing_pool_target_specs[@]}"; do
+    IFS=$'\t' read -r spec_pool target <<<"$spec"
+    [ "$spec_pool" != "$pool" ] || return 0
+  done
+  return 1
+}
+
+pool_missing_target_path() {
+  local pool spec spec_pool target
+  pool="${1:?pool required}"
+  for spec in "${missing_pool_target_specs[@]}"; do
+    IFS=$'\t' read -r spec_pool target <<<"$spec"
+    [ "$spec_pool" != "$pool" ] || {
+      printf '%s\n' "$target"
+      return 0
+    }
+  done
+  return 1
+}
+
 inventory_resources() {
-  local pool network bridge volume output
+  local pool pool_type target network bridge volume output
   output="$(list_matching_names list "$resource_prefix")" ||
     die "Unable to inventory LoopForge domains"
   domains=()
@@ -156,6 +171,7 @@ inventory_resources() {
   regular_pools=()
   base_pools=()
   volume_specs=()
+  missing_pool_target_specs=()
   bridges=()
 
   for pool in "${all_pools[@]}"; do
@@ -163,8 +179,21 @@ inventory_resources() {
       loopforge-vm-base-*) base_pools+=("$pool") ;;
       *) regular_pools+=("$pool") ;;
     esac
-    output="$(list_pool_volumes "$pool")" ||
-      die "Unable to inventory LoopForge pool volumes: $pool"
+    if pool_is_active "$pool"; then
+      output="$(list_active_pool_volumes "$pool")" ||
+        die "Unable to inventory LoopForge pool volumes: $pool"
+    else
+      IFS=$'\t' read -r pool_type target < <(pool_type_and_target "$pool")
+      [ "$pool_type" = dir ] ||
+        die "Inactive LoopForge pool is not a directory pool: $pool"
+      if [ -d "$target" ]; then
+        output="$(list_inactive_directory_pool_volumes "$pool" "$target")" ||
+          die "Unable to inventory LoopForge pool volumes: $pool"
+      else
+        missing_pool_target_specs+=("$pool"$'\t'"$target")
+        output=""
+      fi
+    fi
     while IFS= read -r volume; do
       [ -n "$volume" ] || continue
       volume_specs+=("$pool"$'\t'"$volume")
@@ -183,7 +212,7 @@ inventory_resources() {
 }
 
 print_dry_run() {
-  local domain state spec pool volume network bridge pool_state network_state
+  local domain state spec pool volume network bridge pool_state network_state target
   printf 'dry-run uri=%s\n' "$VM_LIBVIRT_URI"
   for domain in "${domains[@]}"; do
     state="$(domain_state "$domain")"
@@ -196,7 +225,12 @@ print_dry_run() {
   for pool in "${regular_pools[@]}" "${base_pools[@]}"; do
     pool_state=inactive
     pool_is_active "$pool" && pool_state=running
-    [ "$pool_state" = running ] || printf 'would-start-pool name=%s\n' "$pool"
+    if pool_has_missing_target "$pool"; then
+      target="$(pool_missing_target_path "$pool")"
+      printf 'missing-pool-target pool=%s path=%s\n' "$pool" "$target"
+    elif [ "$pool_state" != running ]; then
+      printf 'would-start-pool name=%s\n' "$pool"
+    fi
     for spec in "${volume_specs[@]}"; do
       IFS=$'\t' read -r spec_pool volume <<<"$spec"
       [ "$spec_pool" = "$pool" ] || continue
@@ -243,8 +277,17 @@ remove_domains() {
 }
 
 remove_pool() {
-  local pool spec spec_pool volume expected actual
+  local pool spec spec_pool volume expected actual target
   pool="${1:?pool required}"
+  if pool_has_missing_target "$pool"; then
+    pool_is_active "$pool" &&
+      die "Pool state changed before cleanup: $pool"
+    target="$(pool_missing_target_path "$pool")"
+    printf 'missing-pool-target pool=%s path=%s\n' "$pool" "$target"
+    virsh -c "$VM_LIBVIRT_URI" pool-undefine "$pool" >/dev/null
+    printf 'removed pool=%s\n' "$pool"
+    return 0
+  fi
   if ! pool_is_active "$pool"; then
     virsh -c "$VM_LIBVIRT_URI" pool-start "$pool" >/dev/null
   fi

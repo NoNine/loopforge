@@ -157,37 +157,95 @@ vm_libvirt_start_set() {
   done
 }
 
-__vm_libvirt_shutdown_machine() {
-  local machine domain deadline state
-  machine="${1:?machine required}"
-  domain="$(vm_libvirt_domain_name "$machine")"
-  vm_libvirt_machine_exists "$machine" || return 0
-  state="$(vm_libvirt_domain_state "$machine")"
-  case "$state" in
-    running)
-      virsh -c "$VM_LIBVIRT_URI" shutdown "$domain" >/dev/null || true
-      deadline=$((SECONDS + VM_OPERATOR_SSH_TIMEOUT_SECONDS))
-      while [ "$SECONDS" -lt "$deadline" ]; do
-        state="$(vm_libvirt_domain_state "$machine")"
-        case "$state" in
-          'shut off'|shut*) return 0 ;;
-        esac
-        sleep "$VM_OPERATOR_SSH_POLL_SECONDS"
-      done
-      die "Timed out waiting for VM domain shutdown: $domain"
-      ;;
-    'shut off'|shut*|missing) ;;
-    *)
-      die "VM domain $machine is in unexpected state for down: $state"
-      ;;
-  esac
-}
-
 vm_libvirt_shutdown_set() {
-  local machine
+  local machine domain state deadline stopped forced
+  local -a requested pending next_pending
+  requested=()
+  pending=()
+  stopped=0
+  forced=0
+
   for machine in "${vm_machines[@]}"; do
-    __vm_libvirt_shutdown_machine "$machine"
+    domain="$(vm_libvirt_domain_name "$machine")"
+    vm_libvirt_machine_exists "$machine" || {
+      printf 'shutdown-skip machine=%s domain=%s state=missing\n' "$machine" "$domain"
+      continue
+    }
+    state="$(vm_libvirt_domain_state "$machine")"
+    case "$state" in
+      running)
+        printf 'shutdown-request machine=%s domain=%s method=graceful\n' "$machine" "$domain"
+        virsh -c "$VM_LIBVIRT_URI" shutdown "$domain" >/dev/null || true
+        requested+=("$machine")
+        ;;
+      'shut off'|shut*)
+        printf 'shutdown-skip machine=%s domain=%s state=shut-off\n' "$machine" "$domain"
+        ;;
+      missing)
+        printf 'shutdown-skip machine=%s domain=%s state=missing\n' "$machine" "$domain"
+        ;;
+      *)
+        die "VM domain $machine is in unexpected state for down: $state"
+        ;;
+    esac
   done
+
+  [ "${#requested[@]}" -gt 0 ] || {
+    printf 'shutdown=ready stopped=0 forced=0\n'
+    return 0
+  }
+
+  pending=("${requested[@]}")
+  deadline=$((SECONDS + VM_OPERATOR_SSH_TIMEOUT_SECONDS))
+  while [ "${#pending[@]}" -gt 0 ] && [ "$SECONDS" -lt "$deadline" ]; do
+    next_pending=()
+    for machine in "${pending[@]}"; do
+      domain="$(vm_libvirt_domain_name "$machine")"
+      state="$(vm_libvirt_domain_state "$machine")"
+      printf 'shutdown-state machine=%s domain=%s state=%s\n' "$machine" "$domain" "$state"
+      case "$state" in
+        'shut off'|shut*|missing)
+          stopped=$((stopped + 1))
+          ;;
+        running)
+          next_pending+=("$machine")
+          ;;
+        *)
+          die "VM domain $machine is in unexpected state for down: $state"
+          ;;
+      esac
+    done
+    pending=("${next_pending[@]}")
+    [ "${#pending[@]}" -eq 0 ] && break
+    sleep "$VM_OPERATOR_SSH_POLL_SECONDS"
+  done
+
+  for machine in "${pending[@]}"; do
+    domain="$(vm_libvirt_domain_name "$machine")"
+    state="$(vm_libvirt_domain_state "$machine")"
+    case "$state" in
+      running)
+        printf 'shutdown-force machine=%s domain=%s method=destroy\n' "$machine" "$domain"
+        virsh -c "$VM_LIBVIRT_URI" destroy "$domain" >/dev/null || return $?
+        forced=$((forced + 1))
+        ;;
+      'shut off'|shut*|missing)
+        ;;
+      *)
+        die "VM domain $machine is in unexpected state for down: $state"
+        ;;
+    esac
+  done
+
+  for machine in "${pending[@]}"; do
+    domain="$(vm_libvirt_domain_name "$machine")"
+    state="$(vm_libvirt_domain_state "$machine")"
+    case "$state" in
+      'shut off'|shut*|missing) stopped=$((stopped + 1)) ;;
+      *) die "Failed to stop VM domain during down: $domain state=$state" ;;
+    esac
+  done
+  printf 'shutdown=ready stopped=%s forced=%s\n' "$stopped" "$forced"
 }
 
 vm_libvirt_machine_ip() {
