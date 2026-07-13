@@ -196,17 +196,18 @@ Host-wide Docker recovery is available as a separate operator tool:
 
 ```bash
 simulation/docker/tools/cleanup-docker-resources.sh --dry-run
-simulation/docker/tools/cleanup-docker-resources.sh
+simulation/docker/tools/cleanup-docker-resources.sh --destroy
 ```
 
 The dry run inventories LoopForge Docker simulation containers, Compose
 `harness` networks, and project-built images discoverable from Docker Compose
 labels plus exact project/service image names. It prints the ordered removal
-actions without mutation. Actual cleanup removes matching containers first,
-then networks, then project-built images, and fails if matching resources
-remain. It does not remove generated workspaces, bind-mounted data, base
-images, artifacts, evidence, or logs. This is a host-wide recovery tool, not
-the selected-run behavior of `down`, `clean`, or `destroy`.
+actions without mutation. No-option execution is also a dry run. Actual
+cleanup uses `--destroy`, removes matching containers first, then networks,
+then project-built images, and fails if matching resources remain. It does not
+remove generated workspaces, bind-mounted data, base images, artifacts,
+evidence, or logs. This is a host-wide recovery tool, not the selected-run
+behavior of `down`, `clean`, or `destroy`.
 
 `down` and `clean` are deliberately separate. `down` maps to Docker Compose
 teardown and retains generated output for review. Docker bind mounts can leave

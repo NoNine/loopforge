@@ -299,14 +299,15 @@ same env defaults as `simulate.sh`, checks libvirt DNS, and can apply or undo
 runtime-only `systemd-resolved` link settings:
 
 ```bash
-simulation/vm/tools/configure-systemd-resolved.sh --check
+simulation/vm/tools/configure-systemd-resolved.sh --dry-run
 simulation/vm/tools/configure-systemd-resolved.sh --env FILE --apply
 simulation/vm/tools/configure-systemd-resolved.sh --env FILE --revert
 ```
 
 If `--env FILE` is omitted, the helper uses
 `simulation/vm/examples/vm.env.example`, matching the VM simulation CLI
-default. `--check` is read-only and does not require privileged access.
+default. No-option execution defaults to `--dry-run`; `--dry-run` is read-only
+and does not require privileged access.
 `--apply` and `--revert` require non-interactive sudo, fail fast when it is
 unavailable, and mutate only systemd-resolved's temporary per-link runtime
 state for the selected bridge. The helper does not edit `/etc/hosts`,
@@ -375,15 +376,16 @@ Host-wide libvirt recovery is available as a separate operator tool:
 
 ```bash
 simulation/vm/tools/cleanup-libvirt-resources.sh --dry-run
-sudo simulation/vm/tools/cleanup-libvirt-resources.sh
+sudo simulation/vm/tools/cleanup-libvirt-resources.sh --destroy
 ```
 
 The dry run inventories every `loopforge-vm-*` domain, managed volume, pool,
 and network plus every `lf-*` bridge and prints the ordered removal actions
-without mutation. Actual cleanup requires root, deletes all matching libvirt
-resources through libvirt APIs before removing residual LoopForge bridges, and
-fails if any matching resource remains. If an inactive LoopForge directory
-pool still exists in libvirt but its target path has already been removed, the
+without mutation. No-option execution is also a dry run. Actual cleanup uses
+`--destroy`, requires root, deletes all matching libvirt resources through
+libvirt APIs before removing residual LoopForge bridges, and fails if any
+matching resource remains. If an inactive LoopForge directory pool still
+exists in libvirt but its target path has already been removed, the
 tool reports the missing target and undefines the empty pool without
 recreating the path. It does not remove generated workspaces, logs, evidence,
 test images, or source cloud images. This is a host-wide recovery tool, not

@@ -402,7 +402,7 @@ require_doc_text simulation/vm/README.md \
   'host-wide recovery tool' \
   'VM README must distinguish host cleanup from selected VM-set destroy'
 require_doc_text simulation/vm/README.md \
-  'configure-systemd-resolved.sh --check' \
+  'configure-systemd-resolved.sh --dry-run' \
   'VM README must document the systemd-resolved split-DNS helper'
 require_doc_text simulation/vm/README.md \
   '`simulation/vm/examples/vm.env.example`, matching the VM simulation CLI' \

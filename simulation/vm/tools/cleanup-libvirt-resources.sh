@@ -5,22 +5,23 @@ set -euo pipefail
 VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 resource_prefix="loopforge-vm-"
 bridge_prefix="lf-"
-dry_run=0
-option_count=0
+mode=dry-run
+mode_option_count=0
 
 usage() {
   cat <<'USAGE'
 Usage:
-  simulation/vm/tools/cleanup-libvirt-resources.sh [--dry-run]
+  simulation/vm/tools/cleanup-libvirt-resources.sh [--dry-run|--destroy]
 
 Options:
   --dry-run  Print the resources and ordered cleanup actions without mutation.
+  --destroy  Remove matching LoopForge libvirt resources.
   -h, --help Show this help.
 
-With neither option nor sudo/root, this tool defaults to --dry-run. When run
-as root with no mode option, it permanently removes every
-LoopForge libvirt domain, volume, pool, network, and bridge from qemu:///system.
-It does not remove generated workspaces or source cloud images.
+With no mode option, this tool defaults to --dry-run. With --destroy, it
+permanently removes every LoopForge libvirt domain, volume, pool, network, and
+bridge from qemu:///system. It does not remove generated workspaces or source
+cloud images.
 USAGE
 }
 
@@ -37,8 +38,14 @@ parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --dry-run)
-        dry_run=1
-        option_count=$((option_count + 1))
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
+        mode=dry-run
+        ;;
+      --destroy)
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
+        mode=destroy
         ;;
       -h|--help)
         usage
@@ -364,14 +371,11 @@ main() {
   require_command find
   virsh -c "$VM_LIBVIRT_URI" uri >/dev/null ||
     die "Unable to query libvirt URI: $VM_LIBVIRT_URI"
-  if [ "$option_count" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
-    dry_run=1
-  fi
-  if [ "$dry_run" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
-    die "Root privilege is required; rerun: sudo $0"
+  if [ "$mode" = destroy ] && [ "$(id -u)" -ne 0 ]; then
+    die "Root privilege is required; rerun: sudo $0 --destroy"
   fi
   inventory_resources
-  if [ "$dry_run" -eq 1 ]; then
+  if [ "$mode" = dry-run ]; then
     print_dry_run
     return 0
   fi

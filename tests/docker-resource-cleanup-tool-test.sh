@@ -167,7 +167,11 @@ if grep -Eq 'foreign|ubuntu:24.04|unrelated|projA_default|noSource|no-source' "$
 fi
 [ ! -s "$mutation_log" ]
 
-run_tool >"$tmp_dir/cleanup.out"
+run_tool >"$tmp_dir/default-dry-run.out"
+grep -Fq 'dry-run: ok containers=3 networks=2 images=3' "$tmp_dir/default-dry-run.out"
+[ ! -s "$mutation_log" ]
+
+run_tool --destroy >"$tmp_dir/cleanup.out"
 grep -Fq 'cleanup: ok containers=3 networks=2 images=3' "$tmp_dir/cleanup.out"
 grep -Fxq 'container-rm c1' "$mutation_log"
 grep -Fxq 'container-rm c2' "$mutation_log"
@@ -194,13 +198,13 @@ grep -Fq $'ubuntu:24.04' "$state/images.tsv"
 grep -Fq $'i3\t<no value>\t<no value>\t<no value>\t<no value>\tforeignProj' "$state/images.tsv"
 grep -Fq $'i5\t<no value>\t<no value>\t<no value>\t<no value>\tnoSource' "$state/images.tsv"
 
-run_tool >"$tmp_dir/repeat.out"
+run_tool --destroy >"$tmp_dir/repeat.out"
 grep -Fq 'cleanup: ok containers=0 networks=0 images=0' "$tmp_dir/repeat.out"
 
 for failure in version ps container-inspect network-ls network-inspect images image-inspect \
   container-rm network-rm image-rm; do
   reset_state
-  if DOCKER_TOOL_FAIL="$failure" run_tool >"$tmp_dir/fail-$failure.out" 2>"$tmp_dir/fail-$failure.err"; then
+  if DOCKER_TOOL_FAIL="$failure" run_tool --destroy >"$tmp_dir/fail-$failure.out" 2>"$tmp_dir/fail-$failure.err"; then
     printf 'Docker cleanup tool must propagate failure: %s\n' "$failure" >&2
     exit 1
   fi
@@ -217,6 +221,7 @@ fi
 grep -Fq 'Unknown option: --unknown' "$tmp_dir/unknown.err"
 
 grep -Fq -- '--dry-run' < <("$tool" --help)
+grep -Fq -- '--destroy' < <("$tool" --help)
 if grep -Eq 'rm -rf|generated/simulation/docker' "$tool"; then
   printf 'Docker cleanup tool must not delete generated workspaces directly\n' >&2
   exit 1

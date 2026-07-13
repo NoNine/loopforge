@@ -6,22 +6,25 @@ tool_script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 docker_dir="$(CDPATH= cd -- "$tool_script_dir/.." && pwd)"
 repo_root="$(CDPATH= cd -- "$docker_dir/../.." && pwd)"
 compose_file="$docker_dir/compose.yaml"
-dry_run=0
+mode=dry-run
+mode_option_count=0
 known_services=(bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target)
 
 usage() {
   cat <<'USAGE'
 Usage:
-  simulation/docker/tools/cleanup-docker-resources.sh [--dry-run]
+  simulation/docker/tools/cleanup-docker-resources.sh [--dry-run|--destroy]
 
 Options:
   --dry-run  Print the resources and ordered cleanup actions without mutation.
+  --destroy  Remove matching LoopForge Docker simulation resources.
   -h, --help Show this help.
 
-Without --dry-run, this tool removes LoopForge Docker simulation containers,
-Compose harness networks, and project-built images discoverable from
-LoopForge ownership labels. It does not remove generated workspaces,
-bind-mounted data, base images, artifacts, logs, or evidence.
+With no mode option, this tool defaults to --dry-run. With --destroy, it
+removes LoopForge Docker simulation containers, Compose harness networks, and
+project-built images discoverable from LoopForge ownership labels. It does
+not remove generated workspaces, bind-mounted data, base images, artifacts,
+logs, or evidence.
 USAGE
 }
 
@@ -38,7 +41,14 @@ parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --dry-run)
-        dry_run=1
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
+        mode=dry-run
+        ;;
+      --destroy)
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
+        mode=destroy
         ;;
       -h|--help)
         usage
@@ -314,7 +324,7 @@ main() {
   require_command docker
   docker version >/dev/null 2>&1 || die "Unable to query Docker daemon"
   inventory_resources
-  if [ "$dry_run" -eq 1 ]; then
+  if [ "$mode" = dry-run ]; then
     print_dry_run
     return 0
   fi

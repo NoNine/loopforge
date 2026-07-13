@@ -112,22 +112,22 @@ sed \
   "$repo_root/simulation/vm/examples/vm.env.example" >"$env_file"
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \
-  "$helper" --env "$env_file" --check >"$tmp_dir/check.out"
-grep -Fq 'selected-network=loopforge-vm-resolved-test-resolved-set-net' "$tmp_dir/check.out"
-grep -Fq 'bridge=lf-test123' "$tmp_dir/check.out"
-grep -Fq 'gateway=192.168.126.1' "$tmp_dir/check.out"
-grep -Fq 'libvirt-dns=ready gerrit.example.test=192.168.126.5 jenkins-controller.example.test=192.168.126.6' "$tmp_dir/check.out"
-grep -Fq 'host-dns=unresolved gerrit.example.test=unresolved jenkins-controller.example.test=unresolved' "$tmp_dir/check.out"
-grep -Fq 'systemd-resolved[check]: ok mode=check' "$tmp_dir/check.out"
+  "$helper" --env "$env_file" --dry-run >"$tmp_dir/dry-run.out"
+grep -Fq 'selected-network=loopforge-vm-resolved-test-resolved-set-net' "$tmp_dir/dry-run.out"
+grep -Fq 'bridge=lf-test123' "$tmp_dir/dry-run.out"
+grep -Fq 'gateway=192.168.126.1' "$tmp_dir/dry-run.out"
+grep -Fq 'libvirt-dns=ready gerrit.example.test=192.168.126.5 jenkins-controller.example.test=192.168.126.6' "$tmp_dir/dry-run.out"
+grep -Fq 'host-dns=unresolved gerrit.example.test=unresolved jenkins-controller.example.test=unresolved' "$tmp_dir/dry-run.out"
+grep -Fq 'systemd-resolved: dry-run ok' "$tmp_dir/dry-run.out"
 [ ! -f "$stub_state/sudo.calls" ]
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" VM_TEST_HOST_DNS=ready \
-  "$helper" --env "$env_file" --check >"$tmp_dir/check-ready.out"
-grep -Fq 'host-dns=ready gerrit.example.test=192.168.126.5 jenkins-controller.example.test=192.168.126.6' "$tmp_dir/check-ready.out"
+  "$helper" --env "$env_file" --dry-run >"$tmp_dir/dry-run-ready.out"
+grep -Fq 'host-dns=ready gerrit.example.test=192.168.126.5 jenkins-controller.example.test=192.168.126.6' "$tmp_dir/dry-run-ready.out"
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" VM_TEST_HOST_DNS=mismatch \
-  "$helper" --env "$env_file" --check >"$tmp_dir/check-mismatch.out"
-grep -Fq 'host-dns=mismatch gerrit.example.test=192.168.126.55 jenkins-controller.example.test=192.168.126.66' "$tmp_dir/check-mismatch.out"
+  "$helper" --env "$env_file" --dry-run >"$tmp_dir/dry-run-mismatch.out"
+grep -Fq 'host-dns=mismatch gerrit.example.test=192.168.126.55 jenkins-controller.example.test=192.168.126.66' "$tmp_dir/dry-run-mismatch.out"
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \
   "$helper" --apply --env "$env_file" >"$tmp_dir/apply.out"
@@ -156,5 +156,13 @@ if [ -f "$stub_state/sudo.calls" ] && grep -Fq 'sudo-run' "$stub_state/sudo.call
 fi
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \
-  "$helper" --check >"$tmp_dir/default-env.out"
+  "$helper" >"$tmp_dir/default-env.out"
 grep -Fq 'selected-network=loopforge-vm-manual-default-net' "$tmp_dir/default-env.out"
+grep -Fq 'systemd-resolved: dry-run ok' "$tmp_dir/default-env.out"
+
+if PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \
+  "$helper" --env "$env_file" --check >"$tmp_dir/check-rejected.out" 2>&1; then
+  printf 'systemd-resolved helper must reject --check\n' >&2
+  exit 1
+fi
+grep -Fq 'Unknown option: --check' "$tmp_dir/check-rejected.out"

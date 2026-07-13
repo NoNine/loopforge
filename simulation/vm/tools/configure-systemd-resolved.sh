@@ -16,19 +16,20 @@ script_dir="$vm_dir"
 . "$vm_lib_dir/config.sh"
 . "$vm_lib_dir/libvirt.sh"
 
-mode=check
+mode=dry-run
+mode_option_count=0
 
 usage() {
   cat <<'USAGE'
 Usage:
-  simulation/vm/tools/configure-systemd-resolved.sh [--env FILE] [--check|--apply|--revert]
+  simulation/vm/tools/configure-systemd-resolved.sh [--env FILE] [--dry-run|--apply|--revert]
 
 Options:
-  --env FILE  Harness env file. Defaults to simulation/vm/examples/vm.env.example.
-  --check     Inspect selected VM DNS readiness without mutation. This is the default.
-  --apply     Configure temporary systemd-resolved split DNS for the selected VM bridge.
-  --revert    Revert temporary systemd-resolved settings for the selected VM bridge.
-  -h, --help  Show this help.
+  --env FILE Harness env file. Defaults to simulation/vm/examples/vm.env.example.
+  --dry-run  Inspect selected VM DNS readiness without mutation. This is the default.
+  --apply    Configure temporary systemd-resolved split DNS for the selected VM bridge.
+  --revert   Revert temporary systemd-resolved settings for the selected VM bridge.
+  -h, --help Show this help.
 
 This helper never edits /etc/hosts, /etc/resolv.conf, NetworkManager,
 dnsmasq, systemd unit files, or persistent network configuration.
@@ -49,15 +50,21 @@ parse_args() {
         [ -n "$HARNESS_ENV_FILE" ] || die "--env requires a file"
         shift
         ;;
-      --check)
-        mode=check
+      --dry-run)
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
+        mode=dry-run
         shift
         ;;
       --apply)
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
         mode=apply
         shift
         ;;
       --revert)
+        mode_option_count=$((mode_option_count + 1))
+        [ "$mode_option_count" -le 1 ] || die "Choose only one mode option"
         mode=revert
         shift
         ;;
@@ -207,8 +214,8 @@ main() {
   resolve_selected_network
   print_dns_status
   case "$mode" in
-    check)
-      print_command_summary systemd-resolved check "ok mode=check"
+    dry-run)
+      print_command_summary systemd-resolved "" "dry-run ok"
       ;;
     apply)
       apply_split_dns

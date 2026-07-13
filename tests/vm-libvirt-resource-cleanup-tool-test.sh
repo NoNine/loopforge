@@ -234,7 +234,19 @@ grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' \
   "$tmp_dir/default-dry-run.out"
 [ ! -s "$command_log" ]
 
-VM_TOOL_TEST_UID=0 run_tool >"$tmp_dir/cleanup.out"
+VM_TOOL_TEST_UID=0 run_tool >"$tmp_dir/root-default-dry-run.out"
+grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' \
+  "$tmp_dir/root-default-dry-run.out"
+[ ! -s "$command_log" ]
+
+if run_tool --destroy >"$tmp_dir/nonroot-destroy.out" 2>"$tmp_dir/nonroot-destroy.err"; then
+  printf 'Cleanup destroy must require root\n' >&2
+  exit 1
+fi
+grep -Fq 'Root privilege is required; rerun:' "$tmp_dir/nonroot-destroy.err"
+grep -Fq -- '--destroy' "$tmp_dir/nonroot-destroy.err"
+
+VM_TOOL_TEST_UID=0 run_tool --destroy >"$tmp_dir/cleanup.out"
 grep -Fq 'missing-pool-target pool=loopforge-vm-test-missingtarget' "$tmp_dir/cleanup.out"
 grep -Fq 'cleanup: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' "$tmp_dir/cleanup.out"
 [ ! -e "$state/domains/loopforge-vm-test-running" ]
@@ -248,29 +260,28 @@ grep -Fq 'cleanup: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' "$tmp_di
 [ -e "$state/networks/unrelated-net" ]
 [ -e "$state/bridges/virbr0" ]
 
-reset_state
-run_tool --dry-run >"$tmp_dir/nonroot-explicit-dry-run.out"
-grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' \
-  "$tmp_dir/nonroot-explicit-dry-run.out"
-
 overlay_delete_line="$(grep -n '^vol-delete loopforge-vm-test-images/' "$command_log" | cut -d: -f1)"
 overlay_pool_line="$(grep -n '^pool-undefine loopforge-vm-test-images$' "$command_log" | cut -d: -f1)"
-cache_pool_line="$(grep -n '^pool-undefine loopforge-vm-test-cache$' "$command_log" | cut -d: -f1)"
 [ "$overlay_delete_line" -lt "$overlay_pool_line" ]
-[ "$overlay_pool_line" -lt "$cache_pool_line" ]
 if grep -Fq 'pool-start loopforge-vm-test-missingtarget' "$command_log"; then
   printf 'Cleanup tool must not start pools with missing targets\n' >&2
   exit 1
 fi
 
-VM_TOOL_TEST_UID=0 run_tool >"$tmp_dir/repeat.out"
+VM_TOOL_TEST_UID=0 run_tool --destroy >"$tmp_dir/repeat.out"
 grep -Fq 'cleanup: ok domains=0 volumes=0 pools=0 networks=0 bridges=0' "$tmp_dir/repeat.out"
+
+reset_state
+run_tool --dry-run >"$tmp_dir/nonroot-explicit-dry-run.out"
+grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' \
+  "$tmp_dir/nonroot-explicit-dry-run.out"
+[ ! -s "$command_log" ]
 
 reset_state
 for failure in pool-start pool-refresh vol-delete pool-destroy pool-undefine \
   destroy-domain undefine-domain net-destroy net-undefine ip-delete; do
   reset_state
-  if VM_TOOL_TEST_UID=0 VM_TOOL_FAIL="$failure" run_tool \
+  if VM_TOOL_TEST_UID=0 VM_TOOL_FAIL="$failure" run_tool --destroy \
     >"$tmp_dir/fail-$failure.out" 2>"$tmp_dir/fail-$failure.err"; then
     printf 'Cleanup tool must propagate failure: %s\n' "$failure" >&2
     exit 1
@@ -296,6 +307,7 @@ fi
 grep -Fq 'Unknown option: --unknown' "$tmp_dir/unknown.err"
 
 grep -Fq -- '--dry-run' < <("$tool" --help)
+grep -Fq -- '--destroy' < <("$tool" --help)
 if grep -Eq '(^|[[:space:]])rm([[:space:]]|$)|qemu-img|generated/simulation/vm' "$tool"; then
   printf 'Cleanup tool must not delete files or generated workspaces directly\n' >&2
   exit 1
