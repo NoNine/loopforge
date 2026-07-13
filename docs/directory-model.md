@@ -167,9 +167,10 @@ root.
 Backup snapshots are review artifacts. Cleanup must not convert active
 target-dominated outputs into host-owned outputs in place; it may copy them
 into retained host-owned review locations before clearing active runtime
-directories. Layer-specific cleanup may remove mutable generated state, stop
-containers, roll back VM snapshots, or delete selected-run scratch, but it must
-not silently discard retained evidence, logs, or exported artifacts.
+directories. Layer-specific lifecycle commands may remove mutable generated
+state, stop containers, restore VM snapshots, or delete selected-run scratch,
+but they must not silently discard retained evidence, logs, or exported
+artifacts.
 
 ## Artifact Extraction Paths
 

@@ -53,10 +53,11 @@ Phases:
   validate-integration
   prove-integration
   reboot [--role <gerrit|jenkins-controller|jenkins-agent>|--all]
-	  audit-state
-	  down
-	  clean
-	  destroy
+  audit-state
+  down
+  restore-baseline
+  clean
+  destroy
 
 Options:
   --env FILE        Harness env file for bootstrap and init-run.
@@ -239,6 +240,11 @@ main() {
       shift
       parse_env_only_args "$@"
       "vm_cmd_$command_name"
+      ;;
+    restore-baseline)
+      shift
+      parse_env_only_args "$@"
+      vm_cmd_restore_baseline
       ;;
     destroy)
       shift

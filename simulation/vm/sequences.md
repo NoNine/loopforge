@@ -346,6 +346,23 @@ sequenceDiagram
   LC-->>CLI: compact down summary
 ```
 
+## restore-baseline
+
+```mermaid
+sequenceDiagram
+  participant CLI as simulate.sh
+  participant LC as lifecycle.sh
+  participant CFG as config.sh
+  participant SET as vm-set.sh
+  participant SNAP as snapshots.sh
+
+  CLI->>LC: vm_cmd_restore_baseline(env)
+  LC->>CFG: vm_config_load_runtime()
+  LC->>SET: vm_set_verify_selected_ownership()
+  LC->>SNAP: vm_snapshots_restore()
+  LC-->>CLI: compact restore-baseline summary
+```
+
 ## clean
 
 ```mermaid
@@ -355,12 +372,13 @@ sequenceDiagram
   participant CFG as config.sh
   participant ST as state.sh
   participant SET as vm-set.sh
-  participant SNAP as snapshots.sh
+  participant LV as libvirt.sh
 
   CLI->>LC: vm_cmd_clean(env)
   LC->>CFG: vm_config_load_runtime()
-  LC->>SET: vm_set_verify_run_and_set()
-  LC->>SNAP: vm_snapshots_restore()
+  LC->>ST: vm_state_verify_run_marker()
+  LC->>SET: vm_set_verify_selected_ownership()
+  LC->>LV: vm_libvirt_require_set_shut_off(clean)
   LC->>ST: vm_state_clean_mutable_run_state()
   LC-->>CLI: compact clean summary
 ```

@@ -375,8 +375,11 @@ require_doc_text simulation/vm/README.md \
   '`reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS' \
   'VM README must document reboot behavior'
 require_doc_text simulation/vm/README.md \
-  '`clean` is destructive to guest disk changes made after the baseline snapshot' \
-  'VM README must document clean as snapshot rollback, not VM deletion'
+  '`restore-baseline` is destructive to guest disk changes made after the' \
+  'VM README must document restore-baseline as snapshot rollback, not VM deletion'
+require_doc_text simulation/vm/README.md \
+  '`clean [--env FILE]` | Requires the selected VM set to be down and deletes mutable generated runtime data' \
+  'VM README must document clean as generated-state cleanup only'
 require_doc_text simulation/vm/README.md \
   'Use `destroy` only when the reusable VM set should be permanently removed.' \
   'VM README must document destroy as permanent VM-set removal'
@@ -452,14 +455,14 @@ require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
   '| M4 | Add `tests/vm-harness-ldap-seed-test.sh`; verify role OS dependency baseline readiness' \
   'Step 13 M4 must prove role OS dependencies and LDAP before baseline snapshot'
 require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  '| M5 | Run `clean`, `destroy`, and `audit-state`; verify rollback' \
-  'Step 13 M5 must perform clean/destroy after baseline prerequisites'
+  '| M5 | Run `restore-baseline`, `clean`, `destroy`, and `audit-state`; verify rollback' \
+  'Step 13 M5 must perform restore/clean/destroy after baseline prerequisites'
 require_doc_text simulation/vm/design.md \
   '| M4 Baseline prerequisites: role OS dependencies and LDAP proof |' \
   'VM design M4 must own baseline prerequisites'
 require_doc_text simulation/vm/design.md \
-  '| M5 Baseline snapshot, clean rollback, and destroy |' \
-  'VM design M5 must own baseline snapshot rollback and destroy'
+  '| M5 Baseline snapshot, restore, clean, and destroy |' \
+  'VM design M5 must own baseline snapshot restore, clean, and destroy'
 require_doc_text simulation/vm/design.md \
   'simulation/vm/libvirt-refactor.md`' \
   'VM design must name the accepted libvirt refactor companion'

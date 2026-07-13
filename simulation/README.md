@@ -175,11 +175,10 @@ simulation steps.
 ## Cleanup And Recovery
 
 Simulation cleanup is manual and conservative. Cleanup commands remove
-or reset mutable generated runtime state for the selected run while
-preserving exported artifact archives, evidence, and logs.
-Layer-specific cleanup commands may additionally stop containers, roll
-back VMs, destroy selected VM sets, or use retained output backup
-snapshots, but they must not silently discard review evidence.
+mutable generated runtime state for the selected run while preserving
+exported artifact archives, evidence, and logs. Lifecycle commands that stop,
+reset, or destroy backend resources are explicit and layer-owned; they must
+not silently discard review evidence.
 
 Never repair stale or inconsistent simulation state in place. Lifecycle
 commands must fail clearly when selected generated state, container bind
@@ -192,15 +191,43 @@ Docker recovery uses `down` or `clean` for the selected run and a fresh
 cleanup for selected project-built images. Docker host-wide cleanup is a
 separate operator recovery path for Compose-labeled LoopForge containers,
 networks, and project-built images; it is not selected-run cleanup. VM
-recovery uses `down`, `clean`, or `destroy` for the selected VM set and run;
-when resource identity is suspect, select both a fresh `HARNESS_RUN_ID` and a
-fresh `LOOPFORGE_VM_SET_ID` for follow-up validation. VM host-wide libvirt
-cleanup is also a separate operator recovery path and is not selected-run
-cleanup.
+recovery uses `down`, `restore-baseline`, `clean`, or `destroy` for the
+selected VM set and run; when resource identity is suspect, select both a
+fresh `HARNESS_RUN_ID` and a fresh `LOOPFORGE_VM_SET_ID` for follow-up
+validation. VM host-wide libvirt cleanup is also a separate operator recovery
+path and is not selected-run cleanup.
 
 `audit-state` is read-only inspection. `run`, role phases, integration
 phases, and verification commands must not call cleanup, teardown,
 destruction, or recovery implicitly.
+
+### Docker And VM Lifecycle Mapping
+
+Docker and VM simulation use different backend resources, but their lifecycle
+commands preserve the same review and recovery boundaries:
+
+| Concern | Docker simulation | VM simulation | Lifecycle meaning |
+| --- | --- | --- | --- |
+| External base artifact | Ubuntu/base Docker image | Source Ubuntu cloud image | External input or cache, not selected simulation ownership. |
+| Reusable simulation artifact | Project-built Docker images | VM-set-local baked base image and baseline snapshots | Created or verified by `create`; removed by `destroy`. |
+| Runtime definition | Compose service/container definition | Libvirt domain definition | Docker derives it from Compose; VM defines it in `create` and undefines it in `destroy`. |
+| Runtime instance | Container process/runtime | Running libvirt domain | `up` starts; `down` stops. |
+| Persistent runtime filesystem | Container writable layer plus bind mounts | Per-machine VM disks | Docker `down` removes container writable layers and preserves bind mounts; VM `down` preserves disks. |
+| Fresh runtime from reusable artifact | Recreated containers from project images | VM disks restored from baseline snapshots | Docker gets fresh container layers from `up`; VM uses `restore-baseline` after `down`. |
+| Generated host-side state | `generated/simulation/docker/<run-id>/` bind-mounted state | `generated/simulation/vm/<run-id>/` rendered inputs, SSH material, markers, logs, and evidence | Preserved by `down`; removed by `clean` except retained review output. |
+| Clean generated state | `clean` removes mutable generated run data | `clean` removes mutable generated run data | Does not reset Docker images or VM disks. |
+| Reset durable runtime state | Usually not needed for container writable layers; bind mounts still require `clean` | `restore-baseline` resets VM disks to the clean baseline snapshot | Must happen after `down`; does not clean generated state. |
+| Remove reusable artifacts/resources | `destroy` removes selected project-built images | `destroy` removes the selected VM set: domains, disks, baked base image, seed media, networks, and metadata | Requires the runtime to be stopped or removed first. |
+
+| Goal | Docker sequence | VM sequence |
+| --- | --- | --- |
+| Start | `up` | `up` |
+| Stop | `down` | `down` |
+| Restart without cleaning generated state | `up -> down -> up` | `up -> down -> up` |
+| Fresh runtime filesystem | `up -> down -> up` | `up -> down -> restore-baseline -> up` |
+| Clean generated host-side state | `down -> clean` | `down -> clean` |
+| Full rerun-oriented reset | `down -> clean -> init-run -> up` | `down -> restore-baseline -> clean -> init-run -> up` |
+| Remove reusable backend artifacts | `down -> destroy` | `down -> destroy` |
 
 ## Shared Command Semantics
 
@@ -225,7 +252,8 @@ When a layer uses these command names, the shared simulation semantics are:
 | `prove-integration` | Active end-to-end trigger proof after matching validation passed. |
 | `audit-state` | Explicit read-only generated-state and environment consistency inspection. |
 | `down` | Stop the selected simulation environment while retaining review output. |
-| `clean` | Reset mutable selected-run state while preserving retained artifacts, evidence, and logs. |
+| `restore-baseline` | Layer-specific durable runtime reset outside normal checkpoint progression, such as VM guest disk rollback to a clean baseline snapshot. |
+| `clean` | Remove mutable selected-run generated state while preserving retained artifacts, evidence, and logs. |
 | `destroy` | Layer-specific destructive cleanup outside normal checkpoint progression, such as Docker project-built image removal or VM resource deletion. |
 
 Layers may add simulation-specific lifecycle commands, such as VM `reboot`,

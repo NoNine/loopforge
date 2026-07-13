@@ -154,10 +154,11 @@ role-local setup, role-local validation, shared integration setup, cross-role
 validation, end-to-end trigger verification, and evidence audit.
 
 Simulation lifecycle and convenience commands such as `up`, `create`,
-`status`, `ssh`, `audit-state`, `reboot`, `down`, `clean`, and `destroy` are
-outside the checkpoint progression unless a layer README explicitly ties one
-of them to a checkpoint. These commands must not silently rerun earlier
-phases or claim checkpoint success without checkpoint evidence.
+`status`, `ssh`, `audit-state`, `reboot`, `down`, `restore-baseline`,
+`clean`, and `destroy` are outside the checkpoint progression unless a layer
+README explicitly ties one of them to a checkpoint. These commands must not
+silently rerun earlier phases or claim checkpoint success without checkpoint
+evidence.
 
 For Docker simulation, `down` and `clean` are the only commands allowed to
 recover from stale existing containers. Other commands must report
@@ -166,12 +167,14 @@ images only; it is not container or generated-state recovery.
 `simulation/docker/README.md` owns the detailed Docker generated-state,
 stale-container, image lifecycle, and cleanup rules.
 
-For VM simulation, `down`, `clean`, and `destroy` are the only commands
-allowed to recover from inconsistent VM lifecycle state. Other commands must
-report inconsistent state and stop. `clean` must preserve review artifacts
-and must not delete the reusable VM set. Only `destroy` removes
-simulation-owned VM resources. This includes the selected VM set's local baked
-base image.
+For VM simulation, `down`, `restore-baseline`, `clean`, and `destroy` are the
+only commands allowed to recover from inconsistent VM lifecycle state. Other
+commands must report inconsistent state and stop. `restore-baseline` resets
+guest disks to the selected VM set's clean baseline snapshot only after the VM
+set is down. `clean` removes mutable generated run state only, must preserve
+review artifacts, and must not delete the reusable VM set. Only `destroy`
+removes simulation-owned VM resources. This includes the selected VM set's
+local baked base image.
 
 ## Evidence Obligations
 

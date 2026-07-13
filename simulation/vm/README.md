@@ -24,10 +24,10 @@ VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
 mechanics only; VM lifecycle and transport stay in the VM harness. VM-specific
 libvirt/KVM domains, VM sets, snapshots, guest reboot, guest SSH readiness,
-guest-owned NFS-backed shared storage, and `create`/`clean`/`destroy` behavior
-must not copy Docker backend assumptions such as Compose project names, Docker
-service names, Docker bind-mount checks, loopback port ownership, or Docker
-transfer waivers.
+guest-owned NFS-backed shared storage, and `create`/`restore-baseline`/
+`clean`/`destroy` behavior must not copy Docker backend assumptions such as
+Compose project names, Docker service names, Docker bind-mount checks,
+loopback port ownership, or Docker transfer waivers.
 
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
@@ -129,7 +129,7 @@ Composite commands:
 
 | Command | Purpose |
 | --- | --- |
-| `run [--env FILE]` | Runs the normal VM simulation workflow for the selected run and VM set. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, `destroy`, or `audit-state`. |
+| `run [--env FILE]` | Runs the normal VM simulation workflow for the selected run and VM set. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
 | `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
@@ -151,7 +151,8 @@ Phase and lifecycle commands:
 | `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, then proves required guest services recovered before any later validation. It does not rerun configuration or validation phases implicitly. |
 | `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected VM set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
 | `down [--env FILE]` | Gracefully shuts down selected VM set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. It requests shutdown for all running domains before polling; if the set-wide bounded wait expires, a hard libvirt stop is used only for domains still running. |
-| `clean [--env FILE]` | Restores the selected VM set to its clean baseline snapshot and deletes only mutable generated runtime data for the selected run. It preserves exported artifacts, evidence, and logs. It does not delete VMs. |
+| `restore-baseline [--env FILE]` | Requires the selected VM set to be down, validates selected ownership and baseline snapshot records, and reverts guest disks to the clean baseline snapshot. It does not clean generated run state or delete VMs. |
+| `clean [--env FILE]` | Requires the selected VM set to be down and deletes mutable generated runtime data for the selected run, including rendered config, runtime input copies, target SSH material, checkpoint state, and the run marker. It preserves exported artifacts, evidence, and logs. It does not restore snapshots or delete VMs. |
 | `destroy [--env FILE]` | Permanently removes the selected simulation-owned VM set after validating ownership metadata when present, or by exact selected resource names during recovery. It undefines domains and removes owned machine disks, the VM-set-local base image, snapshots, seed media, VM networks, and VM-set metadata. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`. `--all`
@@ -215,20 +216,21 @@ VM simulation maps Loopforge commands onto libvirt/KVM state deliberately:
 | `up` | Start defined VM domains and wait for control-plane readiness. |
 | `reboot` | Reboot guests from inside the OS to prove machine reboot behavior. |
 | `down` | Shut down running domains set-wide while retaining definitions, disks, and snapshots; hard-stop only domains that remain running after the bounded graceful wait. |
-| `clean` | Revert the selected VM set to the baseline snapshot and clean mutable run state. |
+| `restore-baseline` | Revert stopped selected VM domains to the baseline snapshot without cleaning generated run state. |
+| `clean` | Clean mutable generated run state without reverting guest disks or deleting VM resources. |
 | `destroy` | Undefine selected VM domains and remove owned storage, the VM-set-local base image, snapshots, seed media, and networks. |
 
 Libvirt `destroy` is a hard power-off operation, not VM deletion. VM deletion
 belongs only to the Loopforge `destroy` command, which uses libvirt undefine
 and storage/network removal after validating selected VM-set ownership.
 
-`clean` is destructive to guest disk changes made after the baseline snapshot,
-but it must not remove the reusable VM set. The baseline snapshot is captured
-after OS, cloud-init, target OS control-plane readiness, SSH host-key capture,
-VM harness prerequisites, role OS dependency fulfillment, LDAP service
-readiness, and LDAP seed verification. It is captured before Loopforge
-artifacts are staged, product services are configured, integration keys are
-created, or verification changes are made.
+`restore-baseline` is destructive to guest disk changes made after the
+baseline snapshot, but it must not remove the reusable VM set or generated run
+state. The baseline snapshot is captured after OS, cloud-init, target OS
+control-plane readiness, SSH host-key capture, VM harness prerequisites, role
+OS dependency fulfillment, LDAP service readiness, and LDAP seed verification.
+It is captured before Loopforge artifacts are staged, product services are
+configured, integration keys are created, or verification changes are made.
 
 M3 provisioning uses Cloud Image Clone. The VM harness consumes a local Ubuntu
 Noble cloud image such as `noble-server-cloudimg-amd64.img`, creates
@@ -387,21 +389,26 @@ recreating the path. It does not remove generated workspaces, logs, evidence,
 test images, or source cloud images. This is a host-wide recovery tool, not
 the ownership-checked, selected-VM-set behavior of the M5 `destroy` command.
 
-`down`, `clean`, and `destroy` are deliberately separate:
+`down`, `restore-baseline`, `clean`, and `destroy` are deliberately separate:
 
 - `down` stops selected VM domains and preserves VM state.
-- `clean` rolls back the selected VM set to the clean baseline snapshot and
-  removes mutable generated state for the selected run. It preserves exported
-  artifacts, evidence, and bounded logs.
+- `restore-baseline` rolls back stopped guest disks in the selected VM set to
+  the clean baseline snapshot. It preserves generated state for review and
+  debugging.
+- `clean` removes mutable generated state for the selected run only. It
+  requires the selected VM set to be down and preserves exported artifacts,
+  evidence, and bounded logs. After `clean`, run `init-run` again before
+  later phases that require rendered runtime config.
 - `destroy` permanently deletes the selected simulation-owned VM set and its
   owned libvirt resources, including the VM-set-local base image.
 
-`clean` validates the selected run marker, selected VM set marker, and
-baseline snapshot records before rollback. It must fail clearly rather than
-roll back an unowned or mismatched VM set. `destroy` performs ownership
-validation when VM-set metadata is present. If generated metadata has already
-been removed, `destroy` recovers by deleting only exact resources derived from
-the selected `HARNESS_PROJECT_NAME`.
+`restore-baseline` validates the selected run marker, selected VM set marker,
+and baseline snapshot records before rollback. It must fail clearly rather
+than roll back an unowned, running, or mismatched VM set. `clean` validates
+the selected run marker and VM set before generated-state cleanup. `destroy`
+performs ownership validation when VM-set metadata is present. If generated
+metadata has already been removed, `destroy` recovers by deleting only exact
+resources derived from the selected `HARNESS_PROJECT_NAME`.
 
 ## State Consistency And Recovery
 
@@ -421,8 +428,8 @@ libvirt resources agree:
 
 If generated state, VM-set metadata, snapshots, or libvirt resources are
 inconsistent, lifecycle phases fail clearly instead of recreating state or
-rerunning earlier phases. Recover with the explicit `down`, `clean`, or
-`destroy` command for the selected VM set and run.
+rerunning earlier phases. Recover with explicit `down`, `restore-baseline`,
+`clean`, or `destroy` commands for the selected VM set and run.
 
 Legacy VM sets rejected by normal lifecycle commands remain eligible only for
 ownership-checked `down` and `destroy`. Clean up an old set with its retained
@@ -456,6 +463,7 @@ simulation/vm/simulate.sh --env FILE reboot --all
 simulation/vm/simulate.sh --env FILE validate-role
 simulation/vm/simulate.sh --env FILE validate-integration
 simulation/vm/simulate.sh --env FILE down
+simulation/vm/simulate.sh --env FILE restore-baseline
 simulation/vm/simulate.sh --env FILE clean
 ```
 

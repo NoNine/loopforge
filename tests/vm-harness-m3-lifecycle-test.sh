@@ -311,21 +311,48 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
 
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/m5-up.out"
+
+  if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" clean >"$tmp_dir/clean-running.out"; then
+    printf 'clean must require the VM set to be down\n' >&2
+    exit 1
+  fi
+  grep -Fq 'clean: failed reason=vm-set-running' "$tmp_dir/clean-running.out"
+
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" down >"$tmp_dir/m5-down.out"
+
+  : >"$virsh_calls"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_CALLS="$virsh_calls" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" restore-baseline >"$tmp_dir/restore-baseline.out"
+  grep -Fxq "restore-baseline: ok vm-set=$vm_set_id baseline=restored" "$tmp_dir/restore-baseline.out"
+  [ "$(grep -c '^snapshot-revert ' "$virsh_calls")" -eq 5 ]
+  ! grep -Fq 'shutdown ' "$virsh_calls"
+  ! grep -Fq 'destroy ' "$virsh_calls"
+
+  : >"$virsh_calls"
+  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_CALLS="$virsh_calls" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" clean >"$tmp_dir/clean.out"
-  grep -Fxq "clean: ok vm-set=$vm_set_id baseline=restored" "$tmp_dir/clean.out"
+  grep -Fxq "clean: ok vm-set=$vm_set_id generated-state=cleaned" "$tmp_dir/clean.out"
+  ! grep -Fq 'snapshot-revert ' "$virsh_calls"
   [ ! -e "$generated_root/$run_id/host/state" ]
+  [ ! -e "$generated_root/$run_id/host/rendered" ]
+  [ ! -e "$generated_root/$run_id/host/runtime-inputs" ]
+  [ ! -e "$generated_root/$run_id/host/target-ssh" ]
   [ -f "$generated_root/$run_id/host/artifacts/exported/m5.txt" ]
   [ -f "$generated_root/$run_id/target/evidence/gerrit/m5.txt" ]
-  [ -f "$generated_root/$run_id/.loopforge-vm-run.env" ]
-  [ -f "$generated_root/$run_id/host/rendered/harness.runtime.env" ]
+  [ ! -f "$generated_root/$run_id/.loopforge-vm-run.env" ]
+  [ ! -f "$generated_root/$run_id/host/rendered/harness.runtime.env" ]
   for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
     grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
   done
 
-  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$tmp_dir/audit-clean.out"
-  grep -Fxq 'audit-state: ok' "$tmp_dir/audit-clean.out"
+  if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+    "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$tmp_dir/audit-clean.out" 2>&1; then
+    printf 'audit-state must fail after clean removes rendered runtime config\n' >&2
+    exit 1
+  fi
+  grep -Fq 'Missing VM harness runtime config' "$tmp_dir/audit-clean.out"
 
   touch "$generated_root/vm-sets/$vm_set_id/libvirt/disks/unowned.qcow2"
   if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \

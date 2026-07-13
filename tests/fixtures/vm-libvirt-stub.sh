@@ -231,6 +231,7 @@ case "$cmd" in
   snapshot-revert)
     domain="${1:?domain required}"
     [ -f "$state_dir/snapshots/$domain/${2:?snapshot required}" ]
+    record_call "snapshot-revert $domain $2"
     printf 'shut off\n' >"$state_dir/domains/$domain.state"
     ;;
   net-dhcp-leases)

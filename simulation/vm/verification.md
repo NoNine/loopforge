@@ -40,7 +40,7 @@ log shows failed commands.
 | M2 | Libvirt/KVM tooling and VM-set ownership checks are read-only, fail on inconsistent selected resources, and do not repair state. |
 | M3 | `create`, `up`, `status`, `ssh --role ROLE`, and `down` prove real VM definitions, guest boot, stable SSH host keys, target OS SSH readiness as the operator account, and clean shutdown. |
 | M4 | `create` proves role OS dependency installation, expected command availability, real LDAP service readiness, seeded entries, local LDAP bind/search, and Gerrit/Jenkins controller LDAP bind/search before writing baseline readiness. |
-| M5 | Baseline snapshot, `clean`, `destroy`, and `audit-state` prove selected VM-set ownership before rollback or deletion and do not touch unowned resources. |
+| M5 | Baseline snapshot, `restore-baseline`, `clean`, `destroy`, and `audit-state` prove selected VM-set ownership before rollback, generated-state cleanup, or deletion and do not touch unowned resources. |
 | M6 | `prepare-artifacts` and `stage-artifacts` prove artifact manifests, checksums, source-boundary labels, transfer, and target-side staging paths before mutation. |
 | M7 | `configure-role` establishes real role service/runtime readiness through role helpers. `validate-role` only observes it. `reboot` must prove guest service recovery before post-reboot validation; readiness is never inferred from reboot success. |
 | M8 | `configure-integration`, `validate-integration`, `prove-integration`, and `run` prove actual cross-role SSH, Jenkins node readiness, Gerrit Trigger flow, build execution, and Gerrit `Verified` behavior. |

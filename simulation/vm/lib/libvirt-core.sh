@@ -239,6 +239,32 @@ vm_libvirt_shutdown_set() {
   printf 'shutdown=ready stopped=%s forced=%s\n' "$stopped" "$forced"
 }
 
+vm_libvirt_require_set_shut_off() {
+  local operation machine domain state rc
+  operation="${1:?operation required}"
+  rc=0
+  for machine in "${vm_machines[@]}"; do
+    domain="$(vm_libvirt_domain_name "$machine")"
+    state="$(vm_libvirt_domain_state "$machine")"
+    case "$state" in
+      'shut off'|shut*)
+        printf 'domain-down machine=%s domain=%s state=shut-off\n' "$machine" "$domain"
+        ;;
+      running)
+        printf 'vm-set-running operation=%s machine=%s domain=%s state=running recovery=run-down-first\n' \
+          "$operation" "$machine" "$domain" >&2
+        rc=1
+        ;;
+      *)
+        printf 'vm-set-not-down operation=%s machine=%s domain=%s state=%s recovery=run-down-first\n' \
+          "$operation" "$machine" "$domain" "$state" >&2
+        rc=1
+        ;;
+    esac
+  done
+  return "$rc"
+}
+
 vm_libvirt_machine_ip() {
   local machine mac network
   machine="${1:?machine required}"

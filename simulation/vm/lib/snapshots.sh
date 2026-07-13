@@ -123,7 +123,7 @@ vm_snapshots_restore() {
   vm_baseline_require_ready || return $?
   vm_set_verify_selected_ownership || return $?
   vm_snapshots_verify || return $?
-  vm_libvirt_shutdown_set || return $?
+  vm_libvirt_require_set_shut_off restore-baseline || return $?
   for machine in "${vm_machines[@]}"; do
     virsh -c "$VM_LIBVIRT_URI" snapshot-revert \
       "$(vm_libvirt_domain_name "$machine")" \

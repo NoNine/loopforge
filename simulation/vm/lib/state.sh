@@ -67,7 +67,16 @@ vm_state_audit_readonly() {
 }
 
 vm_state_clean_mutable_run_state() {
-  rm -rf -- "$HARNESS_HOST_DIR/state"
+  local path
+  for path in \
+    "$HARNESS_RUN_MARKER" \
+    "$HARNESS_RENDERED_DIR" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
+    "$HARNESS_TARGET_SSH_DIR" \
+    "$HARNESS_HOST_DIR/state"; do
+    [ -e "$path" ] || continue
+    rm -rf -- "$path" || return 1
+  done
 }
 
 vm_state_write_role_checkpoint() {

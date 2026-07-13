@@ -559,20 +559,42 @@ vm_cmd_down() {
 }
 
 vm_cmd_clean() {
-  local evidence log
+  local evidence log reason
   vm_config_load_runtime
   log="$(vm_path_bounded_log clean)"
   {
-    vm_set_verify_run_and_set
-    vm_snapshots_restore
+    vm_state_verify_run_marker
+    vm_set_verify_selected_ownership
+    vm_libvirt_require_set_shut_off clean
     vm_state_clean_mutable_run_state
   } >"$log" 2>&1 || {
-    evidence="$(vm_write_harness_evidence clean fail "simulate.sh clean" "$log" "M5 baseline rollback failed ownership or snapshot validation")"
-    print_command_failure clean "" "failed reason=baseline-rollback" "$log" "$evidence"
+    reason=generated-cleanup
+    grep -Fq 'vm-set-running operation=clean' "$log" && reason=vm-set-running
+    evidence="$(vm_write_harness_evidence clean fail "simulate.sh clean" "$log" "VM generated runtime cleanup failed or VM set was not down")"
+    print_command_failure clean "" "failed reason=$reason" "$log" "$evidence"
     return 1
   }
-  evidence="$(vm_write_harness_evidence clean pass "simulate.sh clean" "$log" "M5 restored the selected owned VM set and preserved review output")"
-  print_command_summary clean "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline=restored"
+  evidence="$(vm_write_harness_evidence clean pass "simulate.sh clean" "$log" "Cleaned mutable generated runtime state while preserving VM resources and review output")"
+  print_command_summary clean "" "ok vm-set=$LOOPFORGE_VM_SET_ID generated-state=cleaned"
+}
+
+vm_cmd_restore_baseline() {
+  local evidence log reason
+  vm_config_load_runtime
+  log="$(vm_path_bounded_log restore-baseline)"
+  {
+    vm_state_verify_run_marker
+    vm_snapshots_restore
+    vm_libvirt_status_table
+  } >"$log" 2>&1 || {
+    reason=baseline-restore
+    grep -Fq 'vm-set-running operation=restore-baseline' "$log" && reason=vm-set-running
+    evidence="$(vm_write_harness_evidence restore-baseline fail "simulate.sh restore-baseline" "$log" "Baseline restore failed ownership, snapshot validation, or down-state validation")"
+    print_command_failure restore-baseline "" "failed reason=$reason" "$log" "$evidence"
+    return 1
+  }
+  evidence="$(vm_write_harness_evidence restore-baseline pass "simulate.sh restore-baseline" "$log" "Restored the selected owned VM set to the clean baseline snapshot")"
+  print_command_summary restore-baseline "" "ok vm-set=$LOOPFORGE_VM_SET_ID baseline=restored"
 }
 
 vm_cmd_destroy() {
