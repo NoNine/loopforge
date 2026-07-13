@@ -10,9 +10,7 @@ generated_root="$repo_root/generated/simulation/vm"
 cleanup() {
   [ "${VM_TEST_KEEP_TMP:-0}" -eq 1 ] ||
     rm -rf "$tmp_dir" "$generated_root/$run_id" "$generated_root/vm-sets/$vm_set_id" \
-      "$generated_root/vm-sets/cache-user-$$" \
-      "$generated_root/vm-prune-skip-$$" "$generated_root/vm-sets/prune-skip-$$" \
-      "$generated_root/vm-prune-remove-$$" "$generated_root/vm-sets/prune-remove-$$"
+      "$generated_root/vm-destroy-recovery-$$" "$generated_root/vm-sets/destroy-recovery-$$"
 }
 trap cleanup EXIT
 
@@ -187,9 +185,15 @@ PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
 grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" "$tmp_dir/create.out"
 marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-set.env"
 grep -Fq "vm_set_id=$vm_set_id" "$marker"
-grep -Fq 'ownership_schema_version=5' "$marker"
+grep -Fq 'ownership_schema_version=6' "$marker"
 grep -Fq 'disk_ownership=libvirt-managed' "$marker"
 grep -Fq 'VM_PROVISIONING_MODEL=cloud-image-clone' "$generated_root/$run_id/host/rendered/harness.runtime.env"
+base_volume="$generated_root/vm-sets/$vm_set_id/libvirt/disks/base.qcow2"
+[ -f "$base_volume" ]
+[ -f "$generated_root/vm-sets/$vm_set_id/libvirt/base-image.env" ]
+grep -Fq "base_image=$base_volume" "$marker"
+grep -Fq "base_image_pool_name=loopforge-vm-$run_id-$vm_set_id-images" "$marker"
+grep -Fq "base_image_volume_name=base.qcow2" "$marker"
 network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
 grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
@@ -217,6 +221,8 @@ for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   grep -Fq 'disk_ownership=libvirt-managed' \
     "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
   grep -Fq "volume_name=$machine.qcow2" \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+  grep -Fq "base_image=$base_volume" \
     "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
   grep -Fq "<disk type='file' device='disk'>" \
     "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.xml"
@@ -336,11 +342,7 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   [ ! -e "$generated_root/vm-sets/$vm_set_id" ]
   [ ! -e "$stub_state/network.name" ]
   [ ! -d "$stub_state/pools/loopforge-vm-$run_id-$vm_set_id-images" ]
-  base_fingerprint="$(cat "$generated_root/$run_id/host/rendered/base-image-fingerprint.txt")"
-  base_cache_dir="$generated_root/base-images/$base_fingerprint"
-  base_pool="$(sed -n 's/^storage_pool_name=//p' "$base_cache_dir/.loopforge-vm-base-image.env")"
-  [ -d "$stub_state/pools/$base_pool" ]
-  [ -d "$base_cache_dir" ]
+  [ ! -e "$base_volume" ]
   [ -f "$generated_root/$run_id/host/artifacts/exported/m5.txt" ]
   [ -f "$generated_root/$run_id/target/evidence/gerrit/m5.txt" ]
 
@@ -350,49 +352,24 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   audit_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'audit-state-*.log' -print | sort | tail -1)"
   grep -Fq 'vm-set=absent vm-resources=absent' "$audit_log"
 
-  prune_skip_run_id="vm-prune-skip-$$"
-  prune_skip_vm_set_id="prune-skip-$$"
-  prune_skip_env="$tmp_dir/harness-prune-skip.env"
+  recovery_run_id="vm-destroy-recovery-$$"
+  recovery_vm_set_id="destroy-recovery-$$"
+  recovery_env="$tmp_dir/harness-destroy-recovery.env"
   sed \
-    -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$prune_skip_run_id/" \
-    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$prune_skip_vm_set_id/" \
+    -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$recovery_run_id/" \
+    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$recovery_vm_set_id/" \
     -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
     -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
     -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-    "$repo_root/simulation/vm/examples/vm.env.example" >"$prune_skip_env"
+    "$repo_root/simulation/vm/examples/vm.env.example" >"$recovery_env"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" init-run >"$tmp_dir/init-run-prune-skip.out"
+    "$repo_root/simulation/vm/simulate.sh" --env "$recovery_env" init-run >"$tmp_dir/init-run-destroy-recovery.out"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" create >"$tmp_dir/create-prune-skip.out"
-  mkdir -p "$generated_root/vm-sets/cache-user-$$"
-  cp "$generated_root/vm-sets/$prune_skip_vm_set_id/.loopforge-vm-set.env" \
-    "$generated_root/vm-sets/cache-user-$$/.loopforge-vm-set.env"
+    "$repo_root/simulation/vm/simulate.sh" --env "$recovery_env" create >"$tmp_dir/create-destroy-recovery.out"
+  rm -rf "$generated_root/$recovery_run_id" "$generated_root/vm-sets/$recovery_vm_set_id"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$prune_skip_env" destroy --prune-cache >"$tmp_dir/destroy-prune-skip.out"
-  grep -Fxq "destroy: ok vm-set=$prune_skip_vm_set_id removed cache-prune=skipped reason=in-use fingerprint=$base_fingerprint" \
-    "$tmp_dir/destroy-prune-skip.out"
-  [ -d "$stub_state/pools/$base_pool" ]
-  [ -d "$base_cache_dir" ]
-  rm -rf "$generated_root/vm-sets/cache-user-$$"
-
-  prune_remove_run_id="vm-prune-remove-$$"
-  prune_remove_vm_set_id="prune-remove-$$"
-  prune_remove_env="$tmp_dir/harness-prune-remove.env"
-  sed \
-    -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$prune_remove_run_id/" \
-    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$prune_remove_vm_set_id/" \
-    -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
-    -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
-    -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
-    "$repo_root/simulation/vm/examples/vm.env.example" >"$prune_remove_env"
-  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" init-run >"$tmp_dir/init-run-prune-remove.out"
-  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" create >"$tmp_dir/create-prune-remove.out"
-  PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
-    "$repo_root/simulation/vm/simulate.sh" --env "$prune_remove_env" destroy --prune-cache >"$tmp_dir/destroy-prune-remove.out"
-  grep -Fxq "destroy: ok vm-set=$prune_remove_vm_set_id removed cache-prune=removed fingerprint=$base_fingerprint" \
-    "$tmp_dir/destroy-prune-remove.out"
-  [ ! -d "$stub_state/pools/$base_pool" ]
-  [ ! -d "$base_cache_dir" ]
+    "$repo_root/simulation/vm/simulate.sh" --env "$recovery_env" destroy >"$tmp_dir/destroy-recovery.out"
+  grep -Fxq "destroy: ok vm-set=$recovery_vm_set_id removed" "$tmp_dir/destroy-recovery.out"
+  [ ! -d "$stub_state/pools/loopforge-vm-$recovery_run_id-$recovery_vm_set_id-images" ]
+  [ ! -f "$stub_state/domains/loopforge-vm-$recovery_run_id-$recovery_vm_set_id-gerrit.state" ]
 fi

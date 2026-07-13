@@ -5,9 +5,7 @@ vm_libvirt_require_base_image() {
 }
 
 __vm_libvirt_bake_work_dir() {
-  printf '%s/bake-work-%s-%s\n' \
-    "$(vm_path_baked_base_image_dir "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}")" \
-    "$HARNESS_PROJECT_NAME" "$$"
+  vm_path_vm_set_bake_work_dir
 }
 
 __vm_libvirt_bake_disk_path() {
@@ -56,22 +54,22 @@ vm_libvirt_select_baked_base_image() {
 }
 
 vm_libvirt_baked_base_image_path() {
-  vm_path_baked_base_image "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}"
+  vm_path_vm_set_base_image
 }
 
 vm_libvirt_baked_base_image_marker_path() {
-  vm_path_baked_base_image_marker "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}"
+  vm_path_vm_set_base_image_marker
 }
 
 vm_libvirt_require_existing_baked_base_image() {
-  if __vm_libvirt_ensure_baked_base_image_pool && vm_libvirt_baked_base_image_ready; then
-    printf 'base-image-cache=hit fingerprint=%s image=%s marker=%s\n' \
+  if vm_libvirt_ensure_storage_pool && vm_libvirt_baked_base_image_ready; then
+    printf 'base-image=ready source=existing fingerprint=%s image=%s marker=%s\n' \
       "$VM_BAKED_BASE_IMAGE_FINGERPRINT" \
       "$(vm_libvirt_baked_base_image_path)" \
       "$(vm_libvirt_baked_base_image_marker_path)"
     return 0
   fi
-  printf 'ERROR: Existing VM disks require their original valid baked-image cache entry. %s\n' \
+  printf 'ERROR: Existing VM disks require their selected VM-set baked base image. %s\n' \
     "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
   return 1
 }
@@ -267,7 +265,7 @@ __vm_libvirt_write_baked_base_image_marker() {
   marker="$(vm_libvirt_baked_base_image_marker_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
   pool="$(vm_libvirt_baked_base_image_pool_name)"
-  target="$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  target="$(vm_path_vm_set_disk_dir)"
   volume="$(vm_libvirt_baked_base_image_volume_name)"
   baked_sha256="$(__vm_libvirt_volume_sha256 "$pool" "$volume")" || return $?
   tmp="$(mktemp "${marker}.XXXXXX")" || return $?
@@ -305,7 +303,7 @@ __vm_libvirt_baked_base_image_volume_ready() {
   local image pool target volume
   image="$(vm_libvirt_baked_base_image_path)"
   pool="$(vm_libvirt_baked_base_image_pool_name)"
-  target="$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  target="$(vm_path_vm_set_disk_dir)"
   volume="$(vm_libvirt_baked_base_image_volume_name)"
   vm_libvirt_pool_exists "$pool" || return 1
   __vm_libvirt_pool_is_active "$pool" || return 1
@@ -326,7 +324,7 @@ vm_libvirt_baked_base_image_ready() {
   marker="$(vm_libvirt_baked_base_image_marker_path)"
   [ -r "$marker" ] || return 1
   pool="$(vm_libvirt_baked_base_image_pool_name)"
-  target="$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  target="$(vm_path_vm_set_disk_dir)"
   volume="$(vm_libvirt_baked_base_image_volume_name)"
   __vm_libvirt_baked_base_image_volume_ready || return 1
   status="$(marker_value "$marker" status 2>/dev/null || true)"
@@ -344,199 +342,13 @@ vm_libvirt_baked_base_image_ready() {
   [ "$actual_sha" = "$expected_sha" ]
 }
 
-__vm_libvirt_baked_base_image_marker_matches_identity() {
-  local fingerprint image marker pool target volume
-  fingerprint="${1:?fingerprint required}"
-  image="${2:?image required}"
-  pool="${3:?pool required}"
-  target="${4:?target required}"
-  volume="${5:?volume required}"
-  marker="$(vm_path_baked_base_image_marker "$fingerprint")"
-  [ -r "$marker" ] || return 1
-  [ "$(marker_value "$marker" status 2>/dev/null || true)" = ready ] || return 1
-  [ "$(marker_value "$marker" schema 2>/dev/null || true)" = "$VM_BASE_IMAGE_BAKE_SCHEMA_VERSION" ] || return 1
-  [ "$(marker_value "$marker" fingerprint 2>/dev/null || true)" = "$fingerprint" ] || return 1
-  [ "$(marker_value "$marker" baked_image 2>/dev/null || true)" = "$image" ] || return 1
-  [ "$(marker_value "$marker" storage_pool_name 2>/dev/null || true)" = "$pool" ] || return 1
-  [ "$(marker_value "$marker" storage_pool_target 2>/dev/null || true)" = "$target" ] || return 1
-  [ "$(marker_value "$marker" volume_name 2>/dev/null || true)" = "$volume" ] || return 1
-  [ "$(marker_value "$marker" image_ownership 2>/dev/null || true)" = libvirt-managed ] || return 1
-}
-
-__vm_libvirt_baked_base_image_volume_matches_identity() {
-  local image pool target volume
-  image="${1:?image required}"
-  pool="${2:?pool required}"
-  target="${3:?target required}"
-  volume="${4:?volume required}"
-  vm_libvirt_pool_exists "$pool" || return 1
-  [ "$(vm_libvirt_pool_target "$pool")" = "$target" ] || return 1
-  vm_libvirt_volume_exists "$pool" "$volume" || return 1
-  [ "$(vm_libvirt_volume_path "$pool" "$volume")" = "$image" ] || return 1
-  [ "$(vm_libvirt_volume_value "$pool" "$volume" format)" = qcow2 ] || return 1
-}
-
-__vm_libvirt_baked_base_image_marker_in_use() {
-  local fingerprint image marker marker_image marker_fingerprint
-  fingerprint="${1:?fingerprint required}"
-  image="${2:?image required}"
-  while IFS= read -r marker; do
-    [ -n "$marker" ] || continue
-    marker_fingerprint="$(marker_value "$marker" base_image_fingerprint 2>/dev/null || true)"
-    marker_image="$(marker_value "$marker" base_image 2>/dev/null || true)"
-    if [ "$marker_fingerprint" = "$fingerprint" ] || [ "$marker_image" = "$image" ]; then
-      return 0
-    fi
-  done < <(find "$(vm_generated_root)/vm-sets" -mindepth 2 -maxdepth 2 \
-    -name .loopforge-vm-set.env -type f -print 2>/dev/null | sort)
-  return 1
-}
-
-__vm_libvirt_baked_base_image_volume_in_use() {
-  local image output pool volume volumes
-  image="${1:?image required}"
-  output="$(virsh -c "$VM_LIBVIRT_URI" pool-list --all --name 2>/dev/null)" || return 2
-  while IFS= read -r pool; do
-    [ -n "$pool" ] || continue
-    case "$pool" in
-      loopforge-vm-base-*) continue ;;
-      loopforge-vm-*) ;;
-      *) continue ;;
-    esac
-    volumes="$(virsh -c "$VM_LIBVIRT_URI" vol-list "$pool" --name 2>/dev/null)" || return 2
-    while IFS= read -r volume; do
-      [ -n "$volume" ] || continue
-      [ "$(vm_libvirt_volume_value "$pool" "$volume" backing_path 2>/dev/null || true)" != "$image" ] ||
-        return 0
-    done <<<"$volumes"
-  done <<<"$output"
-  return 1
-}
-
-__vm_libvirt_baked_base_image_cache_in_use() {
-  local image status
-  image="${2:?image required}"
-  if __vm_libvirt_baked_base_image_marker_in_use "$1" "$image"; then
-    return 0
-  fi
-  if __vm_libvirt_baked_base_image_volume_in_use "$image"; then
-    return 0
-  else
-    status=$?
-  fi
-  case "$status" in
-    1) return 1 ;;
-    *) return 2 ;;
-  esac
-}
-
-vm_libvirt_prune_baked_base_image_cache_after_destroy() {
-  local cache_dir fingerprint image in_use_status lock lock_fd pool target volume
-  fingerprint="${VM_DESTROY_CACHE_FINGERPRINT:-}"
-  image="${VM_DESTROY_CACHE_IMAGE:-}"
-  pool="${VM_DESTROY_CACHE_POOL:-}"
-  target="${VM_DESTROY_CACHE_TARGET:-}"
-  volume="${VM_DESTROY_CACHE_VOLUME:-}"
-  if [ -n "${VM_DESTROY_CACHE_SKIP_REASON:-}" ]; then
-    printf 'cache-prune=skipped reason=%s\n' "$VM_DESTROY_CACHE_SKIP_REASON"
-    return 0
-  fi
-  for value in "$fingerprint" "$image" "$pool" "$target" "$volume"; do
-    [ -n "$value" ] || {
-      printf 'cache-prune=skipped reason=missing-cache-identity\n'
-      return 0
-    }
-  done
-  cache_dir="$(vm_path_baked_base_image_dir "$fingerprint")"
-  lock="$(vm_path_baked_base_image_lock "$fingerprint")"
-  mkdir -p "$(dirname "$lock")" || {
-    printf 'cache-prune=skipped reason=lock-unavailable fingerprint=%s\n' "$fingerprint"
-    return 0
-  }
-  exec {lock_fd}>"$lock" || {
-    printf 'cache-prune=skipped reason=lock-unavailable fingerprint=%s\n' "$fingerprint"
-    return 0
-  }
-  flock "$lock_fd" || {
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=lock-unavailable fingerprint=%s\n' "$fingerprint"
-    return 0
-  }
-  if ! __vm_libvirt_baked_base_image_marker_matches_identity \
-    "$fingerprint" "$image" "$pool" "$target" "$volume"; then
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=cache-invalid fingerprint=%s\n' "$fingerprint"
-    return 0
-  fi
-  if ! vm_libvirt_pool_exists "$pool"; then
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=cache-invalid fingerprint=%s\n' "$fingerprint"
-    return 0
-  fi
-  if ! __vm_libvirt_pool_is_active "$pool"; then
-    virsh -c "$VM_LIBVIRT_URI" pool-start "$pool" >/dev/null || {
-      exec {lock_fd}>&-
-      printf 'cache-prune=skipped reason=remove-failed fingerprint=%s\n' "$fingerprint"
-      return 0
-    }
-  fi
-  virsh -c "$VM_LIBVIRT_URI" pool-refresh "$pool" >/dev/null || {
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=remove-failed fingerprint=%s\n' "$fingerprint"
-    return 0
-  }
-  if ! __vm_libvirt_baked_base_image_volume_matches_identity \
-    "$image" "$pool" "$target" "$volume"; then
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=cache-invalid fingerprint=%s\n' "$fingerprint"
-    return 0
-  fi
-  if __vm_libvirt_baked_base_image_cache_in_use "$fingerprint" "$image"; then
-    in_use_status=0
-  else
-    in_use_status=$?
-  fi
-  case "$in_use_status" in
-    0)
-      exec {lock_fd}>&-
-      printf 'cache-prune=skipped reason=in-use fingerprint=%s\n' "$fingerprint"
-      return 0
-      ;;
-    1) ;;
-    *)
-      exec {lock_fd}>&-
-      printf 'cache-prune=skipped reason=dependency-check-failed fingerprint=%s\n' "$fingerprint"
-      return 0
-      ;;
-  esac
-  if vm_libvirt_volume_exists "$pool" "$volume"; then
-    virsh -c "$VM_LIBVIRT_URI" vol-delete "$volume" --pool "$pool" >/dev/null || {
-      exec {lock_fd}>&-
-      printf 'cache-prune=skipped reason=remove-failed fingerprint=%s\n' "$fingerprint"
-      return 0
-    }
-  fi
-  vm_libvirt_remove_pool "$pool" || {
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=remove-failed fingerprint=%s\n' "$fingerprint"
-    return 0
-  }
-  rm -rf -- "$cache_dir" || {
-    exec {lock_fd}>&-
-    printf 'cache-prune=skipped reason=remove-failed fingerprint=%s\n' "$fingerprint"
-    return 0
-  }
-  exec {lock_fd}>&-
-  printf 'cache-prune=removed fingerprint=%s\n' "$fingerprint"
-}
-
 __vm_libvirt_bake_base_image() {
   local final_image packages script tmp_image
   final_image="$(vm_libvirt_baked_base_image_path)"
   tmp_image="$(__vm_libvirt_bake_disk_path)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
   if [ -e "$final_image" ] || [ -e "$(vm_libvirt_baked_base_image_marker_path)" ]; then
-    printf 'ERROR: Refusing to replace an existing invalid VM baked-image cache entry: %s\n' \
+    printf 'ERROR: Refusing to replace an existing invalid VM-set base image: %s\n' \
       "$(dirname "$final_image")" >&2
     return 1
   fi
@@ -572,7 +384,7 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
   fi
   __vm_libvirt_cleanup_bake_domain || return $?
   mv "$tmp_image" "$final_image" || return $?
-  __vm_libvirt_ensure_baked_base_image_pool || return $?
+  virsh -c "$VM_LIBVIRT_URI" pool-refresh "$(vm_libvirt_baked_base_image_pool_name)" >/dev/null || return $?
   __vm_libvirt_baked_base_image_volume_ready || {
     printf 'ERROR: VM baked base image is not a valid libvirt-managed qcow2 volume: %s\n' \
       "$final_image" >&2
@@ -592,31 +404,31 @@ vm_libvirt_ensure_baked_base_image() {
   [ -n "${VM_BAKED_BASE_IMAGE_FINGERPRINT:-}" ] || vm_libvirt_select_baked_base_image
   image="$(vm_libvirt_baked_base_image_path)"
   marker="$(vm_libvirt_baked_base_image_marker_path)"
-  lock="$(vm_path_baked_base_image_lock "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
+  lock="$(vm_path_vm_set_base_image_lock)"
   mkdir -p "$(dirname "$lock")" || return $?
   exec {lock_fd}>"$lock" || return $?
   flock "$lock_fd" || {
     exec {lock_fd}>&-
     return 1
   }
-  if ! __vm_libvirt_ensure_baked_base_image_pool; then
+  if ! vm_libvirt_ensure_storage_pool; then
     exec {lock_fd}>&-
     return 1
   fi
   if vm_libvirt_baked_base_image_ready; then
-    printf 'base-image-cache=hit fingerprint=%s image=%s marker=%s\n' \
+    printf 'base-image=ready source=existing fingerprint=%s image=%s marker=%s\n' \
       "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$image" "$marker"
     exec {lock_fd}>&-
     return 0
   fi
   if [ -e "$image" ] || [ -e "$marker" ]; then
-    printf 'ERROR: Existing VM baked-image cache entry failed integrity validation: %s. %s\n' \
+    printf 'ERROR: Existing VM-set base image failed integrity validation: %s. %s\n' \
       "$(dirname "$image")" \
       "Do not remove it while VM disks may depend on it; preserve affected sets for M5 down/destroy cleanup." >&2
     exec {lock_fd}>&-
     return 1
   fi
-  printf 'base-image-cache=miss fingerprint=%s image=%s marker=%s\n' \
+  printf 'base-image=ready source=bake fingerprint=%s image=%s marker=%s\n' \
     "$VM_BAKED_BASE_IMAGE_FINGERPRINT" "$image" "$marker"
   __vm_libvirt_bake_base_image
   rc=$?

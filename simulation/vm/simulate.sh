@@ -56,7 +56,7 @@ Phases:
 	  audit-state
 	  down
 	  clean
-	  destroy [--prune-cache]
+	  destroy
 
 Options:
   --env FILE        Harness env file for bootstrap and init-run.
@@ -193,38 +193,6 @@ parse_reboot_args() {
   PARSED_REBOOT_ALL="$all"
 }
 
-parse_destroy_args() {
-  local prune_cache
-  prune_cache=0
-  HARNESS_ENV_FILE="${HARNESS_ENV_FILE:-$vm_env_example}"
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --env)
-        [ "$#" -ge 2 ] || die "--env requires a file"
-        HARNESS_ENV_FILE="$2"
-        shift 2
-        ;;
-      --env=*)
-        HARNESS_ENV_FILE="${1#--env=}"
-        [ -n "$HARNESS_ENV_FILE" ] || die "--env requires a file"
-        shift
-        ;;
-      --prune-cache)
-        prune_cache=1
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        die "Unknown option for VM harness command: $1"
-        ;;
-    esac
-  done
-  PARSED_DESTROY_PRUNE_CACHE="$prune_cache"
-}
-
 main() {
   local command_name env_file
   env_file="$vm_env_example"
@@ -274,8 +242,8 @@ main() {
       ;;
     destroy)
       shift
-      parse_destroy_args "$@"
-      vm_cmd_destroy "$PARSED_DESTROY_PRUNE_CACHE"
+      parse_env_only_args "$@"
+      vm_cmd_destroy
       ;;
     status)
       shift

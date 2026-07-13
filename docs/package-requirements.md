@@ -20,7 +20,7 @@ installation is simulation-only.
 | Mode | Minimum host prerequisites | Notes |
 | --- | --- | --- |
 | `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
-| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, `flock`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. `flock` serializes shared baked-image cache publication for one fingerprint. VM provisioning satisfies role target OS dependency baselines before the clean baseline snapshot. LDAP service packages such as `slapd`, proof tools such as `ldap-utils`, and NFS packages for shared Jenkins storage are guest VM dependencies, not control-node host prerequisites. |
+| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, `flock`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. `flock` serializes selected VM-set base-image preparation. VM provisioning satisfies role target OS dependency baselines before the clean baseline snapshot. LDAP service packages such as `slapd`, proof tools such as `ldap-utils`, and NFS packages for shared Jenkins storage are guest VM dependencies, not control-node host prerequisites. |
 | `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
 
 ## Package Matrix
@@ -44,12 +44,11 @@ installation is simulation-only.
 | Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker README and this document. |
 
 VM simulation realizes role target OS dependency baselines during VM
-provisioning before the clean baseline snapshot. The VM harness may bake or
-reuse a simulation-owned base image that contains the VM package superset, but
-the baked-image cache identity includes the source image, Ubuntu baseline, apt
-mirror, source-boundary label, VM disk size, and package matrix. Each VM must
-still verify role package and command expectations during M4. Role helpers
-validate those expectations later; they do not install Ubuntu/OS dependencies.
+provisioning before the clean baseline snapshot. The VM harness bakes one
+VM-set-local base image that contains the VM package superset for the selected
+source image, Ubuntu baseline, apt mirror, source-boundary label, VM disk size,
+and package matrix. Each VM must still verify role package and command
+expectations during M4. Role helpers validate those expectations later; they do not install Ubuntu/OS dependencies.
 
 ## Native Target Install Baselines
 

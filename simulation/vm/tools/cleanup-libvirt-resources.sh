@@ -6,6 +6,7 @@ VM_LIBVIRT_URI="${VM_LIBVIRT_URI:-qemu:///system}"
 resource_prefix="loopforge-vm-"
 bridge_prefix="lf-"
 dry_run=0
+option_count=0
 
 usage() {
   cat <<'USAGE'
@@ -16,9 +17,10 @@ Options:
   --dry-run  Print the resources and ordered cleanup actions without mutation.
   -h, --help Show this help.
 
-Without --dry-run, this tool permanently removes every LoopForge libvirt
-domain, volume, pool, network, and bridge from qemu:///system and must run as
-root. It does not remove generated workspaces or source cloud images.
+With neither option nor sudo/root, this tool defaults to --dry-run. When run
+as root with no mode option, it permanently removes every
+LoopForge libvirt domain, volume, pool, network, and bridge from qemu:///system.
+It does not remove generated workspaces or source cloud images.
 USAGE
 }
 
@@ -36,6 +38,7 @@ parse_args() {
     case "$1" in
       --dry-run)
         dry_run=1
+        option_count=$((option_count + 1))
         ;;
       -h|--help)
         usage
@@ -168,17 +171,13 @@ inventory_resources() {
     die "Unable to inventory LoopForge networks"
   networks=()
   [ -z "$output" ] || mapfile -t networks <<<"$output"
-  regular_pools=()
-  base_pools=()
+  pools=()
   volume_specs=()
   missing_pool_target_specs=()
   bridges=()
 
   for pool in "${all_pools[@]}"; do
-    case "$pool" in
-      loopforge-vm-base-*) base_pools+=("$pool") ;;
-      *) regular_pools+=("$pool") ;;
-    esac
+    pools+=("$pool")
     if pool_is_active "$pool"; then
       output="$(list_active_pool_volumes "$pool")" ||
         die "Unable to inventory LoopForge pool volumes: $pool"
@@ -222,7 +221,7 @@ print_dry_run() {
     esac
     printf 'would-undefine-domain name=%s\n' "$domain"
   done
-  for pool in "${regular_pools[@]}" "${base_pools[@]}"; do
+  for pool in "${pools[@]}"; do
     pool_state=inactive
     pool_is_active "$pool" && pool_state=running
     if pool_has_missing_target "$pool"; then
@@ -249,7 +248,7 @@ print_dry_run() {
     printf 'would-delete-bridge name=%s\n' "$bridge"
   done
   printf 'dry-run: ok domains=%s volumes=%s pools=%s networks=%s bridges=%s\n' \
-    "${#domains[@]}" "${#volume_specs[@]}" "$(( ${#regular_pools[@]} + ${#base_pools[@]} ))" \
+    "${#domains[@]}" "${#volume_specs[@]}" "${#pools[@]}" \
     "${#networks[@]}" "${#bridges[@]}"
 }
 
@@ -313,8 +312,7 @@ remove_pool() {
 
 remove_pools() {
   local pool
-  for pool in "${regular_pools[@]}"; do remove_pool "$pool"; done
-  for pool in "${base_pools[@]}"; do remove_pool "$pool"; done
+  for pool in "${pools[@]}"; do remove_pool "$pool"; done
 }
 
 remove_networks() {
@@ -366,6 +364,9 @@ main() {
   require_command find
   virsh -c "$VM_LIBVIRT_URI" uri >/dev/null ||
     die "Unable to query libvirt URI: $VM_LIBVIRT_URI"
+  if [ "$option_count" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
+    dry_run=1
+  fi
   if [ "$dry_run" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
     die "Root privilege is required; rerun: sudo $0"
   fi
@@ -380,7 +381,7 @@ main() {
   remove_bridges
   verify_cleanup
   printf 'cleanup: ok domains=%s volumes=%s pools=%s networks=%s bridges=%s\n' \
-    "${#domains[@]}" "${#volume_specs[@]}" "$(( ${#regular_pools[@]} + ${#base_pools[@]} ))" \
+    "${#domains[@]}" "${#volume_specs[@]}" "${#pools[@]}" \
     "${#networks[@]}" "${#bridges[@]}"
 }
 

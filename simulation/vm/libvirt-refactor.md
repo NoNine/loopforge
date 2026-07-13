@@ -279,7 +279,7 @@ teardown implementation helpers. `simulate.sh` continues to call only
 
 Record the current source order and externally referenced function set. Ensure
 existing tests cover CLI summaries, VM-set marker contents, storage backing
-identity, domain attachments, image-cache hit and failure paths, LDAP proof,
+identity, domain attachments, VM-set-local base-image failure paths, LDAP proof,
 snapshot reuse and rollback, and destruction refusal on ownership mismatch.
 
 ### 2. Extract Without Redesign
@@ -342,7 +342,7 @@ Focused tests must continue to prove:
 - read-only preflight and audit do not repair state;
 - existing disks fail closed on pool, volume, backing image, or metadata
   mismatch;
-- baked-image cache hits validate fingerprint, format, capacity, and content;
+- VM-set-local baked base images validate fingerprint, format, capacity, and content;
 - LDAP readiness requires exact seeded DNs and consumer bind/search proof;
 - snapshot records match live snapshot and VM-set identity;
 - rollback leaves every selected domain shut off;

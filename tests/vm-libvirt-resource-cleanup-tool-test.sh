@@ -182,17 +182,17 @@ reset_state() {
   printf 'running\n' >"$state/domains/loopforge-vm-test-running"
   printf 'shut off\n' >"$state/domains/loopforge-vm-test-stopped"
   printf 'running\n' >"$state/domains/unrelated-domain"
-  for pool in loopforge-vm-test-images loopforge-vm-base-1234567890abcdef unrelated-pool; do
+  for pool in loopforge-vm-test-images loopforge-vm-test-cache unrelated-pool; do
     mkdir -p "$state/pools/$pool" "$state/volumes/$pool"
     printf '%s\n' "$state/volumes/$pool" >"$state/pools/$pool/target"
     touch "$state/pools/$pool/active"
   done
-  mkdir -p "$state/pools/loopforge-vm-base-missingtarget"
-  printf '%s\n' "$state/volumes/loopforge-vm-base-missingtarget" \
-    >"$state/pools/loopforge-vm-base-missingtarget/target"
-  rm -f "$state/pools/loopforge-vm-base-1234567890abcdef/active"
+  mkdir -p "$state/pools/loopforge-vm-test-missingtarget"
+  printf '%s\n' "$state/volumes/loopforge-vm-test-missingtarget" \
+    >"$state/pools/loopforge-vm-test-missingtarget/target"
+  rm -f "$state/pools/loopforge-vm-test-cache/active"
   printf 'overlay\n' >"$state/volumes/loopforge-vm-test-images/bundle-factory.qcow2"
-  printf 'base\n' >"$state/volumes/loopforge-vm-base-1234567890abcdef/base.qcow2"
+  printf 'cache\n' >"$state/volumes/loopforge-vm-test-cache/base.qcow2"
   printf 'keep\n' >"$state/volumes/unrelated-pool/keep.qcow2"
   for network in loopforge-vm-test-net loopforge-vm-test-inactive-net unrelated-net; do
     mkdir -p "$state/networks/$network"
@@ -217,10 +217,10 @@ run_tool --dry-run >"$dry_out"
 grep -Fq 'would-destroy-domain name=loopforge-vm-test-running state=running' "$dry_out"
 grep -Fq 'would-undefine-domain name=loopforge-vm-test-stopped' "$dry_out"
 grep -Fq 'would-delete-volume pool=loopforge-vm-test-images name=bundle-factory.qcow2' "$dry_out"
-grep -Fq 'would-start-pool name=loopforge-vm-base-1234567890abcdef' "$dry_out"
-grep -Fq 'would-delete-volume pool=loopforge-vm-base-1234567890abcdef name=base.qcow2' "$dry_out"
-grep -Fq 'missing-pool-target pool=loopforge-vm-base-missingtarget' "$dry_out"
-grep -Fq 'would-undefine-pool name=loopforge-vm-base-missingtarget' "$dry_out"
+grep -Fq 'would-start-pool name=loopforge-vm-test-cache' "$dry_out"
+grep -Fq 'would-delete-volume pool=loopforge-vm-test-cache name=base.qcow2' "$dry_out"
+grep -Fq 'missing-pool-target pool=loopforge-vm-test-missingtarget' "$dry_out"
+grep -Fq 'would-undefine-pool name=loopforge-vm-test-missingtarget' "$dry_out"
 grep -Fq 'would-destroy-network name=loopforge-vm-test-net' "$dry_out"
 grep -Fq 'would-undefine-network name=loopforge-vm-test-inactive-net' "$dry_out"
 grep -Fq 'would-delete-bridge name=lf-deadbeef' "$dry_out"
@@ -229,20 +229,18 @@ grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' "$dry_ou
 [ -e "$state/domains/loopforge-vm-test-running" ]
 [ -e "$state/volumes/loopforge-vm-test-images/bundle-factory.qcow2" ]
 
-if run_tool >"$tmp_dir/nonroot.out" 2>"$tmp_dir/nonroot.err"; then
-  printf 'Cleanup tool must reject non-root mutation\n' >&2
-  exit 1
-fi
-grep -Fq "Root privilege is required; rerun: sudo $tool" "$tmp_dir/nonroot.err"
+run_tool >"$tmp_dir/default-dry-run.out"
+grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' \
+  "$tmp_dir/default-dry-run.out"
 [ ! -s "$command_log" ]
 
 VM_TOOL_TEST_UID=0 run_tool >"$tmp_dir/cleanup.out"
-grep -Fq 'missing-pool-target pool=loopforge-vm-base-missingtarget' "$tmp_dir/cleanup.out"
+grep -Fq 'missing-pool-target pool=loopforge-vm-test-missingtarget' "$tmp_dir/cleanup.out"
 grep -Fq 'cleanup: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' "$tmp_dir/cleanup.out"
 [ ! -e "$state/domains/loopforge-vm-test-running" ]
 [ ! -e "$state/volumes/loopforge-vm-test-images/bundle-factory.qcow2" ]
-[ ! -e "$state/pools/loopforge-vm-base-1234567890abcdef" ]
-[ ! -e "$state/pools/loopforge-vm-base-missingtarget" ]
+[ ! -e "$state/pools/loopforge-vm-test-cache" ]
+[ ! -e "$state/pools/loopforge-vm-test-missingtarget" ]
 [ ! -e "$state/networks/loopforge-vm-test-net" ]
 [ ! -e "$state/bridges/lf-deadbeef" ]
 [ -e "$state/domains/unrelated-domain" ]
@@ -250,12 +248,17 @@ grep -Fq 'cleanup: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' "$tmp_di
 [ -e "$state/networks/unrelated-net" ]
 [ -e "$state/bridges/virbr0" ]
 
+reset_state
+run_tool --dry-run >"$tmp_dir/nonroot-explicit-dry-run.out"
+grep -Fq 'dry-run: ok domains=2 volumes=2 pools=3 networks=2 bridges=3' \
+  "$tmp_dir/nonroot-explicit-dry-run.out"
+
 overlay_delete_line="$(grep -n '^vol-delete loopforge-vm-test-images/' "$command_log" | cut -d: -f1)"
 overlay_pool_line="$(grep -n '^pool-undefine loopforge-vm-test-images$' "$command_log" | cut -d: -f1)"
-base_pool_line="$(grep -n '^pool-undefine loopforge-vm-base-1234567890abcdef$' "$command_log" | cut -d: -f1)"
+cache_pool_line="$(grep -n '^pool-undefine loopforge-vm-test-cache$' "$command_log" | cut -d: -f1)"
 [ "$overlay_delete_line" -lt "$overlay_pool_line" ]
-[ "$overlay_pool_line" -lt "$base_pool_line" ]
-if grep -Fq 'pool-start loopforge-vm-base-missingtarget' "$command_log"; then
+[ "$overlay_pool_line" -lt "$cache_pool_line" ]
+if grep -Fq 'pool-start loopforge-vm-test-missingtarget' "$command_log"; then
   printf 'Cleanup tool must not start pools with missing targets\n' >&2
   exit 1
 fi

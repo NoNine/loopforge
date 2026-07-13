@@ -72,11 +72,10 @@ capture/rollback, VM start/stop/destruction, VM-set ownership inspection, and
 guest-owned NFS setup.
 
 VM provisioning must satisfy the role target OS dependency baselines before
-the clean baseline snapshot is captured. The `create` command may bake or
-reuse a simulation-owned dependency-prepared base image when the selected
-source image, Ubuntu baseline, apt mirror, source-boundary label, VM disk size,
-or package matrix changes. Role helpers validate those package and command
-expectations later; they do not install Ubuntu/OS dependencies.
+the clean baseline snapshot is captured. The `create` command bakes one
+simulation-owned, dependency-prepared base image inside the selected VM set,
+then creates the five role disks from that base image. Role helpers validate
+those package and command expectations later; they do not install Ubuntu/OS dependencies.
 
 After the clean baseline snapshot, checkpoint work must use target-like
 interfaces and paths: target OS SSH as `ci-operator`, SSH file transfer, role
@@ -153,7 +152,7 @@ Phase and lifecycle commands:
 | `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected VM set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
 | `down [--env FILE]` | Gracefully shuts down selected VM set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. It requests shutdown for all running domains before polling; if the set-wide bounded wait expires, a hard libvirt stop is used only for domains still running. |
 | `clean [--env FILE]` | Restores the selected VM set to its clean baseline snapshot and deletes only mutable generated runtime data for the selected run. It preserves exported artifacts, evidence, and logs. It does not delete VMs. |
-| `destroy [--env FILE] [--prune-cache]` | Permanently removes the selected simulation-owned VM set after validating ownership metadata. It undefines domains, removes owned storage, snapshots, seed media, and VM networks, and is the only VM command that deletes VM resources. With `--prune-cache`, it also attempts guarded removal of the associated baked base-image cache after VM-set deletion. |
+| `destroy [--env FILE]` | Permanently removes the selected simulation-owned VM set after validating ownership metadata when present, or by exact selected resource names during recovery. It undefines domains and removes owned machine disks, the VM-set-local base image, snapshots, seed media, VM networks, and VM-set metadata. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`. `--all`
 for `reboot` includes those service VMs and dependency VMs needed for the
@@ -217,7 +216,7 @@ VM simulation maps Loopforge commands onto libvirt/KVM state deliberately:
 | `reboot` | Reboot guests from inside the OS to prove machine reboot behavior. |
 | `down` | Shut down running domains set-wide while retaining definitions, disks, and snapshots; hard-stop only domains that remain running after the bounded graceful wait. |
 | `clean` | Revert the selected VM set to the baseline snapshot and clean mutable run state. |
-| `destroy` | Undefine selected VM domains and remove owned storage, snapshots, seed media, and networks. With `--prune-cache`, remove the associated baked base-image cache only when no remaining VM set or libvirt disk depends on it. |
+| `destroy` | Undefine selected VM domains and remove owned storage, the VM-set-local base image, snapshots, seed media, and networks. |
 
 Libvirt `destroy` is a hard power-off operation, not VM deletion. VM deletion
 belongs only to the Loopforge `destroy` command, which uses libvirt undefine
@@ -249,11 +248,11 @@ the harness does not depend on their POSIX owner or repair access with
 `chmod` or `chown`. It uses libvirt volume metadata for format, capacity, and
 backing-store proof and uses mediated volume download for SHA-256 proof.
 Domains attach each mutable volume's libvirt-reported path as a file-backed
-disk so the host security driver applies its runtime label. Cache validity
-does not depend on the read-only base volume's incidental owner.
-Publication uses fingerprint-scoped `flock` locking; the completed volume is
-published before its ready marker. An existing invalid entry fails
-closed and is not replaced because reusable VM disks may depend on it.
+disk so the host security driver applies its runtime label. Base-image
+validity does not depend on the read-only base volume's incidental owner.
+Preparation uses a VM-set-local `flock` lock; the completed volume is recorded
+before its ready marker. An existing invalid entry fails closed and is not
+replaced because reusable VM disks may depend on it.
 
 Each reusable VM disk records and verifies its storage pool, volume, backing
 path, fingerprint, SHA-256, and disk size through libvirt APIs. `create`
@@ -338,11 +337,9 @@ generated/simulation/vm/<run-id>/
 ```
 
 VM set state persists across runs until `destroy`. Run-scoped output is tied
-to `HARNESS_RUN_ID` and may be cleaned or retained independently. Baked
-base-image cache entries under `base-images/<fingerprint>/` are shared across
-VM sets by default and are removed only by host-wide cleanup or by
-`destroy --prune-cache` after the selected VM set has been deleted and the
-cache is proven unused.
+to `HARNESS_RUN_ID` and may be cleaned or retained independently. The baked
+base image is stored inside the selected VM set and is removed by `destroy`
+with the rest of that VM set.
 
 | Output kind | VM generated pattern |
 | --- | --- |
@@ -397,17 +394,14 @@ the ownership-checked, selected-VM-set behavior of the M5 `destroy` command.
   removes mutable generated state for the selected run. It preserves exported
   artifacts, evidence, and bounded logs.
 - `destroy` permanently deletes the selected simulation-owned VM set and its
-  owned libvirt resources. By default it preserves the shared baked base-image
-  cache.
+  owned libvirt resources, including the VM-set-local base image.
 
 `clean` validates the selected run marker, selected VM set marker, and
 baseline snapshot records before rollback. It must fail clearly rather than
-roll back an unowned or mismatched VM set. `destroy` performs the same
-ownership validation before deleting domains, disks, snapshots, seed media, or
-networks. `destroy --prune-cache` first removes the selected VM set, then
-attempts to delete the associated baked base-image cache. Cache pruning is
-skipped, not repaired, when cache identity is missing, legacy, invalid, still in
-use by another VM set or libvirt disk, or cannot be proven safe to remove.
+roll back an unowned or mismatched VM set. `destroy` performs ownership
+validation when VM-set metadata is present. If generated metadata has already
+been removed, `destroy` recovers by deleting only exact resources derived from
+the selected `HARNESS_PROJECT_NAME`.
 
 ## State Consistency And Recovery
 
@@ -465,9 +459,7 @@ simulation/vm/simulate.sh --env FILE down
 simulation/vm/simulate.sh --env FILE clean
 ```
 
-Use `destroy` only when the reusable VM set should be permanently removed. Add
-`--prune-cache` only when the associated baked base-image cache should also be
-removed if it is no longer shared.
+Use `destroy` only when the reusable VM set should be permanently removed.
 
 ## Integration Boundary
 

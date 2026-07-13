@@ -247,9 +247,7 @@ generated/simulation/vm/<run-id>/
 | --- | --- | --- | --- |
 | `vm-sets/<vm-set-id>/` | VM-set registry root | Host-dominated | Ownership marker, selected VM set identity, and reusable resource records |
 | `vm-sets/<vm-set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
-| `vm-sets/<vm-set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | Mutable qcow2 volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
-| `base-images/<fingerprint>/` | Baked-image cache registry | Host-dominated | Operator-owned fingerprint marker, pool descriptor, and cache lock state |
-| `base-images/<fingerprint>/volumes/` | Shared libvirt directory-pool target | Libvirt-dominated | Dependency-prepared qcow2 base volume managed, hashed, and inspected through libvirt after publication |
+| `vm-sets/<vm-set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | VM-set-local base image and mutable qcow2 machine volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
 | `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
 | `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
 | Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
@@ -275,13 +273,11 @@ to one `HARNESS_RUN_ID` and may be cleaned independently. `clean` rolls the
 selected VM set back to the clean baseline snapshot and removes mutable
 selected-run state, while preserving exported artifacts, evidence, bounded
 logs, and retained-output backups. `destroy` is the only command that removes
-simulation-owned VM domains, disks, snapshots, seed media, or networks after
-ownership validation. Baked base-image cache entries under
-`base-images/<fingerprint>/` are shared host infrastructure and survive normal
-`destroy`; `destroy --prune-cache` removes one only after selected VM-set
-deletion and unused-cache proof. VM shared Jenkins storage is not VM-host
-state; it is guest-local data on the Jenkins agent VM and is removed only as
-part of owned VM disk destruction.
+simulation-owned VM domains, the VM-set-local base image, machine disks,
+snapshots, seed media, or networks after ownership validation or exact selected
+resource recovery. VM shared Jenkins storage is not VM-host state; it is
+guest-local data on the Jenkins agent VM and is removed only as part of owned
+VM disk destruction.
 
 The host operator owns VM control metadata but does not own adopted qcow2
 content. Libvirt volume APIs provide format, capacity, backing-store, hashing,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 __vm_set_load_marker_values() {
-  VM_SET_MARKER_SCHEMA_VERSION=5
+  VM_SET_MARKER_SCHEMA_VERSION=6
   VM_SET_MARKER_LIBVIRT_URI="$VM_LIBVIRT_URI"
   VM_SET_MARKER_DOMAIN_PREFIX="$(vm_libvirt_domain_prefix)"
   VM_SET_MARKER_NETWORK_NAME="$(vm_libvirt_network_name)"
@@ -24,8 +24,8 @@ vm_set_prepare() {
   else
     vm_libvirt_ensure_ssh_key || return $?
     vm_libvirt_define_network || return $?
-    vm_libvirt_ensure_baked_base_image || return $?
     vm_libvirt_ensure_storage_pool || return $?
+    vm_libvirt_ensure_baked_base_image || return $?
   fi
 }
 
@@ -40,8 +40,8 @@ vm_set_create() {
   chmod 0700 "$(vm_path_vm_set_machine_dir)" "$(vm_path_vm_set_volume_dir)" || return $?
   vm_libvirt_ensure_ssh_key || return $?
   vm_libvirt_define_network || return $?
-  vm_libvirt_ensure_baked_base_image || return $?
   vm_libvirt_ensure_storage_pool || return $?
+  vm_libvirt_ensure_baked_base_image || return $?
   for machine in "${vm_machines[@]}"; do
     vm_libvirt_define_machine "$machine" || return $?
   done
@@ -120,7 +120,7 @@ __vm_set_verify_teardown_ownership() {
   fi
   for machine in "${vm_machines[@]}"; do
     volume="$(vm_libvirt_machine_volume_name "$machine")"
-    if [ "$schema" = 5 ] && vm_libvirt_volume_exists "$pool" "$volume"; then
+    if [ "$schema" = "$VM_SET_MARKER_SCHEMA_VERSION" ] && vm_libvirt_volume_exists "$pool" "$volume"; then
       __vm_set_verify_teardown_disk_identity "$machine" || return $?
     fi
     vm_libvirt_machine_exists "$machine" || continue
@@ -136,6 +136,9 @@ __vm_set_verify_teardown_pool_volumes() {
   while IFS= read -r actual; do
     [ -n "$actual" ] || continue
     allowed=0
+    if [ "$kind" = disk ] && [ "$actual" = "$(vm_libvirt_baked_base_image_volume_name)" ]; then
+      allowed=1
+    fi
     for machine in "${vm_machines[@]}"; do
       case "$kind" in
         disk) volume="$(vm_libvirt_machine_volume_name "$machine")" ;;
@@ -177,8 +180,71 @@ __vm_set_verify_teardown_disk_identity() {
     die "Selected VM volume format mismatch for teardown: $machine"
 }
 
+__vm_set_destroy_pool_recovery() {
+  local actual pool target volume
+  pool="${1:?pool required}"
+  target="${2:?target required}"
+  [ "${3:?kind required}" = seed ] || [ "$3" = disk ] ||
+    die "Unknown recovery pool kind: $3"
+  vm_libvirt_pool_exists "$pool" || return 0
+  actual="$(vm_libvirt_pool_target "$pool")" ||
+    die "Selected recovery storage pool has unreadable target: $pool"
+  [ "$actual" = "$target" ] ||
+    die "Selected recovery storage pool target mismatch: $pool"
+  if [ -d "$target" ]; then
+    vm_libvirt_require_directory_pool "$pool" "$target" ||
+      die "Selected recovery storage pool is not usable: $pool"
+    __vm_set_verify_teardown_pool_volumes "$pool" "$3" || return $?
+    while IFS= read -r volume; do
+      [ -n "$volume" ] || continue
+      virsh -c "$VM_LIBVIRT_URI" vol-delete "$volume" --pool "$pool" >/dev/null || return $?
+    done < <(virsh -c "$VM_LIBVIRT_URI" vol-list "$pool" --name)
+  else
+    printf 'recovery-missing-pool-target pool=%s path=%s\n' "$pool" "$target"
+  fi
+  vm_libvirt_remove_pool "$pool"
+}
+
+vm_set_destroy_recovery() {
+  local domain machine network pool seed_pool state
+  pool="$(vm_libvirt_storage_pool_name)"
+  seed_pool="$(vm_libvirt_seed_pool_name)"
+  network="$(vm_libvirt_network_name)"
+  for machine in "${vm_machines[@]}"; do
+    vm_libvirt_machine_exists "$machine" || continue
+    domain="$(vm_libvirt_domain_name "$machine")"
+    state="$(vm_libvirt_domain_state "$machine")"
+    case "$state" in
+      'shut off'|shut*) ;;
+      *) virsh -c "$VM_LIBVIRT_URI" destroy "$domain" >/dev/null || return $? ;;
+    esac
+    virsh -c "$VM_LIBVIRT_URI" undefine "$domain" \
+      --snapshots-metadata --nvram >/dev/null 2>&1 ||
+      virsh -c "$VM_LIBVIRT_URI" undefine "$domain" \
+        --snapshots-metadata >/dev/null 2>&1 ||
+      virsh -c "$VM_LIBVIRT_URI" undefine "$domain" >/dev/null || return $?
+  done
+  __vm_set_destroy_pool_recovery "$pool" "$(vm_path_vm_set_disk_dir)" disk || return $?
+  __vm_set_destroy_pool_recovery "$seed_pool" "$(vm_path_vm_set_seed_dir)" seed || return $?
+  if vm_libvirt_selected_network_exists; then
+    __vm_set_verify_network_identity || die "Selected recovery network identity mismatch"
+    if vm_libvirt_network_is_active; then
+      virsh -c "$VM_LIBVIRT_URI" net-destroy "$network" >/dev/null || return $?
+    fi
+    virsh -c "$VM_LIBVIRT_URI" net-undefine "$network" >/dev/null || return $?
+  fi
+  vm_libvirt_selected_resources_exist &&
+    die "Selected VM resources remain after recovery destroy"
+  printf 'vm-set-destroy=ready recovery=metadata-missing\n'
+}
+
 vm_set_destroy() {
   local domain machine network pool seed_pool state volume
+  __vm_libvirt_cleanup_bake_domain || return $?
+  if [ ! -f "$HARNESS_VM_SET_MARKER" ]; then
+    vm_set_destroy_recovery
+    return $?
+  fi
   __vm_set_verify_teardown_ownership || return $?
   pool="$(vm_libvirt_storage_pool_name)"
   seed_pool="$(vm_libvirt_seed_pool_name)"
@@ -203,6 +269,10 @@ vm_set_destroy() {
       vm_libvirt_volume_exists "$pool" "$volume" || continue
       virsh -c "$VM_LIBVIRT_URI" vol-delete "$volume" --pool "$pool" >/dev/null || return $?
     done
+    volume="$(vm_libvirt_baked_base_image_volume_name)"
+    if vm_libvirt_volume_exists "$pool" "$volume"; then
+      virsh -c "$VM_LIBVIRT_URI" vol-delete "$volume" --pool "$pool" >/dev/null || return $?
+    fi
   fi
   if vm_libvirt_pool_exists "$seed_pool"; then
     for machine in "${vm_machines[@]}"; do
@@ -325,40 +395,9 @@ vm_set_verify_marker() {
 }
 
 vm_set_verify_marker_for_teardown() {
-  local actual expected key schema
   [ -f "$HARNESS_VM_SET_MARKER" ] ||
     die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
-  schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
-  case "$schema" in
-    1|2|3|4)
-      for key in mode vm_set_id project_name repo_root vm_set_dir libvirt_uri \
-        domain_prefix network_name storage_pool_name seed_pool_name \
-        baseline_snapshot_name; do
-        actual="$(marker_value "$HARNESS_VM_SET_MARKER" "$key" 2>/dev/null || true)"
-        case "$key" in
-          mode) expected="$HARNESS_MODE" ;;
-          vm_set_id) expected="$LOOPFORGE_VM_SET_ID" ;;
-          project_name) expected="$HARNESS_PROJECT_NAME" ;;
-          repo_root) expected="$repo_root" ;;
-          vm_set_dir) expected="$HARNESS_VM_SET_DIR" ;;
-          libvirt_uri) expected="$VM_LIBVIRT_URI" ;;
-          domain_prefix) expected="$(vm_libvirt_domain_prefix)" ;;
-          network_name) expected="$(vm_libvirt_network_name)" ;;
-          storage_pool_name) expected="$(vm_libvirt_storage_pool_name)" ;;
-          seed_pool_name) expected="$(vm_libvirt_seed_pool_name)" ;;
-          baseline_snapshot_name) expected="$VM_BASELINE_SNAPSHOT_NAME" ;;
-        esac
-        [ "$actual" = "$expected" ] ||
-          die "Legacy VM-set marker $key does not match selected runtime config"
-      done
-      ;;
-    5)
-      vm_set_verify_marker
-      ;;
-    *)
-      die "Unsupported VM-set ownership schema for teardown: ${schema:-missing}"
-      ;;
-  esac
+  vm_set_verify_marker
 }
 
 __vm_set_schema() {
@@ -402,59 +441,6 @@ vm_set_validate_ownership_readonly() {
 vm_set_verify_run_and_set() {
   vm_state_verify_run_marker
   vm_set_verify_marker
-}
-
-vm_set_capture_destroy_cache_identity() {
-  local actual expected fingerprint key schema
-  VM_DESTROY_CACHE_FINGERPRINT=
-  VM_DESTROY_CACHE_IMAGE=
-  VM_DESTROY_CACHE_POOL=
-  VM_DESTROY_CACHE_TARGET=
-  VM_DESTROY_CACHE_VOLUME=
-  VM_DESTROY_CACHE_SKIP_REASON=
-  [ -f "$HARNESS_VM_SET_MARKER" ] || {
-    VM_DESTROY_CACHE_SKIP_REASON=missing-vm-set-marker
-    return 0
-  }
-  schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
-  [ "$schema" = 5 ] || {
-    VM_DESTROY_CACHE_SKIP_REASON=unsupported-schema
-    return 0
-  }
-  fingerprint="$(marker_value "$HARNESS_VM_SET_MARKER" base_image_fingerprint 2>/dev/null || true)"
-  [ -n "$fingerprint" ] || {
-    VM_DESTROY_CACHE_SKIP_REASON=missing-cache-identity
-    return 0
-  }
-  VM_DESTROY_CACHE_FINGERPRINT="$fingerprint"
-  VM_DESTROY_CACHE_IMAGE="$(marker_value "$HARNESS_VM_SET_MARKER" base_image 2>/dev/null || true)"
-  VM_DESTROY_CACHE_POOL="$(marker_value "$HARNESS_VM_SET_MARKER" base_image_pool_name 2>/dev/null || true)"
-  VM_DESTROY_CACHE_TARGET="$(vm_path_baked_base_image_volume_dir "$fingerprint")"
-  VM_DESTROY_CACHE_VOLUME="$(marker_value "$HARNESS_VM_SET_MARKER" base_image_volume_name 2>/dev/null || true)"
-  for key in image pool volume; do
-    case "$key" in
-      image)
-        actual="$VM_DESTROY_CACHE_IMAGE"
-        expected="$(vm_path_baked_base_image "$fingerprint")"
-        ;;
-      pool)
-        actual="$VM_DESTROY_CACHE_POOL"
-        expected="$(vm_libvirt_baked_base_image_pool_name_for_fingerprint "$fingerprint")"
-        ;;
-      volume)
-        actual="$VM_DESTROY_CACHE_VOLUME"
-        expected="$(vm_libvirt_baked_base_image_volume_name)"
-        ;;
-    esac
-    [ -n "$actual" ] || {
-      VM_DESTROY_CACHE_SKIP_REASON=missing-cache-identity
-      return 0
-    }
-    [ "$actual" = "$expected" ] || {
-      VM_DESTROY_CACHE_SKIP_REASON=identity-mismatch
-      return 0
-    }
-  done
 }
 
 vm_set_remove_metadata() {

@@ -12,10 +12,6 @@ vm_path_set_dir() {
   printf '%s/vm-sets/%s\n' "$(vm_generated_root)" "$LOOPFORGE_VM_SET_ID"
 }
 
-vm_path_base_image_cache_root() {
-  printf '%s/base-images\n' "$(vm_generated_root)"
-}
-
 vm_paths_apply_canonical() {
   HARNESS_GENERATED_RUN_DIR="$(vm_path_run_dir)"
   HARNESS_VM_SET_DIR="$(vm_path_set_dir)"
@@ -117,6 +113,22 @@ vm_path_vm_set_disk_dir() {
   printf '%s/disks\n' "$(vm_path_vm_set_libvirt_dir)"
 }
 
+vm_path_vm_set_base_image() {
+  printf '%s/base.qcow2\n' "$(vm_path_vm_set_disk_dir)"
+}
+
+vm_path_vm_set_base_image_marker() {
+  printf '%s/base-image.env\n' "$(vm_path_vm_set_libvirt_dir)"
+}
+
+vm_path_vm_set_base_image_lock() {
+  printf '%s/.locks/base-image.lock\n' "$HARNESS_VM_SET_DIR"
+}
+
+vm_path_vm_set_bake_work_dir() {
+  printf '%s/bake-work-%s\n' "$(vm_path_vm_set_libvirt_dir)" "$$"
+}
+
 vm_path_vm_set_seed_dir() {
   printf '%s/seeds\n' "$(vm_path_vm_set_libvirt_dir)"
 }
@@ -137,30 +149,10 @@ vm_path_vm_volume_xml() {
   printf '%s/%s.xml\n' "$(vm_path_vm_set_volume_dir)" "${1:?machine required}"
 }
 
+vm_path_vm_base_volume_xml() {
+  printf '%s/base.xml\n' "$(vm_path_vm_set_volume_dir)"
+}
+
 vm_path_vm_machine_file() {
   printf '%s/%s.env\n' "$(vm_path_vm_set_machine_dir)" "${1:?machine required}"
-}
-
-vm_path_baked_base_image_dir() {
-  printf '%s/%s\n' "$(vm_path_base_image_cache_root)" "${1:?fingerprint required}"
-}
-
-vm_path_baked_base_image_volume_dir() {
-  printf '%s/volumes\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
-}
-
-vm_path_baked_base_image_pool_xml() {
-  printf '%s/storage-pool.xml\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
-}
-
-vm_path_baked_base_image() {
-  printf '%s/base.qcow2\n' "$(vm_path_baked_base_image_volume_dir "${1:?fingerprint required}")"
-}
-
-vm_path_baked_base_image_marker() {
-  printf '%s/.loopforge-vm-base-image.env\n' "$(vm_path_baked_base_image_dir "${1:?fingerprint required}")"
-}
-
-vm_path_baked_base_image_lock() {
-  printf '%s/.locks/%s.lock\n' "$(vm_path_base_image_cache_root)" "${1:?fingerprint required}"
 }

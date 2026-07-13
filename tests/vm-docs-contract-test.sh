@@ -155,8 +155,8 @@ require_doc_text docs/package-requirements.md \
   '`ldap-utils` for LDAP bind/search readiness and seed proof' \
   'Package requirements must document VM LDAP proof tooling'
 require_doc_text docs/package-requirements.md \
-  '`flock` serializes shared baked-image cache publication' \
-  'Package requirements must document VM baked-image cache locking'
+  '`flock` serializes selected VM-set base-image preparation' \
+  'Package requirements must document VM-set base-image locking'
 require_doc_text docs/package-requirements.md \
   'VM LDAP guest service' \
   'Package requirements evidence map must include VM LDAP guest service'
@@ -312,8 +312,8 @@ require_doc_text simulation/vm/README.md \
   'successful LDAP operation with no matching entries is a failure' \
   'VM README must require exact LDAP entry proof'
 require_doc_text simulation/vm/README.md \
-  'fingerprint-scoped `flock` locking' \
-  'VM README must document serialized baked-image cache publication'
+  'VM-set-local base image' \
+  'VM README must document VM-set-local base-image ownership'
 require_doc_text simulation/vm/README.md \
   'become libvirt-managed volumes' \
   'VM README must define libvirt-managed image ownership'
@@ -366,7 +366,7 @@ require_doc_text simulation/vm/README.md \
   'role OS dependency fulfillment, LDAP service' \
   'VM README must place role OS dependency fulfillment before baseline snapshot capture'
 require_doc_text simulation/vm/verification.md \
-  '`create` baked or reused a simulation-owned dependency-prepared base image' \
+  '`create` baked a simulation-owned dependency-prepared base image' \
   'VM verification must require baked base-image proof for M4'
 require_doc_text simulation/vm/verification.md \
   'each VM proves the expected packages and commands are available from the' \
@@ -381,17 +381,17 @@ require_doc_text simulation/vm/README.md \
   'Use `destroy` only when the reusable VM set should be permanently removed.' \
   'VM README must document destroy as permanent VM-set removal'
 require_doc_text simulation/vm/README.md \
-  '`destroy [--env FILE] [--prune-cache]`' \
-  'VM README must document destroy cache pruning flag'
+  '`destroy [--env FILE]`' \
+  'VM README must document destroy command'
 require_doc_text simulation/vm/README.md \
-  'skipped, not repaired, when cache identity is missing' \
-  'VM README must document guarded destroy cache pruning'
+  'VM-set-local base image' \
+  'VM README must document destroy removes local base image'
 require_doc_text docs/lifecycle-contract.md \
-  '`destroy --prune-cache` may also remove' \
-  'Lifecycle contract must define guarded VM base-image cache pruning'
+  "This includes the selected VM set's local baked" \
+  'Lifecycle contract must define local VM base-image destruction'
 require_doc_text docs/directory-model.md \
-  '`destroy --prune-cache` removes one only after selected VM-set' \
-  'Directory model must define baked base-image cache prune boundary'
+  'VM-set-local base image' \
+  'Directory model must define VM-set-local base-image ownership'
 require_doc_text simulation/vm/README.md \
   'cleanup-libvirt-resources.sh --dry-run' \
   'VM README must document host cleanup dry-run'

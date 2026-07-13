@@ -183,13 +183,6 @@ vm_libvirt_require_existing_storage_pool() {
   }
 }
 
-__vm_libvirt_ensure_baked_base_image_pool() {
-  __vm_libvirt_ensure_directory_pool \
-    "$(vm_libvirt_baked_base_image_pool_name)" \
-    "$(vm_path_baked_base_image_volume_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")" \
-    "$(vm_path_baked_base_image_pool_xml "$VM_BAKED_BASE_IMAGE_FINGERPRINT")"
-}
-
 vm_libvirt_volume_exists() {
   local pool volume
   pool="${1:?pool name required}"
@@ -249,7 +242,8 @@ __vm_libvirt_volume_sha256() {
   local pool volume tmp sha rc
   pool="${1:?pool name required}"
   volume="${2:?volume name required}"
-  tmp="$(mktemp "$(vm_path_baked_base_image_dir "$VM_BAKED_BASE_IMAGE_FINGERPRINT")/.volume-download.XXXXXX")" || return $?
+  mkdir -p "$HARNESS_VM_SET_DIR/.tmp" || return $?
+  tmp="$(mktemp "$HARNESS_VM_SET_DIR/.tmp/volume-download.XXXXXX")" || return $?
   if virsh -c "$VM_LIBVIRT_URI" vol-download "$volume" "$tmp" \
     --pool "$pool" --sparse >/dev/null; then
     sha="$(sha256sum "$tmp" | awk '{print $1}')"

@@ -47,17 +47,8 @@ vm_libvirt_storage_pool_name() {
   printf '%s-images' "$HARNESS_PROJECT_NAME"
 }
 
-vm_libvirt_baked_base_image_pool_name_for_fingerprint() {
-  local digest fingerprint target
-  fingerprint="${1:?fingerprint required}"
-  target="$(vm_path_baked_base_image_volume_dir "$fingerprint")"
-  digest="$(printf '%s\n' "$target" | sha256sum | awk '{print $1}')"
-  printf 'loopforge-vm-base-%s\n' "${digest:0:16}"
-}
-
 vm_libvirt_baked_base_image_pool_name() {
-  vm_libvirt_baked_base_image_pool_name_for_fingerprint \
-    "${VM_BAKED_BASE_IMAGE_FINGERPRINT:?baked base image fingerprint required}"
+  vm_libvirt_storage_pool_name
 }
 
 vm_libvirt_baked_base_image_volume_name() {

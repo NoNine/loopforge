@@ -50,14 +50,13 @@ log shows failed commands.
 M4 is the baseline-prerequisite gate. It must not accept marker-only proof.
 Before writing `baseline-prereqs=ready`, the harness must prove:
 
-- `create` baked or reused a simulation-owned dependency-prepared base image
+- `create` baked a simulation-owned dependency-prepared base image
   for the selected source image checksum, Ubuntu baseline, apt mirror,
   source-boundary label, VM disk size, and VM package matrix;
 - the base-image bake completed package installation from the configured
-  simulation apt mirror, or a matching ready marker proved the cache hit;
-- cache hits prove qcow2 format and the recorded baked-image SHA-256 through
-  libvirt volume metadata and mediated download, and fingerprint-scoped
-  locking prevents concurrent publication races;
+  simulation apt mirror, and a VM-set-local ready marker proves qcow2 format
+  and the recorded baked-image SHA-256 through libvirt volume metadata and
+  mediated download;
 - existing VM disks prove through libvirt volume metadata that their recorded
   pool, volume, backing path, fingerprint, SHA-256, and disk size match the
   selected baked image, without requiring direct host file access, and domain
@@ -86,7 +85,7 @@ without repairing it.
 For M4, a create log that contains apt `E:` errors, `Err:` fetch failures,
 `command not found`, `Unit file ... does not exist`, failed `ldapsearch`,
 permission errors, or timeouts invalidates `os-baseline`,
-`base-image-bake=ready`, `base-image-cache=hit`, `ldap-service=ready`,
+`base-image-bake=ready`, `base-image=ready`, `ldap-service=ready`,
 `ldap-consumer=... reachable`, and `baseline-prereqs=ready` for that run.
 
 ## Review Use

@@ -576,20 +576,21 @@ vm_cmd_clean() {
 }
 
 vm_cmd_destroy() {
-  local cache_prune_summary detail evidence log prune_cache
-  prune_cache="${1:-0}"
-  vm_config_load_runtime
+  local detail evidence log
+  if vm_config_runtime_valid; then
+    vm_config_load_runtime
+  else
+    vm_config_load "$HARNESS_ENV_FILE"
+  fi
   log="$(vm_path_bounded_log destroy)"
   {
-    vm_state_verify_run_marker
-    if [ "$prune_cache" -eq 1 ]; then
-      vm_set_capture_destroy_cache_identity
+    if [ -f "$HARNESS_RUN_MARKER" ]; then
+      vm_state_verify_run_marker
+    else
+      printf 'recovery-missing-run-marker path=%s\n' "$HARNESS_RUN_MARKER"
     fi
     vm_set_destroy
     vm_set_remove_metadata
-    if [ "$prune_cache" -eq 1 ]; then
-      cache_prune_summary="$(vm_libvirt_prune_baked_base_image_cache_after_destroy)"
-    fi
   } >"$log" 2>&1 || {
     evidence="$(vm_write_harness_evidence destroy fail "simulate.sh destroy" "$log" "M5 selected VM-set destruction failed ownership validation or removal")"
     print_command_failure destroy "" "failed reason=vm-set-destroy" "$log" "$evidence"
@@ -597,6 +598,5 @@ vm_cmd_destroy() {
   }
   evidence="$(vm_write_harness_evidence destroy pass "simulate.sh destroy" "$log" "M5 permanently removed only the selected owned VM set")"
   detail="ok vm-set=$LOOPFORGE_VM_SET_ID removed"
-  [ -z "${cache_prune_summary:-}" ] || detail="$detail $cache_prune_summary"
   print_command_summary destroy "" "$detail"
 }
