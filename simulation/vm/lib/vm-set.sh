@@ -399,9 +399,25 @@ vm_set_verify_marker() {
 }
 
 vm_set_verify_marker_for_teardown() {
+  local key
   [ -f "$HARNESS_VM_SET_MARKER" ] ||
     die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
-  vm_set_verify_marker
+  __vm_set_load_marker_values
+  for key in \
+    mode \
+    vm_set_id \
+    project_name \
+    repo_root \
+    vm_set_dir \
+    libvirt_uri \
+    domain_prefix \
+    network_name \
+    storage_pool_name \
+    seed_pool_name \
+    baseline_snapshot_name
+  do
+    __vm_set_verify_marker_key "$key"
+  done
 }
 
 __vm_set_schema() {

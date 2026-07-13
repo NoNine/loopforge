@@ -91,7 +91,7 @@ grep -Fq "Incompatible legacy VM set $vm_set_id" "$audit_err"
 grep -Fq 'Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID' "$audit_err"
 grep -Fq 'M5 down/destroy cleanup' "$audit_err"
 
-sed -i 's/^ownership_schema_version=1$/ownership_schema_version=5/' "$marker"
+sed -i 's/^ownership_schema_version=1$/ownership_schema_version=6/' "$marker"
 cat >>"$marker" <<EOF
 base_image=not-created
 base_image_fingerprint=not-created

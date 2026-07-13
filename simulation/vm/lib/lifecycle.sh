@@ -640,9 +640,9 @@ vm_cmd_clean() {
 }
 
 vm_cmd_clean_steps() {
-  vm_state_verify_run_marker
-  vm_set_verify_teardown_ownership
-  vm_libvirt_require_set_shut_off clean
+  vm_state_verify_run_marker || return $?
+  vm_set_verify_teardown_ownership || return $?
+  vm_libvirt_require_set_shut_off clean || return $?
   vm_state_clean_mutable_run_state
 }
 

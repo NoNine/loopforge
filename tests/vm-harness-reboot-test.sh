@@ -72,7 +72,7 @@ HARNESS_TARGET_SSH_IDENTITY_FILE="$tmp_dir/ci-operator"
 HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$tmp_dir/known_hosts"
 touch "$HARNESS_TARGET_SSH_IDENTITY_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
 set +e
-PATH="$stub_bin:$PATH" vm_ssh_wait_ready bundle-factory >"$tmp_dir/ssh-ready.out" 2>"$tmp_dir/ssh-ready.err"
+(PATH="$stub_bin:$PATH"; vm_ssh_wait_ready bundle-factory) >"$tmp_dir/ssh-ready.out" 2>"$tmp_dir/ssh-ready.err"
 rc=$?
 set -e
 if [ "$rc" -eq 0 ]; then

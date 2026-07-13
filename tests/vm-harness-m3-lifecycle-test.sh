@@ -307,12 +307,13 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
     [ -f "$stub_state/snapshots/loopforge-vm-$run_id-$vm_set_id-$machine/loopforge-clean-baseline" ]
   done
 
-  chmod 0444 "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/bundle-factory-seed.iso"
+  seed_iso="$generated_root/vm-sets/$vm_set_id/libvirt/seeds/bundle-factory-seed.iso"
+  seed_before="$(stat -c '%i:%Y:%a' "$seed_iso")"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create-reuse.out"
   grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" \
     "$tmp_dir/create-reuse.out"
-  [ "$(stat -c %a "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/bundle-factory-seed.iso")" = 644 ]
+  [ "$(stat -c '%i:%Y:%a' "$seed_iso")" = "$seed_before" ]
   [ "$(cat "$vm_set_ssh_identity.pub")" = "$vm_set_ssh_public_key" ]
   reuse_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
   grep -Fq 'baseline-snapshot=ready source=existing' "$reuse_log"
@@ -342,8 +343,11 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   [ "$(grep -c '^snapshot-revert ' "$virsh_calls")" -eq 5 ]
   ! grep -Fq 'shutdown ' "$virsh_calls"
   ! grep -Fq 'destroy ' "$virsh_calls"
+  gerrit_machine_metadata="$generated_root/vm-sets/$vm_set_id/libvirt/machines/gerrit.env"
+  gerrit_machine_metadata_before="$(mktemp "$tmp_dir/gerrit.env.XXXXXX")"
+  cp "$gerrit_machine_metadata" "$gerrit_machine_metadata_before"
   sed -i 's/^base_image_fingerprint=.*/base_image_fingerprint=clean-must-not-care/' \
-    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/gerrit.env"
+    "$gerrit_machine_metadata"
 
   : >"$virsh_calls"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_CALLS="$virsh_calls" \
@@ -363,6 +367,7 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
   for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
     grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
   done
+  cp "$gerrit_machine_metadata_before" "$gerrit_machine_metadata"
 
   if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" audit-state >"$tmp_dir/audit-clean.out" 2>&1; then

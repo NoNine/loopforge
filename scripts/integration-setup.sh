@@ -826,7 +826,7 @@ ensure_shared_storage_mount_on_controller() {
   target_exec jenkins-controller "
     set -e
     expected_source='$JENKINS_AGENT_HOST:$JENKINS_SHARED_STORAGE_PATH'
-    current_source=\$(findmnt -n -T '$JENKINS_SHARED_STORAGE_PATH' -o SOURCE 2>/dev/null || true)
+    current_source=\$(findmnt -n -M '$JENKINS_SHARED_STORAGE_PATH' -o SOURCE 2>/dev/null || true)
     if [ \"\$current_source\" != \"\$expected_source\" ]; then
       if [ -n \"\$current_source\" ]; then
         printf 'unexpected mount source for %s: %s\n' '$JENKINS_SHARED_STORAGE_PATH' \"\$current_source\" >&2
@@ -835,8 +835,8 @@ ensure_shared_storage_mount_on_controller() {
       sudo install -d -m 2775 -o '$JENKINS_RUNTIME_ACCOUNT' -g '$JENKINS_SHARED_GROUP' '$JENKINS_SHARED_STORAGE_PATH'
       sudo mount -t nfs '$JENKINS_AGENT_HOST:$JENKINS_SHARED_STORAGE_PATH' '$JENKINS_SHARED_STORAGE_PATH'
     fi
-    source=\$(findmnt -n -T '$JENKINS_SHARED_STORAGE_PATH' -o SOURCE)
-    fstype=\$(findmnt -n -T '$JENKINS_SHARED_STORAGE_PATH' -o FSTYPE)
+    source=\$(findmnt -n -M '$JENKINS_SHARED_STORAGE_PATH' -o SOURCE)
+    fstype=\$(findmnt -n -M '$JENKINS_SHARED_STORAGE_PATH' -o FSTYPE)
     test \"\$source\" = \"\$expected_source\"
     case \"\$fstype\" in
       nfs|nfs4) ;;

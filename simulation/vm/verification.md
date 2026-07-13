@@ -86,11 +86,13 @@ the changed subsystem can affect them:
 
 Tests should model retained-state side effects when practical. Examples
 include stale target SSH known-host entries, non-teardown metadata drift,
-retained VM-set SSH identity, libvirt-managed disk metadata, unwritable or
-libvirt-owned final seed media, unowned selected-pool volumes, and bounded
+retained VM-set SSH identity, libvirt-managed disk metadata, retained seed
+media attachment and readability, unowned selected-pool volumes, and bounded
 logs that contain runtime failure markers. These are not workaround
 scenarios; they are the normal state boundaries created by reusable VM sets
-and explicit cleanup commands.
+and explicit cleanup commands. Ready-baseline reuse verifies retained seed
+media; it must not rewrite or chmod-normalize valid retained seed media as a
+hidden repair path.
 
 Recovery remains explicit. Only `down`, `restore-baseline`, `clean`, and
 `destroy` may recover VM lifecycle state as defined by
