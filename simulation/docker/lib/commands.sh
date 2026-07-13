@@ -221,62 +221,94 @@ cmd_up() {
   print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
 }
 
-docker_project_image_refs() {
-  local service ref
+docker_destroy_container_targets() {
+  local service
   for service in "${services[@]}"; do
-    for ref in "$HARNESS_PROJECT_NAME-$service" "$HARNESS_PROJECT_NAME"_"$service"; do
-      if docker image inspect "$ref" >/dev/null 2>&1; then
-        printf '%s\n' "$ref"
-      fi
-    done
-  done
+    docker ps -a -q \
+      --filter "label=org.loopforge.resource=docker-simulation" \
+      --filter "label=org.loopforge.project=$HARNESS_PROJECT_NAME" \
+      --filter "label=org.loopforge.run-id=$HARNESS_RUN_ID" \
+      --filter "label=org.loopforge.service=$service" 2>/dev/null || true
+  done | awk 'NF && !seen[$0]++'
 }
 
-docker_project_image_ids() {
-  docker images -q --filter "label=com.docker.compose.project=$HARNESS_PROJECT_NAME" 2>/dev/null || true
+docker_destroy_network_targets() {
+  (docker network ls -q \
+    --filter "label=org.loopforge.resource=docker-simulation" \
+    --filter "label=org.loopforge.project=$HARNESS_PROJECT_NAME" \
+    --filter "label=org.loopforge.run-id=$HARNESS_RUN_ID" \
+    --filter "label=org.loopforge.network=harness" 2>/dev/null || true) |
+    awk 'NF && !seen[$0]++'
 }
 
 docker_destroy_image_targets() {
-  local refs
-  refs="$(docker_project_image_refs)"
-  if [ -n "$refs" ]; then
-    printf '%s\n' "$refs" | awk 'NF && !seen[$0]++'
-    return 0
-  fi
-  docker_project_image_ids | awk 'NF && !seen[$0]++'
+  local service
+  for service in "${services[@]}"; do
+    docker images -q \
+      --filter "label=org.loopforge.resource=docker-simulation" \
+      --filter "label=org.loopforge.project=$HARNESS_PROJECT_NAME" \
+      --filter "label=org.loopforge.run-id=$HARNESS_RUN_ID" \
+      --filter "label=org.loopforge.service=$service" 2>/dev/null || true
+  done | awk 'NF && !seen[$0]++'
 }
 
 cmd_destroy() {
-  local log rc evidence target removed_count
+  local log rc evidence target container_count network_count image_count
   bootstrap_harness_env
   require_command docker
-  detect_compose
-  if selected_containers_exist; then
-    die "Selected Docker simulation containers still exist; run down before destroy"
-  fi
   log="$(bounded_log_path destroy)"
   rc=0
-  removed_count=0
+  container_count=0
+  network_count=0
+  image_count=0
   : >"$log"
   while IFS= read -r target; do
     [ -n "$target" ] || continue
-    if docker image rm "$target" >>"$log" 2>&1; then
-      removed_count=$((removed_count + 1))
+    if docker rm -f "$target" >>"$log" 2>&1; then
+      container_count=$((container_count + 1))
     else
       rc=$?
-      printf 'image_remove_failed target=%s\n' "$target" >>"$log"
+      printf 'container_remove_failed target=%s\n' "$target" >>"$log"
       break
     fi
   done <<EOF
+$(docker_destroy_container_targets)
+EOF
+  if [ "$rc" -eq 0 ]; then
+    while IFS= read -r target; do
+      [ -n "$target" ] || continue
+      if docker network rm "$target" >>"$log" 2>&1; then
+        network_count=$((network_count + 1))
+      else
+        rc=$?
+        printf 'network_remove_failed target=%s\n' "$target" >>"$log"
+        break
+      fi
+    done <<EOF
+$(docker_destroy_network_targets)
+EOF
+  fi
+  if [ "$rc" -eq 0 ]; then
+    while IFS= read -r target; do
+      [ -n "$target" ] || continue
+      if docker image rm "$target" >>"$log" 2>&1; then
+        image_count=$((image_count + 1))
+      else
+        rc=$?
+        printf 'image_remove_failed target=%s\n' "$target" >>"$log"
+        break
+      fi
+    done <<EOF
 $(docker_destroy_image_targets)
 EOF
+  fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence destroy harness fail "simulate.sh destroy" "$log" "Docker project-built image removal failed")"
+    evidence="$(write_evidence destroy harness fail "simulate.sh destroy" "$log" "Docker selected resource destruction failed")"
     print_command_failure destroy "" failed "$log" "$evidence"
     return "$rc"
   fi
-  evidence="$(write_evidence destroy harness pass "simulate.sh destroy" "$log" "Removed selected Docker simulation project-built images only; base images and generated state were not removed")"
-  print_command_summary destroy "" "ok images-removed=$removed_count"
+  evidence="$(write_evidence destroy harness pass "simulate.sh destroy" "$log" "Removed selected Docker simulation containers, harness network, and project-built images; base images and generated state were not removed")"
+  print_command_summary destroy "" "ok containers-removed=$container_count networks-removed=$network_count images-removed=$image_count"
 }
 
 cmd_status() {

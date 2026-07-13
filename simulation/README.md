@@ -186,11 +186,12 @@ mounts, VM-set metadata, snapshots, or libvirt resources do not match
 the selected run. Recover with the explicit cleanup commands owned by
 the layer README, then use a fresh run identity for new validation.
 
-Docker recovery uses `down` or `clean` for the selected run and a fresh
-`HARNESS_RUN_ID` for follow-up validation. Docker `destroy` is separate image
-cleanup for selected project-built images. Docker host-wide cleanup is a
-separate operator recovery path for Compose-labeled LoopForge containers,
-networks, and project-built images; it is not selected-run cleanup. VM
+Docker recovery uses `down`, `clean`, or `destroy` for the selected run and a
+fresh `HARNESS_RUN_ID` for follow-up validation. Docker `destroy` removes
+selected LoopForge-labeled containers, the selected harness network, and
+selected project-built images. Docker host-wide cleanup is a separate operator
+recovery path for Compose-labeled LoopForge containers, networks, and
+project-built images; it is not selected-run cleanup. VM
 recovery uses `down`, `restore-baseline`, `clean`, or `destroy` for the
 selected VM set and run; when resource identity is suspect, select both a
 fresh `HARNESS_RUN_ID` and a fresh `LOOPFORGE_VM_SET_ID` for follow-up
@@ -217,7 +218,7 @@ commands preserve the same review and recovery boundaries:
 | Generated host-side state | `generated/simulation/docker/<run-id>/` bind-mounted state | `generated/simulation/vm/<run-id>/` rendered inputs, SSH material, markers, logs, and evidence | Preserved by `down`; removed by `clean` except retained review output. |
 | Clean generated state | `clean` removes mutable generated run data | `clean` removes mutable generated run data | Does not reset Docker images or VM disks. |
 | Reset durable runtime state | Usually not needed for container writable layers; bind mounts still require `clean` | `restore-baseline` resets VM disks to the clean baseline snapshot | Must happen after `down`; does not clean generated state. |
-| Remove reusable artifacts/resources | `destroy` removes selected project-built images | `destroy` removes the selected VM set: domains, disks, baked base image, seed media, networks, and metadata | Requires the runtime to be stopped or removed first. |
+| Remove reusable artifacts/resources | `destroy` removes selected containers, the harness network, and project-built images | `destroy` removes the selected VM set: domains, disks, baked base image, seed media, networks, and metadata | Removes selected backend resources without deleting generated review output. |
 
 | Goal | Docker sequence | VM sequence |
 | --- | --- | --- |

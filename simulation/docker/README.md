@@ -73,7 +73,7 @@ Phase and lifecycle commands:
 | `audit-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
 | `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
 | `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
-| `destroy [--env FILE]` | Removes images built for the selected Docker simulation project. It does not remove containers, networks, generated state, base images, artifacts, evidence, or logs. If selected containers still exist, it fails and tells the operator to run `down` first. |
+| `destroy [--env FILE]` | Removes selected LoopForge-labeled containers, the selected harness network, and images built for the selected Docker simulation project. It does not remove generated state, base images, artifacts, evidence, or logs. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
@@ -309,11 +309,12 @@ the same initialized run.
 Use `audit-state` when you need the slower bind-mount audit for an existing
 run. Normal lifecycle phases keep the cheap runtime-config check only.
 
-`destroy` is deliberately narrower than VM `destroy`. Docker `destroy`
-removes only images built for the selected Compose project, normally after
-`down` has removed selected containers. It leaves upstream/base images such as
-`HARNESS_UBUNTU_IMAGE` and `HARNESS_LDAP_IMAGE` intact and leaves generated
-run output for review or explicit `clean`.
+Docker `destroy` removes only selected LoopForge-labeled Docker resources for
+the selected project and run: containers, the harness network, and
+project-built images. It can recover the selected Docker resources from the
+env identity when rendered runtime state has already been removed. It leaves
+upstream/base images such as `HARNESS_UBUNTU_IMAGE` and `HARNESS_LDAP_IMAGE`
+intact and leaves generated run output for review or explicit `clean`.
 
 ## Integration Boundary
 
