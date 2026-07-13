@@ -405,6 +405,7 @@ sequenceDiagram
   LC->>LC: vm_cmd_init_run()
   LC->>LC: vm_cmd_create()
   LC->>LC: vm_cmd_up()
+  LC->>LC: vm_cmd_status()
   LC->>LC: vm_cmd_prepare_artifacts()
   LC->>LC: vm_cmd_stage_artifacts()
   LC->>LC: vm_cmd_configure_role()

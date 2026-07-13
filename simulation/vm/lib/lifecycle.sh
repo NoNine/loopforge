@@ -208,24 +208,43 @@ vm_cmd_audit_state() {
   print_command_summary audit-state "" "ok"
 }
 
+vm_workflow_step() {
+  local step
+  step="${1:?workflow step required}"
+  shift
+  printf '==> %s\n' "$step"
+  if [ -n "${HARNESS_TEST_WORKFLOW_CALLS:-}" ]; then
+    mkdir -p "$(dirname "$HARNESS_TEST_WORKFLOW_CALLS")"
+    printf '%s\n' "$step" >>"$HARNESS_TEST_WORKFLOW_CALLS"
+    return 0
+  fi
+  "$@"
+}
+
+vm_workflow_downstream_steps() {
+  vm_workflow_step create vm_cmd_create || return $?
+  vm_workflow_step up vm_cmd_up || return $?
+  vm_workflow_step status vm_cmd_status || return $?
+  vm_workflow_step prepare-artifacts vm_cmd_prepare_artifacts "" || return $?
+  vm_workflow_step stage-artifacts vm_cmd_stage_artifacts "" || return $?
+  vm_workflow_step configure-role vm_cmd_configure_role "" || return $?
+  vm_workflow_step validate-role vm_cmd_validate_role "" || return $?
+  vm_workflow_step configure-integration vm_cmd_configure_integration || return $?
+  vm_workflow_step validate-integration vm_cmd_validate_integration || return $?
+  vm_workflow_step prove-integration vm_cmd_prove_integration || return $?
+}
+
 vm_cmd_run() {
   if vm_config_runtime_valid; then
+    vm_config_load_runtime
     printf 'run: mode=resume run-id=%s vm-set=%s\n' "$HARNESS_RUN_ID" "$LOOPFORGE_VM_SET_ID"
   else
     vm_config_load "$HARNESS_ENV_FILE"
     printf 'run: mode=fresh run-id=%s vm-set=%s\n' "$HARNESS_RUN_ID" "$LOOPFORGE_VM_SET_ID"
-    vm_cmd_preflight || return $?
-    vm_cmd_init_run || return $?
+    vm_workflow_step preflight vm_cmd_preflight || return $?
+    vm_workflow_step init-run vm_cmd_init_run || return $?
   fi
-  vm_cmd_create || return $?
-  vm_cmd_up || return $?
-  vm_cmd_prepare_artifacts "" || return $?
-  vm_cmd_stage_artifacts "" || return $?
-  vm_cmd_configure_role "" || return $?
-  vm_cmd_validate_role "" || return $?
-  vm_cmd_configure_integration || return $?
-  vm_cmd_validate_integration || return $?
-  vm_cmd_prove_integration || return $?
+  vm_workflow_downstream_steps || return $?
   print_command_summary run "" "ok run-id=$HARNESS_RUN_ID vm-set=$LOOPFORGE_VM_SET_ID"
 }
 
