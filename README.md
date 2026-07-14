@@ -131,6 +131,7 @@ accounts.
 ├── AGENTS.md             # AI coding-agent instructions for this repository
 ├── docs/                 # Product, architecture, contracts, operations, and plans
 ├── examples/             # Reviewed env-file examples with placeholder values
+├── project-state/        # Mutable implementation resume ledger
 ├── scripts/              # Role helpers, integration setup, and evidence collection
 ├── simulation/           # Shared simulation model and mode-specific harnesses
 │   ├── docker/           # Docker simulation CLI, Compose file, and operator docs

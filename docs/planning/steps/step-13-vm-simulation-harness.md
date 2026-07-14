@@ -43,7 +43,7 @@ for the specific target and action.
 ## Milestone State
 
 Use `simulation/vm/docs/design.md` for the durable M1-M8 milestone sequence. Use
-`docs/execution-status.md` for the current milestone, completed milestone
+`project-state/execution-status.md` for the current milestone, completed milestone
 state, verification logs, blockers, guardrails, and next authorized work.
 
 ## Verification

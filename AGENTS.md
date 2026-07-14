@@ -6,7 +6,7 @@ This repository contains the Gerrit/Jenkins setup package described in
 Use `docs/README.md` to resolve documentation authority before
 changing product, process, or implementation facts. Use
 `docs/planning/implementation-plan.md` for implementation sequencing and
-`docs/execution-status.md` for mutable resume state.
+`project-state/execution-status.md` for mutable resume state.
 
 ## Interaction Rules
 
@@ -94,14 +94,14 @@ argument creates a separate paragraph.
 
 ## Commit Scope
 
-- Never stage or commit `docs/execution-status.md` as part of implementation,
+- Never stage or commit `project-state/execution-status.md` as part of implementation,
   documentation, cleanup, or a broad request to commit current changes.
-- Keep `docs/execution-status.md` as unstaged mutable resume state by default,
+- Keep `project-state/execution-status.md` as unstaged mutable resume state by default,
   including when other repository changes are committed.
 - Commit that file only when the user explicitly requests a ledger snapshot
-  commit and names `docs/execution-status.md` or the execution ledger.
+  commit and names `project-state/execution-status.md` or the execution ledger.
 - Before every commit or amend, verify that the staged path list excludes
-  `docs/execution-status.md` unless that explicit exception applies.
+  `project-state/execution-status.md` unless that explicit exception applies.
 
 ## Log Handling
 

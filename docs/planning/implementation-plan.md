@@ -31,7 +31,7 @@ instead of preserving contradictory guidance.
 - Use `docs/planning/steps/<step>.md` for task-local plan detail.
 - Read companion docs named by the active step before editing code, tests,
   helpers, or consumer docs in that area.
-- Use `docs/execution-status.md` only for mutable resume state, active
+- Use `project-state/execution-status.md` only for mutable resume state, active
   guardrails, verification logs, blockers, and next authorized work.
 - Product facts belong in the proper authority doc before or alongside
   implementation.

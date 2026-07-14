@@ -6,8 +6,8 @@ This file is the durable resume ledger for implementation work. It records
 accepted steps, commits, verification logs, active guardrails, blockers,
 waivers, and the next authorized work item.
 
-Use `docs/docs-management.md` to resolve documentation authority. Product
-truth belongs in the stable authority docs. `docs/implementation-plan.md` is
+Use `docs/README.md` to resolve documentation authority. Product
+truth belongs in the stable authority docs. `docs/planning/implementation-plan.md` is
 the active implementation roadmap, and `docs/references/reference-digest.md` is
 historical draft-behavior input constrained by current Loopforge authorities.
 
@@ -34,18 +34,22 @@ that belong only in bounded logs.
 ## Current State
 
 - Branch: `main`
-- Current HEAD: `18f4b89`
+- Current implementation HEAD: `3df011c`
 - Current implementation stage: Step 13 VM simulation harness implementation
   has M8 integration workflow implemented and verified on a fresh restored
   clean-baseline VM run; follow-up commits through `18f4b89` hardened state
-  permissions, documented explicit recovery, added guarded VM destroy cache
-  pruning, and fixed VM status/env-example paths.
+  permissions, documented explicit recovery, fixed VM status/env-example
+  paths, and the worktree now simplifies VM base images to VM-set-local
+  ownership with plain `destroy` removal.
 - Next authorized work state: Step 13 needs final acceptance/retirement review
   before Step 14. Before any further remote VM mutation, inspect current remote
   state and use explicit cleanup/recovery commands with a fresh run identity.
 - Active lifecycle follow-up: helper-based `target-deployment` support is
   required but not yet implemented; the native target procedure remains the
   currently executable path.
+- Documentation organization: stable docs and simulation companions were
+  reorganized in `3df011c`; this mutable ledger now lives under
+  `project-state/` with explicit staging guards.
 - Ledger policy: this file is mutable execution state and remains unstaged
   unless the user explicitly requests a ledger snapshot commit.
 - Active guardrail: do not run another end-to-end Docker simulation until the
@@ -261,8 +265,8 @@ that belong only in bounded logs.
   2. The VM integration path now uses Jenkins-agent-hosted NFS shared storage
      at `/data/jenkins-shared`; permission handling follows documented
      sensitivity classes and explicit file modes.
-  3. Recovery remains explicit: stale or suspect VM/libvirt/cache state must be
-     inspected, cleaned, destroyed, or pruned through documented commands, then
+  3. Recovery remains explicit: stale or suspect VM/libvirt state must be
+     inspected, cleaned, or destroyed through documented commands, then
      resumed with fresh selected state rather than compatibility fallback.
 
 ### Step 14: Add Boundary Checks
@@ -282,11 +286,11 @@ that belong only in bounded logs.
 
 ## Resume Instructions
 
-1. Read `docs/docs-management.md`, `docs/prd.md`,
-   `docs/implementation-plan.md`, `docs/references/reference-digest.md`, and this
+1. Read `docs/README.md`, `docs/product/prd.md`,
+   `docs/planning/implementation-plan.md`, `docs/references/reference-digest.md`, and this
    ledger.
 2. Check `git status --short`.
-3. Keep `docs/execution-status.md` unstaged unless the user explicitly
+3. Keep `project-state/execution-status.md` unstaged unless the user explicitly
    requests a ledger snapshot commit.
 4. Continue only from the active follow-up or next pending step authorized by
    the user.
@@ -296,7 +300,7 @@ that belong only in bounded logs.
 
 ## Update Rules
 
-- Keep this file subordinate to `docs/docs-management.md` and the stable
+- Keep this file subordinate to `docs/README.md` and the stable
   authority docs it identifies.
 - Keep entries concise: status, commit, verification, and resume-critical notes.
 - Do not paste full logs, transcripts, or repeated historical detail.

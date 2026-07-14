@@ -9,9 +9,10 @@ Current structure:
 ```text
 README.md
 AGENTS.md
+project-state/
+  execution-status.md
 docs/
   README.md
-  execution-status.md
   product/
     prd.md
   architecture/
@@ -44,8 +45,8 @@ Implementation notes:
   simulations, and validation evidence.
 - `docs/` separates product, architecture, contracts, baselines, operations,
   planning, and reference material by ownership.
-- `docs/execution-status.md` contains mutable repository resume state and is
-  not part of the stable documentation authority tree.
+- `project-state/` contains mutable repository resume state and is not part of
+  the stable documentation authority tree.
 - `examples/` contains reviewed env-file examples with placeholder values.
 - `scripts/` contains helper commands that match manual phases.
 - `templates/` contains service config, JCasC, job, and integration templates.

@@ -22,8 +22,8 @@ apply that fact instead of restating the full policy.
 - `references/` contains non-authoritative research and historical input.
 
 Simulation realization documents remain beside the implementation they
-describe under `simulation/`. `docs/execution-status.md` remains mutable
-repository resume state rather than stable documentation authority.
+describe under `simulation/`. Mutable repository resume state lives outside
+the stable documentation tree in `project-state/execution-status.md`.
 
 ## Authority Layers
 
@@ -86,7 +86,7 @@ material as stale or contextual input.
 
 ## Execution Ledger Role
 
-`docs/execution-status.md` is a mutable resume ledger. It may record
+`project-state/execution-status.md` is a mutable resume ledger. It may record
 current state, accepted commits, verification log paths, guardrails, waivers,
 blockers, and the next authorized work item.
 
@@ -109,7 +109,7 @@ Completed steps in the implementation plan should be compressed to historical
 sequencing context once their behavior is accepted. Current product behavior
 belongs in the stable authority docs, scripts, templates, simulations, and
 tests. Mutable status, verification logs, blockers, waivers, and next-work
-facts belong in `docs/execution-status.md`.
+facts belong in `project-state/execution-status.md`.
 
 Create or update a task-local companion doc when an implementation step needs
 durable design detail that would otherwise bloat the roadmap, such as module
@@ -151,7 +151,7 @@ Before changing docs, an agent should:
 For implementation tasks, agents should also read
 `docs/planning/implementation-plan.md`, the relevant per-step plan under
 `docs/planning/steps/` when one exists, and
-`docs/execution-status.md` to understand sequencing and active
+`project-state/execution-status.md` to understand sequencing and active
 guardrails. Those files do not replace the authorities listed above.
 
 When an authority document names implementation, design, sequence, schema, or
@@ -183,7 +183,7 @@ Use this checklist for documentation changes:
   helper-equivalent transcripts.
 - Evidence, logs, summaries, and examples avoid private keys, passwords,
   tokens, LDAP bind secrets, and verbose runtime log dumps.
-- `docs/execution-status.md` records only resume or audit state.
+- `project-state/execution-status.md` records only resume or audit state.
 
 Automated documentation contract tests protect repeated drift patterns. They
 supplement rather than replace this required review checklist.

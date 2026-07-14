@@ -10,7 +10,7 @@ It does not own lifecycle phase semantics, role-specific command transcripts,
 simulation backend mechanics, evidence schema, or mutable implementation
 availability. Those belong respectively to `docs/contracts/lifecycle-contract.md`, the
 role manuals and native operation references, simulation documentation,
-`docs/contracts/validation-and-evidence.md`, and `docs/execution-status.md`.
+`docs/contracts/validation-and-evidence.md`, and `project-state/execution-status.md`.
 
 ## Operator Interfaces
 
@@ -55,4 +55,4 @@ transcripts. Helper scripts implement the reviewed-input interface, and
 simulation documentation realizes the contract for each backend.
 
 Current support status, blockers, waivers, and the next implementation work
-belong only in `docs/execution-status.md`; they are not product-contract facts.
+belong only in `project-state/execution-status.md`; they are not product-contract facts.
