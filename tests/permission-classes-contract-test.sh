@@ -8,7 +8,7 @@ require_doc_text() {
   local pattern message
   pattern="${1:?pattern required}"
   message="${2:?message required}"
-  grep -Fq -- "$pattern" "$repo_root/docs/directory-model.md" || {
+  grep -Fq -- "$pattern" "$repo_root/docs/contracts/directory-model.md" || {
     printf '%s\n' "$message" >&2
     exit 1
   }

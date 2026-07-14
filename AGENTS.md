@@ -1,11 +1,11 @@
 ## Repository Context
 
 This repository contains the Gerrit/Jenkins setup package described in
-`docs/prd.md`.
+`docs/product/prd.md`.
 
-Use `docs/docs-management.md` to resolve documentation authority before
+Use `docs/README.md` to resolve documentation authority before
 changing product, process, or implementation facts. Use
-`docs/implementation-plan.md` for implementation sequencing and
+`docs/planning/implementation-plan.md` for implementation sequencing and
 `docs/execution-status.md` for mutable resume state.
 
 ## Interaction Rules

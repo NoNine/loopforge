@@ -4,7 +4,7 @@
 
 This research note records practical CI patterns for Android AOSP and
 AOSP-style multi-repository projects that integrate Gerrit, Repo manifests,
-and Jenkins. It supports the product CI ownership model in `docs/ci-model.md`
+and Jenkins. It supports the product CI ownership model in `docs/contracts/ci-model.md`
 but does not replace it as product authority.
 
 The central distinction is important: official AOSP documents Repo, manifest,
@@ -186,7 +186,7 @@ live outside Loopforge and generate or reconcile Jenkins jobs.
 
 ## Implications For Loopforge
 
-Loopforge should keep the product CI boundary in `docs/ci-model.md`: Loopforge
+Loopforge should keep the product CI boundary in `docs/contracts/ci-model.md`: Loopforge
 owns Gerrit, Jenkins, agent wiring, Gerrit Trigger integration, `Verified`
 voting, validation, and evidence. Product CI repositories own product job
 definitions, manifest/ref policy, checkout orchestration, and generated job

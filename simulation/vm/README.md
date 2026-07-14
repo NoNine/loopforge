@@ -17,8 +17,8 @@ cross-role integration orchestration. Do not add standalone VM phase scripts or
 a second VM simulation CLI.
 
 Internal harness module structure and implementation contracts are documented
-in `simulation/vm/design.md`. Milestone verification gates are documented in
-`simulation/vm/verification.md`.
+in `simulation/vm/docs/design.md`. Milestone verification gates are documented in
+`simulation/vm/docs/verification.md`.
 
 VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
@@ -32,7 +32,7 @@ loopback port ownership, or Docker transfer waivers.
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
 `simulation/README.md`. VM hostnames, browser URLs, SSH host strings, and LDAP
-endpoint identities follow `docs/endpoint-identity.md`.
+endpoint identities follow `docs/contracts/endpoint-identity.md`.
 
 VM simulation may use simulation-owned fake LDAP bind passwords for its own
 LDAP VM, matching Docker simulation. Those values must be labeled as test
@@ -103,7 +103,7 @@ emit a readiness marker such as `baseline-prereqs=ready`, role validation
 success, integration validation success, or proof success until the runtime
 assertions for that milestone have passed.
 
-The detailed gate contract is `simulation/vm/verification.md`. Public command
+The detailed gate contract is `simulation/vm/docs/verification.md`. Public command
 behavior follows these rules:
 
 - `create` fails closed when VM provisioning, target OS SSH readiness, role OS
@@ -123,7 +123,7 @@ behavior follows these rules:
 ## Command Reference
 
 This section owns VM command behavior. The command-to-checkpoint mapping is
-summarized in `docs/lifecycle-contract.md`.
+summarized in `docs/contracts/lifecycle-contract.md`.
 
 Composite commands:
 

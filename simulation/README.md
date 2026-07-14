@@ -3,7 +3,7 @@
 This directory defines the shared simulation model for the v1 Gerrit/Jenkins
 setup package. Layer-specific command ownership lives in the Docker and VM
 README files; this file owns the common topology, source boundaries, output
-conventions, and simulation realization details. `docs/lifecycle-contract.md`
+conventions, and simulation realization details. `docs/contracts/lifecycle-contract.md`
 owns checkpoint semantics for all modes.
 
 The model has two layers:
@@ -54,7 +54,7 @@ harness is working, promote only that proven boundary.
 ## Simulation Accounts
 
 The simulation model derives account roles and numeric identity policy from
-`docs/account-model.md`. It does not introduce a separate account taxonomy.
+`docs/contracts/account-model.md`. It does not introduce a separate account taxonomy.
 Docker and VM simulation use the account model's example target-local names and
 numeric identities by default unless a layer-specific configuration overrides
 them.
@@ -108,7 +108,7 @@ Docker exec or libvirt console access.
 
 ## Version Baseline
 
-`docs/version-baseline.md` owns the default version baseline for both
+`docs/baselines/version-baseline.md` owns the default version baseline for both
 simulation layers. Future verifiers must fail or report blocked rather than
 claim comparable readiness when the Ubuntu, Java, Gerrit, Jenkins controller,
 plugin-manager, or Jenkins agent/plugin-bundle versions differ from the
@@ -264,7 +264,7 @@ does not claim guest reboot persistence.
 
 ## Terminal Output Convention
 
-`simulation/terminal-output.md` owns shared simulation terminal presentation
+`simulation/docs/terminal-output.md` owns shared simulation terminal presentation
 conventions, including compact command summaries and Docker/VM `status`
 previews. Layer README files own concrete command behavior for their
 entrypoints.
@@ -337,7 +337,7 @@ VM set.
 
 ## Lifecycle Realization
 
-`docs/lifecycle-contract.md` defines checkpoint semantics, pass/block
+`docs/contracts/lifecycle-contract.md` defines checkpoint semantics, pass/block
 conditions, mutation boundaries, and evidence obligations. Simulation layers
 may split, collapse, or add simulation-only commands, but they must preserve
 that contract and keep terminal output short.

@@ -26,179 +26,179 @@ reject_doc_text() {
   fi
 }
 
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   '## Simulation Command Relationship' \
   'Lifecycle contract must describe simulation command relationship'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   '`simulation/README.md` owns shared simulation command semantics.' \
   'Lifecycle contract must point to shared simulation command semantics'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   '`simulation/docker/README.md` and `simulation/vm/README.md` own the concrete' \
   'Lifecycle contract must point concrete command references to layer docs'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   'outside the checkpoint progression' \
   'Lifecycle contract must keep utility commands outside checkpoint progression'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   '`clean` must preserve review artifacts' \
   'Lifecycle contract must preserve VM clean review artifacts'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   'must not delete the reusable VM set' \
   'Lifecycle contract must separate VM clean from destroy'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   'Only `destroy` removes' \
   'Lifecycle contract must define VM destroy as resource deletion'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   'simulation-owned VM resources.' \
   'Lifecycle contract must identify deleted VM resources'
-reject_doc_text docs/lifecycle-contract.md \
+reject_doc_text docs/contracts/lifecycle-contract.md \
   '| VM command | Lifecycle checkpoint |' \
   'Lifecycle contract must not duplicate the VM command reference table'
-reject_doc_text docs/lifecycle-contract.md \
+reject_doc_text docs/contracts/lifecycle-contract.md \
   '| Docker command | Lifecycle checkpoint |' \
   'Lifecycle contract must not duplicate the Docker command reference table'
-reject_doc_text docs/lifecycle-contract.md \
+reject_doc_text docs/contracts/lifecycle-contract.md \
   'VM simulation infrastructure provisioning for the selected reusable VM set' \
   'Lifecycle contract must not duplicate detailed VM implementation behavior'
 
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '## VM Simulation Backing' \
   'Directory model must own VM simulation backing paths'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'generated/simulation/vm/vm-sets/<vm-set-id>/' \
   'Directory model must document reusable VM-set state root'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'generated/simulation/vm/<run-id>/' \
   'Directory model must document VM run-scoped output root'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`vm-sets/<vm-set-id>/libvirt/`' \
   'Directory model must document VM libvirt metadata backing'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`vm-sets/<vm-set-id>/snapshots/`' \
   'Directory model must document VM baseline snapshot records'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'Jenkins-agent-hosted shared storage exported to the controller VM' \
   'Directory model must document Jenkins-agent-hosted VM shared storage'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`host/artifacts/exported/`' \
   'Directory model must document VM host-owned artifact review copies'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '## Operator Input Custody' \
   'Directory model must own operator input custody paths'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`/home/<operator-account>/loopforge-inputs/<role>.env`' \
   'Directory model must define the configurable canonical role env path'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`/home/ci-operator/loopforge-inputs/<role>.env`' \
   'Directory model must name the default operator role env path'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '| `0700` |' \
   'Directory model must protect the operator input directory'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '| `0600` |' \
   'Directory model must protect reviewed role env files'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`gerrit`, `jenkins-controller`, or `jenkins-agent`' \
   'Directory model must constrain canonical role env filenames'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`bundle-factory/` directory are not part of the canonical path' \
   'Directory model must require a flat factory and target role env layout'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '## Role Helper Custody' \
   'Directory model must own role-helper execution paths'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`/home/<operator-account>/loopforge/`' \
   'Directory model must define the configurable canonical role-helper root'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`/home/ci-operator/loopforge/`' \
   'Directory model must name the default role-helper root'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'Root and directories `0755`; regular files `0644`; role helper scripts `0755`' \
   'Directory model must keep role helpers executable non-secret control-plane input'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'Loopforge permissions are classified by data sensitivity' \
   'Directory model must document sensitivity-based permission classes'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'Run IDs and role-specific package directories are not part of the' \
   'Directory model must require one shared role-helper tree'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'VM artifact staging uses target OS SSH' \
   'Directory model must document VM staging through target OS SSH'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   '`/var/lib/loopforge/staging/<role>/`' \
   'Directory model must document VM guest-local canonical staging'
-reject_doc_text docs/directory-model.md \
+reject_doc_text docs/contracts/directory-model.md \
   'VM-to-target transfer scratch' \
   'Directory model must not model VM staging as generated transfer scratch'
 
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   'Linux host with libvirt/KVM access' \
   'Package requirements must document VM libvirt/KVM host prerequisite'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   '`virsh`' \
   'Package requirements must document virsh as VM simulation tooling'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   'cloud-init or seed media tooling' \
   'Package requirements must document VM seed media tooling'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   'NFS packages for shared Jenkins storage are guest VM dependencies' \
   'Package requirements must place VM NFS packages in guests'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   '`nfs-kernel-server`' \
   'Package requirements must document Jenkins agent NFS server package'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   '`nfs-common`' \
   'Package requirements must document Jenkins controller NFS client package'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   '| VM LDAP guest | `slapd` for the simulation-owned LDAP service' \
   'Package requirements must document the VM LDAP guest service package'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   '`ldap-utils` for LDAP bind/search readiness and seed proof' \
   'Package requirements must document VM LDAP proof tooling'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   '`flock` serializes selected VM-set base-image preparation' \
   'Package requirements must document VM-set base-image locking'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   'VM LDAP guest service' \
   'Package requirements evidence map must include VM LDAP guest service'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   'VM simulation realizes role target OS dependency baselines during VM' \
   'Package requirements must place VM role OS dependencies in provisioning'
-require_doc_text docs/package-requirements.md \
+require_doc_text docs/baselines/package-requirements.md \
   'they do not install Ubuntu/OS' \
   'Package requirements must keep role helpers out of OS dependency installation'
 
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'VM simulation evidence must identify the selected `vm_set_id` and `run_id`' \
   'Evidence contract must require VM set and run identity'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'baseline snapshot' \
   'Evidence contract must require VM baseline snapshot evidence'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   '`reboot` evidence' \
   'Evidence contract must require VM reboot evidence'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'agent VM hosts the NFS-backed `/data/jenkins-shared` export' \
   'Evidence contract must require VM shared storage proof'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'VM LDAP evidence must record LDAP service readiness' \
   'Evidence contract must require VM LDAP service readiness evidence'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'seeded account/group' \
   'Evidence contract must require VM LDAP seeded account and group evidence'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'bind/search proof' \
   'Evidence contract must require VM LDAP bind/search evidence'
-require_doc_text docs/validation-and-evidence.md \
+require_doc_text docs/contracts/validation-and-evidence.md \
   'must not imply `target-deployment` acceptance' \
   'Evidence contract must keep VM evidence separate from target deployment'
 
-require_doc_text docs/endpoint-identity.md \
+require_doc_text docs/contracts/endpoint-identity.md \
   'VM inventory must not use Docker service names' \
   'Endpoint identity must reject Docker service names in VM inventory'
-require_doc_text docs/endpoint-identity.md \
+require_doc_text docs/contracts/endpoint-identity.md \
   'Docker published loopback' \
   'Endpoint identity must reject Docker published loopback ports in VM inventory'
-reject_doc_text docs/endpoint-identity.md \
+reject_doc_text docs/contracts/endpoint-identity.md \
   '## VM Simulation Endpoint Realization' \
   'Endpoint identity must not duplicate Applied To Loopforge with a VM-only section'
 
@@ -233,42 +233,42 @@ require_doc_text simulation/README.md \
   '## Terminal Output Convention' \
   'Shared simulation README must document the terminal output convention'
 require_doc_text simulation/README.md \
-  '`simulation/terminal-output.md` owns shared simulation terminal presentation' \
+  '`simulation/docs/terminal-output.md` owns shared simulation terminal presentation' \
   'Shared simulation README must point terminal convention to the companion doc'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   '# Simulation Terminal Output' \
   'Terminal output companion doc must exist'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'Routine command success should use compact summary lines' \
   'Terminal output companion doc must define compact command summaries'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'Commands must not claim success when proof is missing.' \
   'Terminal output companion doc must require honest command states'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'Failure summaries should start with a compact reason' \
   'Terminal output companion doc must define compact failure summaries'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'The `status` command is an operator-facing summary, not an audit report.' \
   'Terminal output companion doc must keep status operator-facing'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'Layers must not force identical fields when their access models' \
   'Terminal output companion doc must allow layer-specific status fields'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'uses the shared `Login accounts` table convention' \
   'Terminal output companion doc must document the login accounts table convention'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'integration service accounts as password-backed login accounts' \
   'Terminal output companion doc must prohibit password-backed integration accounts in status'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   '## Summary Preview' \
   'Terminal output companion doc must include command summary previews'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   '## Docker Preview' \
   'Terminal output companion doc must include a Docker preview'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   '## VM Preview' \
   'Terminal output companion doc must include a VM preview'
-require_doc_text simulation/terminal-output.md \
+require_doc_text simulation/docs/terminal-output.md \
   'not print raw libvirt URIs, VM resource marker values, domain dumps, Docker' \
   'Terminal output companion doc must keep backend internals out of normal output'
 
@@ -320,10 +320,10 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   "libvirt-reported path as a file-backed" \
   'VM README must use file-backed attachment for managed volumes'
-require_doc_text simulation/vm/verification.md \
+require_doc_text simulation/vm/docs/verification.md \
   'without requiring direct host file access' \
   'VM verification must avoid operator reads of managed images'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'Libvirt directory-pool target' \
   'Directory model must identify libvirt-managed VM image paths'
 require_doc_text simulation/vm/README.md \
@@ -365,10 +365,10 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'role OS dependency fulfillment, LDAP service' \
   'VM README must place role OS dependency fulfillment before baseline snapshot capture'
-require_doc_text simulation/vm/verification.md \
+require_doc_text simulation/vm/docs/verification.md \
   '`create` baked a simulation-owned dependency-prepared base image' \
   'VM verification must require baked base-image proof for M4'
-require_doc_text simulation/vm/verification.md \
+require_doc_text simulation/vm/docs/verification.md \
   'each VM proves the expected packages and commands are available from the' \
   'VM verification must keep per-VM package and command proof after baking'
 require_doc_text simulation/vm/README.md \
@@ -389,10 +389,10 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'VM-set-local base image' \
   'VM README must document destroy removes local base image'
-require_doc_text docs/lifecycle-contract.md \
+require_doc_text docs/contracts/lifecycle-contract.md \
   "This includes the selected VM set's local baked" \
   'Lifecycle contract must define local VM base-image destruction'
-require_doc_text docs/directory-model.md \
+require_doc_text docs/contracts/directory-model.md \
   'VM-set-local base image' \
   'Directory model must define VM-set-local base-image ownership'
 require_doc_text simulation/vm/README.md \
@@ -430,51 +430,51 @@ reject_doc_text simulation/vm/README.md \
   'Docker service names such as `gerrit-target`' \
   'VM README must not use Docker service names as VM endpoint identities'
 
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'simulation/vm/README.md` for the public VM command contract' \
   'Step 13 plan must point public VM behavior to the VM README'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'simulation/vm/design.md` for module boundaries and milestone sequence' \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
+  'simulation/vm/docs/design.md` for module boundaries and milestone sequence' \
   'Step 13 plan must point internal VM design to the VM design doc'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'simulation/vm/libvirt-refactor.md` for the accepted libvirt, VM-set,' \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
+  'simulation/vm/docs/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,' \
   'Step 13 plan must name the accepted libvirt refactor companion'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
-  'simulation/vm/sequences.md` for command flow' \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
+  'simulation/vm/docs/sequences.md` for command flow' \
   'Step 13 plan must point VM command flow to the sequence companion doc'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'M2-M8 verification remains milestone-scoped' \
   'Step 13 plan must preserve milestone-scoped verification'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'Local-only milestones must not mutate VM, libvirt, host, guest, Gerrit,' \
   'Step 13 plan must preserve local-only non-mutating scope'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'libvirt preflight and VM-set ownership validation enabled' \
   'Step 13 plan must preserve M2 libvirt preflight and VM-set ownership validation scope'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   '| M4 | Add `tests/vm-harness-ldap-seed-test.sh`; verify role OS dependency baseline readiness' \
   'Step 13 M4 must prove role OS dependencies and LDAP before baseline snapshot'
-require_doc_text docs/implementation/step-13-vm-simulation-harness.md \
+require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   '| M5 | Run `restore-baseline`, `clean`, `destroy`, and `audit-state`; verify rollback' \
   'Step 13 M5 must perform restore/clean/destroy after baseline prerequisites'
-require_doc_text simulation/vm/design.md \
+require_doc_text simulation/vm/docs/design.md \
   '| M4 Baseline prerequisites: role OS dependencies and LDAP proof |' \
   'VM design M4 must own baseline prerequisites'
-require_doc_text simulation/vm/design.md \
+require_doc_text simulation/vm/docs/design.md \
   '| M5 Baseline snapshot, restore, clean, and destroy |' \
   'VM design M5 must own baseline snapshot restore, clean, and destroy'
-require_doc_text simulation/vm/design.md \
-  'simulation/vm/libvirt-refactor.md`' \
+require_doc_text simulation/vm/docs/design.md \
+  'simulation/vm/docs/decisions/libvirt-module-refactor.md`' \
   'VM design must name the accepted libvirt refactor companion'
-require_doc_text simulation/vm/libvirt-refactor.md \
+require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \
   'This decision is implemented.' \
   'VM libvirt refactor companion must record its implemented status'
-require_doc_text simulation/vm/libvirt-refactor.md \
+require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \
   '`lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`' \
   'VM libvirt refactor companion must define the target dependency direction'
-require_doc_text simulation/vm/libvirt-refactor.md \
+require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \
   'The public CLI is unchanged.' \
   'VM libvirt refactor companion must preserve the public CLI'
-require_doc_text simulation/vm/sequences.md \
+require_doc_text simulation/vm/docs/sequences.md \
   'verify role OS dependency baselines' \
   'VM create sequence must verify role OS dependency baselines before snapshot'

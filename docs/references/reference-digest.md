@@ -11,9 +11,9 @@ verbatim implementation from the draft repository. Use this digest only for
 behavior, workflow order, validation expectations, integration intent, and
 known failure boundaries.
 
-Implementation agents may use this digest with `docs/implementation-plan.md`
+Implementation agents may use this digest with `docs/planning/implementation-plan.md`
 for implementation context. They should resolve current product authority
-through `docs/docs-management.md`, and they must not open or copy from the
+through `docs/README.md`, and they must not open or copy from the
 draft repository unless a human explicitly approves a new reference review.
 
 ## Authority Notes
@@ -22,7 +22,7 @@ Current Loopforge authority docs govern v1 boundaries and intended topology.
 When draft repository materials are stale or conflict with current authorities,
 this digest is subordinate to the current authorities.
 
-`docs/lifecycle-contract.md` owns durable lifecycle behavior. This digest may
+`docs/contracts/lifecycle-contract.md` owns durable lifecycle behavior. This digest may
 provide historical workflow context, but it must not define phase order,
 checkpoint semantics, mutation boundaries, resume/rerun behavior, or Docker
 command mapping.
@@ -188,7 +188,7 @@ Agent behavior notes:
 
 ### Shared Integration Helper
 
-`docs/integration-setup-manual.md` is the operator command manual for the
+`docs/operations/setup/integration.md` is the operator command manual for the
 shared helper. It runs after the three role manuals are complete.
 
 `scripts/integration-setup.sh` should support:
@@ -214,7 +214,7 @@ justification plus compatibility evidence.
 Docker simulation command behavior, generated-state lifecycle,
 stale-container recovery, and fresh-run rules are documented in
 `simulation/docker/README.md`. Durable command-to-checkpoint mapping is
-documented in `docs/lifecycle-contract.md`.
+documented in `docs/contracts/lifecycle-contract.md`.
 
 Docker simulation behavior notes:
 
@@ -358,14 +358,14 @@ Do not carry these draft concepts into v1 as supported behavior:
 
 ## Document Map
 
-- `docs/gerrit-setup-manual.md` covers Gerrit role-local setup.
-- `docs/jenkins-controller-setup-manual.md` covers Jenkins controller
+- `docs/operations/setup/gerrit.md` covers Gerrit role-local setup.
+- `docs/operations/setup/jenkins-controller.md` covers Jenkins controller
   role-local setup.
-- `docs/jenkins-agent-setup-manual.md` covers Jenkins agent host role-local
+- `docs/operations/setup/jenkins-agent.md` covers Jenkins agent host role-local
   setup.
-- `docs/integration-setup-manual.md` covers the shared cross-role helper
+- `docs/operations/setup/integration.md` covers the shared cross-role helper
   command workflow after the three role manuals complete.
-- `docs/gerrit-trigger-integration.md` covers the Gerrit Trigger policy and
+- `docs/contracts/gerrit-trigger-integration.md` covers the Gerrit Trigger policy and
   validation contract.
 
 ## Maintained Native Operation References
@@ -375,10 +375,10 @@ references for direct OS and application operations:
 
 | Native reference | Maintained with |
 | --- | --- |
-| `docs/gerrit-native-operations-reference.md` | `docs/gerrit-setup-manual.md` and Step 7 behavior. |
-| `docs/jenkins-controller-native-operations-reference.md` | `docs/jenkins-controller-setup-manual.md` and Step 8 behavior. |
-| `docs/jenkins-agent-native-operations-reference.md` | `docs/jenkins-agent-setup-manual.md` and Step 9 behavior. |
-| `docs/integration-native-operations-reference.md` | `docs/integration-setup-manual.md` and shared integration behavior. |
+| `docs/operations/native/gerrit.md` | `docs/operations/setup/gerrit.md` and Step 7 behavior. |
+| `docs/operations/native/jenkins-controller.md` | `docs/operations/setup/jenkins-controller.md` and Step 8 behavior. |
+| `docs/operations/native/jenkins-agent.md` | `docs/operations/setup/jenkins-agent.md` and Step 9 behavior. |
+| `docs/operations/native/integration.md` | `docs/operations/setup/integration.md` and shared integration behavior. |
 
 These documents must not contain repository helper commands, helper-equivalent
 tables, or `scripts/...` command references. When role manuals or helper

@@ -19,16 +19,16 @@ container lifecycle, bind-mount validation, `docker cp` waivers, loopback
 browser ports, target SSH staging, and cleanup behavior remain Docker harness
 responsibilities rather than generic backend hooks.
 
-Lifecycle checkpoint semantics are defined in `docs/lifecycle-contract.md`.
+Lifecycle checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
 Docker generated-state and stale-container behavior is defined in this
 document.
 
 The shared Docker target image is a simulation superset. It combines
 role-runtime packages, helper-script packages, and Docker harness packages; it
 is not authority for native target-host baselines. See
-`docs/package-requirements.md` for the package classification.
+`docs/baselines/package-requirements.md` for the package classification.
 Docker-specific service names, host loopback browser URLs, and target SSH
-inventory values follow `docs/endpoint-identity.md`.
+inventory values follow `docs/contracts/endpoint-identity.md`.
 
 Docker does not run a guest init system. Its target containers retain the
 existing direct-process lifecycle: the container entrypoint starts `sshd`, and
@@ -45,7 +45,7 @@ this phase boundary is pending implementation.
 ## Command Reference
 
 This section owns Docker command behavior. The command-to-checkpoint mapping
-is summarized in `docs/lifecycle-contract.md`.
+is summarized in `docs/contracts/lifecycle-contract.md`.
 
 Composite command:
 
@@ -168,8 +168,8 @@ Implementation-specific harness state can live below child directories inside
 those roots, but the operator-facing Docker model has one run-scoped output
 layout. Shared simulation contracts for input custody, helper-visible paths,
 artifact staging, LDAP secret handling, retained outputs, and integration key
-custody live in `simulation/README.md`, `docs/artifact-bundle-contract.md`,
-and `docs/directory-model.md`.
+custody live in `simulation/README.md`, `docs/contracts/artifact-bundle-contract.md`,
+and `docs/contracts/directory-model.md`.
 
 Docker realizes those contracts with container lifecycle, generated bind-mount
 sources, and explicitly labeled Docker `cp` waivers:
@@ -215,7 +215,7 @@ host files owned by container users, and Compose does not delete those
 bind-mounted directories, so `clean` is the explicit housekeeping command.
 
 `clean` follows the shared retained-output contract from
-`docs/directory-model.md`. It verifies the selected run marker and operates
+`docs/contracts/directory-model.md`. It verifies the selected run marker and operates
 only under the canonical repo-local generated run root. It backs up retained
 outputs, clears active retained output directories for later run reuse, and
 removes Docker mutable generated runtime data: host rendered inputs and target
@@ -226,8 +226,8 @@ host-orchestrated integration helper state, not role helper roots. If the host
 user cannot remove container-owned files, `clean` may use a one-shot cleanup
 container mounted only to the validated run root.
 
-See `docs/lifecycle-contract.md` for phase behavior rules and
-`docs/directory-model.md` for generated path ownership, host/target dominance,
+See `docs/contracts/lifecycle-contract.md` for phase behavior rules and
+`docs/contracts/directory-model.md` for generated path ownership, host/target dominance,
 and retained-output backup ownership.
 
 ## State Consistency And Recovery
@@ -320,7 +320,7 @@ intact and leaves generated run output for review or explicit `clean`.
 ## Integration Boundary
 
 The shared integration boundary is defined in `simulation/README.md` and
-`docs/lifecycle-contract.md`. Docker orchestrates that shared helper through
+`docs/contracts/lifecycle-contract.md`. Docker orchestrates that shared helper through
 the Docker target SSH inventory and generated Docker run state.
 
 `validate-integration` and `prove-integration` must fail or report blocked

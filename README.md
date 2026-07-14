@@ -49,8 +49,8 @@ target-deployment documentation.
 
 Docker, VM, and target-deployment modes realize the same logical environments
 with different infrastructure boundaries. Detailed interfaces are documented
-in `docs/system-model.md`; phase order and checkpoint behavior are documented
-in `docs/lifecycle-contract.md`.
+in `docs/architecture/system-model.md`; phase order and checkpoint behavior are documented
+in `docs/contracts/lifecycle-contract.md`.
 
 ## Docker Simulation Flow
 
@@ -84,7 +84,7 @@ Run the local harness on a Linux host with:
 - Docker Compose
 - Enough disk space for `generated/` and `logs/`
 
-See `docs/package-requirements.md` for mode-based host prerequisites and the
+See `docs/baselines/package-requirements.md` for mode-based host prerequisites and the
 package matrix.
 
 ## Start With Docker Simulation
@@ -129,7 +129,7 @@ accounts.
 ```text
 .
 ├── AGENTS.md             # AI coding-agent instructions for this repository
-├── docs/                 # Product scope, system model, topic references, and manuals
+├── docs/                 # Product, architecture, contracts, operations, and plans
 ├── examples/             # Reviewed env-file examples with placeholder values
 ├── scripts/              # Role helpers, integration setup, and evidence collection
 ├── simulation/           # Shared simulation model and mode-specific harnesses
@@ -143,35 +143,35 @@ accounts.
 
 ## Documentation Guide
 
-AI agents and reviewers should start with `docs/docs-management.md` when a
+AI agents and reviewers should start with `docs/README.md` when a
 change affects documentation ownership, source-of-truth boundaries, or
 cross-document consistency. It defines the layered authority model and the
 review checklist for docs changes.
 
 Scope and model:
 
-- `docs/prd.md` defines product goals, non-goals, requirements, and acceptance
+- `docs/product/prd.md` defines product goals, non-goals, requirements, and acceptance
   criteria.
-- `docs/system-model.md` defines environments, actors, accounts, utilities,
+- `docs/architecture/system-model.md` defines environments, actors, accounts, utilities,
   interfaces, deployment modes, and evidence relationships.
-- `docs/lifecycle-contract.md` defines phase order, lifecycle checkpoints,
+- `docs/contracts/lifecycle-contract.md` defines phase order, lifecycle checkpoints,
   mutation boundaries, resume/rerun behavior, and command mapping.
 
 Topic references:
 
-- `docs/account-model.md` defines runtime, admin, integration, test, bind, and
+- `docs/contracts/account-model.md` defines runtime, admin, integration, test, bind, and
   simulation accounts.
-- `docs/directory-model.md` defines product homes, helper-owned state,
+- `docs/contracts/directory-model.md` defines product homes, helper-owned state,
   artifact extraction paths, runtime scratch, and simulation backing.
-- `docs/version-baseline.md` defines the default Ubuntu, Java, Gerrit,
+- `docs/baselines/version-baseline.md` defines the default Ubuntu, Java, Gerrit,
   Jenkins, plugin-manager, and Jenkins agent/tooling baseline.
-- `docs/package-requirements.md` defines layered Ubuntu package requirements
+- `docs/baselines/package-requirements.md` defines layered Ubuntu package requirements
   for product runtimes, helper scripts, bundle factory, and Docker simulation.
-- `docs/artifact-bundle-contract.md` defines application artifact archive
+- `docs/contracts/artifact-bundle-contract.md` defines application artifact archive
   contents, checksums, source boundaries, and bundle-factory dependencies.
-- `docs/gerrit-trigger-integration.md` defines Gerrit Trigger, ACL, and
+- `docs/contracts/gerrit-trigger-integration.md` defines Gerrit Trigger, ACL, and
   `Verified` voting behavior.
-- `docs/validation-and-evidence.md` defines validation evidence and redaction
+- `docs/contracts/validation-and-evidence.md` defines validation evidence and redaction
   rules.
 
 Simulation:
@@ -180,11 +180,21 @@ Simulation:
   baseline, output conventions, and simulation realization details.
 - `simulation/docker/README.md` documents the Docker simulation CLI command
   surface.
+- `simulation/vm/README.md` documents the VM simulation CLI command surface.
 
 Operator manuals:
 
-- `docs/gerrit-setup-manual.md`,
-  `docs/jenkins-controller-setup-manual.md`, and
-  `docs/jenkins-agent-setup-manual.md` document role-local setup.
-- `docs/integration-setup-manual.md` documents the shared cross-role
+- `docs/operations/setup/gerrit.md`,
+  `docs/operations/setup/jenkins-controller.md`, and
+  `docs/operations/setup/jenkins-agent.md` document role-local setup.
+- `docs/operations/setup/integration.md` documents the shared cross-role
   integration workflow.
+
+Native operation references:
+
+- `docs/operations/native/gerrit.md`,
+  `docs/operations/native/jenkins-controller.md`, and
+  `docs/operations/native/jenkins-agent.md` document direct role-local
+  procedures.
+- `docs/operations/native/integration.md` documents direct cross-role
+  integration procedures.

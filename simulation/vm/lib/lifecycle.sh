@@ -114,8 +114,8 @@ vm_cmd_preflight() {
   require_command flock
   [ -f "$vm_env_example" ] || die "Missing VM example env: $vm_env_example"
   [ -f "$vm_dir/README.md" ] || die "Missing VM README"
-  [ -f "$vm_dir/design.md" ] || die "Missing VM design doc"
-  [ -f "$vm_dir/sequences.md" ] || die "Missing VM command sequence doc"
+  [ -f "$vm_dir/docs/design.md" ] || die "Missing VM design doc"
+  [ -f "$vm_dir/docs/sequences.md" ] || die "Missing VM command sequence doc"
   [ -x "$repo_root/scripts/integration-setup.sh" ] ||
     die "Missing executable integration helper: $repo_root/scripts/integration-setup.sh"
   log="$(vm_path_bounded_log preflight)"

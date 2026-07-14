@@ -26,48 +26,48 @@ reject_doc_text() {
   fi
 }
 
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'local naming standard for the deployment; the examples here describe roles,' \
   'Account model must preserve local naming-standard authority'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'not required literal names.' \
   'Account model must preserve example-name language'
-reject_doc_text docs/account-model.md \
+reject_doc_text docs/contracts/account-model.md \
   'This package fixes product runtime' \
   'Account model must not claim product runtime account names are fixed literals'
-reject_doc_text docs/account-model.md \
+reject_doc_text docs/contracts/account-model.md \
   'targets must use those runtime identities' \
   'Account model must not claim product runtime account names are fixed literals'
 
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   '| Operator account | `ci-operator` | `61000` | `61000` |' \
   'Account model must document the operator example numeric identity'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   '| Gerrit runtime account | `gerrit` | `61010` | `61010` |' \
   'Account model must document the Gerrit example numeric identity'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   '| Jenkins controller runtime account | `jenkins` | `61020` | `61020` |' \
   'Account model must document the Jenkins controller example numeric identity'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   '| Jenkins agent runtime account | `jenkins-agent` | `61030` | `61030` |' \
   'Account model must document the Jenkins agent example numeric identity'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   '| Jenkins shared integration group | `jenkins-share` | not applicable | `61040` |' \
   'Account model must document the Jenkins shared group example GID'
 
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'not share a UID in the recommended v1 model.' \
   'Account model must keep Jenkins controller and agent UIDs separate'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'storage access is granted through the dedicated Jenkins shared integration' \
   'Account model must document group-based Jenkins shared storage'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'The shared GID is the cross-host contract for NFS-backed sharing' \
   'Account model must document the shared GID storage contract'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'normally `/data/jenkins-shared`. The Jenkins agent host owns the v1 NFS server' \
   'Account model must document agent-hosted Jenkins shared storage'
-require_doc_text docs/account-model.md \
+require_doc_text docs/contracts/account-model.md \
   'For NFS-backed storage, keep `root_squash` enabled' \
   'Account model must document NFS root_squash guidance'
 
@@ -108,9 +108,9 @@ require_doc_text simulation/vm/README.md \
   'VM README must document VM shared storage is not a product role'
 
 for native_reference in \
-  docs/gerrit-native-operations-reference.md \
-  docs/jenkins-controller-native-operations-reference.md \
-  docs/jenkins-agent-native-operations-reference.md; do
+  docs/operations/native/gerrit.md \
+  docs/operations/native/jenkins-controller.md \
+  docs/operations/native/jenkins-agent.md; do
   reject_doc_text "$native_reference" \
     '/home/ci-operator' \
     'Native target-deployment references must not hardcode the operator home'
