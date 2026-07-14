@@ -75,6 +75,22 @@ require_text docs/operations/native/acceptance-checklist.md \
 require_text docs/operations/native/acceptance-checklist.md \
   'repair service state during validation.' \
   'Checklist must keep validation non-repairing'
+require_text docs/operations/native/acceptance-checklist.md \
+  'Reboot checks are optional and may be left unchecked when not' \
+  'Checklist must allow reboot checks to be skipped'
+require_text docs/operations/native/acceptance-checklist.md \
+  'a failed optional reboot check makes the run `BLOCKED`.' \
+  'Checklist must block an attempted reboot check that fails'
+if [ "$(grep -Fc -- '- [ ] Optional reboot check:' "$checklist")" -ne 3 ]; then
+  printf 'Checklist must contain exactly three optional reboot checks\n' >&2
+  exit 1
+fi
+require_text docs/operations/native/acceptance-checklist.md \
+  'reviewed JCasC or UI-driven configuration.' \
+  'Checklist must accept reviewed JCasC and UI-driven configuration'
+reject_text docs/operations/native/acceptance-checklist.md \
+  'required build tools' \
+  'Checklist must not require unspecified agent build tools'
 
 if rg -n 'scripts/[^[:space:]`]+\.sh|simulation/[^[:space:]`]+\.sh|```(bash|sh)|collect-evidence|JSON|evidence package' \
   "$checklist"; then
@@ -116,9 +132,45 @@ reject_text docs/operations/native/jenkins-controller.md \
 reject_text docs/operations/native/jenkins-agent.md \
   'Until that workflow is implemented' \
   'Agent native handoff must not call the manual integration workflow unimplemented'
+require_text docs/operations/native/jenkins-controller.md \
+  '<JENKINS_URL>/api/json' \
+  'Jenkins native validation must check the required API endpoint'
+require_text docs/operations/native/jenkins-controller.md \
+  'authenticated browser session' \
+  'Jenkins API validation must use the authenticated browser session'
+for role_doc in \
+  docs/operations/native/gerrit.md \
+  docs/operations/native/jenkins-controller.md \
+  docs/operations/native/jenkins-agent.md; do
+  require_text "$role_doc" \
+    'The reboot check is optional.' \
+    'Native role procedure must mark its reboot check optional'
+  require_text "$role_doc" \
+    'mark the run `BLOCKED`.' \
+    'Native role procedure must block an attempted reboot check that fails'
+done
 require_text docs/operations/native/integration.md \
   '`docs/operations/native/acceptance-checklist.md`' \
   'Native integration must use the single acceptance checklist'
 reject_text docs/operations/native/integration.md \
   'Collect an integration evidence record with:' \
   'Native integration must not require a separate evidence record'
+reject_text docs/operations/native/integration.md \
+  'role-local readiness evidence' \
+  'Native integration must consume checklist outcomes, not role evidence records'
+
+for native_doc in \
+  docs/operations/native/gerrit.md \
+  docs/operations/native/jenkins-controller.md \
+  docs/operations/native/jenkins-agent.md \
+  docs/operations/native/integration.md; do
+  reject_text "$native_doc" \
+    'Evidence may record' \
+    'Native procedures must not define a separate evidence record'
+  reject_text "$native_doc" \
+    'Evidence should record' \
+    'Native procedures must not require separate evidence details'
+  reject_text "$native_doc" \
+    'role-local evidence' \
+    'Native procedures must record role outcomes in the acceptance checklist'
+done

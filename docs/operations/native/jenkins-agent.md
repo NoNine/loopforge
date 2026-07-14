@@ -232,7 +232,7 @@ Agent host-only bringup does not consume controller key material, validate
 controller SSH access, update `authorized_keys`, register a Jenkins node, or
 prove controller scheduling. The agent role proves OS/tooling readiness, the
 dedicated runtime account, remote filesystem ownership, the SSH daemon, staged
-artifacts, bounded logs, and role-local evidence.
+artifacts, and bounded log inspection.
 
 Later Jenkins-to-agent public-key authorization, Jenkins node registration,
 scheduling validation, and key rotation belong to
@@ -248,9 +248,10 @@ artifact staging needed by that later UI operation.
 
 Credential custody remains fixed: the Jenkins controller owns the
 Jenkins-to-agent private key, and the agent host consumes only the matching
-public key. Agent evidence may record public-key fingerprints, accounts,
-endpoints, bounded log paths, and redaction status, but never private keys,
-passwords, tokens, or LDAP bind secrets.
+public key. Do not create a separate agent evidence record. Record the required
+role outcomes only in `docs/operations/native/acceptance-checklist.md`. Do not
+place private keys, passwords, tokens, LDAP bind secrets, or secret-bearing
+configuration in the checklist or its three references.
 
 ### 3.2 Configure Build Server Runtime Account
 
@@ -284,6 +285,13 @@ Acceptance checks:
   scheduling-label proof, later integration validation jobs, Gerrit Trigger
   execution, and `Verified` vote proof are deferred to the later shared
   integration workflow.
+
+The reboot check is optional. To perform it, use the site's reviewed reboot
+procedure, wait for the target to return, and rerun the validation above
+without starting, enabling, or repairing the SSH service. Leave the optional
+checklist item unchecked when the check is not performed. If the check is
+attempted and the agent does not return to the same ready state,
+mark the run `BLOCKED`.
 
 This guest OpenSSH service is the lifecycle owner for the outbound SSH agent.
 There is no separate `jenkins-agent.service`.

@@ -16,8 +16,11 @@ target locations and are inspected when a check fails.
 
 The acceptance operator should not be an author of the native procedures. Mark
 an item complete only after observing the documented result. Every required
-item must pass. A failed or undocumented step makes the run `BLOCKED`. Never
-repair service state during validation. Correct the owning procedure or
+item must pass. Reboot checks are optional and may be left unchecked when not
+performed. If a reboot check is attempted, mark it complete only after it
+passes; a failed optional reboot check makes the run `BLOCKED`. Any other
+failed or undocumented step also makes the run `BLOCKED`.
+Never repair service state during validation. Correct the owning procedure or
 environment explicitly, provision fresh target state, and start a new
 checklist.
 
@@ -51,7 +54,8 @@ Loopforge revision:
   account.
 - [ ] The Gerrit HTTP and SSH endpoints respond as documented.
 - [ ] The reviewed LDAP administrator and test user can sign in.
-- [ ] Gerrit returns to the same ready state after a reviewed reboot.
+- [ ] Optional reboot check: Gerrit returns to the same ready state after a
+  reviewed reboot.
 
 ## Jenkins Controller
 
@@ -61,18 +65,20 @@ Loopforge revision:
   account.
 - [ ] The Jenkins HTTP and API endpoints respond as documented.
 - [ ] The reviewed LDAP administrator can sign in.
-- [ ] Required plugins load without errors and JCasC matches the reviewed
-  configuration.
+- [ ] Required plugins load without errors and the active Jenkins configuration
+  matches the reviewed JCasC or UI-driven configuration.
 - [ ] The built-in node has zero executors.
-- [ ] Jenkins returns to the same ready state after a reviewed reboot.
+- [ ] Optional reboot check: Jenkins returns to the same ready state after a
+  reviewed reboot.
 
 ## Jenkins Agent
 
 - [ ] The native Jenkins agent preparation procedure completed.
 - [ ] The target SSH service is enabled and active.
 - [ ] The reviewed runtime account and workspace ownership are correct.
-- [ ] Java and the required build tools are available.
-- [ ] The agent target returns to the same ready state after a reviewed reboot.
+- [ ] Java is available.
+- [ ] Optional reboot check: The agent target returns to the same ready state
+  after a reviewed reboot.
 
 ## Integration
 

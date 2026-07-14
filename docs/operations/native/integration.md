@@ -62,14 +62,15 @@ loopback URLs into target-deployment inventory.
 
 Prerequisites:
 
-- Gerrit role-local readiness evidence shows HTTP, SSH, LDAP, runtime account,
-  staged artifacts, and plugin readiness.
-- Jenkins controller role-local readiness evidence shows controller startup,
-  plugin readiness, LDAP/JCasC readiness, zero built-in executors, and endpoint
-  readiness.
-- Jenkins agent role-local readiness evidence shows OpenSSH reachability,
-  runtime account ownership, remote filesystem ownership, and host-side
-  readiness.
+- All required Gerrit items in
+  `docs/operations/native/acceptance-checklist.md` are complete for HTTP, SSH,
+  LDAP, runtime account, staged artifacts, and plugin readiness.
+- All required Jenkins controller items in the checklist are complete for
+  controller startup, plugins, LDAP, reviewed configuration, zero built-in
+  executors, and endpoint readiness.
+- All required Jenkins agent items in the checklist are complete for OpenSSH
+  reachability, runtime account ownership, remote filesystem ownership, and
+  host-side readiness.
 - The operator has Gerrit administrator access sufficient to create reviewable
   `All-Projects` and project config changes.
 - The Gerrit administrator account is already provisioned in Gerrit. If the
@@ -91,13 +92,15 @@ Credential custody:
 - The Jenkins controller owns the Jenkins-to-Gerrit private key.
 - Gerrit receives only the matching Jenkins-to-Gerrit public key.
 - Gerrit issues a Gerrit HTTP auth token for the Jenkins Gerrit integration
-  account. Record only the reviewed token ID, not the token value.
+  account. Keep only the reviewed token ID, not the token value, in the
+  reviewed integration inventory.
 - The Jenkins controller owns the Jenkins-to-agent private key.
 - The Jenkins agent receives only the matching Jenkins-to-agent public key.
-- Evidence may record public-key fingerprints, credential IDs, account names,
-  endpoints, change numbers, build URLs, and bounded log paths.
-- Evidence must not contain private keys, passwords, tokens, LDAP bind secrets,
-  or full secret-bearing env values.
+- Do not create separate integration evidence. Record required outcomes only in
+  the acceptance checklist, which retains the deployment/change ticket,
+  disposable Gerrit verification change, and Jenkins verification build.
+- Do not place private keys, passwords, tokens, LDAP bind secrets, or
+  secret-bearing configuration in the checklist or its three references.
 
 ## 2. Jenkins-To-Gerrit SSH
 
@@ -222,8 +225,8 @@ In the Jenkins Web UI:
    when available and enter `/var/lib/jenkins/.ssh/jenkins-gerrit`.
 6. If the installed Jenkins UI only supports direct key entry, treat the paste
    as an approved Jenkins administrator secret-entry action. Do not save the
-   private key to local files, screenshots, evidence, logs, Gerrit, or the
-   agent host.
+   private key to local files, screenshots, the checklist, logs, Gerrit, or
+   the agent host.
 7. Save the credential.
 
 In Gerrit, generate or rotate an HTTP auth token for the Gerrit integration
@@ -235,8 +238,8 @@ In the Gerrit Web UI, sign in as the reviewed integration account or use the
 site-approved administrator UI for that account. Open `Settings` >
 `HTTP Credentials` or `HTTP Password`, generate a new token/password with the
 reviewed token ID when the UI supports token names, and copy the token value
-directly into the Jenkins Gerrit Trigger server configuration below. Record
-only the token ID in evidence.
+directly into the Jenkins Gerrit Trigger server configuration below. Keep only
+the token ID in the reviewed integration inventory.
 
 If the Gerrit integration account does not exist yet, create it as a Gerrit
 service account before generating the token. Do not create it as an LDAP user
@@ -394,10 +397,11 @@ sudo -u jenkins sh -c 'printf shared-storage-proof > /data/jenkins-shared/contro
 sudo -u jenkins-agent grep -Fx shared-storage-proof /data/jenkins-shared/controller-proof.txt
 ```
 
-Evidence should record the shared group name and GID, export path, controller
-mount source, export options, bounded command references, and the runtime
-account read/write proof. Do not store integration keys, scripts, credentials,
-or helper status under shared storage.
+Observe the shared group and GID, export path, controller mount source, export
+options, and runtime-account read/write result during this check. Record only
+the required shared-storage outcome in the acceptance checklist; do not create
+a separate evidence record. Do not store integration keys, scripts,
+credentials, or helper status under shared storage.
 
 ## 7. Jenkins Agent Node Registration
 

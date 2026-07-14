@@ -435,10 +435,10 @@ the endpoints, LDAP, and bounded logs. It does not start or repair Gerrit.
 
 Gerrit-native role readiness stops before cross-role Jenkins integration.
 The Gerrit role proves the Gerrit service, LDAP configuration, HTTP endpoint,
-SSH endpoint, runtime account, staged artifacts, and bounded evidence. It does
-not register Jenkins public keys, create Gerrit Trigger credentials, install or
-validate external Gerrit plugins, grant stream-events permission, apply
-`Verified` voting grants, or prove trigger delivery.
+SSH endpoint, runtime account, staged artifacts, and bounded log inspection. It
+does not register Jenkins public keys, create Gerrit Trigger credentials,
+install or validate external Gerrit plugins, grant stream-events permission,
+apply `Verified` voting grants, or prove trigger delivery.
 
 Later cross-role work belongs to the separate integration workflow, not this
 role-local native reference. That later workflow owns Jenkins-to-Gerrit
@@ -452,10 +452,10 @@ Credential custody remains fixed:
 
 - The Jenkins controller owns the Jenkins-to-Gerrit private key.
 - Gerrit consumes only the matching public key.
-- Gerrit evidence may record public-key fingerprints, accounts, endpoints,
-  bounded log paths, and redaction status.
-- Gerrit evidence must not contain private keys, passwords, tokens, LDAP bind
-  secrets, or full secret-bearing env values.
+- Do not create a separate Gerrit evidence record. Record the required role
+  outcomes only in `docs/operations/native/acceptance-checklist.md`.
+- Do not place private keys, passwords, tokens, LDAP bind secrets, or
+  secret-bearing configuration in the checklist or its three references.
 
 ## 5. Validation
 
@@ -474,11 +474,16 @@ Acceptance checks:
 
 - OpenJDK 21 is active.
 - Gerrit starts under systemd.
-- Gerrit survives reboot.
 - LDAP users can log in.
 - Gerrit SSH works on port `29418`.
 - Jenkins integration prerequisites from Section 4 are deferred to
   `docs/operations/native/integration.md`.
+
+The reboot check is optional. To perform it, use the site's reviewed reboot
+procedure, wait for the target to return, and rerun the validation above
+without starting, enabling, or repairing Gerrit. Leave the optional checklist
+item unchecked when the check is not performed. If the check is attempted and
+Gerrit does not return to the same ready state, mark the run `BLOCKED`.
 
 Use the Gerrit Web UI to complete the application checks:
 

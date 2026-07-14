@@ -240,8 +240,8 @@ EOF
 ```
 
 Resolve and download the accepted direct pins and their dependencies once.
-Plugin Installation Manager output is bounded operator log evidence, not a
-bundle proof file.
+Plugin Installation Manager output is bounded operator output for inspection,
+not a bundle proof file.
 
 ```bash
 rm -rf ~/jenkins-artifacts-bundle/jenkins/plugins
@@ -572,11 +572,11 @@ If not using JCasC:
 
 Controller-only bringup stops before cross-role Gerrit and agent integration.
 The Jenkins controller role proves Jenkins startup, HTTP reachability,
-curated plugin installation, LDAP/JCasC configuration, zero built-in
-executors, runtime configuration, staged artifacts, bounded logs, and
-role-local evidence. It does not generate integration keypairs, configure
-Gerrit Trigger, register an SSH agent node, prove stream-events, run agent
-scheduling checks, or prove a `Verified` vote.
+curated plugin installation, LDAP and reviewed controller configuration, zero
+built-in executors, runtime configuration, staged artifacts, and bounded log
+inspection. It does not generate integration keypairs, configure Gerrit
+Trigger, register an SSH agent node, prove stream-events, run agent scheduling
+checks, or prove a `Verified` vote.
 
 Later cross-role work belongs to `docs/operations/native/integration.md`,
 not this controller role-local native reference. That later workflow owns
@@ -590,11 +590,10 @@ Credential custody remains fixed:
 - The Jenkins controller owns the Jenkins-to-Gerrit private key.
 - The Jenkins controller owns the Jenkins-to-agent private key.
 - Gerrit and the Jenkins agent consume only matching public keys.
-- Controller role-local evidence may record public key fingerprints, accounts,
-  endpoints, bounded log paths, and redaction status.
-- Controller role-local and integration evidence must not contain private
-  keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env
-  values.
+- Do not create a separate controller evidence record. Record the required role
+  outcomes only in `docs/operations/native/acceptance-checklist.md`.
+- Do not place private keys, passwords, tokens, LDAP bind secrets, or
+  secret-bearing configuration in the checklist or its three references.
 
 ## 6. Controller-Only Validation
 
@@ -612,25 +611,34 @@ Acceptance checks:
 
 - OpenJDK 21 is active.
 - Jenkins starts under systemd.
-- Jenkins survives reboot.
 - LDAP users can log in.
 - Required plugins load successfully.
+- An authenticated request to `<JENKINS_URL>/api/json` returns a successful
+  JSON response.
 - Gerrit SSH, Gerrit event streaming, Jenkins agent scheduling, and `Verified`
   vote checks are deferred to `docs/operations/native/integration.md`.
 - Do not accept rendered Gerrit Trigger config, keypairs, node registration,
-  scheduling records, or trigger/vote proof as controller-only validation
-  evidence.
+  scheduling records, or trigger/vote proof as controller-only validation.
 
 Use the Jenkins Web UI to complete the application checks:
 
 1. Browse to `JENKINS_URL` and sign in as the reviewed Jenkins administrator.
-2. Open `Manage Jenkins` and confirm no administrative monitor reports a plugin
+2. In the authenticated browser session, open `<JENKINS_URL>/api/json` and
+   confirm Jenkins returns a successful JSON object rather than a login or
+   error page.
+3. Open `Manage Jenkins` and confirm no administrative monitor reports a plugin
    load failure for required plugins.
-3. Open `Manage Jenkins` > `Security` and confirm LDAP and authorization
-   settings match the reviewed values without exposing bind secrets in
-   evidence.
-4. Open `Manage Jenkins` > `Nodes` and confirm the built-in node has zero
+4. Open `Manage Jenkins` > `Security` and confirm the active LDAP and
+   authorization settings match the reviewed JCasC or UI-driven configuration
+   without exposing bind secrets in the checklist or its references.
+5. Open `Manage Jenkins` > `Nodes` and confirm the built-in node has zero
    executors.
+
+The reboot check is optional. To perform it, use the site's reviewed reboot
+procedure, wait for the target to return, and rerun the validation above
+without starting, enabling, or repairing Jenkins. Leave the optional checklist
+item unchecked when the check is not performed. If the check is attempted and
+Jenkins does not return to the same ready state, mark the run `BLOCKED`.
 
 ## 7. Backup and Operations
 
