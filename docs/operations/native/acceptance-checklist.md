@@ -1,0 +1,108 @@
+# Native Target-Deployment Acceptance Checklist
+
+Use this checklist for one fresh native `target-deployment` acceptance run in
+a production-equivalent acceptance environment. The operator follows the
+detailed procedures in:
+
+- `docs/operations/native/gerrit.md`
+- `docs/operations/native/jenkins-controller.md`
+- `docs/operations/native/jenkins-agent.md`
+- `docs/operations/native/integration.md`
+
+This checklist records outcomes only. It does not replace or duplicate the
+native procedures. It does not require machine-generated evidence, copied
+service logs, or repository automation. Detailed logs remain in their normal
+target locations and are inspected when a check fails.
+
+The acceptance operator should not be an author of the native procedures. Mark
+an item complete only after observing the documented result. Every required
+item must pass. A failed or undocumented step makes the run `BLOCKED`. Never
+repair service state during validation. Correct the owning procedure or
+environment explicitly, provision fresh target state, and start a new
+checklist.
+
+## Deployment
+
+```text
+Operator:
+Date:
+Change/ticket:
+Loopforge revision:
+```
+
+## Preparation
+
+- [ ] The run uses freshly provisioned target hosts with no prior Gerrit,
+  Jenkins, or Loopforge runtime state.
+- [ ] The control node, bundle factory, Gerrit target, Jenkins controller
+  target, Jenkins agent target, and approved non-simulation LDAP service are
+  identified in the reviewed inventory.
+- [ ] Operator access, delegated privileges, runtime accounts, package
+  sources, DNS, time, routes, storage, and target-to-target connectivity are
+  ready.
+- [ ] Backup, rollback, and approval owners are recorded in the change/ticket.
+- [ ] Reviewed artifact manifests and checksums match the artifacts staged on
+  each target.
+
+## Gerrit
+
+- [ ] The native Gerrit installation and configuration procedure completed.
+- [ ] The Gerrit systemd unit is enabled and active under the reviewed runtime
+  account.
+- [ ] The Gerrit HTTP and SSH endpoints respond as documented.
+- [ ] The reviewed LDAP administrator and test user can sign in.
+- [ ] Gerrit returns to the same ready state after a reviewed reboot.
+
+## Jenkins Controller
+
+- [ ] The native Jenkins controller installation and configuration procedure
+  completed.
+- [ ] The Jenkins systemd unit is enabled and active under the reviewed runtime
+  account.
+- [ ] The Jenkins HTTP and API endpoints respond as documented.
+- [ ] The reviewed LDAP administrator can sign in.
+- [ ] Required plugins load without errors and JCasC matches the reviewed
+  configuration.
+- [ ] The built-in node has zero executors.
+- [ ] Jenkins returns to the same ready state after a reviewed reboot.
+
+## Jenkins Agent
+
+- [ ] The native Jenkins agent preparation procedure completed.
+- [ ] The target SSH service is enabled and active.
+- [ ] The reviewed runtime account and workspace ownership are correct.
+- [ ] Java and the required build tools are available.
+- [ ] The agent target returns to the same ready state after a reviewed reboot.
+
+## Integration
+
+- [ ] Jenkins-held private keys remain on the Jenkins controller and only the
+  matching public keys were transferred.
+- [ ] Jenkins-to-Gerrit SSH authentication succeeds as the reviewed integration
+  account.
+- [ ] Gerrit `stream-events` succeeds for the reviewed integration account.
+- [ ] The reviewed `Verified` label and project/ref permissions are effective.
+- [ ] Jenkins-to-agent SSH authentication succeeds from the controller.
+- [ ] The Jenkins agent node is online with the reviewed label and executor
+  count.
+- [ ] Shared Jenkins storage passes the documented controller/agent read-write
+  check.
+
+## End-To-End Result
+
+- [ ] A disposable Gerrit change triggered the reviewed Jenkins job.
+- [ ] The build ran on the reviewed Jenkins agent, not the controller.
+- [ ] The build completed successfully.
+- [ ] Gerrit shows `Verified +1` on the expected change and patch set.
+- [ ] Both Gerrit event delivery and the final review vote were observed.
+
+```text
+Gerrit verification change:
+Jenkins verification build:
+Result: ACCEPTED / BLOCKED
+Notes:
+Reviewer:
+```
+
+Do not place passwords, tokens, private keys, LDAP bind secrets, or
+secret-bearing configuration in this checklist or its three references.

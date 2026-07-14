@@ -199,3 +199,5 @@ Native operation references:
   procedures.
 - `docs/operations/native/integration.md` documents direct cross-role
   integration procedures.
+- `docs/operations/native/acceptance-checklist.md` provides the manual
+  end-to-end `target-deployment` signoff surface.

@@ -444,8 +444,9 @@ Later cross-role work belongs to the separate integration workflow, not this
 role-local native reference. That later workflow owns Jenkins-to-Gerrit
 public-key registration, Gerrit integration permissions, `Verified`
 label/grant application, stream-events validation, trigger validation, and
-integration evidence. Until that workflow is implemented, this native
-reference remains limited to Gerrit role-local readiness.
+integration acceptance. The manual workflow is available in
+`docs/operations/native/integration.md`; this native reference remains limited
+to Gerrit role-local readiness.
 
 Credential custody remains fixed:
 

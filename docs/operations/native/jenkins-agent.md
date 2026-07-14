@@ -237,8 +237,8 @@ artifacts, bounded logs, and role-local evidence.
 Later Jenkins-to-agent public-key authorization, Jenkins node registration,
 scheduling validation, and key rotation belong to
 `docs/operations/native/integration.md`, not this agent role-local native
-reference. Until that workflow is implemented, this native reference remains
-limited to agent host readiness.
+reference. The manual integration workflow is available; this native reference
+remains limited to agent host readiness.
 
 When the shared integration workflow begins, perform Jenkins-side node
 registration through the Jenkins Web UI steps in

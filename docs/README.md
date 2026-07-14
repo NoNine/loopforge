@@ -64,6 +64,9 @@ Use this order when deciding where a product or process fact belongs:
    `docs/operations/native/jenkins-agent.md`, and
    `docs/operations/native/integration.md`. These references must
    remain free of repository helper command transcripts.
+   `docs/operations/native/acceptance-checklist.md` applies the native
+   references as one manual `target-deployment` acceptance gate without
+   becoming another command reference.
 7. Simulation docs own simulation realization details:
    `simulation/README.md`, `simulation/docker/README.md`,
    and `simulation/vm/README.md`.

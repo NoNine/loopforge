@@ -20,7 +20,7 @@ Target deployment supports two equivalent operator interfaces:
 | --- | --- | --- |
 | Execution | Reads reviewed inputs and performs idempotent target operations through delegated privilege. | Operator performs documented OS and application operations through delegated privilege. |
 | Service lifecycle | Installs or updates the documented guest systemd units and uses standard systemd control. | Creates or updates the documented guest systemd units and uses standard systemd control. |
-| Validation | Performs bounded observational checks and collects redacted evidence. | Operator performs equivalent bounded observational checks and retains target-owned evidence. |
+| Validation | Performs bounded observational checks and collects redacted evidence. | Operator performs equivalent bounded observational checks and records the result in the native acceptance checklist; detailed logs remain target-owned. |
 | Scope boundary | Remains role-local until the shared integration workflow. | Remains role-local until the shared integration workflow. |
 
 The two interfaces must produce equivalent product state for their declared
@@ -51,8 +51,10 @@ credential-custody boundary, validation result, or evidence redaction rules.
 
 Role manuals describe inputs, outputs, phase-local effects, and handoff.
 Native operation references provide the direct procedure without helper
-transcripts. Helper scripts implement the reviewed-input interface, and
-simulation documentation realizes the contract for each backend.
+transcripts. `docs/operations/native/acceptance-checklist.md` records manual
+native acceptance outcomes without duplicating those procedures. Helper scripts
+implement the reviewed-input interface, and simulation documentation realizes
+the contract for each backend.
 
 Current support status, blockers, waivers, and the next implementation work
 belong only in `project-state/execution-status.md`; they are not product-contract facts.

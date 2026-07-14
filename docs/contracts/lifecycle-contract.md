@@ -181,9 +181,10 @@ base image.
 
 ## Evidence Obligations
 
-Evidence obligations are detailed in `docs/contracts/validation-and-evidence.md`. This
-contract requires every checkpoint to preserve enough proof for review without
-replaying verbose runtime logs:
+Evidence obligations are detailed in
+`docs/contracts/validation-and-evidence.md`. Machine-generated helper and
+simulation checkpoints preserve enough proof for review without replaying
+verbose runtime logs:
 
 - Evidence must identify mode, timestamp, environment or role, checkpoint,
   command, status, reviewed input fingerprint, relevant endpoints, manifest
@@ -192,8 +193,13 @@ replaying verbose runtime logs:
   readiness and end-to-end trigger proof.
 - Simulation evidence must be labeled as `docker-simulation` or
   `vm-simulation` and must not imply target-deployment acceptance.
-- VM and target-deployment evidence for Gerrit, Jenkins controller, or SSH
-  agent readiness must identify the expected systemd unit state. Docker
-  evidence identifies its direct process state instead.
+- VM and helper-based target-deployment evidence for Gerrit, Jenkins
+  controller, or SSH agent readiness must identify the expected systemd unit
+  state. Docker evidence identifies its direct process state instead.
 - Evidence records must never include private keys, passwords, tokens, LDAP
   bind secrets, or full secret-bearing env values.
+
+Native `target-deployment` records the corresponding role, reboot,
+integration, scheduling, trigger, and vote outcomes in
+`docs/operations/native/acceptance-checklist.md`. Routine service logs remain
+in their normal target locations and are inspected when a check fails.

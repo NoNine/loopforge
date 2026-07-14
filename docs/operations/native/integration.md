@@ -490,26 +490,18 @@ ran on `JENKINS_AGENT_NODE_NAME` or the reviewed scheduling label. In the Gerrit
 Web UI, open the disposable change and confirm the latest patch set shows the
 expected `Verified +1` vote from the Jenkins Gerrit integration account.
 
-## 9. Evidence And Failure Classification
+## 9. Acceptance And Failure Classification
 
-Collect an integration evidence record with:
+Record the final result in
+`docs/operations/native/acceptance-checklist.md`. Do not create a separate
+integration evidence record or copy routine service and command output. The
+checklist retains only the deployment/change ticket, disposable Gerrit
+verification change, and Jenkins verification build references.
 
-- Verification mode.
-- Timestamp.
-- Gerrit, Jenkins controller, and Jenkins agent endpoints.
-- Reviewed project and ref scope.
-- Jenkins node name, labels, and executor policy.
-- Public-key fingerprints only.
-- Jenkins credential IDs only when they do not encode secret material.
-- Gerrit config review change numbers and URLs.
-- Disposable Gerrit change and Jenkins build identifiers.
-- Bounded log references.
-- Redaction status.
-
-Collect evidence manually from the UI and command outputs by recording only the
-allowed identifiers above. Do not paste private key material, token values,
-passwords, LDAP bind secrets, full console logs, or full secret-bearing
-configuration into the evidence record.
+Keep detailed service logs in their normal target locations and inspect them
+when a check fails. Do not put private key material, token values, passwords,
+LDAP bind secrets, full console logs, or secret-bearing configuration in the
+checklist or its references.
 
 Classify failures at the point where proof breaks:
 

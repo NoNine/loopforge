@@ -293,11 +293,11 @@ project-level Gerrit config review.
 ## Evidence Relationship
 
 `docs/contracts/validation-and-evidence.md` owns the detailed evidence schema and
-redaction rules. This model defines minimum checkpoint expectations:
+redaction rules. Machine-generated helper and simulation evidence must record
+mode, timestamp, environment or role, checkpoint, command, status, reviewed
+input fingerprint, relevant endpoints, manifest references, checksum results,
+bounded logs, and redaction status.
 
-- Evidence must record mode, timestamp, environment or role, checkpoint,
-  command, status, reviewed input fingerprint, relevant endpoints, manifest
-  references, checksum results, bounded logs, and redaction status.
 - Integration evidence must distinguish role-local readiness from cross-role
   readiness and end-to-end trigger proof.
 - Gerrit ACL evidence must record ACL mode, `All-Projects` change identifier
@@ -306,11 +306,13 @@ redaction rules. This model defines minimum checkpoint expectations:
   log references, and redaction status.
 - Simulation evidence must be labeled as `docker-simulation` or
   `vm-simulation` and must not imply target-deployment acceptance.
-- `target-deployment` evidence must identify real target infrastructure only
-  through approved, non-secret identifiers.
+- Native `target-deployment` acceptance uses
+  `docs/operations/native/acceptance-checklist.md`. It records observed
+  outcomes and only the approved deployment/change ticket, Gerrit verification
+  change, and Jenkins verification build references.
 
-Evidence records must never include private keys, passwords, tokens, LDAP bind
-secrets, or full secret-bearing env values.
+Machine-generated records and the native checklist must never include private
+keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env values.
 
 ## Source Boundary
 

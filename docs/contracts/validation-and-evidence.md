@@ -16,9 +16,26 @@ v1 boundaries still apply:
 - Public internet fallback on target hosts is simulation-only and must be
   labeled that way in docs, logs, and verification summaries.
 
-## Evidence Contract
+## Native Target-Deployment Acceptance
 
-Every evidence record must include:
+Native `target-deployment` installation and configuration are fully manual.
+The operator records acceptance through
+`docs/operations/native/acceptance-checklist.md`, not through machine-generated
+records or global aggregation. The checklist tracks observed outcomes and
+retains only three system-of-record references: the deployment/change ticket,
+the disposable Gerrit verification change, and the Jenkins verification
+build.
+
+Service logs remain in their normal target locations and are inspected when a
+check fails. Native acceptance does not require copied logs, structured record
+authoring, or an evidence package. The completed checklist remains in the
+organization's approved change-management system and must not contain private
+keys, passwords, tokens, LDAP bind secrets, or secret-bearing configuration.
+
+## Machine-Generated Evidence Contract
+
+The following contract applies to evidence produced by helpers and simulation
+utilities. Every machine-generated evidence record must include:
 
 - Verification mode.
 - Timestamp.
@@ -104,8 +121,10 @@ accepted as a pass with caveats.
 
 ## Checkpoints
 
-Collect evidence at every operator workflow checkpoint so failed runs can be
-reviewed from the last completed boundary.
+Helpers and simulation utilities collect machine-generated evidence at every
+operator workflow checkpoint so failed runs can be reviewed from the last
+completed boundary. Native `target-deployment` uses the acceptance checklist
+to track the corresponding outcomes without producing checkpoint records.
 
 Recommended checkpoints:
 
@@ -131,14 +150,15 @@ own scope.
 - Jenkins agent evidence covers SSH readiness, runtime-account ownership, and
   remote filesystem readiness.
 
-For `vm-simulation` and `target-deployment`, Gerrit and Jenkins controller
-role evidence records the guest systemd unit state in addition to application
-checks. Jenkins agent evidence records the enabled and active guest
-`ssh.service` or `sshd.service` state. `docker-simulation` records its
-direct process and endpoint checks instead, because it has no guest systemd
-manager and does not claim reboot persistence.
+For `vm-simulation` and helper-based `target-deployment`, Gerrit and Jenkins
+controller role evidence records the guest systemd unit state in addition to
+application checks. Jenkins agent evidence records the enabled and active guest
+`ssh.service` or `sshd.service` state. `docker-simulation` records its direct
+process and endpoint checks instead, because it has no guest systemd manager
+and does not claim reboot persistence. Native `target-deployment` tracks the
+corresponding role and reboot outcomes in the acceptance checklist.
 
-These records are the primary inputs to global aggregation.
+Machine-generated role records are the primary inputs to global aggregation.
 
 ## Integration-Local Evidence
 
@@ -201,6 +221,9 @@ real Gerrit review when none occurred.
 - Docker harness records.
 - VM simulation utility records.
 - End-to-end integration records when present.
+
+Global aggregation applies to machine-generated records.
+It is not required for the native `target-deployment` acceptance checklist.
 
 The helper writes a final evidence package containing:
 

@@ -9,6 +9,9 @@ Run final acceptance in this order:
 5. Global evidence aggregation.
 6. Shared simulation library checks from Step 12.
 7. VM simulation checks from Step 13 when VM implementation is in scope.
+8. Native `target-deployment` acceptance through
+   `docs/operations/native/acceptance-checklist.md` when the release claims
+   native target readiness.
 
 Retained rendered inputs, prepared artifacts, staged artifacts, and harness
 state may be reused only when manifests and checksums verify against the current
@@ -50,6 +53,20 @@ When Step 13 is in scope for the release, also run the VM lifecycle through
 environment. When Step 13 is not in scope, final acceptance must say it was
 skipped and must not claim VM readiness or VM end-to-end verification.
 
+Native `target-deployment` acceptance is a manual operation, not part of the
+minimum helper and simulation command set above. Run it only after Step 13 is
+accepted and Step 14 boundary checks pass. One operator who did not author the
+native procedures follows the four native references on freshly provisioned
+targets and records outcomes in the acceptance checklist. The checklist does
+not require machine-generated evidence, global aggregation, or copied service
+logs. Retain the completed checklist in the approved change-management system,
+not in the repository.
+
+If any required checklist item fails or requires an undocumented operation,
+mark the run `BLOCKED`. Correct the owning procedure or environment explicitly,
+provision fresh target state, and begin a new checklist. Do not repair service
+state during validation.
+
 Final acceptance criteria:
 
 - A new operator can follow the docs without repo history.
@@ -64,3 +81,6 @@ Final acceptance criteria:
 - Step 12 shared library extraction preserves Docker behavior.
 - Step 13 VM simulation either passes in an approved VM environment or is
   explicitly documented as out of scope without claiming VM readiness.
+- A release claiming native `target-deployment` readiness has one completed
+  `ACCEPTED` checklist with a deployment/change ticket, disposable Gerrit
+  verification change, and Jenkins verification build reference.

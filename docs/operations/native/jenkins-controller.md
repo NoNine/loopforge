@@ -582,8 +582,8 @@ Later cross-role work belongs to `docs/operations/native/integration.md`,
 not this controller role-local native reference. That later workflow owns
 Jenkins-to-Gerrit SSH setup, Jenkins-to-agent SSH setup, Gerrit Trigger
 configuration, integration validation, trigger verification, and integration
-evidence. Until that workflow is implemented, this native reference remains
-limited to Jenkins controller role-local readiness.
+acceptance. The manual integration workflow is available; this native
+reference remains limited to Jenkins controller role-local readiness.
 
 Credential custody remains fixed:
 
