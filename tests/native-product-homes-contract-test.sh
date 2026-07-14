@@ -329,11 +329,11 @@ require_pattern scripts/gerrit-setup.sh \
   'GERRIT_SITE_PATH must be $GERRIT_NATIVE_SITE_PATH, got $GERRIT_SITE_PATH' \
   'Gerrit helper must fail when GERRIT_SITE_PATH is not native'
 require_pattern scripts/gerrit-setup.sh \
-  'require_runtime_account_home "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "$GERRIT_NATIVE_SITE_PATH" "Gerrit"' \
-  'Gerrit helper must validate runtime account/group against native home'
+  '"$GERRIT_RUNTIME_UID" "$GERRIT_RUNTIME_GID"' \
+  'Gerrit helper must validate the reviewed numeric runtime identity'
 require_pattern scripts/gerrit-setup.sh \
-  'require_product_home_ownership "$GERRIT_NATIVE_SITE_PATH" "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "Gerrit"' \
-  'Gerrit helper must validate native product home ownership'
+  'identity_action="$(realize_runtime_identity' \
+  'Gerrit install must create or reuse the complete runtime identity'
 require_pattern scripts/gerrit-setup.sh \
   'sudo -n -u "$GERRIT_RUNTIME_ACCOUNT" sh -c "$command_text"' \
   'Gerrit helper must delegate runtime-account operations when run by the operator'
@@ -365,11 +365,11 @@ require_pattern scripts/jenkins-controller-setup.sh \
   'JENKINS_HOME must be $JENKINS_NATIVE_HOME, got $JENKINS_HOME' \
   'Jenkins helper must fail when JENKINS_HOME is not native'
 require_pattern scripts/jenkins-controller-setup.sh \
-  'require_runtime_account_home "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_NATIVE_HOME" "Jenkins"' \
-  'Jenkins helper must validate runtime account/group against native home'
+  '"$JENKINS_RUNTIME_UID" "$JENKINS_RUNTIME_GID"' \
+  'Jenkins helper must validate the reviewed numeric runtime identity'
 require_pattern scripts/jenkins-controller-setup.sh \
-  'require_product_home_ownership "$JENKINS_NATIVE_HOME" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "Jenkins"' \
-  'Jenkins helper must validate native product home ownership'
+  'identity_action="$(realize_runtime_identity' \
+  'Jenkins install must create or reuse the complete runtime identity'
 require_pattern scripts/jenkins-controller-setup.sh \
   'sudo -n -u "$JENKINS_RUNTIME_ACCOUNT" sh -lc "$command"' \
   'Jenkins controller helper must delegate runtime-account operations when run by the operator'
@@ -431,11 +431,11 @@ require_pattern scripts/jenkins-agent-setup.sh \
   'JENKINS_AGENT_REMOTE_FS must be $JENKINS_AGENT_NATIVE_REMOTE_FS, got $value' \
   'Agent helper must fail when JENKINS_AGENT_REMOTE_FS is not native'
 require_pattern scripts/jenkins-agent-setup.sh \
-  'require_runtime_account_home "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_NATIVE_REMOTE_FS" "Jenkins agent"' \
-  'Agent helper must validate runtime account/group against native home'
+  '"$JENKINS_AGENT_UID" "$JENKINS_AGENT_GID"' \
+  'Agent helper must validate the reviewed numeric runtime identity'
 require_pattern scripts/jenkins-agent-setup.sh \
-  'require_product_home_ownership "$JENKINS_AGENT_NATIVE_REMOTE_FS" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "Jenkins agent"' \
-  'Agent helper must validate native product home ownership'
+  'identity_action="$(realize_runtime_identity' \
+  'Agent install must create or reuse the complete runtime identity'
 require_pattern scripts/jenkins-agent-setup.sh \
   'sudo -n sh -c "$command"' \
   'Jenkins agent helper must delegate privileged target operations when run by the operator'
@@ -458,12 +458,15 @@ reject_pattern scripts/jenkins-agent-setup.sh \
   'JENKINS_AGENT_GROUP must be $JENKINS_AGENT_NATIVE_GROUP' \
   'Agent helper must not require a fixed literal runtime group name'
 
-reject_pattern scripts/jenkins-agent-setup.sh \
-  'useradd --create-home' \
-  'Agent helper must not create the product runtime account'
-reject_pattern scripts/jenkins-agent-setup.sh \
-  'groupadd "$JENKINS_AGENT_GROUP"' \
-  'Agent helper must not create the product runtime group'
+require_pattern scripts/common.sh \
+  'useradd --uid $(shell_quote "$uid") --gid $(shell_quote "$gid") --home-dir $(shell_quote "$home") --no-create-home' \
+  'Role install must create missing runtime accounts from reviewed identity values'
+require_pattern scripts/common.sh \
+  'groupadd --gid $(shell_quote "$gid") $(shell_quote "$group")' \
+  'Role install must create missing runtime groups from reviewed identity values'
+require_pattern scripts/common.sh \
+  'runtime identity state is partial' \
+  'Role preflight must block partial runtime identity state'
 reject_pattern scripts/jenkins-agent-setup.sh \
   '/harness/target/helper-state/agent/workspace' \
   'Agent helper must not accept /harness/target/helper-state/agent/workspace as product remote FS'

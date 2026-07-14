@@ -70,6 +70,13 @@ libvirt APIs and metadata instead of repairing VM disk ownership directly:
 Product homes are service-owned runtime directories. They are separate from
 helper-owned `/var/lib/loopforge/` state.
 
+Role preflight accepts a fully absent runtime account/group/product-home set
+after checking that its reviewed names and numeric identities can be created.
+After staged artifact verification, role `install` creates that complete set
+and then verifies its ownership before writing product files. A fully matching
+set is reused on rerun. Partial state, a non-directory path, or mismatched
+ownership blocks instead of being repaired in place.
+
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/srv/gerrit` | Gerrit target | Gerrit service and Gerrit role helper | `gerrit:gerrit` by default | Service-owned; helper verifies runtime account home and ownership | Gerrit site, repositories, config, plugins, indexes, logs, runtime markers | Sensitive because config can include LDAP/service authentication material | Backups and evidence may reference subpaths; secrets must be protected |

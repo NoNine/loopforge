@@ -31,6 +31,23 @@ Lifecycle phases are strict, single-purpose operations:
 - Phase success means the phase completed its own job, not that another phase
   was replayed or repaired implicitly.
 
+Role preflight and role installation divide runtime identity work as follows:
+
+- `preflight` is non-mutating. It validates the reviewed runtime account name,
+  primary group name, UID, GID, and canonical product home. Fully absent
+  account/group/home state is ready for creation, and fully matching state is
+  ready for reuse.
+- Partial or conflicting runtime identity state blocks. Examples include an
+  account without its complete group/home state, a numeric identity collision,
+  a mismatched passwd home or primary group, and a product home with the wrong
+  type or ownership.
+- Role-local `install` creates a fully absent runtime group, runtime account,
+  and product home from the reviewed values after staged artifacts have been
+  verified. It reuses fully matching state but never repairs mismatched state.
+- The operator account is a target-provisioning prerequisite because it runs
+  the helpers. Jenkins shared identity and storage remain later shared
+  integration work.
+
 Target-environment operations run as the operator account whenever practical.
 The operator account is the default target control-plane identity for helper
 commands, staging, validation, and evidence collection. Direct root login or
@@ -86,7 +103,7 @@ they must preserve the checkpoint semantics defined here.
 | Input review | Human operator or machine runner | Prepare reviewed env files and remove placeholders. No target mutation. |
 | Artifact preparation | Bundle factory through role helpers | Prepare application artifacts, manifests, checksums, and source-boundary labels. Target hosts are not mutated. |
 | Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target environments and verify target-side manifests/checksums before service mutation. |
-| Role-local setup | Role helpers or native operator procedure | Install/configure role-local target state and establish its runtime for Gerrit, Jenkins controller, or Jenkins agent. |
+| Role-local setup | Role helpers or native operator procedure | Create or verify the reviewed role runtime group, account, and product home; install/configure role-local target state; and establish its runtime for Gerrit, Jenkins controller, or Jenkins agent. |
 | Role-local validation | Role helpers or native operator procedure | Observe role readiness without cross-role integration claims or service repair. |
 | Shared integration setup | `scripts/integration-setup.sh` | Create or validate cross-role keys, ACL workflow, credentials, node registration, trigger server, jobs, and shared storage. |
 | Cross-role validation | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove Jenkins-to-Gerrit SSH, `stream-events`, effective Gerrit label/access state, Jenkins-to-agent SSH, node readiness, and scheduling. |
@@ -109,9 +126,9 @@ transcript. Operator manuals own exact commands and role-specific procedure.
 | Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed role env files, removes all `CHANGE_ME` values, keeps secrets out of committed examples, reviews cross-role values, and confirms browser-visible URLs for simulation. | None beyond local env-file creation. | Reviewed env files exist for Gerrit, Jenkins controller, Jenkins agent, and shared integration values; preflight failures are resolved before mutation. |
 | Artifacts | Bundle factory | `prepare-artifacts` | Consumes reviewed role env files and produces role artifact directories, manifests, checksums, and source-boundary records. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
 | Artifact staging | Bundle factory and target hosts | Operator-managed file transfer or simulation utility; target-side checksum verification | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
-| Gerrit readiness | Gerrit host | Gerrit role helper or native procedure | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit during configuration. | Validation observes a running Gerrit service, LDAP, HTTP/SSH, and bounded logs before Jenkins integration mutation. |
-| Jenkins controller readiness | Jenkins controller | Jenkins controller role helper or native procedure | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Installs packages from approved sources, creates or updates Jenkins runtime files and plugins, then starts or restarts Jenkins after configuration. | Validation observes a running Jenkins service, LDAP/JCasC, required plugins, and bounded logs before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
-| Jenkins agent readiness | Jenkins agent | Jenkins agent role helper or native procedure | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Installs packages from approved sources and creates or updates agent-host runtime files and SSH service state. | Validation observes the enabled/active SSH service, OS/tooling, runtime account, filesystem, staged artifact, bounded log, and evidence readiness before credential transfer, controller node registration, or scheduling proof. |
+| Gerrit readiness | Gerrit host | Gerrit role helper or native procedure | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Creates or verifies the reviewed runtime identity and product home, installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit during configuration. | Validation observes a running Gerrit service, LDAP, HTTP/SSH, and bounded logs before Jenkins integration mutation. |
+| Jenkins controller readiness | Jenkins controller | Jenkins controller role helper or native procedure | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Creates or verifies the reviewed runtime identity and product home, installs packages from approved sources, creates or updates Jenkins runtime files and plugins, then starts or restarts Jenkins after configuration. | Validation observes a running Jenkins service, LDAP/JCasC, required plugins, and bounded logs before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
+| Jenkins agent readiness | Jenkins agent | Jenkins agent role helper or native procedure | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Creates or verifies the reviewed runtime identity and product home, installs packages from approved sources, and creates or updates agent-host runtime files and SSH service state. | Validation observes the enabled/active SSH service, OS/tooling, runtime account, filesystem, staged artifact, bounded log, and evidence readiness before credential transfer, controller node registration, or scheduling proof. |
 | Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/operations/setup/integration.md` for the cross-role command sequence and stop/review points. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 

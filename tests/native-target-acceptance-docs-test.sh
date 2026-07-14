@@ -143,12 +143,45 @@ for role_doc in \
   docs/operations/native/jenkins-controller.md \
   docs/operations/native/jenkins-agent.md; do
   require_text "$role_doc" \
+    'freshly provisioned' \
+    'Native role procedure must require a freshly provisioned target'
+  require_text "$role_doc" \
+    'stop and reprovision the target' \
+    'Native role procedure must stop when clean-install prerequisites fail'
+  reject_text "$role_doc" \
+    'fully matching' \
+    'Native clean-install procedure must not describe helper state reuse'
+  reject_text "$role_doc" \
+    'partial runtime identity state' \
+    'Native clean-install procedure must not copy helper state classification'
+  reject_text "$role_doc" \
+    'elif getent' \
+    'Native clean-install procedure must not contain helper-style account branches'
+  require_text "$role_doc" \
     'The reboot check is optional.' \
     'Native role procedure must mark its reboot check optional'
   require_text "$role_doc" \
     'mark the run `BLOCKED`.' \
     'Native role procedure must block an attempted reboot check that fails'
 done
+require_text docs/operations/native/gerrit.md \
+  'sudo groupadd --gid 61010 gerrit' \
+  'Gerrit native procedure must create its reviewed runtime group directly'
+require_text docs/operations/native/gerrit.md \
+  'sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --no-create-home' \
+  'Gerrit native procedure must create its reviewed runtime account directly'
+require_text docs/operations/native/jenkins-controller.md \
+  'sudo groupadd --gid 61020 jenkins' \
+  'Jenkins native procedure must create its reviewed runtime group directly'
+require_text docs/operations/native/jenkins-controller.md \
+  'sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --no-create-home' \
+  'Jenkins native procedure must create its reviewed runtime account directly'
+require_text docs/operations/native/jenkins-agent.md \
+  'groupadd --gid "${agent_gid}" "${agent_user}"' \
+  'Agent native procedure must create its reviewed runtime group directly'
+require_text docs/operations/native/jenkins-agent.md \
+  'useradd --uid "${agent_uid}" --gid "${agent_gid}" --home-dir "${remote_fs}" --no-create-home' \
+  'Agent native procedure must create its reviewed runtime account directly'
 require_text docs/operations/native/integration.md \
   '`docs/operations/native/acceptance-checklist.md`' \
   'Native integration must use the single acceptance checklist'

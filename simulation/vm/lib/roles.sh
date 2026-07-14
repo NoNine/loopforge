@@ -144,62 +144,6 @@ vm_roles_run_helper() {
   esac
 }
 
-vm_roles_prepare_runtime_identity() {
-  local role machine env account_key group_key uid_key gid_key home_key script
-  role="${1:?role required}"
-  machine="$(vm_ssh_role_machine "$role")"
-  env="$(vm_path_guest_role_env "$role")"
-  case "$role" in
-    gerrit)
-      account_key=GERRIT_RUNTIME_ACCOUNT
-      group_key=GERRIT_RUNTIME_GROUP
-      uid_key=GERRIT_RUNTIME_UID
-      gid_key=GERRIT_RUNTIME_GID
-      home_key=GERRIT_SITE_PATH
-      ;;
-    jenkins-controller)
-      account_key=JENKINS_RUNTIME_ACCOUNT
-      group_key=JENKINS_RUNTIME_GROUP
-      uid_key=JENKINS_RUNTIME_UID
-      gid_key=JENKINS_RUNTIME_GID
-      home_key=JENKINS_HOME
-      ;;
-    jenkins-agent)
-      account_key=JENKINS_AGENT_ACCOUNT
-      group_key=JENKINS_AGENT_GROUP
-      uid_key=JENKINS_AGENT_UID
-      gid_key=JENKINS_AGENT_GID
-      home_key=JENKINS_AGENT_REMOTE_FS
-      ;;
-  esac
-  script=$(cat <<EOF
-set -eu
-. $(shell_quote "$env")
-eval "account=\${$account_key}"
-eval "group=\${$group_key}"
-eval "uid=\${$uid_key}"
-eval "gid=\${$gid_key}"
-eval "home=\${$home_key}"
-if getent group "\$group" >/dev/null 2>&1; then
-  test "\$(getent group "\$group" | awk -F: '{print \$3}')" = "\$gid"
-else
-  sudo -n groupadd --gid "\$gid" "\$group"
-fi
-if getent passwd "\$account" >/dev/null 2>&1; then
-  entry="\$(getent passwd "\$account")"
-  test "\$(printf '%s\\n' "\$entry" | awk -F: '{print \$3}')" = "\$uid"
-  test "\$(printf '%s\\n' "\$entry" | awk -F: '{print \$4}')" = "\$gid"
-  test "\$(printf '%s\\n' "\$entry" | awk -F: '{print \$6}')" = "\$home"
-else
-  sudo -n useradd --uid "\$uid" --gid "\$gid" --home-dir "\$home" --shell /bin/bash "\$account"
-fi
-printf 'runtime-identity=ready role=%s account=%s group=%s uid=%s gid=%s home=%s\\n' \
-  $(shell_quote "$role") "\$account" "\$group" "\$uid" "\$gid" "\$home"
-EOF
-)
-  vm_ssh_run_machine "$machine" "$script"
-}
-
 vm_roles_configure() {
   local role machine boot_id
   role="${1:?role required}"
@@ -207,7 +151,6 @@ vm_roles_configure() {
   vm_set_verify_run_and_set || return $?
   vm_artifacts_stage_role_env "$machine" "$role" || return $?
   vm_artifacts_verify_staged_role "$role" || return $?
-  vm_roles_prepare_runtime_identity "$role" || return $?
   case "$role" in
     gerrit)
       vm_roles_run_helper "$role" install || return $?

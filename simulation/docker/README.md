@@ -113,6 +113,10 @@ All lifecycle and cleanup commands use the repo-local
 The shared simulation account contract, including seeded LDAP login accounts,
 is defined in `simulation/README.md`. The Docker target image realizes that
 contract with the default simulation operator and product runtime accounts.
+For a fresh run, `up` initializes the empty bind-mounted product-home roots to
+the baked runtime accounts' reviewed numeric ownership before role setup.
+Later starts only validate that ownership. Drift blocks and requires explicit
+cleanup with a fresh run; the harness does not repair populated product homes.
 
 Docker realizes Jenkins shared storage by bind-mounting one run-local
 `target/shared-jenkins-storage` directory into both the Jenkins controller and

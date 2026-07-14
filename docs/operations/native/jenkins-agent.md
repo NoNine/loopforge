@@ -30,6 +30,9 @@ Assumptions:
 
 - Jenkins runs on its own Ubuntu 24.04 LTS host.
 - The build agent runs on a separate Ubuntu 24.04 LTS host.
+- The agent target is freshly provisioned with no prior Jenkins agent or
+  Loopforge runtime state, including no agent runtime account, group, or
+  `/var/lib/jenkins-agent` path.
 - Jenkins connects out to the build agent over SSH.
 - The build agent exposes SSH only on a trusted/internal network.
 - Staging can use an internet-connected Ubuntu 24.04 machine to prepare
@@ -107,9 +110,10 @@ Ask an administrator to perform or delegate these build-server tasks:
 The package rationale and layered classification are maintained in
 `docs/baselines/package-requirements.md`.
 
-OS dependency setup also creates the dedicated `jenkins-agent` account and
-enables SSH. It does not install Jenkins controller keys; controller credential
-selection, node registration, and scheduling proof are later integration work.
+Role installation creates the dedicated `jenkins-agent` account and product
+home; OS dependency setup enables SSH. Neither step installs Jenkins controller
+keys. Controller credential selection, node registration, and scheduling proof
+are later integration work.
 
 Manual package baseline on the build server:
 
@@ -137,9 +141,10 @@ v1 does not support installing OS dependencies from locally bundled Ubuntu
 packages. Use approved internal Ubuntu/OS package repositories for OS packages
 on target hosts.
 
-The Jenkins agent runtime account and group must already exist, and its passwd
-HOME must be `/var/lib/jenkins-agent`. Create the account and group through
-administrator-controlled OS procedures before continuing.
+Review the Jenkins agent runtime account/group names and numeric IDs before
+installation. This clean-install procedure creates them on the freshly
+provisioned target. If a reviewed name, numeric ID, or product-home path is
+already in use, stop and reprovision the target.
 
 ### 2.2 Create the Agent Artifact Bundle
 
@@ -180,6 +185,11 @@ Verify the artifact archive and internal checksums on the build server, stage
 the payload under `/var/lib/loopforge/staging`, then configure the runtime
 account and SSH service:
 
+This is a clean-install procedure. The four `getent` commands below must
+return no entry, and the final `test` must succeed. If any reviewed name,
+numeric ID, or path is already in use, stop and reprovision the target instead
+of adapting or repairing it in place.
+
 ```bash
 operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
 operator_group="${LOOPFORGE_OPERATOR_GROUP:-$operator_account}"
@@ -191,6 +201,11 @@ operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
 
 cd "$operator_home"
 sha256sum -c jenkins-agent-artifacts-bundle.tar.gz.sha256
+getent passwd jenkins-agent
+getent group jenkins-agent
+getent passwd 61030
+getent group 61030
+test ! -e /var/lib/jenkins-agent
 
 sudo bash -s "$operator_account" "$operator_group" "$operator_home" <<'EOF'
 set -euo pipefail
@@ -208,21 +223,18 @@ tar -xzf "$operator_home/jenkins-agent-artifacts-bundle.tar.gz" -C "$staging"
 chown -R "$operator_account:$operator_group" "$staging/jenkins-agent"
 cd "$staging/jenkins-agent"
 sha256sum -c checksums.sha256
-if ! getent group "${agent_user}" >/dev/null; then
-  groupadd --gid "${agent_gid}" "${agent_user}"
-fi
-if ! getent passwd "${agent_user}" >/dev/null; then
-  useradd --uid "${agent_uid}" --gid "${agent_gid}" --home-dir "${remote_fs}" --shell /bin/bash "${agent_user}"
-fi
-install -d -o "${agent_user}" -g "${agent_user}" -m 0750 "${remote_fs}"
+groupadd --gid "${agent_gid}" "${agent_user}"
+useradd --uid "${agent_uid}" --gid "${agent_gid}" --home-dir "${remote_fs}" --no-create-home --shell /bin/bash "${agent_user}"
+install -d -o "${agent_user}" -g "${agent_user}" -m 0755 "${remote_fs}"
 rm -f "${remote_fs}/remoting.jar"
 systemctl enable --now ssh || systemctl enable --now sshd || true
 EOF
 ```
 
-For artifact recovery, rerun only the artifact archive checksum, transfer,
-internal checksum, account, remote filesystem, and SSH service commands. OS
-package recovery uses the approved internal Ubuntu/OS package repository path.
+For artifact recovery after installation, rerun only the artifact archive
+checksum, transfer, internal checksum, and bootstrap file copy. Do not rerun
+the account or product-home creation commands. OS package recovery uses the
+approved internal Ubuntu/OS package repository path.
 
 ## 3. Jenkins Agent Installation
 

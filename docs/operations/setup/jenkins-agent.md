@@ -87,6 +87,9 @@ Produced outputs:
   values, SSH endpoint values, runtime account values, remote filesystem
   path, node name, labels, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
+- Runtime identity readiness: fully absent account/group/product-home state is
+  accepted for creation by `install`, fully matching state is accepted for
+  reuse, and partial or conflicting state blocks.
 
 Side effects:
 
@@ -200,10 +203,11 @@ agent host setup does not consume controller key material and does not update
 `authorized_keys`. Jenkins-to-agent keypair generation, public-key transfer,
 and access authorization remain later integration work.
 
-The helper requires the configured local runtime account and group to already
-exist. It fails clearly when either is missing, or when the existing account
-passwd HOME is not `/var/lib/jenkins-agent`. Native account and group
-provisioning is outside the helper.
+The helper creates the configured local runtime group, account, and
+`/var/lib/jenkins-agent` product home during `install` when the complete set is
+absent. It reuses a fully matching set and fails clearly on partial state,
+numeric collisions, a mismatched passwd HOME or primary group, or mismatched
+product-home ownership.
 
 Consumed inputs:
 
@@ -220,9 +224,11 @@ Produced outputs:
 
 Mutation side effects:
 
-- Verifies the dedicated local runtime account and role-local runtime group
-  from `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`.
-- Creates or updates the remote filesystem.
+- Creates or verifies the dedicated local runtime account and role-local
+  runtime group from the reviewed UID/GID values and
+  `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`.
+- Creates the remote filesystem with reviewed ownership when the complete
+  runtime identity state is absent; it does not repair existing mismatches.
 - Requires the guest OS to manage OpenSSH as `ssh.service` or `sshd.service`
   in VM simulation and target deployment. The agent remains an outbound SSH
   node and does not need a separate Jenkins agent daemon.

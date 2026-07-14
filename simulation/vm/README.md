@@ -267,9 +267,10 @@ set; do not delete its libvirt resources or generated backing directly.
 ## Simulation Accounts
 
 The shared simulation account contract, including seeded LDAP login accounts,
-is defined in `simulation/README.md`. VM provisioning realizes that contract
-with the default simulation operator and product runtime accounts unless a
-reviewed VM config overrides them.
+is defined in `simulation/README.md`. VM provisioning realizes the default
+simulation operator. Role `install` creates or verifies the reviewed product
+runtime accounts and product homes inside the target VMs; the VM harness does
+not create those identities before invoking the helpers.
 
 VM simulation models Jenkins shared storage as a Jenkins-agent-hosted
 NFS-backed shared storage resource. It is target-like guest state, not a

@@ -190,6 +190,18 @@ if grep -Fq -- 'prepare_product_home_ownership' "${docker_harness_sources[@]}" |
   printf 'Docker harness must not own container-visible Loopforge/product ownership prep\n' >&2
   exit 1
 fi
+grep -Fq -- '.runtime-identity-pending' "$repo_root/simulation/docker/lib/config.sh" || {
+  printf 'Fresh Docker runs must mark product homes for one-time identity initialization\n' >&2
+  exit 1
+}
+grep -Fq -- 'initialize_or_validate_product_homes' "$repo_root/simulation/docker/lib/commands.sh" || {
+  printf 'Docker up must initialize fresh homes and validate ownership on later starts\n' >&2
+  exit 1
+}
+grep -Fq -- 'run explicit cleanup and use a fresh run' "$repo_root/simulation/docker/lib/commands.sh" || {
+  printf 'Docker product-home ownership drift must require explicit cleanup\n' >&2
+  exit 1
+}
 if grep -Fq -- '/var/lib/loopforge/rendered' "${docker_harness_sources[@]}"; then
   printf 'Docker harness must not stage helper env files under Loopforge rendered state\n' >&2
   exit 1

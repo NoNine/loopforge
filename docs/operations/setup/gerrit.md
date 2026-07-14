@@ -88,7 +88,9 @@ Produced outputs:
   endpoint values, LDAP assumptions, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
 - Normal-mode disk-space, host-resolution, LDAP bind/search, and Gerrit
-  runtime account/group readiness checks.
+  runtime identity checks. Fully absent account/group/product-home state is
+  accepted for creation by `install`; fully matching state is accepted for
+  reuse; partial or conflicting state blocks.
 - Jenkins Gerrit integration account, group, and public-key handoff values are
   not Step 7 prerequisites. They are reviewed and applied in the later
   integration step.
@@ -101,8 +103,9 @@ Side effects:
   internet fallback for target-host Ubuntu/OS dependency installation is
   simulation-only.
 - Dry-run preflight validates reviewed values and reports planned checks
-  without requiring operator-workstation DNS, LDAP, disk, or account state to
-  match the target.
+  without requiring operator-workstation DNS, LDAP, or disk state to match the
+  target. Runtime identity state is still inspected because absent, partial,
+  and matching target state produce different installation outcomes.
 
 Helper:
 
@@ -213,6 +216,9 @@ Produced outputs:
 
 Mutation side effects:
 
+- Creates the reviewed Gerrit primary group, runtime account, and
+  `/srv/gerrit` product home when all three are absent, or reuses the fully
+  matching set. It does not repair partial or mismatched state.
 - Creates or updates Gerrit role-local site files.
 - Does not download application artifacts on the target.
 - Fails before mutation if the staged Gerrit WAR is not a valid archive.

@@ -190,6 +190,9 @@ GERRIT_HTTP_PORT
 GERRIT_SSH_PORT
 GERRIT_CANONICAL_WEB_URL
 GERRIT_RUNTIME_ACCOUNT
+GERRIT_RUNTIME_GROUP
+GERRIT_RUNTIME_UID
+GERRIT_RUNTIME_GID
 LOOPFORGE_OPERATOR_ACCOUNT
 LOOPFORGE_OPERATOR_GROUP
 GERRIT_SITE_PATH
@@ -542,8 +545,10 @@ check_host_resolution() {
 check_runtime_account_readiness() {
   [ "$GERRIT_SITE_PATH" = "$GERRIT_NATIVE_SITE_PATH" ] ||
     die "GERRIT_SITE_PATH must be $GERRIT_NATIVE_SITE_PATH, got $GERRIT_SITE_PATH"
-  require_runtime_account_home "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "$GERRIT_NATIVE_SITE_PATH" "Gerrit"
-  require_product_home_ownership "$GERRIT_NATIVE_SITE_PATH" "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" "Gerrit"
+  classify_runtime_identity_state \
+    "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" \
+    "$GERRIT_RUNTIME_UID" "$GERRIT_RUNTIME_GID" \
+    "$GERRIT_NATIVE_SITE_PATH" "Gerrit" >/dev/null
 }
 
 verify_staged_artifacts() {
@@ -585,9 +590,10 @@ cmd_preflight() {
     check_host_resolution
     check_ldap_access
   fi
-  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s ssh_port=%s mode=%s checks=%s\n' \
-    "$dry_run" "${env_file:-$default_env_file}" "$GERRIT_HOST" "$GERRIT_HTTP_PORT" "$GERRIT_SSH_PORT" "$GERRIT_VERIFICATION_MODE" \
-    "disk,host-resolution,runtime-account-group,ldap-bind-search"
+  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s ssh_port=%s runtime_uid=%s runtime_gid=%s mode=%s checks=%s\n' \
+    "$dry_run" "${env_file:-$default_env_file}" "$GERRIT_HOST" "$GERRIT_HTTP_PORT" "$GERRIT_SSH_PORT" \
+    "$GERRIT_RUNTIME_UID" "$GERRIT_RUNTIME_GID" "$GERRIT_VERIFICATION_MODE" \
+    "disk,host-resolution,runtime-identity,ldap-bind-search"
 }
 
 write_manifest() {
@@ -644,7 +650,7 @@ prepare_artifact_bundle_workspace() {
 }
 
 prepare_real_gerrit_war() {
-  local war source download_log
+  local war source
   war="$GERRIT_ARTIFACT_OUTPUT_DIR/gerrit-3.13.6.war"
   source="${GERRIT_WAR_SOURCE:-}"
   if [ -n "$source" ]; then
@@ -652,13 +658,11 @@ prepare_real_gerrit_war() {
     cp "$source" "$war"
   elif [ "${GERRIT_DOWNLOAD_ARTIFACTS:-0}" = "1" ]; then
     require_command wget
-    download_log="$(factory_download_log_path)"
-    printf 'simulation-only public internet use: downloading Gerrit application artifact in bundle factory\n' >"$download_log"
+    printf 'simulation-only public internet use: downloading Gerrit application artifact in bundle factory\n' >"$(factory_download_log_path)"
     rm -f "$war"
     wget -nv --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
       -O "$war" \
-      "https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war" \
-      >>"$download_log" 2>&1
+      "https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war"
   else
     printf 'BLOCKED: prepare-artifacts requires GERRIT_WAR_SOURCE or GERRIT_DOWNLOAD_ARTIFACTS=1 in the bundle factory; target hosts never download Gerrit application artifacts as fallback\n' >&2
     return 1
@@ -713,19 +717,25 @@ cmd_prepare_artifacts() {
 }
 
 cmd_install() {
+  local identity_action
   load_env normal
   require_env_values
+  check_runtime_account_readiness
   confirm_mutation install || return 0
   verify_staged_artifacts
+  verify_war_artifact "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war"
+  identity_action="$(realize_runtime_identity \
+    "$GERRIT_RUNTIME_ACCOUNT" "$GERRIT_RUNTIME_GROUP" \
+    "$GERRIT_RUNTIME_UID" "$GERRIT_RUNTIME_GID" \
+    "$GERRIT_NATIVE_SITE_PATH" "Gerrit")"
   ensure_dirs
   reset_gerrit_site_for_install
   prepare_gerrit_runtime_directories
-  check_runtime_account_readiness
-  verify_war_artifact "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war"
   install_file_as_runtime "$GERRIT_STAGED_ARTIFACT_DIR/gerrit-3.13.6.war" "$GERRIT_SITE_PATH/bin/gerrit.war" 0644
   run_with_privilege "install -d -m 0755 -o $(shell_quote "$GERRIT_RUNTIME_ACCOUNT") -g $(shell_quote "$GERRIT_RUNTIME_GROUP") $(shell_quote "$GERRIT_SITE_PATH/plugins")"
   write_text_file_as_runtime "$GERRIT_SITE_PATH/state/install.status" "installed"
-  printf 'status=pass command=install site=%s staged=%s\n' "$GERRIT_SITE_PATH" "$GERRIT_STAGED_ARTIFACT_DIR"
+  printf 'status=pass command=install site=%s staged=%s runtime_identity=%s\n' \
+    "$GERRIT_SITE_PATH" "$GERRIT_STAGED_ARTIFACT_DIR" "$identity_action"
 }
 
 cmd_configure() {

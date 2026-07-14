@@ -27,6 +27,8 @@ Gerrit/Jenkins integration.
 Assumptions:
 
 - Gerrit runs on its own Ubuntu 24.04 LTS host.
+- The target is freshly provisioned with no prior Gerrit or Loopforge runtime
+  state, including no Gerrit runtime account, group, or `/srv/gerrit` path.
 - Jenkins runs on a separate host and will integrate with Gerrit later.
 - Identity is integrated with LDAP/Active Directory.
 - Gerrit exposes direct service ports on a trusted/internal network.
@@ -120,7 +122,8 @@ values, and run network checks that your account is allowed to run.
 Ask an administrator to perform or delegate these production-host tasks:
 
 - Install OS packages and Java dependencies.
-- Confirm the local Gerrit runtime account and group exist on the Gerrit host.
+- Confirm the reviewed Gerrit runtime account/group names, UID/GID, and product
+  home are unused on the freshly provisioned host, then create them.
 - Create and own `/srv/gerrit`, `/srv/gerrit/bin`, `/srv/gerrit/plugins`, and any
   staged `/var/lib/loopforge/staging/gerrit` content as documented.
 - Place `/srv/gerrit/bin/gerrit.war`, initialize Gerrit as `gerrit`, and protect `/srv/gerrit/etc/secure.config`.
@@ -244,11 +247,25 @@ java -version
 
 Install the Gerrit artifact files:
 
+This is a clean-install procedure. The four `getent` commands below must
+return no entry, and the final `test` must succeed. If any reviewed name,
+numeric ID, or path is already in use, stop and reprovision the target instead
+of adapting or repairing it in place.
+
 ```bash
-sudo install -d -m 0750 /srv/gerrit
-sudo groupadd --gid 61010 gerrit || true
-sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --shell /bin/bash gerrit || true
-sudo chown gerrit:gerrit /srv/gerrit
+getent passwd gerrit
+getent group gerrit
+getent passwd 61010
+getent group 61010
+test ! -e /srv/gerrit
+```
+
+Create the runtime account, product home, and initial artifact files:
+
+```bash
+sudo groupadd --gid 61010 gerrit
+sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --no-create-home --shell /bin/bash gerrit
+sudo install -d -m 0755 -o gerrit -g gerrit /srv/gerrit
 sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/bin
 sudo cp /var/lib/loopforge/staging/gerrit/gerrit-3.13.6.war /srv/gerrit/bin/gerrit.war
 sudo chown gerrit:gerrit /srv/gerrit/bin/gerrit.war
@@ -262,15 +279,17 @@ Ubuntu/OS package repository path.
 
 ## 3. Gerrit Installation
 
-### 3.1 Confirm Service Account and Create Directories
+### 3.1 Confirm Service Account and Directories
 
 Run on the Gerrit host:
 
 ```bash
 getent passwd gerrit
 getent group gerrit
-install -d -o gerrit -g gerrit -m 0750 /srv/gerrit
-install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/bin
+test "$(getent passwd gerrit | cut -d: -f3)" = 61010
+test "$(getent group gerrit | cut -d: -f3)" = 61010
+test "$(getent passwd gerrit | cut -d: -f6)" = /srv/gerrit
+test "$(stat -c '%U:%G' /srv/gerrit)" = gerrit:gerrit
 ```
 
 Place the Gerrit WAR from the staged bundle-factory artifact bundle. Target

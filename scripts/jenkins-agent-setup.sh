@@ -137,6 +137,8 @@ JENKINS_AGENT_HOST
 JENKINS_AGENT_SSH_PORT
 JENKINS_AGENT_ACCOUNT
 JENKINS_AGENT_GROUP
+JENKINS_AGENT_UID
+JENKINS_AGENT_GID
 LOOPFORGE_OPERATOR_ACCOUNT
 LOOPFORGE_OPERATOR_GROUP
 JENKINS_AGENT_REMOTE_FS
@@ -668,8 +670,11 @@ cmd_preflight() {
     die "Jenkins agent must consume SSH Build Agents plugin from the controller plugin bundle"
   [ "$JENKINS_AGENT_EXECUTOR_CONTEXT" = "controller-owned" ] ||
     die "Jenkins agent executor and scheduling context must remain controller-owned"
-  printf 'status=pass command=preflight dry_run=%s env=%s host=%s ssh_port=%s account=%s group=%s node_name=%s labels=%s mode=%s\n' \
-    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_SSH_PORT" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$JENKINS_AGENT_VERIFICATION_MODE"
+  printf 'status=pass command=preflight dry_run=%s env=%s host=%s ssh_port=%s account=%s group=%s uid=%s gid=%s node_name=%s labels=%s mode=%s\n' \
+    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_AGENT_HOST" "$JENKINS_AGENT_SSH_PORT" \
+    "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_UID" \
+    "$JENKINS_AGENT_GID" "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" \
+    "$JENKINS_AGENT_VERIFICATION_MODE"
 }
 
 write_manifest() {
@@ -744,27 +749,32 @@ cmd_prepare_artifacts() {
 }
 
 cmd_install() {
+  local identity_action
   load_env normal
   require_env_values
   validate_agent_render_inputs
+  check_agent_runtime_account_readiness
   confirm_mutation install || return 0
   verify_staged_artifacts
+  identity_action="$(realize_runtime_identity \
+    "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" \
+    "$JENKINS_AGENT_UID" "$JENKINS_AGENT_GID" \
+    "$JENKINS_AGENT_NATIVE_REMOTE_FS" "Jenkins agent")"
   ensure_dirs
-  check_agent_runtime_account_readiness
   reset_agent_state_for_install
   install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644
   copy_tree_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates" "$JENKINS_AGENT_STATE_DIR/templates"
   write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/install.status" "installed"
-  printf 'status=pass command=install state_dir=%s staged=%s\n' "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_STAGED_ARTIFACT_DIR"
+  printf 'status=pass command=install state_dir=%s staged=%s runtime_identity=%s\n' \
+    "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_STAGED_ARTIFACT_DIR" "$identity_action"
 }
 
 check_agent_runtime_account_readiness() {
   validate_agent_remote_fs
-  require_runtime_account_home "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "$JENKINS_AGENT_NATIVE_REMOTE_FS" "Jenkins agent"
-  if [ ! -d "$JENKINS_AGENT_NATIVE_REMOTE_FS" ]; then
-    prepare_agent_remote_fs
-  fi
-  require_product_home_ownership "$JENKINS_AGENT_NATIVE_REMOTE_FS" "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" "Jenkins agent"
+  classify_runtime_identity_state \
+    "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_GROUP" \
+    "$JENKINS_AGENT_UID" "$JENKINS_AGENT_GID" \
+    "$JENKINS_AGENT_NATIVE_REMOTE_FS" "Jenkins agent" >/dev/null
 }
 
 ensure_runtime_account_accepts_publickey() {

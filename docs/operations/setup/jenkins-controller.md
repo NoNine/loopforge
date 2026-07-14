@@ -107,6 +107,9 @@ Produced outputs:
   values, controller endpoint values, LDAP assumptions, deferred integration
   inventory values, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
+- Runtime identity readiness: fully absent account/group/product-home state is
+  accepted for creation by `install`, fully matching state is accepted for
+  reuse, and partial or conflicting state blocks.
 
 Side effects:
 
@@ -234,6 +237,9 @@ Produced outputs:
 
 Mutation side effects:
 
+- Creates the reviewed Jenkins primary group, runtime account, and
+  `/var/lib/jenkins` product home when all three are absent, or reuses the
+  fully matching set. It does not repair partial or mismatched state.
 - Creates or updates Jenkins role-local home files.
 - Uses `JENKINS_RUNTIME_GROUP`, defaulting to `jenkins`, for role-local
   Jenkins home ownership.

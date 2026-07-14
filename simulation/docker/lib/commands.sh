@@ -164,6 +164,48 @@ cmd_create() {
   print_command_summary create "" "ok images=project-built"
 }
 
+initialize_or_validate_product_homes() {
+  local log marker pending spec service account group path
+  local expected expected_uid expected_gid actual
+  log="${1:?log required}"
+  marker="$HARNESS_PRODUCT_HOME_DIR/.runtime-identity-pending"
+  pending=0
+  [ ! -f "$marker" ] || pending=1
+
+  for spec in \
+    'gerrit-target:gerrit:gerrit:/srv/gerrit:61010:61010' \
+    'jenkins-controller-target:jenkins:jenkins:/var/lib/jenkins:61020:61020' \
+    'jenkins-agent-target:jenkins-agent:jenkins-agent:/var/lib/jenkins-agent:61030:61030'; do
+    IFS=: read -r service account group path expected_uid expected_gid <<<"$spec"
+    expected="$expected_uid:$expected_gid"
+    if [ "$pending" -eq 1 ]; then
+      compose exec -T "$service" sh -c \
+        'test -d "$1" && test -z "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit)" && install -d -m 0755 -o "$2" -g "$3" "$1"' \
+        sh "$path" "$account" "$group" >>"$log" 2>&1 || {
+          printf 'ERROR: Fresh Docker product home initialization failed for %s:%s\n' "$service" "$path" >>"$log"
+          return 1
+        }
+    else
+      actual="$(compose exec -T "$service" stat -c '%u:%g' "$path" 2>>"$log" | tr -d '\r')" || {
+        printf 'ERROR: Could not inspect Docker product home ownership for %s:%s\n' "$service" "$path" >>"$log"
+        return 1
+      }
+      if [ "$actual" != "$expected" ]; then
+        printf 'ERROR: Docker product home ownership mismatch for %s:%s expected=%s actual=%s; run explicit cleanup and use a fresh run\n' \
+          "$service" "$path" "$expected" "$actual" >>"$log"
+        return 1
+      fi
+    fi
+  done
+
+  if [ "$pending" -eq 1 ]; then
+    rm -f -- "$marker"
+    printf 'product-home-runtime-identities=initialized\n' >>"$log"
+  else
+    printf 'product-home-runtime-identities=validated\n' >>"$log"
+  fi
+}
+
 cmd_up() {
   local log rc evidence
   bootstrap_harness_env
@@ -196,6 +238,11 @@ cmd_up() {
     evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Compose up failed")"
     print_command_failure up "" failed "$log" "$evidence"
     return "$rc"
+  fi
+  if ! initialize_or_validate_product_homes "$log"; then
+    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Docker product home runtime identity initialization or validation failed")"
+    print_command_failure up "" failed "$log" "$evidence"
+    return 1
   fi
   check_ubuntu_service_baseline bundle-factory bundle-factory
   check_ubuntu_service_baseline gerrit-target gerrit

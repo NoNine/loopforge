@@ -32,6 +32,9 @@ Jenkins-to-Gerrit keys, controller node registration, scheduling proof, and
 Assumptions:
 
 - Jenkins runs on its own Ubuntu 24.04 LTS host.
+- The target is freshly provisioned with no prior Jenkins or Loopforge runtime
+  state, including no Jenkins runtime account, group, or `/var/lib/jenkins`
+  path.
 - Gerrit runs on a separate host and is reachable from Jenkins.
 - Identity is integrated with LDAP/Active Directory.
 - Jenkins exposes a direct service port on a trusted/internal network.
@@ -109,10 +112,10 @@ nc -vz LDAP_HOST 636 || true
 
 Use port `389` for LDAP with StartTLS if required. Use port `636` for LDAPS.
 
-The Jenkins runtime user and group are local OS identities. If the Jenkins
-package creates `jenkins:jenkins`, use that account. If your site requires a
-different local account, create it before configuring the service and use that
-same value everywhere this manual shows `jenkins`.
+The Jenkins runtime user and group are reviewed local OS identities. This
+clean-install procedure creates them during installation. If your site uses
+different values, substitute the reviewed name and numeric identity everywhere
+this manual shows the defaults.
 
 The LDAP bind DN used by Jenkins should be a dedicated read-only Jenkins bind
 account. It must have permission to search the configured user and group bases.
@@ -129,7 +132,8 @@ that your account is allowed to run.
 Ask an administrator to perform or delegate these production-host tasks:
 
 - Install OS packages and Java dependencies.
-- Confirm the local Jenkins runtime account and group exist on the Jenkins host.
+- Confirm the reviewed Jenkins runtime account/group names, UID/GID, and
+  product home are unused on the freshly provisioned host, then create them.
 - Create and own `/var/lib/jenkins`, `/var/lib/jenkins/war`,
   `/var/lib/jenkins/plugins`, `/var/lib/jenkins/jcasc`, and any staged
   `/var/lib/loopforge/staging/jenkins` content as documented.
@@ -326,12 +330,25 @@ sha256sum -c checksums.sha256
 java -version
 ```
 
-Install or refresh controller application artifacts from the artifact bundle:
+This is a clean-install procedure. The four `getent` commands below must
+return no entry, and the final `test` must succeed. If any reviewed name,
+numeric ID, or path is already in use, stop and reprovision the target instead
+of adapting or repairing it in place.
 
 ```bash
-sudo systemctl stop jenkins || true
-sudo groupadd --gid 61020 jenkins || true
-sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --shell /bin/bash jenkins || true
+getent passwd jenkins
+getent group jenkins
+getent passwd 61020
+getent group 61020
+test ! -e /var/lib/jenkins
+```
+
+Install controller application artifacts from the artifact bundle:
+
+```bash
+sudo groupadd --gid 61020 jenkins
+sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --no-create-home --shell /bin/bash jenkins
+sudo install -d -m 0755 -o jenkins -g jenkins /var/lib/jenkins
 sudo install -d -o jenkins -g jenkins -m 0755 /var/lib/jenkins/war
 sudo cp /var/lib/loopforge/staging/jenkins/jenkins-2.555.3.war /var/lib/jenkins/war/jenkins.war
 sudo cp /var/lib/loopforge/staging/jenkins/jenkins-plugin-manager-2.15.0.jar /var/lib/jenkins/war/jenkins-plugin-manager.jar

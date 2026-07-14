@@ -208,6 +208,8 @@ JENKINS_URL
 JENKINS_HTTP_PORT
 JENKINS_RUNTIME_ACCOUNT
 JENKINS_RUNTIME_GROUP
+JENKINS_RUNTIME_UID
+JENKINS_RUNTIME_GID
 LOOPFORGE_OPERATOR_ACCOUNT
 LOOPFORGE_OPERATOR_GROUP
 JENKINS_HOME
@@ -371,11 +373,10 @@ runtime_account_exists() {
   validate_runtime_owner_inputs
   [ "$JENKINS_HOME" = "$JENKINS_NATIVE_HOME" ] ||
     die "JENKINS_HOME must be $JENKINS_NATIVE_HOME, got $JENKINS_HOME"
-  require_runtime_account_home "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_NATIVE_HOME" "Jenkins"
-  if [ ! -d "$JENKINS_NATIVE_HOME" ]; then
-    prepare_jenkins_runtime_dirs
-  fi
-  require_product_home_ownership "$JENKINS_NATIVE_HOME" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "Jenkins"
+  classify_runtime_identity_state \
+    "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" \
+    "$JENKINS_RUNTIME_UID" "$JENKINS_RUNTIME_GID" \
+    "$JENKINS_NATIVE_HOME" "Jenkins" >/dev/null
 }
 
 run_as_runtime() {
@@ -907,8 +908,10 @@ cmd_preflight() {
     check_os_dependency_expectations
   fi
   enforce_version_baseline
-  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s runtime_account=%s runtime_group=%s mode=%s plugins=accepted-direct-pins\n' \
-    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_VERIFICATION_MODE"
+  printf 'status=pass command=preflight dry_run=%s env=%s host=%s http_port=%s runtime_account=%s runtime_group=%s runtime_uid=%s runtime_gid=%s mode=%s plugins=accepted-direct-pins\n' \
+    "$dry_run" "${env_file:-$default_env_file}" "$JENKINS_HOST" "$JENKINS_HTTP_PORT" \
+    "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" "$JENKINS_RUNTIME_UID" \
+    "$JENKINS_RUNTIME_GID" "$JENKINS_VERIFICATION_MODE"
 }
 
 write_manifest() {
@@ -993,14 +996,18 @@ cmd_prepare_artifacts() {
 }
 
 cmd_install() {
-  local pids
+  local identity_action pids
   load_env normal
   require_env_values
   validate_runtime_owner_inputs
+  runtime_account_exists
   confirm_mutation install || return 0
   verify_staged_artifacts
+  identity_action="$(realize_runtime_identity \
+    "$JENKINS_RUNTIME_ACCOUNT" "$JENKINS_RUNTIME_GROUP" \
+    "$JENKINS_RUNTIME_UID" "$JENKINS_RUNTIME_GID" \
+    "$JENKINS_NATIVE_HOME" "Jenkins")"
   ensure_dirs
-  runtime_account_exists
   if [ -f "$JENKINS_HOME/run/jenkins.pid" ] && kill -0 "$(cat "$JENKINS_HOME/run/jenkins.pid")" 2>/dev/null; then
     run_with_privilege "kill $(shell_quote "$(cat "$JENKINS_HOME/run/jenkins.pid")") 2>/dev/null || true"
   fi
@@ -1016,7 +1023,8 @@ cmd_install() {
   install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-plugin-manager-2.15.0.jar" "$JENKINS_HOME/war/jenkins-plugin-manager.jar" 0644
   copy_tree_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates" "$JENKINS_HOME/templates" 0755
   write_text_file_as_runtime "$JENKINS_HOME/state/install.status" "installed"
-  printf 'status=pass command=install home=%s staged=%s\n' "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR"
+  printf 'status=pass command=install home=%s staged=%s runtime_identity=%s\n' \
+    "$JENKINS_HOME" "$JENKINS_STAGED_ARTIFACT_DIR" "$identity_action"
 }
 
 jenkins_process_running() {

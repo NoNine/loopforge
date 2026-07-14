@@ -122,8 +122,9 @@ grep -Fq ' configure-service' "$calls"
 grep -Fq ' install-plugins' "$calls"
 grep -Fq ' configure-jcasc' "$calls"
 grep -Fq ' configure-runtime' "$calls"
-grep -Fq 'groupadd --gid' "$calls"
-grep -Fq 'useradd --uid' "$calls"
+! grep -Fq 'groupadd --gid' "$calls"
+! grep -Fq 'useradd --uid' "$calls"
+! grep -Fq 'vm_roles_prepare_runtime_identity' "$repo_root/simulation/vm/lib/roles.sh"
 [ "$(grep -c '^ldap machine=' "$calls")" -eq 6 ]
 ! grep -Fq "$HARNESS_LDAP_BIND_PASSWORD" "$calls"
 

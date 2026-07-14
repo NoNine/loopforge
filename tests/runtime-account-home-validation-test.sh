@@ -14,19 +14,19 @@ cat >"$fake_bin/getent" <<'SH'
 set -euo pipefail
 db="${1:?db required}"
 key="${2:?key required}"
-if [ "${FAKE_GETENT_MISSING:-}" = "$db:$key" ]; then
-  exit 2
-fi
+case ",${FAKE_GETENT_MISSING:-}," in
+  *",$db:$key,"*) exit 2 ;;
+esac
 case "$db:$key" in
   hosts:gerrit-target) printf '127.0.0.1 gerrit-target\n' ;;
   hosts:jenkins-controller-target) printf '127.0.0.1 jenkins-controller-target\n' ;;
   hosts:jenkins-agent-target) printf '127.0.0.1 jenkins-agent-target\n' ;;
-  passwd:gerrit|passwd:custom-gerrit) printf '%s:x:1001:%s:Gerrit:%s:/bin/bash\n' "$key" "${FAKE_GERRIT_PRIMARY_GID:-1001}" "${FAKE_GERRIT_HOME:-/wrong/gerrit}" ;;
-  group:gerrit|group:custom-gerrit) printf '%s:x:%s:\n' "$key" "${FAKE_GERRIT_GROUP_GID:-1001}" ;;
-  passwd:jenkins|passwd:custom-jenkins) printf '%s:x:1002:%s:Jenkins:%s:/bin/bash\n' "$key" "${FAKE_JENKINS_PRIMARY_GID:-1002}" "${FAKE_JENKINS_HOME:-/wrong/jenkins}" ;;
-  group:jenkins|group:custom-jenkins) printf '%s:x:%s:\n' "$key" "${FAKE_JENKINS_GROUP_GID:-1002}" ;;
-  passwd:jenkins-agent|passwd:custom-agent) printf '%s:x:1003:%s:Jenkins Agent:%s:/bin/bash\n' "$key" "${FAKE_AGENT_PRIMARY_GID:-1003}" "${FAKE_AGENT_HOME:-/wrong/agent}" ;;
-  group:jenkins-agent|group:custom-agent) printf '%s:x:%s:\n' "$key" "${FAKE_AGENT_GROUP_GID:-1003}" ;;
+  passwd:gerrit|passwd:custom-gerrit) printf '%s:x:61010:%s:Gerrit:%s:/bin/bash\n' "$key" "${FAKE_GERRIT_PRIMARY_GID:-61010}" "${FAKE_GERRIT_HOME:-/wrong/gerrit}" ;;
+  group:gerrit|group:custom-gerrit) printf '%s:x:%s:\n' "$key" "${FAKE_GERRIT_GROUP_GID:-61010}" ;;
+  passwd:jenkins|passwd:custom-jenkins) printf '%s:x:61020:%s:Jenkins:%s:/bin/bash\n' "$key" "${FAKE_JENKINS_PRIMARY_GID:-61020}" "${FAKE_JENKINS_HOME:-/wrong/jenkins}" ;;
+  group:jenkins|group:custom-jenkins) printf '%s:x:%s:\n' "$key" "${FAKE_JENKINS_GROUP_GID:-61020}" ;;
+  passwd:jenkins-agent|passwd:custom-agent) printf '%s:x:61030:%s:Jenkins Agent:%s:/bin/bash\n' "$key" "${FAKE_AGENT_PRIMARY_GID:-61030}" "${FAKE_AGENT_HOME:-/wrong/agent}" ;;
+  group:jenkins-agent|group:custom-agent) printf '%s:x:%s:\n' "$key" "${FAKE_AGENT_GROUP_GID:-61030}" ;;
   *) exit 2 ;;
 esac
 SH
@@ -39,6 +39,14 @@ exec /usr/bin/mkdir "$@"
 SH
 chmod +x "$fake_bin/mkdir"
 
+cat >"$fake_bin/install" <<'SH'
+#!/usr/bin/env bash
+[ -n "${FAKE_MUTATION_LOG:-}" ] || exec /usr/bin/install "$@"
+printf 'install %s\n' "$*" >>"$FAKE_MUTATION_LOG"
+exit 0
+SH
+chmod +x "$fake_bin/install"
+
 cat >"$fake_bin/stat" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -47,14 +55,17 @@ format="${2:?format required}"
 path="${3:?path required}"
 case "$path" in
   /srv/gerrit)
+    [ "${FAKE_GERRIT_HOME_MISSING:-0}" != "1" ] || exit 1
     owner="${FAKE_GERRIT_OWNER:-gerrit}"
     group="${FAKE_GERRIT_GROUP:-gerrit}"
     ;;
   /var/lib/jenkins)
+    [ "${FAKE_JENKINS_HOME_MISSING:-0}" != "1" ] || exit 1
     owner="${FAKE_JENKINS_OWNER:-jenkins}"
     group="${FAKE_JENKINS_GROUP:-jenkins}"
     ;;
   /var/lib/jenkins-agent)
+    [ "${FAKE_AGENT_HOME_MISSING:-0}" != "1" ] || exit 1
     owner="${FAKE_AGENT_OWNER:-jenkins-agent}"
     group="${FAKE_AGENT_GROUP:-jenkins-agent}"
     ;;
@@ -85,6 +96,8 @@ GERRIT_HTTP_PORT="8080"
 GERRIT_SSH_PORT="29418"
 GERRIT_RUNTIME_ACCOUNT="gerrit"
 GERRIT_RUNTIME_GROUP="gerrit"
+GERRIT_RUNTIME_UID="61010"
+GERRIT_RUNTIME_GID="61010"
 GERRIT_SITE_PATH="/srv/gerrit"
 GERRIT_STAGED_ARTIFACT_DIR="/unused/staged"
 GERRIT_ARTIFACT_OUTPUT_DIR="/unused/artifacts"
@@ -107,6 +120,8 @@ JENKINS_URL="http://jenkins-controller-target:8080/"
 JENKINS_HTTP_PORT="8080"
 JENKINS_RUNTIME_ACCOUNT="jenkins"
 JENKINS_RUNTIME_GROUP="jenkins"
+JENKINS_RUNTIME_UID="61020"
+JENKINS_RUNTIME_GID="61020"
 JENKINS_HOME="/var/lib/jenkins"
 JENKINS_STAGED_ARTIFACT_DIR="/unused/staged"
 JENKINS_ARTIFACT_OUTPUT_DIR="/unused/artifacts"
@@ -132,6 +147,8 @@ JENKINS_AGENT_HOST="jenkins-agent-target"
 JENKINS_AGENT_SSH_PORT="22"
 JENKINS_AGENT_ACCOUNT="jenkins-agent"
 JENKINS_AGENT_GROUP="jenkins-agent"
+JENKINS_AGENT_UID="61030"
+JENKINS_AGENT_GID="61030"
 JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"
 JENKINS_AGENT_NODE_NAME="build-linux-x86-01"
 JENKINS_AGENT_LABELS="linux x86_64 general-build gerrit-ci"
@@ -174,6 +191,8 @@ JENKINS_AGENT_HOST="jenkins-agent-target"
 JENKINS_AGENT_SSH_PORT="22"
 JENKINS_AGENT_ACCOUNT="jenkins-agent"
 JENKINS_AGENT_GROUP="jenkins-agent"
+JENKINS_AGENT_UID="61030"
+JENKINS_AGENT_GID="61030"
 JENKINS_AGENT_REMOTE_FS="/var/lib/jenkins-agent"
 JENKINS_AGENT_NODE_NAME="build-linux-x86-01"
 JENKINS_AGENT_LABELS="linux x86_64 general-build gerrit-ci"
@@ -343,13 +362,13 @@ expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/
   HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit.env" \
-  'Missing Gerrit runtime account: gerrit' \
+  'Gerrit runtime identity state is partial' \
   FAKE_GETENT_MISSING=passwd:gerrit
 expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$tmp_dir/jenkins-controller.env" \
-  'Missing Jenkins runtime account: jenkins' \
+  'Jenkins runtime identity state is partial' \
   FAKE_GETENT_MISSING=passwd:jenkins
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/jenkins-agent.env" \
-  'Missing Jenkins agent runtime account: jenkins-agent' \
+  'Jenkins agent runtime identity state is partial' \
   FAKE_GETENT_MISSING=passwd:jenkins-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit-dry-custom-path.env" \
@@ -363,19 +382,26 @@ expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/
   FAKE_AGENT_HOME=/var/lib/jenkins-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
 expect_dry_run_preflight_pass() {
-  local role script env_file output rc
+  local role script env_file mutation_log output rc
   role="${1:?role required}"
   script="${2:?script required}"
   env_file="${3:?env required}"
   shift 3
+  mutation_log="$mutation_dir/${role,,}-dry-run.log"
+  rm -f "$mutation_log"
   set +e
-  output="$(env "$@" PATH="$fake_bin:$PATH" "$repo_root/$script" --env "$env_file" --dry-run preflight 2>&1)"
+  output="$(env "$@" FAKE_MUTATION_LOG="$mutation_log" PATH="$fake_bin:$PATH" "$repo_root/$script" --env "$env_file" --dry-run preflight 2>&1)"
   rc=$?
   set -e
   [ "$rc" -eq 0 ] || {
     printf '%s dry-run preflight should accept configured runtime identity\nOutput:\n%s\n' "$role" "$output" >&2
     exit 1
   }
+  if [ -s "$mutation_log" ]; then
+    printf '%s dry-run preflight mutated state:\n' "$role" >&2
+    cat "$mutation_log" >&2
+    exit 1
+  fi
 }
 
 expect_dry_run_preflight_pass Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit-dry-custom-account.env" \
@@ -385,11 +411,19 @@ expect_dry_run_preflight_pass Jenkins scripts/jenkins-controller-setup.sh "$tmp_
 expect_dry_run_preflight_pass Agent scripts/jenkins-agent-setup.sh "$tmp_dir/agent-dry-custom-account.env" \
   FAKE_AGENT_HOME=/var/lib/jenkins-agent FAKE_AGENT_OWNER=custom-agent FAKE_AGENT_GROUP=custom-agent HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
 
+expect_dry_run_preflight_pass Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit.env" \
+  FAKE_GETENT_MISSING=passwd:gerrit,group:gerrit FAKE_GERRIT_HOME_MISSING=1
+expect_dry_run_preflight_pass Jenkins scripts/jenkins-controller-setup.sh "$tmp_dir/jenkins-controller.env" \
+  FAKE_GETENT_MISSING=passwd:jenkins,group:jenkins FAKE_JENKINS_HOME_MISSING=1
+expect_dry_run_preflight_pass Agent scripts/jenkins-agent-setup.sh "$tmp_dir/jenkins-agent.env" \
+  FAKE_GETENT_MISSING=passwd:jenkins-agent,group:jenkins-agent FAKE_AGENT_HOME_MISSING=1 \
+  HARNESS_MODE=docker-simulation HARNESS_ENVIRONMENT=jenkins-agent-target
+
 expect_dry_run_preflight_failure Gerrit scripts/gerrit-setup.sh "$tmp_dir/gerrit-dry-custom-account.env" \
-  'Missing Gerrit runtime account: custom-gerrit' \
+  'Gerrit runtime identity state is partial' \
   FAKE_GERRIT_HOME=/srv/gerrit FAKE_GERRIT_OWNER=custom-gerrit FAKE_GERRIT_GROUP=custom-gerrit FAKE_GETENT_MISSING=passwd:custom-gerrit
 expect_dry_run_preflight_failure Jenkins scripts/jenkins-controller-setup.sh "$tmp_dir/jenkins-dry-custom-account.env" \
-  'Missing Jenkins runtime group: custom-jenkins' \
+  'Jenkins runtime identity state is partial' \
   FAKE_JENKINS_HOME=/var/lib/jenkins FAKE_JENKINS_OWNER=custom-jenkins FAKE_JENKINS_GROUP=custom-jenkins FAKE_GETENT_MISSING=group:custom-jenkins
 expect_dry_run_preflight_failure Agent scripts/jenkins-agent-setup.sh "$tmp_dir/agent-dry-custom-account.env" \
   'Jenkins agent runtime account custom-agent primary group must be custom-agent' \
@@ -466,7 +500,7 @@ set -e
   printf 'Agent preflight unexpectedly passed with missing runtime account\n' >&2
   exit 1
 }
-grep -Fq 'Missing Jenkins agent runtime account: jenkins-agent' <<<"$missing_agent_output" || {
+grep -Fq 'Jenkins agent runtime identity state is partial' <<<"$missing_agent_output" || {
   printf 'Agent preflight did not report missing runtime account\nOutput:\n%s\n' "$missing_agent_output" >&2
   exit 1
 }

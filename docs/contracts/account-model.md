@@ -65,6 +65,20 @@ values, not friendly names. Before any target-owned durable path is created,
 operators must define reviewed, stable, non-colliding numeric identities for
 the local OS accounts and groups that can own that data.
 
+The reviewed role env file supplies the runtime account name, primary group
+name, UID, and GID before role setup begins. Role preflight validates those
+values without mutation. A role's `install` phase creates its fully absent
+runtime group and account immediately before creating the role product home,
+or reuses a fully matching account/group/home set. Partial state, numeric
+collisions, and mismatches block and require explicit operator cleanup or
+correction; helpers do not reconfigure existing identities.
+
+This ownership applies only to the Gerrit, Jenkins controller, and Jenkins
+agent runtime identities. The operator account must already exist so it can
+run helpers with delegated privilege. The Jenkins shared integration group is
+created or verified later by `scripts/integration-setup.sh`, and LDAP-backed
+accounts remain owned by their directory or application administration flow.
+
 The example target-local identity range is `61000-61999`. Use a site-reserved
 range instead when local policy requires it, and verify that the chosen values
 do not collide on every participating host and storage server.

@@ -756,6 +756,8 @@ prepare_init_run() {
   copy_runtime_env_inputs
   load_harness_integration_env
   ensure_dirs
+  : >"$HARNESS_PRODUCT_HOME_DIR/.runtime-identity-pending"
+  chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_PRODUCT_HOME_DIR/.runtime-identity-pending"
   write_rendered_helper_envs
 }
 
