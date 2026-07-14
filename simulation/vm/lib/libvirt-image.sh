@@ -259,6 +259,10 @@ __vm_libvirt_cleanup_bake_domain() {
   return 0
 }
 
+vm_libvirt_cleanup_bake_domain() {
+  __vm_libvirt_cleanup_bake_domain
+}
+
 __vm_libvirt_write_baked_base_image_marker() {
   local image marker packages pool target volume baked_sha256 tmp
   image="$(vm_libvirt_baked_base_image_path)"

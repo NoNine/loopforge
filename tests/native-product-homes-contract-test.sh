@@ -127,8 +127,11 @@ reject_pattern scripts/integration-setup.sh \
   "printf '%s/jenkins-controller/integration\n' \"\$HARNESS_STATE_DIR\"" \
   'Integration host state must not live under Jenkins controller helper state'
 require_pattern scripts/integration-setup.sh \
-  'mkdir -p "$(integration_host_state_dir)/status" "$(integration_log_dir)" "$(integration_evidence_dir)"' \
-  'Integration host state must only create status, logs, and evidence directories'
+  'install -d -m "$LF_MODE_PRIVATE_DIR" "$(integration_host_state_dir)" "$(integration_host_state_dir)/status"' \
+  'Integration host state and status directories must use the private directory mode'
+require_pattern scripts/integration-setup.sh \
+  'install -d -m "$LF_MODE_REVIEW_DIR" "$(integration_log_dir)" "$(integration_evidence_dir)"' \
+  'Integration logs and evidence directories must use the review directory mode'
 require_pattern scripts/integration-setup.sh \
   "printf '%s/integration-ops\n' \"\$JENKINS_HOME\"" \
   'Jenkins operation custody must live under Jenkins home'
@@ -243,10 +246,10 @@ reject_pattern scripts/integration-setup.sh \
   "install -d -m 700 -o '\$JENKINS_RUNTIME_ACCOUNT' -g '\$JENKINS_RUNTIME_GROUP' /harness/target/helper-state/integration" \
   'Integration setup must not transfer harness integration directory ownership to Jenkins'
 reject_pattern scripts/integration-setup.sh \
-  'mkdir -p "$(integration_host_state_dir)/keys"' \
+  '"$(integration_host_state_dir)/keys"' \
   'Integration host state must not contain key directories'
 reject_pattern scripts/integration-setup.sh \
-  'mkdir -p "$(integration_host_state_dir)/scripts"' \
+  '"$(integration_host_state_dir)/scripts"' \
   'Integration host state must not contain script directories'
 reject_pattern scripts/integration-setup.sh \
   'chmod 0770 "$(integration_host_state_dir)" "$(integration_host_state_dir)/keys"' \

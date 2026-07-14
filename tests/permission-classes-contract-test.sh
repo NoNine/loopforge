@@ -49,10 +49,14 @@ require_source_text simulation/lib/permissions.sh 'LF_MODE_REVIEW_FILE=0640' \
 
 require_source_text simulation/lib/state.sh 'chmod "${LF_MODE_PUBLIC_FILE:-0644}" "$marker"' \
   'Run and checkpoint markers must be non-secret public/read-only metadata'
-require_source_text simulation/docker/lib/config.sh 'chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_ENV"' \
-  'Docker runtime env must remain private'
-require_source_text simulation/vm/lib/config.sh 'chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_ENV"' \
-  'VM runtime env must remain private'
+for config in simulation/docker/lib/config.sh simulation/vm/lib/config.sh; do
+  require_source_text "$config" 'tmp="$(mktemp "${HARNESS_RUNTIME_ENV}.XXXXXX")"' \
+    'Runtime env publication must stage through a same-directory temporary file'
+  require_source_text "$config" 'chmod "$LF_MODE_PRIVATE_FILE" "$tmp"' \
+    'Runtime env temporary files must use the private file mode'
+  require_source_text "$config" 'mv -- "$tmp" "$HARNESS_RUNTIME_ENV"' \
+    'Runtime env publication must atomically replace the destination'
+done
 require_source_text simulation/docker/lib/artifacts.sh 'find $(shell_quote "$tmp") -type f -exec chmod $LF_MODE_PUBLIC_FILE' \
   'Docker staged role helper files must use public/read-only mode'
 require_source_text simulation/vm/lib/ssh.sh 'find $(shell_quote "$remote_tmp") -type f -exec chmod $LF_MODE_PUBLIC_FILE' \

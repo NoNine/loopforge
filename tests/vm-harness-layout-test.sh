@@ -122,6 +122,8 @@ for file in "$vm_root"/lib/{baseline,vm-set,snapshots,lifecycle,ssh,state}.sh; d
   reject_in_file "$file" '__vm_libvirt_' \
     'VM libvirt package-private helpers must not escape the package'
 done
+require_in_file "$vm_root/lib/vm-set.sh" 'vm_libvirt_cleanup_bake_domain' \
+  'VM-set destroy must use the public libvirt bake-domain cleanup capability'
 
 for file in "${vm_impl_files[@]}"; do
   reject_in_file "$file" 'simulation/docker/lib|/docker/lib/' \

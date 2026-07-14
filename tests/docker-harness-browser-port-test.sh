@@ -8,7 +8,7 @@ tmp_dir="$(mktemp -d)"
 run_id="port-test-$$"
 run_root="$repo_root/generated/simulation/docker"
 trap 'rm -rf "$tmp_dir" "$run_root/$run_id" "$run_root/$run_id-explicit" "$run_root/$run_id-invalid" "$run_root/$run_id-busy"' EXIT
-state_dir="$run_root/$run_id/state"
+host_dir="$run_root/$run_id/host"
 
 init_run() {
   HARNESS_RUN_ID="$run_id" \
@@ -17,7 +17,7 @@ init_run() {
 }
 
 init_run >"$tmp_dir/init-run-1.out"
-env_file="$state_dir/rendered/harness.env"
+env_file="$host_dir/rendered/harness.env"
 
 gerrit_port="$(sed -n 's/^HARNESS_GERRIT_HTTP_HOST_PORT=//p' "$env_file")"
 jenkins_port="$(sed -n 's/^HARNESS_JENKINS_HTTP_HOST_PORT=//p' "$env_file")"

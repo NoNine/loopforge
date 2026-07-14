@@ -244,7 +244,7 @@ vm_set_destroy_recovery() {
 
 vm_set_destroy() {
   local domain machine network pool seed_pool state volume
-  __vm_libvirt_cleanup_bake_domain || return $?
+  vm_libvirt_cleanup_bake_domain || return $?
   if [ ! -f "$HARNESS_VM_SET_MARKER" ]; then
     vm_set_destroy_recovery
     return $?
