@@ -46,6 +46,7 @@ for path in \
   docs/operations/native/jenkins-controller.md \
   docs/operations/native/jenkins-agent.md \
   docs/operations/native/integration.md \
+  docs/operations/native/review-guide.md \
   docs/planning/implementation-plan.md \
   docs/planning/steps/step-01-repository-structure.md \
   docs/planning/steps/step-15-final-acceptance.md \
@@ -117,6 +118,35 @@ grep -Fq -- 'Native references are operator-first and operator-friendly.' \
   printf 'Operations index must define the native operator-first standard\n' >&2
   exit 1
 }
+
+grep -Fq -- '`native/review-guide.md`' \
+  "$repo_root/docs/operations/README.md" || {
+  printf 'Operations index must link the native manual review guide\n' >&2
+  exit 1
+}
+
+for review_status in \
+  '**Static review**' \
+  '**Tool-resolution proof**' \
+  '**Runtime acceptance**'; do
+  grep -Fq -- "$review_status" \
+    "$repo_root/docs/operations/native/review-guide.md" || {
+    printf 'Native review guide is missing status: %s\n' "$review_status" >&2
+    exit 1
+  }
+done
+
+for operator_rule in \
+  'Use the shortest reviewable sequence of OS and application-native commands' \
+  "Prefer a tool's own validation, status, and" \
+  'Commands should be independently runnable, keep their output inspectable' \
+  'reproduce helper implementation logic, generated state machines, or'; do
+  grep -Fq -- "$operator_rule" "$repo_root/docs/operations/README.md" || {
+    printf 'Operations index is missing native operator-first rule: %s\n' \
+      "$operator_rule" >&2
+    exit 1
+  }
+done
 
 grep -Fq -- 'are the procedural baseline for operation documentation' \
   "$repo_root/docs/README.md" || {

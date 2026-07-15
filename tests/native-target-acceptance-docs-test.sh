@@ -177,11 +177,26 @@ require_text docs/operations/native/jenkins-controller.md \
   'sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --no-create-home' \
   'Jenkins native procedure must create its reviewed runtime account directly'
 require_text docs/operations/native/jenkins-agent.md \
-  'groupadd --gid "${agent_gid}" "${agent_user}"' \
+  'sudo groupadd --gid 61030 jenkins-agent' \
   'Agent native procedure must create its reviewed runtime group directly'
 require_text docs/operations/native/jenkins-agent.md \
-  'useradd --uid "${agent_uid}" --gid "${agent_gid}" --home-dir "${remote_fs}" --no-create-home' \
+  'sudo useradd --uid 61030 --gid 61030' \
   'Agent native procedure must create its reviewed runtime account directly'
+require_text docs/operations/native/jenkins-agent.md \
+  'getent passwd 61030' \
+  'Agent native preflight must check the reviewed numeric identity directly'
+require_text docs/operations/native/jenkins-agent.md \
+  'sudo systemctl enable --now ssh' \
+  'Agent native procedure must enable the Ubuntu SSH service directly'
+reject_text docs/operations/native/jenkins-agent.md \
+  'sudo bash -s' \
+  'Agent native procedure must not hide direct operations in a privileged heredoc'
+reject_text docs/operations/native/jenkins-agent.md \
+  'if getent' \
+  'Agent native preflight must remain a direct operator command sequence'
+reject_text docs/operations/native/jenkins-agent.md \
+  'systemctl enable --now sshd || true' \
+  'Agent native procedure must not mask SSH service activation failure'
 require_text docs/operations/native/integration.md \
   '`docs/operations/native/acceptance-checklist.md`' \
   'Native integration must use the single acceptance checklist'

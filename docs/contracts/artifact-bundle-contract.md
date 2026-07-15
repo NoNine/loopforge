@@ -43,8 +43,13 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
   `/var/lib/loopforge/preparing/{gerrit-artifacts-bundle.tar.gz,gerrit-artifacts-bundle.tar.gz.sha256,gerrit-artifacts-bundle}`.
 - Each archive extracts directly to one role payload directory: `gerrit/`,
   `jenkins/`, or `jenkins-agent/`.
-- Each payload must contain exactly one compact `manifest.txt` and one
-  payload `checksums.sha256`.
+- Each helper-generated payload must contain exactly one compact `manifest.txt`
+  and one payload `checksums.sha256`.
+- Each native operator-prepared payload must contain one payload
+  `checksums.sha256` and only the artifacts required by its native operation
+  reference. It does not require a helper manifest or helper template set.
+- Each native operation reference owns any additional operator manifest or
+  template requirements for its role.
 - The archive pair is the handoff artifact; extracted trees are disposable
   staging or target state, not the source of truth.
 
@@ -112,8 +117,12 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 
 ## Bundle Contents Boundary
 
-- Bundles contain application artifacts, config/templates, one compact
-  artifact manifest, and one payload checksum file.
+- Helper-generated bundles contain application artifacts, config/templates,
+  one compact artifact manifest, and one payload checksum file.
+- Native operator-prepared bundles contain the application artifacts required
+  by their native operation reference and one payload checksum file. Their
+  contents need not match a helper-generated payload when both procedures
+  produce equivalent product state.
 - Bundles must not contain SSH private keys, public-key handoff files,
   `authorized_keys`, generated integration keys, passwords, tokens, or LDAP
   bind secrets.
@@ -122,10 +131,11 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 
 ## Evidence And Failure Semantics
 
-- Passing evidence must show mode, role, archive checksum verification,
-  payload checksum verification, source-boundary metadata where applicable,
-  and bounded log references.
-- Missing, stale, mismatched, or drifted manifests/checksums block comparable
-  readiness instead of passing.
+- Passing machine-generated evidence must show mode, role, archive checksum
+  verification, payload checksum verification, source-boundary metadata where
+  applicable, and bounded log references.
+- Missing or mismatched checksums block readiness for both operator interfaces.
+  Missing, stale, mismatched, or drifted manifests also block helper readiness,
+  and block native readiness when a native operation reference requires one.
 - Simulation evidence must be labeled as simulation and must not imply
   `target-deployment` acceptance.

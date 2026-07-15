@@ -9,6 +9,64 @@ trap 'rm -rf "$tmp_dir"' EXIT
 mkdir -p "$tmp_dir/scripts" "$tmp_dir/plugins" "$tmp_dir/artifacts"
 ln -s "$repo_root/scripts/common.sh" "$tmp_dir/scripts/common.sh"
 
+baseline="$repo_root/docs/baselines/version-baseline.md"
+native_manual="$repo_root/docs/operations/native/jenkins-controller.md"
+env_example="$repo_root/examples/jenkins-controller.env.example"
+helper="$repo_root/scripts/jenkins-controller-setup.sh"
+
+baseline_pins="$tmp_dir/baseline-pins.txt"
+native_pins="$tmp_dir/native-pins.txt"
+example_pins="$tmp_dir/example-pins.txt"
+helper_pins="$tmp_dir/helper-pins.txt"
+
+awk '
+  $0 == "## Jenkins Direct Plugin Baseline" { section = 1; next }
+  section && $0 == "```text" { pins = 1; next }
+  pins && $0 == "```" { exit }
+  pins { print }
+' "$baseline" >"$baseline_pins"
+awk '
+  /cat > plugins\.intent\.txt <<'"'"'EOF'"'"'/ { pins = 1; next }
+  pins && $0 == "EOF" { exit }
+  pins { print }
+' "$native_manual" >"$native_pins"
+sed -n 's/^JENKINS_PLUGIN_LIST="\(.*\)"$/\1/p' "$env_example" |
+  tr ',' '\n' >"$example_pins"
+sed -n 's/.*JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-\([^}]*\)}".*/\1/p' "$helper" |
+  tr ',' '\n' >"$helper_pins"
+
+[ "$(wc -l <"$baseline_pins" | tr -d ' ')" -eq 12 ] || {
+  printf 'Jenkins direct plugin baseline must contain exactly 12 pins\n' >&2
+  exit 1
+}
+for pins in "$native_pins" "$example_pins" "$helper_pins"; do
+  diff -u "$baseline_pins" "$pins" >/dev/null || {
+    printf 'Jenkins direct plugin pins drifted from the version baseline: %s\n' "$pins" >&2
+    exit 1
+  }
+done
+
+if rg -q 'tmp_plugins_seed|<accepted-direct-plugin>|/tmp/jenkins-plugin-facts' "$native_manual"; then
+  printf 'Native Jenkins plugin review must not use placeholder or temporary inventories\n' >&2
+  exit 1
+fi
+for pattern in \
+  '--plugin-file ~/jenkins-artifacts-bundle/jenkins/plugins.intent.txt' \
+  'plugins.resolved.txt' \
+  '--list' \
+  'Resulting plugin list' \
+  'Do not use `--skip-failed-plugins`'; do
+  rg -Fq -- "$pattern" "$native_manual" || {
+    printf 'Native Jenkins plugin review is missing operator guidance: %s\n' "$pattern" >&2
+    exit 1
+  }
+done
+if rg -q 'invalid direct plugin pin at line|resolved_plugin_count=|manifest=.*unzip -p|while IFS=: read -r name expected_version' \
+  "$native_manual"; then
+  printf 'Native Jenkins plugin review must not reproduce helper validation logic\n' >&2
+  exit 1
+fi
+
 old_validator_pattern='validate_plugin_dependency_''closure'
 old_lock_pattern='plugins\.expected-''lock\.txt'
 old_lock_diff_pattern='Downloaded or reviewed Jenkins plugin artifacts do not ''match'
@@ -17,7 +75,7 @@ if rg -q "$old_validator_pattern|$old_lock_pattern|$old_lock_diff_pattern" "$rep
   exit 1
 fi
 
-for path in "$repo_root/scripts/jenkins-controller-setup.sh" "$repo_root/examples/jenkins-controller.env.example"; do
+for path in "$helper" "$env_example" "$baseline" "$native_manual"; do
   rg -q 'configuration-as-code:2100\.vb_fd699d2a_09c' "$path" || {
     printf 'Updated configuration-as-code direct pin is missing from %s\n' "$path" >&2
     exit 1
@@ -33,7 +91,7 @@ for path in "$repo_root/scripts/jenkins-controller-setup.sh" "$repo_root/example
 done
 
 if rg -q 'configuration-as-code:2088\.ve3b_42c663c80|credentials:1502\.v5c95e620ddfe|gerrit-trigger:3\.1971\.v217d381e3a_5a_' \
-  "$repo_root/scripts/jenkins-controller-setup.sh" "$repo_root/examples/jenkins-controller.env.example"; then
+  "$helper" "$env_example" "$baseline" "$native_manual"; then
   printf 'Stale Jenkins direct plugin pin remains in product defaults\n' >&2
   exit 1
 fi

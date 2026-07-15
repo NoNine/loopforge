@@ -16,10 +16,23 @@ outcomes and failure boundaries, and make validation and handoffs clear. Write
 for the operator completing the deployment, not for a repository maintainer
 explaining helper internals.
 
+Use the shortest reviewable sequence of OS and application-native commands that
+preserves the owning contract. Prefer a tool's own validation, status, and
+reporting options over embedded shell parsers or helper-like orchestration.
+Commands should be independently runnable, keep their output inspectable, and
+name the operator decision or stop condition immediately after the command.
+Use shell loops or parsing only when the native tool has no suitable operation;
+keep that logic small, local to the task, and directly auditable. Do not
+reproduce helper implementation logic, generated state machines, or
+machine-evidence pipelines in a native manual.
+
 - `native/gerrit.md`
 - `native/jenkins-controller.md`
 - `native/jenkins-agent.md`
 - `native/integration.md`
+
+Use `native/review-guide.md` to review these manuals consistently and to keep
+static review, native-tool proof, and runtime acceptance distinct.
 
 For a release claiming native `target-deployment` readiness, use
 `native/acceptance-checklist.md` as the single end-to-end signoff surface after

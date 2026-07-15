@@ -1020,7 +1020,6 @@ cmd_install() {
   run_with_privilege "rm -rf $(shell_quote "$JENKINS_HOME/war") $(shell_quote "$JENKINS_HOME/war-cache") $(shell_quote "$JENKINS_HOME/plugins") $(shell_quote "$JENKINS_HOME/templates") $(shell_quote "$JENKINS_HOME/state") $(shell_quote "$JENKINS_HOME/etc") $(shell_quote "$JENKINS_HOME/jcasc") $(shell_quote "$JENKINS_HOME/run") $(shell_quote "$JENKINS_HOME/artifact-manifest.txt") $(shell_quote "$JENKINS_HOME/artifact-checksums.sha256")"
   prepare_jenkins_runtime_dirs
   install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war" 0644
-  install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-plugin-manager-2.15.0.jar" "$JENKINS_HOME/war/jenkins-plugin-manager.jar" 0644
   copy_tree_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates" "$JENKINS_HOME/templates" 0755
   write_text_file_as_runtime "$JENKINS_HOME/state/install.status" "installed"
   printf 'status=pass command=install home=%s staged=%s runtime_identity=%s\n' \
@@ -1304,7 +1303,6 @@ verify_base_readiness_facts() {
   [ -s "$JENKINS_HOME/state/install.status" ] || die "Install marker missing"
   [ -s "$JENKINS_HOME/state/service-configured.status" ] || die "Service configuration marker missing"
   [ -s "$JENKINS_HOME/war/jenkins.war" ] || die "Jenkins WAR is not installed"
-  [ -s "$JENKINS_HOME/war/jenkins-plugin-manager.jar" ] || die "Jenkins plugin manager is not installed"
   check_plugin_readiness
   check_jcasc_readiness
   [ -s "$JENKINS_HOME/state/runtime.status" ] || die "Jenkins runtime status marker is missing"

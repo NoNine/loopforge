@@ -176,7 +176,9 @@ Produced outputs:
 - `manifest.txt`.
 - `checksums.sha256`.
 - Curated Jenkins WAR artifact for real controller startup.
-- Curated Jenkins Plugin Installation Manager Tool artifact.
+- Curated Jenkins Plugin Installation Manager Tool artifact, retained in the
+  prepared and staged bundle for plugin resolution provenance but not copied
+  into Jenkins runtime state.
 - Curated Jenkins plugin artifacts, including resolved dependency plugins,
   staged from reviewed sources or resolved in the bundle factory.
 - Controller-only JCasC and service templates.
@@ -232,7 +234,6 @@ Produced outputs:
 
 - Jenkins home tree under `JENKINS_HOME`.
 - `war/jenkins.war`.
-- `war/jenkins-plugin-manager.jar`.
 - Staged templates under `templates/`.
 - Install marker under `state/install.status`.
 

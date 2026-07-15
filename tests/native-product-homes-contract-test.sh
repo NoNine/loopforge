@@ -379,6 +379,9 @@ require_pattern scripts/jenkins-controller-setup.sh \
 require_pattern scripts/jenkins-controller-setup.sh \
   'install_file_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/jenkins-2.555.3.war" "$JENKINS_HOME/war/jenkins.war" 0644' \
   'Jenkins controller install must place the WAR through delegated runtime-owned install'
+reject_pattern scripts/jenkins-controller-setup.sh \
+  '$JENKINS_HOME/war/jenkins-plugin-manager.jar' \
+  'Jenkins controller runtime must not retain the bundle-factory plugin manager'
 require_pattern scripts/jenkins-controller-setup.sh \
   'render_template_as_runtime "$JENKINS_STAGED_ARTIFACT_DIR/templates/jenkins-jcasc.yaml.template" "$CASC_JENKINS_CONFIG"' \
   'Jenkins controller JCasC must render through delegated runtime-owned install'

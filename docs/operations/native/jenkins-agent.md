@@ -176,19 +176,14 @@ sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz > ~/jenkins-agent-artifacts-bu
 
 ### 2.3 Install the Agent Artifact Bundle Manually
 
-Transfer the agent artifact archive and `.sha256` file to the build-agent
-host. The staged archive must not carry Gerrit, Jenkins, or agent SSH key
-material. Jenkins controller keypair generation and public-key installation are
-later integration-step work.
+Transfer the agent artifact archive and `.sha256` file to the operator home on
+the build-agent host. The staged archive must not carry Gerrit, Jenkins, or
+agent SSH key material. Jenkins controller keypair generation and public-key
+installation are later integration-step work.
 
-Verify the artifact archive and internal checksums on the build server, stage
-the payload under `/var/lib/loopforge/staging`, then configure the runtime
-account and SSH service:
-
-This is a clean-install procedure. The four `getent` commands below must
-return no entry, and the final `test` must succeed. If any reviewed name,
-numeric ID, or path is already in use, stop and reprovision the target instead
-of adapting or repairing it in place.
+Set the reviewed operator account values and verify the transferred archive.
+Run the remaining commands in this section from the same operator shell so
+these values remain available:
 
 ```bash
 operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
@@ -201,40 +196,62 @@ operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
 
 cd "$operator_home"
 sha256sum -c jenkins-agent-artifacts-bundle.tar.gz.sha256
+```
+
+This is a clean-install procedure. Run these read-only checks before staging
+artifacts or creating the runtime identity and product home. The four `getent`
+commands must return no entry, and the final `test` must succeed. If a command
+finds an existing name, numeric ID, or path, stop and reprovision the target
+instead of adapting or repairing it in place:
+
+```bash
 getent passwd jenkins-agent
 getent group jenkins-agent
 getent passwd 61030
 getent group 61030
 test ! -e /var/lib/jenkins-agent
+```
 
-sudo bash -s "$operator_account" "$operator_group" "$operator_home" <<'EOF'
-set -euo pipefail
-operator_account="${1:?operator account required}"
-operator_group="${2:?operator group required}"
-operator_home="${3:?operator home required}"
-agent_user=jenkins-agent
-agent_uid=61030
-agent_gid=61030
-remote_fs=/var/lib/jenkins-agent
-staging=/var/lib/loopforge/staging
-install -d -m 0750 -o "$operator_account" -g "$operator_group" "$staging"
-rm -rf "$staging/jenkins-agent"
-tar -xzf "$operator_home/jenkins-agent-artifacts-bundle.tar.gz" -C "$staging"
-chown -R "$operator_account:$operator_group" "$staging/jenkins-agent"
-cd "$staging/jenkins-agent"
+After preflight succeeds, replace the disposable extracted staging tree and
+verify every staged file. The `rm` command below removes only the Jenkins agent
+staging payload; it does not remove the transferred archive or the agent
+product home:
+
+```bash
+sudo install -d -m 0750 -o "$operator_account" -g "$operator_group" \
+  /var/lib/loopforge/staging
+sudo rm -rf -- /var/lib/loopforge/staging/jenkins-agent
+sudo tar -xzf "$operator_home/jenkins-agent-artifacts-bundle.tar.gz" \
+  -C /var/lib/loopforge/staging
+sudo chown -R "$operator_account:$operator_group" \
+  /var/lib/loopforge/staging/jenkins-agent
+cd /var/lib/loopforge/staging/jenkins-agent
 sha256sum -c checksums.sha256
-groupadd --gid "${agent_gid}" "${agent_user}"
-useradd --uid "${agent_uid}" --gid "${agent_gid}" --home-dir "${remote_fs}" --no-create-home --shell /bin/bash "${agent_user}"
-install -d -o "${agent_user}" -g "${agent_user}" -m 0755 "${remote_fs}"
-rm -f "${remote_fs}/remoting.jar"
-systemctl enable --now ssh || systemctl enable --now sshd || true
-EOF
+```
+
+Create the reviewed runtime group, account, and product home:
+
+```bash
+sudo groupadd --gid 61030 jenkins-agent
+sudo useradd --uid 61030 --gid 61030 \
+  --home-dir /var/lib/jenkins-agent --no-create-home \
+  --shell /bin/bash jenkins-agent
+sudo install -d -m 0755 -o jenkins-agent -g jenkins-agent \
+  /var/lib/jenkins-agent
+```
+
+Ubuntu 24.04 provides the OpenSSH server as the `ssh` systemd unit. Enable and
+start that unit; do not continue if this command fails:
+
+```bash
+sudo systemctl enable --now ssh
 ```
 
 For artifact recovery after installation, rerun only the artifact archive
-checksum, transfer, internal checksum, and bootstrap file copy. Do not rerun
-the account or product-home creation commands. OS package recovery uses the
-approved internal Ubuntu/OS package repository path.
+checksum, transfer, extraction, and internal checksum commands. Do not rerun
+the clean-install preflight, account creation, or product-home creation
+commands. OS package recovery uses the approved internal Ubuntu/OS package
+repository path.
 
 ## 3. Jenkins Agent Installation
 

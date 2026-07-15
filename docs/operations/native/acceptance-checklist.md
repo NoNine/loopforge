@@ -44,7 +44,7 @@ Loopforge revision:
   sources, DNS, time, routes, storage, and target-to-target connectivity are
   ready.
 - [ ] Backup, rollback, and approval owners are recorded in the change/ticket.
-- [ ] Reviewed artifact manifests and checksums match the artifacts staged on
+- [ ] Reviewed artifact inventories and checksums match the artifacts staged on
   each target.
 
 ## Gerrit

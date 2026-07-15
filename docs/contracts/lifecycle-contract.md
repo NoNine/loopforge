@@ -101,8 +101,8 @@ they must preserve the checkpoint semantics defined here.
 | Checkpoint | Owner | Boundary |
 | --- | --- | --- |
 | Input review | Human operator or machine runner | Prepare reviewed env files and remove placeholders. No target mutation. |
-| Artifact preparation | Bundle factory through role helpers | Prepare application artifacts, manifests, checksums, and source-boundary labels. Target hosts are not mutated. |
-| Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target environments and verify target-side manifests/checksums before service mutation. |
+| Artifact preparation | Bundle factory through role helpers or the native operator procedure | Prepare application artifacts and checksums. Helper preparation also produces manifests and source-boundary labels. Target hosts are not mutated. |
+| Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target environments and verify target-side checksums plus any interface-required manifest before service mutation. |
 | Role-local setup | Role helpers or native operator procedure | Create or verify the reviewed role runtime group, account, and product home; install/configure role-local target state; and establish its runtime for Gerrit, Jenkins controller, or Jenkins agent. |
 | Role-local validation | Role helpers or native operator procedure | Observe role readiness without cross-role integration claims or service repair. |
 | Shared integration setup | `scripts/integration-setup.sh` | Create or validate cross-role keys, ACL workflow, credentials, node registration, trigger server, jobs, and shared storage. |
@@ -125,7 +125,7 @@ transcript. Operator manuals own exact commands and role-specific procedure.
 | --- | --- | --- | --- | --- | --- |
 | Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed role env files, removes all `CHANGE_ME` values, keeps secrets out of committed examples, reviews cross-role values, and confirms browser-visible URLs for simulation. | None beyond local env-file creation. | Reviewed env files exist for Gerrit, Jenkins controller, Jenkins agent, and shared integration values; preflight failures are resolved before mutation. |
 | Artifacts | Bundle factory | `prepare-artifacts` | Consumes reviewed role env files and produces role artifact directories, manifests, checksums, and source-boundary records. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
-| Artifact staging | Bundle factory and target hosts | Operator-managed file transfer or simulation utility; target-side checksum verification | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side manifest/checksum verification passes before installation. |
+| Artifact staging | Bundle factory and target hosts | Operator-managed file transfer or simulation utility; target-side checksum verification | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side checksum plus any interface-required manifest verification passes before installation. |
 | Gerrit readiness | Gerrit host | Gerrit role helper or native procedure | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Creates or verifies the reviewed runtime identity and product home, installs packages from approved sources, creates or updates local runtime files, and starts or restarts Gerrit during configuration. | Validation observes a running Gerrit service, LDAP, HTTP/SSH, and bounded logs before Jenkins integration mutation. |
 | Jenkins controller readiness | Jenkins controller | Jenkins controller role helper or native procedure | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Creates or verifies the reviewed runtime identity and product home, installs packages from approved sources, creates or updates Jenkins runtime files and plugins, then starts or restarts Jenkins after configuration. | Validation observes a running Jenkins service, LDAP/JCasC, required plugins, and bounded logs before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
 | Jenkins agent readiness | Jenkins agent | Jenkins agent role helper or native procedure | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Creates or verifies the reviewed runtime identity and product home, installs packages from approved sources, and creates or updates agent-host runtime files and SSH service state. | Validation observes the enabled/active SSH service, OS/tooling, runtime account, filesystem, staged artifact, bounded log, and evidence readiness before credential transfer, controller node registration, or scheduling proof. |
@@ -134,10 +134,12 @@ transcript. Operator manuals own exact commands and role-specific procedure.
 
 ## Sequencing Rules
 
-- Run `prepare-artifacts` from the bundle factory environment for each role.
+- For the helper interface, run `prepare-artifacts` from the bundle factory
+  environment for each role. For the native interface, follow the role's
+  native bundle-factory procedure.
 - Stage prepared artifacts from the bundle factory to each target host before
-  running target-host installation, then verify manifests and checksums on the
-  target host before mutation.
+  running target-host installation, then verify checksums and any
+  interface-required manifest on the target host before mutation.
 - Application artifact bundles for Gerrit, Jenkins controller, and Jenkins
   agent are key-free. They must not contain SSH private keys, public keys,
   `authorized_keys`, or generated key/public-key handoff files.
