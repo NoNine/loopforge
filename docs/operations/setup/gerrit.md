@@ -1,16 +1,18 @@
 # Gerrit Setup Manual
 
-This manual is the authority for the Gerrit role. The helper
+This manual owns the Gerrit reviewed-input helper workflow. The helper
 `scripts/gerrit-setup.sh` is a repeatable accelerator for reviewed env files;
-it does not replace operator review.
+it does not replace operator review or the direct procedure in
+`docs/operations/native/gerrit.md`.
 
 `docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
 mutation boundaries, and resume/rerun rules. This manual owns only the
 Gerrit-specific application of that contract.
 
-Maintain this manual with `docs/operations/native/gerrit.md`. The
-native reference is the strong reference for direct OS and Gerrit operations
-and must remain free of repository helper commands.
+The native reference is the procedural baseline for direct OS and Gerrit
+operations. Keep this helper workflow aligned with that baseline and preserve
+equivalent product state and validation outcomes. The native reference must
+remain free of repository helper commands.
 
 The v1 boundary is unchanged: application artifacts are prepared in the bundle
 factory, staged to the Gerrit target, and verified by manifest and checksum

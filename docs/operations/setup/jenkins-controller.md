@@ -1,17 +1,18 @@
 # Jenkins Controller Setup Manual
 
-This manual is the authority for the Jenkins controller role. The helper
-`scripts/jenkins-controller-setup.sh` is a repeatable accelerator for reviewed
-env files; it does not replace operator review.
+This manual owns the Jenkins controller reviewed-input helper workflow. The
+helper `scripts/jenkins-controller-setup.sh` is a repeatable accelerator for
+reviewed env files; it does not replace operator review or the direct
+procedure in `docs/operations/native/jenkins-controller.md`.
 
 `docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
 mutation boundaries, and resume/rerun rules. This manual owns only the Jenkins
 controller-specific application of that contract.
 
-Maintain this manual with
-`docs/operations/native/jenkins-controller.md`. The native reference
-is the strong reference for direct OS and Jenkins controller operations and
-must remain free of repository helper commands.
+The native reference is the procedural baseline for direct OS and Jenkins
+controller operations. Keep this helper workflow aligned with that baseline
+and preserve equivalent product state and validation outcomes. The native
+reference must remain free of repository helper commands.
 
 The v1 boundary is unchanged: Jenkins application artifacts, plugin artifacts,
 JCasC templates, job templates, manifests, and checksums are prepared in the

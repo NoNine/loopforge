@@ -52,13 +52,8 @@ Use this order when deciding where a product or process fact belongs:
    `docs/contracts/gerrit-trigger-integration.md` for Gerrit Trigger and
    `Verified` behavior, and `docs/contracts/ci-model.md` for external product
    CI configuration ownership and generated Jenkins job modeling.
-5. Operator manuals own procedural application of the model and lifecycle
-   contract:
-   `docs/operations/setup/gerrit.md`,
-   `docs/operations/setup/jenkins-controller.md`,
-   `docs/operations/setup/jenkins-agent.md`, and
-   `docs/operations/setup/integration.md`.
-6. Native operation references own direct OS and application procedures:
+5. Native operation references own the direct OS and application procedures
+   and are the procedural baseline for operation documentation:
    `docs/operations/native/gerrit.md`,
    `docs/operations/native/jenkins-controller.md`,
    `docs/operations/native/jenkins-agent.md`, and
@@ -67,6 +62,14 @@ Use this order when deciding where a product or process fact belongs:
    `docs/operations/native/acceptance-checklist.md` applies the native
    references as one manual `target-deployment` acceptance gate without
    becoming another command reference.
+6. Setup manuals own the repository-assisted application of the model and
+   lifecycle contract:
+   `docs/operations/setup/gerrit.md`,
+   `docs/operations/setup/jenkins-controller.md`,
+   `docs/operations/setup/jenkins-agent.md`, and
+   `docs/operations/setup/integration.md`. They must remain aligned with the
+   native procedural baseline and produce equivalent product state and
+   validation outcomes.
 7. Simulation docs own simulation realization details:
    `simulation/README.md`, `simulation/docker/README.md`,
    and `simulation/vm/README.md`.

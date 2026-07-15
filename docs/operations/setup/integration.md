@@ -6,6 +6,12 @@ This manual is the operator guide for `scripts/integration-setup.sh`. Use it
 after the Gerrit, Jenkins controller, and Jenkins agent role setup manuals have
 completed and each role has passing role-local readiness evidence.
 
+This manual owns the shared integration reviewed-input helper workflow. The
+native reference at `docs/operations/native/integration.md` is the procedural
+baseline for direct integration operations. Keep this helper workflow aligned
+with that baseline and preserve equivalent product state and validation
+outcomes.
+
 The Standard Interfaces contract in `docs/architecture/system-model.md` is authoritative
 for this helper. `scripts/integration-setup.sh` must use SSH as the common
 OS/control-plane interface for Gerrit, Jenkins controller, and Jenkins agent
@@ -14,8 +20,8 @@ Docker APIs are simulation lifecycle internals and are not the shared
 integration communication surface.
 
 `docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
-mutation boundaries, and resume/rerun rules. This manual owns only the shared
-integration command workflow and cross-role procedure inside that contract.
+mutation boundaries, and resume/rerun rules. This manual applies that contract
+only to the shared integration helper workflow.
 
 Current implementation caveat: the script still executes only the Docker
 simulation path until the SSH target-interface refactor is implemented. That

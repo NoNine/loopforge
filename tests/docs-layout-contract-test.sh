@@ -98,6 +98,50 @@ grep -Fq -- '`native/` documents direct OS and application procedures' \
   exit 1
 }
 
+native_heading_line="$(
+  grep -n -m1 '^## Native Operation References$' \
+    "$repo_root/docs/operations/README.md" | cut -d: -f1 || true
+)"
+setup_heading_line="$(
+  grep -n -m1 '^## Setup Manuals$' \
+    "$repo_root/docs/operations/README.md" | cut -d: -f1 || true
+)"
+[ -n "$native_heading_line" ] && [ -n "$setup_heading_line" ] &&
+  [ "$native_heading_line" -lt "$setup_heading_line" ] || {
+  printf 'Operations index must present native references before setup manuals\n' >&2
+  exit 1
+}
+
+grep -Fq -- 'Native references are operator-first and operator-friendly.' \
+  "$repo_root/docs/operations/README.md" || {
+  printf 'Operations index must define the native operator-first standard\n' >&2
+  exit 1
+}
+
+grep -Fq -- 'are the procedural baseline for operation documentation' \
+  "$repo_root/docs/README.md" || {
+  printf 'Documentation authority must define the native procedural baseline\n' >&2
+  exit 1
+}
+
+for manual in \
+  docs/operations/setup/gerrit.md \
+  docs/operations/setup/jenkins-controller.md \
+  docs/operations/setup/jenkins-agent.md \
+  docs/operations/setup/integration.md; do
+  rg -q -U 'procedural[[:space:]]+baseline' "$repo_root/$manual" || {
+    printf 'Setup manual must follow the native procedural baseline: %s\n' \
+      "$manual" >&2
+    exit 1
+  }
+done
+
+if rg -n 'manual is the authority for the .* role' \
+  "$repo_root/docs/operations/setup"; then
+  printf 'Setup manuals must not claim competing role authority\n' >&2
+  exit 1
+fi
+
 grep -Fq -- \
   'Never stage or commit `project-state/execution-status.md`' \
   "$repo_root/AGENTS.md" || {

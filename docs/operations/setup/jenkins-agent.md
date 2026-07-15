@@ -1,16 +1,18 @@
 # Jenkins Agent Setup Manual
 
-This manual is the authority for the Jenkins SSH build-agent host role. The
-helper `scripts/jenkins-agent-setup.sh` is a repeatable accelerator for
-reviewed env files; it does not replace operator review.
+This manual owns the Jenkins SSH build-agent host reviewed-input helper
+workflow. The helper `scripts/jenkins-agent-setup.sh` is a repeatable
+accelerator for reviewed env files; it does not replace operator review or the
+direct procedure in `docs/operations/native/jenkins-agent.md`.
 
 `docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
 mutation boundaries, and resume/rerun rules. This manual owns only the Jenkins
 agent-specific application of that contract.
 
-Maintain this manual with `docs/operations/native/jenkins-agent.md`.
-The native reference is the strong reference for direct OS, OpenSSH, and
-Jenkins agent operations and must remain free of repository helper commands.
+The native reference is the procedural baseline for direct OS, OpenSSH, and
+Jenkins agent operations. Keep this helper workflow aligned with that baseline
+and preserve equivalent product state and validation outcomes. The native
+reference must remain free of repository helper commands.
 
 The v1 boundary is unchanged: agent bootstrap artifacts, templates, manifests,
 and checksums are prepared in the bundle factory, staged to the Jenkins agent
