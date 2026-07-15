@@ -177,14 +177,17 @@ require_text docs/operations/native/jenkins-controller.md \
   'sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --no-create-home' \
   'Jenkins native procedure must create its reviewed runtime account directly'
 require_text docs/operations/native/jenkins-agent.md \
-  'sudo groupadd --gid 61030 jenkins-agent' \
+  'sudo groupadd --gid JENKINS_AGENT_GID jenkins-agent' \
   'Agent native procedure must create its reviewed runtime group directly'
 require_text docs/operations/native/jenkins-agent.md \
-  'sudo useradd --uid 61030 --gid 61030' \
+  'sudo useradd --uid JENKINS_AGENT_UID --gid JENKINS_AGENT_GID' \
   'Agent native procedure must create its reviewed runtime account directly'
 require_text docs/operations/native/jenkins-agent.md \
-  'getent passwd 61030' \
+  'getent passwd JENKINS_AGENT_UID' \
   'Agent native preflight must check the reviewed numeric identity directly'
+require_text docs/operations/native/jenkins-agent.md \
+  "sudo usermod -p '*' jenkins-agent" \
+  'Agent native procedure must make the runtime account public-key capable without a password'
 require_text docs/operations/native/jenkins-agent.md \
   'sudo systemctl enable --now ssh' \
   'Agent native procedure must enable the Ubuntu SSH service directly'
@@ -197,6 +200,20 @@ reject_text docs/operations/native/jenkins-agent.md \
 reject_text docs/operations/native/jenkins-agent.md \
   'systemctl enable --now sshd || true' \
   'Agent native procedure must not mask SSH service activation failure'
+
+for checksum_spec in \
+  'docs/operations/native/gerrit.md:gerrit-artifacts-bundle.tar.gz' \
+  'docs/operations/native/jenkins-controller.md:jenkins-artifacts-bundle.tar.gz' \
+  'docs/operations/native/jenkins-agent.md:jenkins-agent-artifacts-bundle.tar.gz'; do
+  checksum_doc="${checksum_spec%%:*}"
+  checksum_archive="${checksum_spec#*:}"
+  require_text "$checksum_doc" \
+    "sha256sum $checksum_archive" \
+    "Native archive checksum must use the transferable basename: $checksum_archive"
+  reject_text "$checksum_doc" \
+    "sha256sum ~/$checksum_archive" \
+    "Native archive checksum must not record a bundle-factory absolute path: $checksum_archive"
+done
 require_text docs/operations/native/integration.md \
   '`docs/operations/native/acceptance-checklist.md`' \
   'Native integration must use the single acceptance checklist'

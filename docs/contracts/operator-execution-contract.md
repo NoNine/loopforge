@@ -34,9 +34,14 @@ credential-custody boundary, validation result, or evidence redaction rules.
 
 - The operator account is the control-plane identity. Direct root login is not
   a supported workflow identity; privileged OS work uses delegated privilege.
-- Reviewed inputs and staged artifacts must be verified before role mutation.
+- Reviewed inputs must be verified before mutation. OS dependency provisioning
+  may precede application artifact preparation and staging, while staged
+  application artifacts must be verified before runtime identity, product-home,
+  application, or service mutation.
 - Configuration establishes the role runtime and validation observes it.
   `docs/contracts/lifecycle-contract.md` owns the detailed phase and reboot semantics.
+- Validation may consume successful earlier checkpoint outcomes and must not
+  replay completed setup checks merely to restate their results.
 - Gerrit and Jenkins controller use guest systemd in VM simulation and target
   deployment. The outbound Jenkins SSH agent relies on the guest SSH service;
   it does not require a separate Jenkins agent daemon.

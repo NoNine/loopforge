@@ -259,8 +259,10 @@ Create checksums and archive:
 cd ~/jenkins-artifacts-bundle
 (cd jenkins && find . -type f ! -name checksums.sha256 -print0 \
   | sort -z | xargs -0 sha256sum > checksums.sha256)
-tar -czf ~/jenkins-artifacts-bundle.tar.gz -C ~/jenkins-artifacts-bundle jenkins
-sha256sum ~/jenkins-artifacts-bundle.tar.gz > ~/jenkins-artifacts-bundle.tar.gz.sha256
+cd "$HOME"
+tar -czf jenkins-artifacts-bundle.tar.gz -C jenkins-artifacts-bundle jenkins
+sha256sum jenkins-artifacts-bundle.tar.gz \
+  > jenkins-artifacts-bundle.tar.gz.sha256
 ```
 
 The approved controller release unit is the artifact archive, its `.sha256`

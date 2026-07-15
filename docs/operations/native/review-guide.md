@@ -88,9 +88,10 @@ tasks when combining them would make review or rollback unsafe.
 ## Validation And Operations Checks
 
 - Map every acceptance statement to an observable command or application UI
-  check.
-- Validate runtime identity, service state, endpoint identity, authentication,
-  required application state, and the role boundary without performing repair.
+  check or to the successful result of its earlier owning checkpoint.
+- Combine earlier identity, filesystem, artifact, and configuration outcomes
+  with current service, endpoint, authentication, and application observations.
+  Do not replay completed checkpoint operations during role validation.
 - Prove external tool assumptions with the actual native tool when practical.
 - Review backup and restore as production procedures: consistent capture,
   complete recovery unit, versioning, protected storage and transport, numeric

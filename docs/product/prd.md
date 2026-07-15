@@ -83,7 +83,9 @@ The product must help engineers and operators install and validate:
   handoff are integration-step work owned by the shared integration command
   surface, not by role-local artifact preparation.
 - Target hosts may use approved internal Ubuntu/OS package repositories for
-  OS dependencies during setup.
+  OS dependencies during setup. OS dependency provisioning is a separate
+  prerequisite lane and may occur before application artifact preparation and
+  staging.
 - Public internet fallback for target-host Ubuntu/OS dependency installation is
   simulation-only and must be labeled that way in docs, logs, and verification
   summaries.
@@ -91,7 +93,7 @@ The product must help engineers and operators install and validate:
   public internet as fallback.
 - Application artifacts must be prepared in the bundle factory or staging
   environment, staged to target hosts, and verified by manifest and checksum
-  before target-host mutation.
+  before runtime identity, product-home, application, or service mutation.
 - v1 does not support offline Ubuntu dependency bundles.
 
 ### 3. Repeatable Service Installation

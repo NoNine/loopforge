@@ -213,8 +213,10 @@ template_count=2
 EOF
 (cd gerrit && find . -type f ! -name checksums.sha256 -print0 \
   | sort -z | xargs -0 sha256sum > checksums.sha256)
-tar -czf ~/gerrit-artifacts-bundle.tar.gz -C ~/gerrit-artifacts-bundle gerrit
-sha256sum ~/gerrit-artifacts-bundle.tar.gz > ~/gerrit-artifacts-bundle.tar.gz.sha256
+cd "$HOME"
+tar -czf gerrit-artifacts-bundle.tar.gz -C gerrit-artifacts-bundle gerrit
+sha256sum gerrit-artifacts-bundle.tar.gz \
+  > gerrit-artifacts-bundle.tar.gz.sha256
 ```
 
 The approved Gerrit release unit is the artifact archive and its `.sha256`

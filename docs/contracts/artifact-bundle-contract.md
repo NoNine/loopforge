@@ -46,10 +46,11 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 - Each helper-generated payload must contain exactly one compact `manifest.txt`
   and one payload `checksums.sha256`.
 - Each native operator-prepared payload must contain one payload
-  `checksums.sha256` and only the artifacts required by its native operation
-  reference. It does not require a helper manifest or helper template set.
-- Each native operation reference owns any additional operator manifest or
-  template requirements for its role.
+  `checksums.sha256`. The native operation reference defines its remaining
+  contents; native payloads do not inherit helper manifest or template
+  requirements.
+- A native operation reference may include its own manifest or templates when
+  its procedure uses them.
 - The archive pair is the handoff artifact; extracted trees are disposable
   staging or target state, not the source of truth.
 
@@ -119,10 +120,10 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 
 - Helper-generated bundles contain application artifacts, config/templates,
   one compact artifact manifest, and one payload checksum file.
-- Native operator-prepared bundles contain the application artifacts required
-  by their native operation reference and one payload checksum file. Their
-  contents need not match a helper-generated payload when both procedures
-  produce equivalent product state.
+- Native operator-prepared bundles contain one payload checksum file and the
+  contents defined by their native operation reference. They need not match a
+  helper-generated payload when both procedures produce equivalent product
+  state.
 - Bundles must not contain SSH private keys, public-key handoff files,
   `authorized_keys`, generated integration keys, passwords, tokens, or LDAP
   bind secrets.

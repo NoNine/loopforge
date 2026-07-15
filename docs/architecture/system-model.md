@@ -114,7 +114,7 @@ remain stable.
 | Environment | Responsibility |
 | --- | --- |
 | Operator workstation or control node | Holds reviewed input files, invokes utilities, receives short summaries, and collects generated evidence references. It is not a Gerrit/Jenkins runtime target. |
-| Bundle factory | Loopforge preparation environment that produces reviewed, version-pinned application artifacts, manifests, checksums, and source-boundary records before target-host mutation. |
+| Bundle factory | Loopforge preparation environment that produces reviewed, version-pinned application artifacts, manifests, checksums, and source-boundary records before target runtime identity, application, or service mutation. |
 | LDAP environment | Provides LDAP-backed users, groups, and bind/search behavior for Gerrit and Jenkins. |
 | Gerrit target | Runs Gerrit, stores Gerrit configuration, exposes Gerrit HTTP and Gerrit SSH service endpoints, and records reviews/votes. |
 | Jenkins controller target | Runs Jenkins, owns Jenkins-held integration private keys, stores Jenkins credentials and jobs, configures Gerrit Trigger, and schedules builds. |
@@ -320,13 +320,15 @@ The source boundary from `docs/product/prd.md` applies to every mode:
 
 - Ubuntu/OS dependencies and application artifacts are separate supply lanes.
 - Target environments may use approved internal Ubuntu/OS package sources for
-  OS dependencies.
+  OS dependencies. This prerequisite provisioning may occur before application
+  artifact preparation and staging.
 - Public internet fallback for target-host Ubuntu/OS dependency installation
   is simulation-only and must be labeled as such.
 - Target environments must not download Gerrit/Jenkins application artifacts
   from the public internet as fallback.
 - Application artifacts are prepared in the bundle factory, staged to targets,
-  and verified by manifest and checksum before target mutation.
+  and verified by manifest and checksum before runtime identity, product-home,
+  application, or service mutation on the target.
 - v1 does not support offline Ubuntu dependency bundles.
 
 ## Terminology

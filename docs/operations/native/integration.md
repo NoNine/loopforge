@@ -49,7 +49,8 @@ loopback URLs into target-deployment inventory.
 | Jenkins URL | `JENKINS_URL` |
 | Jenkins controller host | `JENKINS_HOST` |
 | Jenkins agent SSH endpoint | `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` |
-| Jenkins agent runtime account | `JENKINS_AGENT_ACCOUNT`, normally `jenkins-agent` |
+| Jenkins agent runtime account | `jenkins-agent`, local OS account |
+| Jenkins agent runtime group | `jenkins-agent`, local OS group |
 | Jenkins node name | `JENKINS_AGENT_NODE_NAME` |
 | Jenkins scheduling labels | `JENKINS_AGENT_LABELS` |
 | Gerrit integration account | `jenkins-gerrit` or reviewed site value |
@@ -291,7 +292,7 @@ Jenkins custody:
 ```bash
 sudo -u jenkins install -d -m 0700 /var/lib/jenkins/.ssh
 sudo -u jenkins ssh-keygen -t ed25519 -N '' \
-  -C jenkins-agent@loopforge \
+  -C jenkins-agent@JENKINS_AGENT_HOST \
   -f /var/lib/jenkins/.ssh/jenkins-agent
 sudo -u jenkins ssh-keygen -lf /var/lib/jenkins/.ssh/jenkins-agent.pub
 ```
@@ -313,10 +314,15 @@ Jenkins Web UI:
 Install only the public key on the Jenkins agent host:
 
 ```bash
-sudo install -d -m 0700 -o jenkins-agent -g jenkins-agent /var/lib/jenkins-agent/.ssh
-sudo install -m 0600 -o jenkins-agent -g jenkins-agent /dev/null /var/lib/jenkins-agent/.ssh/authorized_keys
+sudo install -d -m 0700 \
+  -o jenkins-agent -g jenkins-agent \
+  /var/lib/jenkins-agent/.ssh
+sudo install -m 0600 \
+  -o jenkins-agent -g jenkins-agent \
+  /dev/null /var/lib/jenkins-agent/.ssh/authorized_keys
 sudo sh -c 'cat /path/to/reviewed/jenkins-agent.pub >> /var/lib/jenkins-agent/.ssh/authorized_keys'
-sudo chown jenkins-agent:jenkins-agent /var/lib/jenkins-agent/.ssh/authorized_keys
+sudo chown jenkins-agent:jenkins-agent \
+  /var/lib/jenkins-agent/.ssh/authorized_keys
 sudo chmod 0600 /var/lib/jenkins-agent/.ssh/authorized_keys
 ```
 
@@ -369,7 +375,9 @@ On the Jenkins agent host, create the exported directory with agent-runtime
 ownership and shared group write:
 
 ```bash
-sudo install -d -m 2775 -o jenkins-agent -g jenkins-share /data/jenkins-shared
+sudo install -d -m 2775 \
+  -o jenkins-agent -g jenkins-share \
+  /data/jenkins-shared
 sudo chmod 2775 /data/jenkins-shared
 ```
 
@@ -394,7 +402,8 @@ Validate shared storage through the runtime accounts:
 
 ```bash
 sudo -u jenkins sh -c 'printf shared-storage-proof > /data/jenkins-shared/controller-proof.txt'
-sudo -u jenkins-agent grep -Fx shared-storage-proof /data/jenkins-shared/controller-proof.txt
+sudo -u jenkins-agent \
+  grep -Fx shared-storage-proof /data/jenkins-shared/controller-proof.txt
 ```
 
 Observe the shared group and GID, export path, controller mount source, export

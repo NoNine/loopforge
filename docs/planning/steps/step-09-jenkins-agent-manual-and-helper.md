@@ -47,12 +47,13 @@ Implementation notes:
 - Jenkins agent artifact bundles must be key-free. `prepare-artifacts` must
   not write Jenkins-to-agent public keys, private keys, `authorized_keys`, or
   generated key handoff files, and staged artifact verification must reject
-  them before target mutation.
+  them before runtime identity, application, or service mutation.
 - Jenkins agent manifests must record compact artifact identity and inventory
   fields only; policy and source-boundary facts belong in docs, logs, and
   evidence.
 - Target-side manifests and checksums must be verified in the Jenkins agent
-  target before install or runtime configuration mutates the agent host.
+  target before runtime identity, product-home, runtime configuration, or
+  service mutation.
 - The agent helper configures only the agent host runtime and SSH service
   side; it must not write `authorized_keys`, register a Jenkins node, prove
   scheduling, configure Gerrit Trigger, or prove `Verified` voting.
@@ -66,12 +67,13 @@ Implementation notes:
   integration-step outputs, not Step 9 acceptance outputs.
 - The controller's built-in node should remain at zero executors in
   target-deployment docs.
-- Agent validation must prove OS/tooling readiness, SSH daemon reachability,
-  runtime account ownership, remote filesystem readiness, staged artifact
-  checks, bounded logs, and role-local evidence. Jenkins node name and labels
-  are handoff metadata only in the agent role. Jenkins controller key handoff,
-  node registration, and controller-side scheduling proof are deferred to the
-  later integration step.
+- Agent readiness combines successful earlier OS/tooling, runtime-account,
+  remote-filesystem, staged-artifact, and SSH-policy checkpoint outcomes with
+  observational validation of Java, SSH service state, endpoint reachability,
+  and bounded status. Validation must not replay completed checkpoint
+  operations. Jenkins node name and labels are handoff metadata only in the
+  agent role. Jenkins controller key handoff, node registration, and
+  controller-side scheduling proof are deferred to the later integration step.
 - `install`, `configure-runtime`, and `validate` must be functional against the
   Jenkins agent target in the shared Docker harness.
 - Agent validation must pass real SSH daemon and filesystem readiness checks,
@@ -106,9 +108,9 @@ Acceptance criteria:
 - Jenkins agent artifact bundles contain no SSH key material, public-key
   handoff files, or `authorized_keys`; Jenkins-to-agent keypair generation and
   public-key handoff remain later integration-step work.
-- Agent validation covers OS/tooling readiness, SSH daemon reachability, remote
-  filesystem readiness, runtime account ownership, staged artifact checks,
-  bounded logs, and role-local evidence.
+- Agent readiness combines successful earlier OS/tooling, remote-filesystem,
+  runtime-account, staged-artifact, and SSH-policy outcomes with observational
+  Java, SSH service, endpoint, and bounded-status validation.
 - Agent service commands pass the shared Docker harness role gate without
   dummy, placeholder, operation-plan-only, or modeled success.
 - Jenkins agent role-local evidence follows the Evidence Contract and includes
@@ -118,4 +120,3 @@ Acceptance criteria:
 - Jenkins agent native operations remain helper-free and consistent with the
   role manual's OS, OpenSSH, host-only validation, backup, and recovery
   operations.
-

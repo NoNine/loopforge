@@ -1,65 +1,47 @@
 # Jenkins Agent Native Operations Reference
 
-This document is the manual target-deployment native operations reference for
-the Jenkins SSH build agent. It uses OS and application-native operations only,
+This document is the manual `target-deployment` native operations reference
+for the Jenkins SSH build agent. It uses direct OS and OpenSSH operations only,
 not repository automation commands.
 
 Repository v1 boundary: v1 is not a strict air-gapped installer and does not
-support installing OS dependencies from locally bundled Ubuntu packages. Target
-hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
-Agent application/bootstrap artifacts are prepared in the bundle-factory
-environment and staged to the target before any mutation. Application artifacts
-and SSH credential material are separate from OS dependencies: artifact bundles
-must not include Gerrit, Jenkins, or agent SSH key material. Public internet
-fallback for target-host Ubuntu/OS dependency installation is simulation-only
-and must be labeled as such in docs, logs, and verification summaries.
-
+support installing OS dependencies from locally bundled Ubuntu packages.
+Target hosts use approved internal Ubuntu/OS package repositories for OS
+dependencies. Agent bootstrap artifacts are prepared in the bundle-factory
+environment and staged to the target before account, filesystem, or service
+mutation. Artifact bundles must not include Gerrit, Jenkins, or agent SSH key
+material. Public internet fallback for target-host Ubuntu/OS dependency
+installation is simulation-only and must be labeled as such.
 
 Audience: production operators preparing a Jenkins outbound SSH build agent on
 Ubuntu 24.04 LTS without Docker.
 
-Use this manual with `docs/operations/native/jenkins-controller.md`. The
-Jenkins controller manual covers controller installation and controller-only
-configuration. Use `docs/operations/native/integration.md` after
-agent-host readiness is proven. Controller-side node registration, Gerrit
-integration, and Jenkins scheduling proof are later integration-step work. This
-manual covers the build server baseline, agent application artifacts, SSH
-access, recovery, and agent host-only validation.
+Use this manual with `docs/operations/native/jenkins-controller.md`. Complete
+this role-local procedure before using `docs/operations/native/integration.md`.
+Controller key creation, agent public-key authorization, node registration,
+shared storage, scheduling, Gerrit Trigger, and `Verified` proof are later
+integration work.
 
 Assumptions:
 
-- Jenkins runs on its own Ubuntu 24.04 LTS host.
-- The build agent runs on a separate Ubuntu 24.04 LTS host.
+- Jenkins and the build agent run on separate Ubuntu 24.04 LTS hosts.
 - The agent target is freshly provisioned with no prior Jenkins agent or
-  Loopforge runtime state, including no agent runtime account, group, or
-  `/var/lib/jenkins-agent` path.
-- Jenkins connects out to the build agent over SSH.
-- The build agent exposes SSH only on a trusted/internal network.
-- Staging can use an internet-connected Ubuntu 24.04 machine to prepare
-  reviewed Jenkins agent application artifacts.
-- Production host commands are run by the operator account with `sudo` or
-  equivalent delegated administrator privileges unless noted. Do not use
-  `root` as a Loopforge account or direct login identity.
+  Loopforge runtime state.
+- Jenkins connects out to the build agent over SSH on a trusted/internal
+  network.
+- The site owns the SSH listener addresses, ports, firewall rules, and global
+  access policy. This role owns only the agent account policy and service
+  readiness checks.
+- Production commands run as the operator account with delegated privilege.
+  Root is not a Loopforge account or supported direct login identity.
 
 Default baseline: Ubuntu 24.04.4 LTS `noble`, OpenJDK 21, OpenSSH
 server/client tooling, and the Jenkins SSH Build Agents plugin from the
-controller plugin bundle. `docs/baselines/version-baseline.md` owns the package-wide
-baseline and reviewed update rules.
+controller plugin bundle. `docs/baselines/version-baseline.md` owns the
+package-wide baseline and reviewed update rules.
 
-Production warning: do not run builds on the Jenkins controller. Keep the
-built-in node at zero executors and provide build capacity through agents.
-
-Privilege warning: agent setup cannot be completed by an unprivileged user
-alone. Package installation, local runtime accounts, SSH service control, and
-remote filesystem ownership require delegated administrator privilege from
-the operator account on the build server. Root may own OS-reserved files, but
-root is not a Loopforge account, runtime identity, or supported direct login
-identity.
-
-Manual authority: this manual is the reference procedure. It intentionally
-contains only native OS, OpenSSH, and Jenkins UI/application operations. Do not
-add repository automation commands or automation-equivalent command tables to
-this document.
+Production warning: keep the Jenkins controller built-in node at zero
+executors. Build capacity comes from agents.
 
 ## 1. Operator Inputs and Current Status
 
@@ -67,59 +49,77 @@ Record these values before installation:
 
 | Item | Value |
 | --- | --- |
-| Agent host | `JENKINS_AGENT_HOST` |
-| Agent SSH port | `22` or chosen port |
-| Agent runtime user | `JENKINS_AGENT_ACCOUNT`, normally `jenkins-agent` |
-| Agent remote FS | `JENKINS_AGENT_REMOTE_FS`, normally `/var/lib/jenkins-agent` |
+| Agent host | `JENKINS_AGENT_HOST`, a site-approved stable hostname |
+| Agent SSH port | `JENKINS_AGENT_SSH_PORT`, site-managed and normally `22` |
+| Agent runtime user | `jenkins-agent`, local OS account |
+| Agent runtime group | `jenkins-agent`, local OS group |
+| Agent runtime UID | `JENKINS_AGENT_UID`, default `61030` |
+| Agent runtime GID | `JENKINS_AGENT_GID`, default `61030` |
+| Agent remote FS | `/var/lib/jenkins-agent` |
 | Jenkins node name | `JENKINS_AGENT_NODE_NAME`, normally `build-linux-x86-01` |
 | Jenkins scheduling labels | `JENKINS_AGENT_LABELS`, normally `linux x86_64 general-build gerrit-ci` |
-| Network mode | Approved internal OS repositories for target-host OS dependencies |
+| Operator account | `LOOPFORGE_OPERATOR_ACCOUNT`, default `ci-operator` |
+| Operator group | `LOOPFORGE_OPERATOR_GROUP`, default `ci-operator` |
+| Network mode | Approved internal OS repositories for target-host dependencies |
 
-Run on the agent host:
+The native baseline runtime account and group are
+`jenkins-agent:jenkins-agent`. This clean-install procedure creates them during
+installation. If your site uses different values, substitute the reviewed name
+and numeric identity consistently everywhere this manual shows the baseline.
+The product home remains `/var/lib/jenkins-agent`. The commands intentionally
+use the baseline names directly rather than account/group variables.
+
+Run these read-only checks on the agent host:
 
 ```bash
-getent hosts JENKINS_AGENT_HOST
+cat /etc/os-release
 hostnamectl
-ip addr
-df -h
+timedatectl
+df -h /var/lib
 free -h
-java -version || true
-systemctl --failed || true
+systemctl --failed
+getent hosts JENKINS_AGENT_HOST
 ```
+
+Confirm the OS reports Ubuntu `24.04` and `noble`, the host and time match the
+reviewed inventory, storage and memory are sufficient, and failed units have an
+approved disposition. The final command must resolve `JENKINS_AGENT_HOST`;
+stop and correct endpoint identity if it does not.
+
+Confirm the selected clean-install identities and role-owned paths are absent.
+Run each command separately. The four `getent` commands must return no entry,
+and both `test` commands must succeed:
+
+```bash
+getent passwd jenkins-agent
+getent group jenkins-agent
+getent passwd JENKINS_AGENT_UID
+getent group JENKINS_AGENT_GID
+test ! -e /var/lib/jenkins-agent
+sudo test ! -e /etc/ssh/sshd_config.d/40-jenkins-agent.conf
+```
+
+If a reviewed name, numeric ID, product home, or role-owned SSH policy path is
+already present, stop and reprovision the target. Do not adapt, overwrite, or
+repair it within this clean-install procedure.
 
 ### 1.1 If You Do Not Have Root Privileges
 
-Use this manual as an administrator handoff. Without root on the build server,
-you can prepare Jenkins agent application artifacts, collect host and SSH
-values, review the controller node configuration, and run network checks
-allowed by your account.
-
-Ask an administrator to perform or delegate these build-server tasks:
-
-- Install OS packages and Java dependencies.
-- Confirm or create the local `jenkins-agent` runtime account and group.
-- Create and own `/var/lib/jenkins-agent`.
-- Enable and start `ssh` or `sshd`.
-- Run any `apt`, `dpkg`, `systemctl`, `groupadd`, `useradd`, `chown`, `chmod`,
-  or writes under system-owned paths.
+Without delegated administrator privilege, use this manual as an administrator
+handoff. An administrator must perform or delegate package installation,
+runtime identity creation, protected path ownership, SSH policy installation,
+and SSH service operations. Do not switch the workflow to direct root login.
 
 ## 2. Dependencies And Jenkins Agent Artifact Bundle
 
-### 2.1 Ubuntu Dependency Setup
+### 2.1 Install Ubuntu Dependencies
 
 The package rationale and layered classification are maintained in
-`docs/baselines/package-requirements.md`.
-
-Role installation creates the dedicated `jenkins-agent` account and product
-home; OS dependency setup enables SSH. Neither step installs Jenkins controller
-keys. Controller credential selection, node registration, and scheduling proof
-are later integration work.
-
-Manual package baseline on the build server:
+`docs/baselines/package-requirements.md`. Run on the agent target:
 
 ```bash
-apt update
-apt install -y \
+sudo apt update
+sudo apt install -y \
   ca-certificates \
   curl \
   nfs-kernel-server \
@@ -131,220 +131,232 @@ apt install -y \
 java -version
 ```
 
-Set `JENKINS_BUILD_EXTRA_PACKAGES` for site-wide packages needed on every
-general build agent, such as `build-essential` when every agent needs a
-compiler toolchain. Keep project-specific toolchains outside the default
-baseline unless every general build agent needs them. Do not treat `sudo` as a
-role dependency; it is an operator privilege mechanism.
+The Java command must report OpenJDK 21. Add site-wide build packages to the
+reviewed package operation only when every general agent requires them. Keep
+project-specific toolchains outside this host baseline.
 
-v1 does not support installing OS dependencies from locally bundled Ubuntu
-packages. Use approved internal Ubuntu/OS package repositories for OS packages
-on target hosts.
+### 2.2 Create The Agent Artifact Bundle
 
-Review the Jenkins agent runtime account/group names and numeric IDs before
-installation. This clean-install procedure creates them on the freshly
-provisioned target. If a reviewed name, numeric ID, or product-home path is
-already in use, stop and reprovision the target.
-
-### 2.2 Create the Agent Artifact Bundle
-
-Run on the bundle-factory VM:
+Run on the bundle-factory VM. The three freshness checks must succeed. Stop and
+select a fresh bundle path if any selected path already exists:
 
 ```bash
-mkdir -p ~/jenkins-agent-artifacts-bundle/jenkins-agent
-cd ~/jenkins-agent-artifacts-bundle
-cat > jenkins-agent/manifest.txt <<'EOF'
-harness_manifest_version=1
-role=jenkins-agent
-bundle_name=jenkins-agent-artifacts-bundle
-ubuntu_release=24.04
-ubuntu_codename=noble
-java_version=21
-gerrit_version=not-applicable
-jenkins_version=not-applicable
-jenkins_plugin_manager_version=not-applicable
-bootstrap=jenkins-agent-bootstrap.txt
-template_count=2
-EOF
+test ! -e "$HOME/jenkins-agent-artifacts-bundle"
+test ! -e "$HOME/jenkins-agent-artifacts-bundle.tar.gz"
+test ! -e "$HOME/jenkins-agent-artifacts-bundle.tar.gz.sha256"
+mkdir -p "$HOME/jenkins-agent-artifacts-bundle/jenkins-agent"
 printf 'Jenkins SSH agent bootstrap marker for Ubuntu 24.04 noble with OpenJDK 21.\n' \
-  > jenkins-agent/jenkins-agent-bootstrap.txt
-(cd jenkins-agent && find . -type f ! -name checksums.sha256 -print0 \
+  > "$HOME/jenkins-agent-artifacts-bundle/jenkins-agent/jenkins-agent-bootstrap.txt"
+(cd "$HOME/jenkins-agent-artifacts-bundle/jenkins-agent" && \
+  find . -type f ! -name checksums.sha256 -print0 \
   | sort -z | xargs -0 sha256sum > checksums.sha256)
-tar -czf ~/jenkins-agent-artifacts-bundle.tar.gz -C ~/jenkins-agent-artifacts-bundle jenkins-agent
-sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz > ~/jenkins-agent-artifacts-bundle.tar.gz.sha256
+cd "$HOME"
+tar -czf jenkins-agent-artifacts-bundle.tar.gz \
+  -C jenkins-agent-artifacts-bundle jenkins-agent
+sha256sum jenkins-agent-artifacts-bundle.tar.gz \
+  > jenkins-agent-artifacts-bundle.tar.gz.sha256
 ```
 
-### 2.3 Install the Agent Artifact Bundle Manually
+The native release unit is the archive, its sibling checksum file, the
+bootstrap marker, and the payload checksum inventory. It contains no native
+manifest or template set. Review the payload inventory and archive checksum in
+the deployment change or ticket. Do not add private keys, public keys,
+`authorized_keys`, passwords, tokens, or secret-bearing configuration.
 
-Transfer the agent artifact archive and `.sha256` file to the operator home on
-the build-agent host. The staged archive must not carry Gerrit, Jenkins, or
-agent SSH key material. Jenkins controller keypair generation and public-key
-installation are later integration-step work.
+### 2.3 Stage And Verify The Agent Artifact Bundle
 
-Set the reviewed operator account values and verify the transferred archive.
-Run the remaining commands in this section from the same operator shell so
-these values remain available:
+Transfer the archive and sibling `.sha256` file to the operator's home on the
+agent host. Replace the uppercase operator placeholders below with reviewed
+values, then run each command separately:
 
 ```bash
-operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
-operator_group="${LOOPFORGE_OPERATOR_GROUP:-$operator_account}"
-operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
-[ -n "$operator_home" ] || {
-  printf 'missing operator account: %s\n' "$operator_account" >&2
-  exit 1
-}
-
-cd "$operator_home"
+getent passwd LOOPFORGE_OPERATOR_ACCOUNT
+getent group LOOPFORGE_OPERATOR_GROUP
+cd "$HOME"
 sha256sum -c jenkins-agent-artifacts-bundle.tar.gz.sha256
-```
-
-This is a clean-install procedure. Run these read-only checks before staging
-artifacts or creating the runtime identity and product home. The four `getent`
-commands must return no entry, and the final `test` must succeed. If a command
-finds an existing name, numeric ID, or path, stop and reprovision the target
-instead of adapting or repairing it in place:
-
-```bash
-getent passwd jenkins-agent
-getent group jenkins-agent
-getent passwd 61030
-getent group 61030
-test ! -e /var/lib/jenkins-agent
-```
-
-After preflight succeeds, replace the disposable extracted staging tree and
-verify every staged file. The `rm` command below removes only the Jenkins agent
-staging payload; it does not remove the transferred archive or the agent
-product home:
-
-```bash
-sudo install -d -m 0750 -o "$operator_account" -g "$operator_group" \
+sudo test ! -e /var/lib/loopforge/staging/jenkins-agent
+sudo install -d -m 0750 \
+  -o LOOPFORGE_OPERATOR_ACCOUNT \
+  -g LOOPFORGE_OPERATOR_GROUP \
   /var/lib/loopforge/staging
-sudo rm -rf -- /var/lib/loopforge/staging/jenkins-agent
-sudo tar -xzf "$operator_home/jenkins-agent-artifacts-bundle.tar.gz" \
+sudo tar -xzf jenkins-agent-artifacts-bundle.tar.gz \
   -C /var/lib/loopforge/staging
-sudo chown -R "$operator_account:$operator_group" \
+sudo chown -R \
+  LOOPFORGE_OPERATOR_ACCOUNT:LOOPFORGE_OPERATOR_GROUP \
   /var/lib/loopforge/staging/jenkins-agent
 cd /var/lib/loopforge/staging/jenkins-agent
 sha256sum -c checksums.sha256
 ```
 
-Create the reviewed runtime group, account, and product home:
-
-```bash
-sudo groupadd --gid 61030 jenkins-agent
-sudo useradd --uid 61030 --gid 61030 \
-  --home-dir /var/lib/jenkins-agent --no-create-home \
-  --shell /bin/bash jenkins-agent
-sudo install -d -m 0755 -o jenkins-agent -g jenkins-agent \
-  /var/lib/jenkins-agent
-```
-
-Ubuntu 24.04 provides the OpenSSH server as the `ssh` systemd unit. Enable and
-start that unit; do not continue if this command fails:
-
-```bash
-sudo systemctl enable --now ssh
-```
-
-For artifact recovery after installation, rerun only the artifact archive
-checksum, transfer, extraction, and internal checksum commands. Do not rerun
-the clean-install preflight, account creation, or product-home creation
-commands. OS package recovery uses the approved internal Ubuntu/OS package
-repository path.
+The identity lookups must return the reviewed operator identities, both
+checksum commands must pass, and the staging freshness test must succeed.
+Stop and reprovision the clean target if staging already exists. Do not create
+runtime identity, product-home state, or SSH service state until payload
+verification passes.
 
 ## 3. Jenkins Agent Installation
 
-### 3.1 Shared Integration Handoff
+### 3.1 Create The Runtime Identity And Product Home
 
-Agent host-only bringup does not consume controller key material, validate
-controller SSH access, update `authorized_keys`, register a Jenkins node, or
-prove controller scheduling. The agent role proves OS/tooling readiness, the
-dedicated runtime account, remote filesystem ownership, the SSH daemon, staged
-artifacts, and bounded log inspection.
+Create the reviewed runtime group, account, and fixed product home:
 
-Later Jenkins-to-agent public-key authorization, Jenkins node registration,
-scheduling validation, and key rotation belong to
-`docs/operations/native/integration.md`, not this agent role-local native
-reference. The manual integration workflow is available; this native reference
-remains limited to agent host readiness.
+```bash
+sudo groupadd --gid JENKINS_AGENT_GID jenkins-agent
+sudo useradd --uid JENKINS_AGENT_UID --gid JENKINS_AGENT_GID \
+  --home-dir /var/lib/jenkins-agent --no-create-home \
+  --shell /bin/bash jenkins-agent
+sudo usermod -p '*' jenkins-agent
+sudo install -d -m 0755 \
+  -o jenkins-agent \
+  -g jenkins-agent \
+  /var/lib/jenkins-agent
+```
 
-When the shared integration workflow begins, perform Jenkins-side node
-registration through the Jenkins Web UI steps in
-`docs/operations/native/integration.md`. This agent reference only prepares
-the build server OS, OpenSSH service, runtime account, remote filesystem, and
-artifact staging needed by that later UI operation.
+`useradd` initially creates a locked account on Ubuntu. The immediate
+`usermod` operation replaces the locking marker with the impossible password
+hash `*`: password authentication cannot succeed, while OpenSSH may use the
+account for the later public-key-only Jenkins connection.
 
-Credential custody remains fixed: the Jenkins controller owns the
-Jenkins-to-agent private key, and the agent host consumes only the matching
-public key. Do not create a separate agent evidence record. Record the required
-role outcomes only in `docs/operations/native/acceptance-checklist.md`. Do not
-place private keys, passwords, tokens, LDAP bind secrets, or secret-bearing
-configuration in the checklist or its three references.
+### 3.2 Install The Agent Account SSH Policy
 
-### 3.2 Configure Build Server Runtime Account
+The site owns global SSH listener addresses and ports. Before changing service
+state, confirm the reviewed agent port is already present in effective sshd
+configuration:
 
-The build server needs a dedicated local runtime account, a remote filesystem,
-a running SSH service, and host-side tooling. The artifact install in section
-2.3 performs those host-only steps. Controller key installation and
-`authorized_keys` mutation are deferred.
+```bash
+sudo sshd -T | awk -v port="JENKINS_AGENT_SSH_PORT" \
+  '$1 == "port" && $2 == port { found=1 } END { exit !found }'
+```
 
-Install OS packages only from configured apt repositories. Stage Jenkins agent
-application artifacts with section 2.3.
+The command must succeed. If it fails, stop and use the site's approved SSH,
+network, and firewall procedure to provision the reviewed listener. Do not add
+or change a global `Port`, `ListenAddress`, or `AllowUsers` directive here.
+This is the site SSH/network provisioning stop condition for the role.
 
-## 4. Validation
+Create the role-owned account policy with `sudoedit`:
 
-Run on the agent host:
+```bash
+sudoedit /etc/ssh/sshd_config.d/40-jenkins-agent.conf
+```
+
+```text
+# Port and ListenAddress are site-owned.
+Match User jenkins-agent
+    AuthenticationMethods publickey
+    PubkeyAuthentication yes
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    PermitEmptyPasswords no
+Match all
+```
+
+Protect and validate the policy before service mutation:
+
+```bash
+sudo chown root:root /etc/ssh/sshd_config.d/40-jenkins-agent.conf
+sudo chmod 0644 /etc/ssh/sshd_config.d/40-jenkins-agent.conf
+sudo sshd -t
+sudo sshd -T -C \
+  user=jenkins-agent,host=JENKINS_AGENT_HOST,addr=127.0.0.1 \
+  | awk '
+      $1 == "authenticationmethods" && $2 == "publickey" { methods=1 }
+      $1 == "pubkeyauthentication" && $2 == "yes" { publickey=1 }
+      $1 == "passwordauthentication" && $2 == "no" { password=1 }
+      $1 == "kbdinteractiveauthentication" && $2 == "no" { interactive=1 }
+      $1 == "permitemptypasswords" && $2 == "no" { empty=1 }
+      END { exit !(methods && publickey && password && interactive && empty) }
+    '
+```
+
+Both commands must succeed. Enable the Ubuntu `ssh` unit and reload the
+validated configuration:
+
+```bash
+sudo systemctl enable --now ssh
+sudo systemctl reload ssh
+```
+
+Keep the current operator session open. From the normal control point, prove a
+second operator login through the site's existing operator SSH endpoint before
+closing the original session. The role-owned `Match User` policy must not
+replace site control-plane access policy.
+
+## 4. Shared Integration Handoff
+
+Agent-native role readiness stops before controller-to-agent integration. This
+role proves the reviewed runtime account and group, numeric identity,
+product-home ownership, staged artifacts, account-scoped SSH policy, site-owned
+SSH endpoint, service state, and bounded status inspection. It does not consume
+controller key material, update `authorized_keys`, register a Jenkins node,
+configure shared storage, or prove scheduling.
+
+Record the agent host, SSH endpoint, runtime account and group, remote FS, node
+name, and labels for integration. The Jenkins controller owns the private key;
+the agent host later consumes only the matching public key. Perform those
+cross-role operations with `docs/operations/native/integration.md` only after
+the controller and agent host are both ready.
+
+Record required outcomes only in
+`docs/operations/native/acceptance-checklist.md`. Do not place private keys,
+passwords, tokens, LDAP bind secrets, or secret-bearing configuration in the
+checklist or its three references.
+
+## 5. Agent-Only Validation
+
+Run on the agent host without starting, enabling, reloading, or repairing SSH:
 
 ```bash
 java -version
-getent passwd jenkins-agent
-systemctl is-enabled ssh || systemctl is-enabled sshd
-systemctl is-active ssh || systemctl is-active sshd
+systemctl is-enabled ssh
+systemctl is-active ssh
+systemctl show ssh \
+  --property=LoadState --property=UnitFileState \
+  --property=ActiveState --property=MainPID --no-pager
+ssh-keyscan -T 5 -p JENKINS_AGENT_SSH_PORT JENKINS_AGENT_HOST
+sudo systemctl status ssh --no-pager --lines=20
 ```
 
-Acceptance checks:
+Acceptance results:
 
-- OpenJDK 21 is active on the build server.
-- The `jenkins-agent` runtime account exists.
-- The agent remote FS exists and is owned by `jenkins-agent`.
-- SSH service is enabled and active on the build server.
-- The SSH daemon returns a real OpenSSH banner on the agent port.
-- Jenkins controller node registration, controller-side SSH launch,
-  scheduling-label proof, later integration validation jobs, Gerrit Trigger
-  execution, and `Verified` vote proof are deferred to the later shared
-  integration workflow.
+- Java reports OpenJDK 21.
+- `ssh.service` is loaded, enabled, and active with a nonzero `MainPID`.
+- `ssh-keyscan` returns OpenSSH host-key output from the reviewed agent endpoint.
+- The bounded service status contains no startup or configuration failure.
+
+Section 2 owns archive and payload checksum verification. Section 3 owns the
+runtime identity, product-home ownership, account shadow state, and effective
+sshd policy checks. Do not replay those earlier checkpoint operations during
+role validation.
 
 The reboot check is optional. To perform it, use the site's reviewed reboot
-procedure, wait for the target to return, and rerun the validation above
-without starting, enabling, or repairing the SSH service. Leave the optional
-checklist item unchecked when the check is not performed. If the check is
-attempted and the agent does not return to the same ready state,
-mark the run `BLOCKED`.
+procedure, wait for the target to return, and rerun this validation without
+starting, enabling, reloading, or repairing SSH. Leave the optional checklist
+item unchecked when the check is not performed. If the check is attempted and
+the agent does not return to the same ready state, mark the run `BLOCKED`.
 
-This guest OpenSSH service is the lifecycle owner for the outbound SSH agent.
+The guest OpenSSH service is the lifecycle owner for the outbound SSH agent.
 There is no separate `jenkins-agent.service`.
 
-## 5. Backup and Operations
+## 6. Backup and Operations
 
-Record the agent host, SSH endpoint, runtime user, remote FS path, Jenkins
-node name, and scheduling labels with the later integration handoff.
+Retain the approved native agent archive, sibling checksum, package inventory,
+reviewed account values, SSH endpoint, node name, and labels with the deployment
+change. Agent workspaces are execution state, not the authoritative recovery
+unit for source or build outputs. Protect authoritative outputs through their
+project or shared-storage retention policy.
 
-Jenkins-to-agent key rotation belongs to
-`docs/operations/native/integration.md`. It must preserve
-Jenkins-controller private-key custody and provide only the matching public key
-to the agent host.
+Do not reinstall the artifact bundle to repair an account, key, product home,
+or SSH service. Preserve bounded diagnostics, reprovision a fresh agent target,
+and rerun this procedure. Package-source or site SSH listener failures belong
+to their owning site procedures. Jenkins-to-agent key replacement and rotation
+belong to `docs/operations/native/integration.md`.
 
-For package baseline changes, update the approved internal Ubuntu/OS package
-repository state and reinstall agent dependencies before repeating host-only
-validation. Smoke-job validation remains later integration work. For account,
-key, or SSH service recovery, reinstall only the agent artifact bundle.
-
-## 6. References
+## 7. References
 
 - Jenkins controller native operations:
   `docs/operations/native/jenkins-controller.md`
 - Integration native operations:
   `docs/operations/native/integration.md`
 - Jenkins SSH Build Agents plugin: https://plugins.jenkins.io/ssh-slaves/
-- Jenkins distributed builds documentation: https://www.jenkins.io/doc/book/using/using-agents/
+- Jenkins distributed builds: https://www.jenkins.io/doc/book/using/using-agents/
+- OpenSSH server configuration: https://man.openbsd.org/sshd_config

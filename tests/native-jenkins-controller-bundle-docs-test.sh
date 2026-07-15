@@ -70,6 +70,14 @@ require_text \
   "$manual" \
   'Create checksums and archive:' \
   'Native Jenkins preparation must create its payload checksum directly'
+require_text \
+  "$manual" \
+  'sha256sum jenkins-artifacts-bundle.tar.gz' \
+  'Native Jenkins archive checksum must use the transferable basename'
+reject_text \
+  "$manual" \
+  'sha256sum ~/jenkins-artifacts-bundle.tar.gz' \
+  'Native Jenkins archive checksum must not record a bundle-factory absolute path'
 for pattern in \
   'jenkins/manifest.txt' \
   'harness_manifest_version' \
@@ -87,8 +95,16 @@ require_text \
   'Artifact contract must retain helper-generated manifests'
 require_text \
   "$bundle_contract" \
-  'It does not require a helper manifest or helper template set.' \
+  'The native operation reference defines its remaining' \
+  'Artifact contract must assign native payload contents to the native reference'
+require_text \
+  "$bundle_contract" \
+  'native payloads do not inherit helper manifest or template' \
   'Artifact contract must separate native payloads from helper metadata'
+require_text \
+  "$bundle_contract" \
+  'its procedure uses them.' \
+  'Artifact contract must allow procedure-owned native manifests or templates'
 require_text \
   "$checklist" \
   'Reviewed artifact inventories and checksums match the artifacts staged on' \
