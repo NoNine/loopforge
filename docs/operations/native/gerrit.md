@@ -55,7 +55,7 @@ contains only native OS and Gerrit operations. Do not add repository automation
 commands or automation-equivalent command tables to this document.
 
 
-## 1. Operator Inputs and Current Status
+## 1. Operator Inputs and Preflight
 
 Record these values before installation:
 
@@ -133,9 +133,9 @@ Ask an administrator to perform or delegate these production-host tasks:
 
 A home-directory Gerrit process can be useful for lab validation, but it is not this production deployment. It will not match the documented systemd service management, ownership model, backup paths, or secret handling.
 
-## 2. Dependencies And Gerrit Artifact Bundle
+## 2. Dependencies and Gerrit Artifact Bundle
 
-### 2.1 Ubuntu Dependencies
+### 2.1 Install Ubuntu Dependencies
 
 The package rationale and layered classification are maintained in
 `docs/baselines/package-requirements.md`.
@@ -168,7 +168,7 @@ ldapsearch -x -H LDAP_URL -D LDAP_BIND_DN -W \
   -b LDAP_GROUP_BASE -s base dn
 ```
 
-### 2.2 Gerrit Artifact Bundle
+### 2.2 Create the Gerrit Artifact Bundle
 
 v1 does not support installing OS dependencies from locally bundled Ubuntu
 packages. Use approved internal Ubuntu/OS package repositories for OS packages
@@ -183,8 +183,6 @@ Official source reference:
 ```text
 https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
 ```
-
-#### 2.2.1 Create the Gerrit Artifact Bundle
 
 Run on the bundle-factory VM. The owning bundle-factory prerequisite baseline
 is defined in `docs/contracts/artifact-bundle-contract.md` and
@@ -228,32 +226,42 @@ sha256sum gerrit-artifacts-bundle.tar.gz \
 The approved Gerrit release unit is the artifact archive and its `.sha256`
 file.
 
-#### 2.2.2 Install the Gerrit Artifact Bundle Manually
+### 2.3 Stage and Verify the Gerrit Artifact Bundle
 
-Transfer the artifact archive and `.sha256` file to the Gerrit host with
-approved media or an approved internal transfer path. Run on the Gerrit host:
+Transfer the artifact archive and `.sha256` file to the operator's home on the
+Gerrit host with approved media or an approved internal transfer path. Replace
+the uppercase operator placeholders below with their reviewed values, then run
+each command separately:
 
 ```bash
-operator_account="${LOOPFORGE_OPERATOR_ACCOUNT:-ci-operator}"
-operator_group="${LOOPFORGE_OPERATOR_GROUP:-$operator_account}"
-operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
-[ -n "$operator_home" ] || {
-  printf 'missing operator account: %s\n' "$operator_account" >&2
-  exit 1
-}
-
-cd "$operator_home"
+getent passwd LOOPFORGE_OPERATOR_ACCOUNT
+getent group LOOPFORGE_OPERATOR_GROUP
+cd "$HOME"
 sha256sum -c gerrit-artifacts-bundle.tar.gz.sha256
 sudo test ! -e /var/lib/loopforge/staging/gerrit
-sudo install -d -m 0750 -o "$operator_account" -g "$operator_group" /var/lib/loopforge/staging
-sudo tar -xzf gerrit-artifacts-bundle.tar.gz -C /var/lib/loopforge/staging
-sudo chown -R "$operator_account:$operator_group" /var/lib/loopforge/staging/gerrit
+sudo install -d -m 0750 \
+  -o LOOPFORGE_OPERATOR_ACCOUNT \
+  -g LOOPFORGE_OPERATOR_GROUP \
+  /var/lib/loopforge/staging
+sudo tar -xzf gerrit-artifacts-bundle.tar.gz \
+  -C /var/lib/loopforge/staging
+sudo chown -R \
+  LOOPFORGE_OPERATOR_ACCOUNT:LOOPFORGE_OPERATOR_GROUP \
+  /var/lib/loopforge/staging/gerrit
 cd /var/lib/loopforge/staging/gerrit
 sha256sum -c checksums.sha256
-java -version
 ```
 
-Install the Gerrit artifact files:
+The account and group lookups must return the reviewed operator identities,
+both checksum commands must pass, and the staging freshness test must succeed.
+Stop and reprovision the clean target if the Gerrit staging path already
+exists; do not delete or repair it within this procedure. Staging does not
+create the Gerrit runtime identity, product home, application state, or service
+state.
+
+## 3. Gerrit Installation and Configuration
+
+### 3.1 Create the Runtime Identity and Product Home
 
 This is a clean-install procedure. The four `getent` commands below must
 return no entry, and the final `test` must succeed. If any reviewed name,
@@ -268,12 +276,30 @@ getent group 61010
 test ! -e /srv/gerrit
 ```
 
-Create the runtime account, product home, and initial artifact files:
+Create the runtime account and product home:
 
 ```bash
 sudo groupadd --gid 61010 gerrit
 sudo useradd --uid 61010 --gid 61010 --home-dir /srv/gerrit --no-create-home --shell /bin/bash gerrit
 sudo install -d -m 0755 -o gerrit -g gerrit /srv/gerrit
+```
+
+Confirm the reviewed identity and product home:
+
+```bash
+getent passwd gerrit
+getent group gerrit
+test "$(getent passwd gerrit | cut -d: -f3)" = 61010
+test "$(getent group gerrit | cut -d: -f3)" = 61010
+test "$(getent passwd gerrit | cut -d: -f6)" = /srv/gerrit
+test "$(stat -c '%U:%G' /srv/gerrit)" = gerrit:gerrit
+```
+
+### 3.2 Install the Gerrit WAR
+
+Install the verified Gerrit WAR and create the initial role directories:
+
+```bash
 sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/bin
 sudo cp /var/lib/loopforge/staging/gerrit/gerrit-3.13.6.war /srv/gerrit/bin/gerrit.war
 sudo chown gerrit:gerrit /srv/gerrit/bin/gerrit.war
@@ -287,26 +313,11 @@ clean-install run. Do not overwrite or repair the selected staging or product
 state in place. OS package-source failures belong to the approved internal
 Ubuntu/OS package repository procedure.
 
-## 3. Gerrit Installation
-
-### 3.1 Confirm Service Account and Directories
-
-Run on the Gerrit host:
-
-```bash
-getent passwd gerrit
-getent group gerrit
-test "$(getent passwd gerrit | cut -d: -f3)" = 61010
-test "$(getent group gerrit | cut -d: -f3)" = 61010
-test "$(getent passwd gerrit | cut -d: -f6)" = /srv/gerrit
-test "$(stat -c '%U:%G' /srv/gerrit)" = gerrit:gerrit
-```
-
 The preceding role-local installation step placed the verified Gerrit WAR from
 the staged bundle. Target hosts must not download Gerrit application artifacts
 as fallback or replay the completed artifact installation here.
 
-### 3.2 Initialize Gerrit
+### 3.3 Initialize Gerrit
 
 Run initialization as the `gerrit` user:
 
@@ -326,7 +337,7 @@ Recommended answers:
 
 For offline installation, do not allow `init` to fetch optional libraries from the internet unless the artifact was staged.
 
-### 3.3 Configure Gerrit
+### 3.4 Configure Gerrit
 
 Update the generated configuration with the reviewed values below:
 
@@ -405,37 +416,7 @@ sudo chown gerrit:gerrit /srv/gerrit/etc/secure.config
 sudo chmod 0600 /srv/gerrit/etc/secure.config
 ```
 
-### 3.4 Install Gerrit Plugins
-
-External Gerrit plugins are operator-managed. Loopforge does not fetch, bundle,
-install, checksum, or validate plugin jars because external plugin delivery is
-not stable enough for the v1 bundle contract.
-
-Common operator-selected plugins include:
-
-- `events-log`: enables missed-event replay for Jenkins Gerrit Trigger.
-- `metrics-reporter-prometheus`: exports operational metrics.
-- `healthcheck`: optional health checks for monitoring.
-
-Repository replication, outbound webhooks, ownership, HA, event-broker, and
-issue-tracker plugins are deployment-specific operator choices.
-
-Plugin rule: Gerrit plugin jars must match the selected Gerrit major/minor line.
-Operators should source plugins from approved internal mirrors or reviewed
-artifact sources, record checksums outside the Loopforge bundle, install jars
-under `/srv/gerrit/plugins`, and restart Gerrit under the documented service
-control path.
-
-Manual operator example:
-
-```bash
-sudo install -d -o gerrit -g gerrit /srv/gerrit/plugins
-sudo install -m 0644 -o gerrit -g gerrit \
-  /approved/plugin.jar /srv/gerrit/plugins/plugin.jar
-sha256sum /srv/gerrit/plugins/plugin.jar
-```
-
-### 3.5 Create Gerrit systemd Service
+### 3.5 Configure and Start the Gerrit Service
 
 Create the unit with delegated privilege:
 
@@ -477,33 +458,7 @@ sudo tail -n 100 /srv/gerrit/logs/gerrit.log
 Subsequent validation observes the enabled and active unit, its runtime owner,
 the endpoints, LDAP, and bounded logs. It does not start or repair Gerrit.
 
-## 4. Shared Integration Handoff
-
-Gerrit-native role readiness stops before cross-role Jenkins integration.
-The Gerrit role proves the Gerrit service, LDAP configuration, HTTP endpoint,
-SSH endpoint, runtime account, staged artifacts, and bounded log inspection. It
-does not register Jenkins public keys, create Gerrit Trigger credentials,
-install or validate external Gerrit plugins, grant stream-events permission,
-apply `Verified` voting grants, or prove trigger delivery.
-
-Later cross-role work belongs to the separate integration workflow, not this
-role-local native reference. That later workflow owns Jenkins-to-Gerrit
-public-key registration, Gerrit integration permissions, `Verified`
-label/grant application, stream-events validation, trigger validation, and
-integration acceptance. The manual workflow is available in
-`docs/operations/native/integration.md`; this native reference remains limited
-to Gerrit role-local readiness.
-
-Credential custody remains fixed:
-
-- The Jenkins controller owns the Jenkins-to-Gerrit private key.
-- Gerrit consumes only the matching public key.
-- Do not create a separate Gerrit evidence record. Record the required role
-  outcomes only in `docs/operations/native/acceptance-checklist.md`.
-- Do not place private keys, passwords, tokens, LDAP bind secrets, or
-  secret-bearing configuration in the checklist or its three references.
-
-## 5. Validation
+## 4. Gerrit Role-Local Validation
 
 Run:
 
@@ -530,7 +485,7 @@ Acceptance checks:
 - Gerrit starts under systemd.
 - LDAP users can log in.
 - Gerrit SSH responds on `GERRIT_SSH_PORT`.
-- Jenkins integration prerequisites from Section 4 are deferred to
+- Jenkins integration prerequisites from Section 6 are deferred to
   `docs/operations/native/integration.md`.
 
 The reboot check is optional. To perform it, use the site's reviewed reboot
@@ -551,7 +506,113 @@ Use the Gerrit Web UI to complete the application checks:
 6. Sign out and sign in as the reviewed test user if one is required for later
    integration proof.
 
-## 6. Backup and Operations
+## 5. Site-Selected External Plugins, If Required
+
+External Gerrit plugins are optional, operator-managed extensions. Loopforge
+does not fetch, bundle, install, checksum, or validate external plugin jars as
+part of baseline Gerrit role readiness or native acceptance. Use this section
+only when the site requires plugins after Section 4 passes.
+
+Common operator-selected plugins include:
+
+- `events-log`: enables missed-event replay for Jenkins Gerrit Trigger.
+- `metrics-reporter-prometheus`: exports operational metrics.
+- `healthcheck`: provides optional health checks for monitoring.
+
+Repository replication, outbound webhooks, ownership, HA, event-broker, and
+issue-tracker plugins are deployment-specific operator choices.
+
+### 5.1 Review Plugin Compatibility, Source, and Checksums
+
+For each selected plugin, record its approved source, filename, version, and
+SHA-256 checksum in the deployment change or ticket. The plugin must support
+the selected Gerrit `3.13` major/minor line. Obtain it from an approved
+internal mirror or reviewed artifact source, not as a target-host fallback
+download.
+
+Replace `PLUGIN_JAR` and `PLUGIN_SHA256` with the reviewed path and checksum,
+then verify the selected artifact:
+
+```bash
+test -f PLUGIN_JAR
+printf '%s  %s\n' PLUGIN_SHA256 PLUGIN_JAR | sha256sum -c -
+```
+
+Both commands must succeed. Stop if the artifact is absent, its checksum does
+not match, or compatibility with Gerrit `3.13` has not been established. Keep
+the plugin and its checksum outside the Loopforge Gerrit artifact bundle.
+
+### 5.2 Install the Reviewed Plugins
+
+Replace `PLUGIN_JAR` with the reviewed source path and `PLUGIN_FILENAME` with
+the reviewed destination basename without `.jar`. Install each reviewed plugin
+separately:
+
+```bash
+sudo install -d -m 0755 -o gerrit -g gerrit /srv/gerrit/plugins
+sudo install -m 0644 -o gerrit -g gerrit \
+  PLUGIN_JAR /srv/gerrit/plugins/PLUGIN_FILENAME.jar
+sudo -u gerrit test -r /srv/gerrit/plugins/PLUGIN_FILENAME.jar
+```
+
+All commands must succeed before Gerrit is restarted. Do not overwrite an
+existing plugin jar unless the deployment change explicitly reviews that
+replacement as an upgrade.
+
+### 5.3 Restart Gerrit
+
+Restart Gerrit through its documented service control path, then inspect only
+bounded service and application logs:
+
+```bash
+sudo systemctl restart gerrit
+systemctl is-active gerrit
+sudo journalctl -u gerrit -n 100 --no-pager
+sudo tail -n 100 /srv/gerrit/logs/gerrit.log
+```
+
+`systemctl is-active` must report `active`. Stop before integration if either
+bounded log reports a plugin load, compatibility, or startup failure. Use the
+site-owned plugin cleanup or rollback procedure; do not hide recovery in this
+installation branch.
+
+### 5.4 Verify Plugin Loading
+
+Sign in to `GERRIT_CANONICAL_WEB_URL` with the reviewed Gerrit administrator
+account. Open the installed Gerrit UI's plugin administration page and confirm
+each selected plugin is loaded at the reviewed version without an error or
+disabled state.
+
+Record site-selected plugin source, checksum, version, and load review in the
+deployment change or ticket. Do not add plugin state to the Loopforge native
+acceptance checklist or claim helper-equivalent plugin evidence.
+
+## 6. Shared Integration Handoff
+
+Gerrit-native baseline readiness stops before cross-role Jenkins integration.
+Proceed only after Section 4 passes and, when Section 5 is selected, Section
+5.4 also passes. The Gerrit role proves the Gerrit service, LDAP configuration,
+HTTP endpoint, SSH endpoint, runtime account, staged artifacts, and bounded log
+inspection. Baseline readiness does not require external Gerrit plugins.
+
+This role does not register Jenkins public keys, create Gerrit Trigger
+credentials, grant stream-events permission, apply `Verified` voting grants,
+or prove trigger delivery. Later cross-role work belongs to the separate
+integration workflow, which owns Jenkins-to-Gerrit public-key registration,
+Gerrit integration permissions, `Verified` label/grant application,
+stream-events validation, trigger validation, and integration acceptance. The
+manual workflow is available in `docs/operations/native/integration.md`.
+
+Credential custody remains fixed:
+
+- The Jenkins controller owns the Jenkins-to-Gerrit private key.
+- Gerrit consumes only the matching public key.
+- Do not create a separate Gerrit evidence record. Record the required role
+  outcomes only in `docs/operations/native/acceptance-checklist.md`.
+- Do not place private keys, passwords, tokens, LDAP bind secrets, or
+  secret-bearing configuration in the checklist or its three references.
+
+## 7. Backup and Operations
 
 Treat the complete `/srv/gerrit` tree as the recovery unit. It includes Gerrit
 configuration, repositories and NoteDb data, plugins, indexes, runtime data,
@@ -593,7 +654,7 @@ preserves hard links, ACLs, extended attributes, and numeric ownership if
 either `rsync` command reports an unsupported feature.
 
 If copying or comparison fails, the backup failed. Start Gerrit, rerun all
-Section 5 validation to end the outage safely, and investigate before the next
+Section 4 validation to end the outage safely, and investigate before the next
 backup attempt. After a successful copy, start Gerrit and rerun the same
 validation before closing the backup window.
 
@@ -607,7 +668,7 @@ Periodically prove that a backup can be restored in an isolated environment.
 Use the matching Gerrit WAR, Java version, and reviewed plugin versions, keep
 the isolated Gerrit service stopped while restoring the complete site, and
 preserve the reviewed numeric runtime UID and GID. Verify ownership before
-starting the isolated service, then run all Section 5 validation. Never test a
+starting the isolated service, then run all Section 4 validation. Never test a
 restore by overwriting an active production Gerrit site.
 
 Upgrade principles:
@@ -620,7 +681,7 @@ Upgrade principles:
   major/minor line and track their source approvals outside the Loopforge
   bundle.
 
-## 7. References
+## 8. References
 
 - Jenkins controller native operations:
   `docs/operations/native/jenkins-controller.md`

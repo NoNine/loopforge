@@ -43,7 +43,7 @@ package-wide baseline and reviewed update rules.
 Production warning: keep the Jenkins controller built-in node at zero
 executors. Build capacity comes from agents.
 
-## 1. Operator Inputs and Current Status
+## 1. Operator Inputs and Preflight
 
 Record these values before installation:
 
@@ -110,7 +110,7 @@ handoff. An administrator must perform or delegate package installation,
 runtime identity creation, protected path ownership, SSH policy installation,
 and SSH service operations. Do not switch the workflow to direct root login.
 
-## 2. Dependencies And Jenkins Agent Artifact Bundle
+## 2. Dependencies and Jenkins Agent Artifact Bundle
 
 ### 2.1 Install Ubuntu Dependencies
 
@@ -135,7 +135,7 @@ The Java command must report OpenJDK 21. Add site-wide build packages to the
 reviewed package operation only when every general agent requires them. Keep
 project-specific toolchains outside this host baseline.
 
-### 2.2 Create The Agent Artifact Bundle
+### 2.2 Create the Agent Artifact Bundle
 
 Run on the bundle-factory VM. The three freshness checks must succeed. Stop and
 select a fresh bundle path if any selected path already exists:
@@ -163,7 +163,7 @@ manifest or template set. Review the payload inventory and archive checksum in
 the deployment change or ticket. Do not add private keys, public keys,
 `authorized_keys`, passwords, tokens, or secret-bearing configuration.
 
-### 2.3 Stage And Verify The Agent Artifact Bundle
+### 2.3 Stage and Verify the Agent Artifact Bundle
 
 Transfer the archive and sibling `.sha256` file to the operator's home on the
 agent host. Replace the uppercase operator placeholders below with reviewed
@@ -194,9 +194,9 @@ Stop and reprovision the clean target if staging already exists. Do not create
 runtime identity, product-home state, or SSH service state until payload
 verification passes.
 
-## 3. Jenkins Agent Installation
+## 3. Jenkins Agent Installation and Configuration
 
-### 3.1 Create The Runtime Identity And Product Home
+### 3.1 Create the Runtime Identity and Product Home
 
 Create the reviewed runtime group, account, and fixed product home:
 
@@ -217,7 +217,7 @@ sudo install -d -m 0755 \
 hash `*`: password authentication cannot succeed, while OpenSSH may use the
 account for the later public-key-only Jenkins connection.
 
-### 3.2 Install The Agent Account SSH Policy
+### 3.2 Confirm the Site-Managed SSH Listener
 
 The site owns global SSH listener addresses and ports. Before changing service
 state, confirm the reviewed agent port is already present in effective sshd
@@ -232,6 +232,8 @@ The command must succeed. If it fails, stop and use the site's approved SSH,
 network, and firewall procedure to provision the reviewed listener. Do not add
 or change a global `Port`, `ListenAddress`, or `AllowUsers` directive here.
 This is the site SSH/network provisioning stop condition for the role.
+
+### 3.3 Install and Validate the Agent Account SSH Policy
 
 Create the role-owned account policy with `sudoedit`:
 
@@ -268,8 +270,11 @@ sudo sshd -T -C \
     '
 ```
 
-Both commands must succeed. Enable the Ubuntu `ssh` unit and reload the
-validated configuration:
+The ownership, mode, syntax, and effective-policy commands must all succeed.
+
+### 3.4 Enable SSH and Verify Operator Access
+
+Enable the Ubuntu `ssh` unit and reload the validated configuration:
 
 ```bash
 sudo systemctl enable --now ssh
@@ -281,27 +286,7 @@ second operator login through the site's existing operator SSH endpoint before
 closing the original session. The role-owned `Match User` policy must not
 replace site control-plane access policy.
 
-## 4. Shared Integration Handoff
-
-Agent-native role readiness stops before controller-to-agent integration. This
-role proves the reviewed runtime account and group, numeric identity,
-product-home ownership, staged artifacts, account-scoped SSH policy, site-owned
-SSH endpoint, service state, and bounded status inspection. It does not consume
-controller key material, update `authorized_keys`, register a Jenkins node,
-configure shared storage, or prove scheduling.
-
-Record the agent host, SSH endpoint, runtime account and group, remote FS, node
-name, and labels for integration. The Jenkins controller owns the private key;
-the agent host later consumes only the matching public key. Perform those
-cross-role operations with `docs/operations/native/integration.md` only after
-the controller and agent host are both ready.
-
-Record required outcomes only in
-`docs/operations/native/acceptance-checklist.md`. Do not place private keys,
-passwords, tokens, LDAP bind secrets, or secret-bearing configuration in the
-checklist or its three references.
-
-## 5. Agent-Only Validation
+## 4. Jenkins Agent Role-Local Validation
 
 Run on the agent host without starting, enabling, reloading, or repairing SSH:
 
@@ -336,6 +321,26 @@ the agent does not return to the same ready state, mark the run `BLOCKED`.
 
 The guest OpenSSH service is the lifecycle owner for the outbound SSH agent.
 There is no separate `jenkins-agent.service`.
+
+## 5. Shared Integration Handoff
+
+Complete Section 4 before controller-to-agent integration. The agent role
+proves the reviewed runtime account and group, numeric identity, product-home
+ownership, staged artifacts, account-scoped SSH policy, site-owned SSH
+endpoint, service state, and bounded status inspection. It does not consume
+controller key material, update `authorized_keys`, register a Jenkins node,
+configure shared storage, or prove scheduling.
+
+Record the agent host, SSH endpoint, runtime account and group, remote FS, node
+name, and labels for integration. The Jenkins controller owns the private key;
+the agent host later consumes only the matching public key. Perform those
+cross-role operations with `docs/operations/native/integration.md` only after
+the controller and agent host are both ready.
+
+Record required outcomes only in
+`docs/operations/native/acceptance-checklist.md`. Do not place private keys,
+passwords, tokens, LDAP bind secrets, or secret-bearing configuration in the
+checklist or its three references.
 
 ## 6. Backup and Operations
 

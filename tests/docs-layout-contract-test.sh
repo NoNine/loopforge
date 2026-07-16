@@ -136,6 +136,44 @@ for review_status in \
   }
 done
 
+for review_profile in \
+  '## Common Review Checks' \
+  '## Role Manual Review Profile' \
+  '## Integration Manual Review Profile'; do
+  grep -Fq -- "$review_profile" \
+    "$repo_root/docs/operations/native/review-guide.md" || {
+    printf 'Native review guide is missing profile: %s\n' "$review_profile" >&2
+    exit 1
+  }
+done
+
+grep -Fq -- \
+  'Do not apply this sequence directly to `integration.md`.' \
+  "$repo_root/docs/operations/native/review-guide.md" || {
+  printf 'Native review guide must limit the role lifecycle sequence\n' >&2
+  exit 1
+}
+
+for integration_checkpoint in \
+  'the three role-readiness prerequisites' \
+  'Reviewed Gerrit label, capability, and project/ref access changes.' \
+  'Shared storage, node registration, and cross-role validation.' \
+  'Disposable change, trigger, agent execution, and REST vote proof.'; do
+  grep -Fq -- "$integration_checkpoint" \
+    "$repo_root/docs/operations/native/review-guide.md" || {
+    printf 'Native review guide is missing integration checkpoint: %s\n' \
+      "$integration_checkpoint" >&2
+    exit 1
+  }
+done
+
+grep -Fq -- \
+  'does not apply directly to the integration manual.' \
+  "$repo_root/docs/operations/README.md" || {
+  printf 'Operations index must distinguish the integration review profile\n' >&2
+  exit 1
+}
+
 for operator_rule in \
   'Use the shortest reviewable sequence of OS and application-native commands' \
   "Prefer a tool's own validation, status, and" \

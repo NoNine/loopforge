@@ -62,7 +62,7 @@ contains only native OS and Jenkins operations. Do not add repository
 automation commands or automation-equivalent command tables to this document.
 
 
-## 1. Operator Inputs and Current Status
+## 1. Operator Inputs and Preflight
 
 Record these values before installation:
 
@@ -141,9 +141,9 @@ Ask an administrator to perform or delegate these production-host tasks:
 
 A home-directory Jenkins process can be useful for lab validation, but it is not this production deployment. It will not match the documented package lifecycle, systemd service management, ownership model, backup paths, or secret handling.
 
-## 2. Dependencies And Jenkins Controller Artifact Bundle
+## 2. Dependencies and Jenkins Controller Artifact Bundle
 
-### 2.1 Ubuntu Dependencies
+### 2.1 Install Ubuntu Dependencies
 
 The package rationale and layered classification are maintained in
 `docs/baselines/package-requirements.md`.
@@ -184,7 +184,7 @@ The Jenkins controller application is staged as a reviewed WAR artifact in the
 Jenkins artifact bundle. Do not configure a public Jenkins apt repository on the
 target host for v1.
 
-### 2.2 Jenkins Controller Artifact Bundle
+### 2.2 Create the Controller Artifact Bundle
 
 v1 does not support installing OS dependencies from locally bundled Ubuntu
 packages. Use approved internal Ubuntu/OS package repositories for OS packages
@@ -201,8 +201,6 @@ https://get.jenkins.io/war-stable/2.555.3/jenkins.war
 https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.15.0/jenkins-plugin-manager-2.15.0.jar
 https://updates.jenkins.io/download/plugins
 ```
-
-#### 2.2.1 Create the Controller Artifact Bundle
 
 Run on the bundle-factory VM:
 
@@ -290,7 +288,7 @@ checksums.
 Before transfer, record `plugins.intent.txt`, `plugins.resolved.txt`, and the
 approved archive checksum in the deployment change/ticket.
 
-#### 2.2.2 Stage and Verify the Controller Artifact Bundle
+### 2.3 Stage and Verify the Controller Artifact Bundle
 
 Transfer the artifact archive and `.sha256` file to the operator's home on the
 Jenkins host with approved media or an approved internal transfer path.
@@ -322,9 +320,9 @@ Stop and reprovision the clean target if the Jenkins staging path already
 exists; do not delete or repair it within this procedure. Staging does not
 create the Jenkins runtime identity or change service state.
 
-## 3. Jenkins Installation and First Startup
+## 3. Jenkins Controller Installation and Configuration
 
-### 3.1 Create the Runtime Identity and Install Application Artifacts
+### 3.1 Create the Runtime Identity and Product Home
 
 This is a clean-install procedure. The four `getent` commands below must
 return no entry, and the final `test` must succeed. If any reviewed name,
@@ -339,13 +337,20 @@ getent group 61020
 test ! -e /var/lib/jenkins
 ```
 
-Create the runtime identity and install the Jenkins application artifacts. Do
-not configure a public Jenkins apt repository on the target host for v1.
+Create the runtime identity and product home. Do not configure a public Jenkins
+apt repository on the target host for v1.
 
 ```bash
 sudo groupadd --gid 61020 jenkins
 sudo useradd --uid 61020 --gid 61020 --home-dir /var/lib/jenkins --no-create-home --shell /bin/bash jenkins
 sudo install -d -m 0755 -o jenkins -g jenkins /var/lib/jenkins
+```
+
+### 3.2 Install the Jenkins WAR
+
+Install the verified Jenkins WAR from the staged controller bundle:
+
+```bash
 sudo install -d -m 0755 -o jenkins -g jenkins /var/lib/jenkins/war
 sudo install -m 0644 -o jenkins -g jenkins \
   /var/lib/loopforge/staging/jenkins/jenkins-2.555.3.war \
@@ -358,7 +363,7 @@ reinstalling the WAR. The Plugin Installation Manager remains a bundle-factory
 tool in the staged release unit; Jenkins does not consume it at runtime. OS
 package recovery uses the approved internal Ubuntu/OS package repository path.
 
-### 3.2 Configure the Jenkins systemd Unit
+### 3.3 Configure the Jenkins Service
 
 Create `/etc/systemd/system/jenkins.service` with `sudoedit` using this unit.
 Replace every uppercase placeholder with its reviewed value before saving:
@@ -396,10 +401,9 @@ sudo systemctl enable jenkins
 systemctl is-enabled jenkins
 ```
 
-Jenkins remains stopped until the plugin and selected configuration steps are
-complete.
+Jenkins remains stopped until the plugin and JCasC baseline steps are complete.
 
-### 3.3 Install Jenkins Plugins
+### 3.4 Install Jenkins Plugins
 
 The direct plugin set is the reviewed version baseline recorded in
 `plugins.intent.txt`. `plugins.resolved.txt` records the direct and transitive
@@ -417,15 +421,13 @@ ls -1 /var/lib/jenkins/plugins/*.jpi
 The `install` command fails when the staged bundle has no `.jpi` artifacts. Do
 not continue with an empty or partial plugin directory.
 
-### 3.4 Configure the JCasC Baseline
+### 3.5 Configure the JCasC Baseline
 
-JCasC is the default configuration path. To use the UI-driven fallback instead,
-remove the `CASC_JENKINS_CONFIG` environment line and the
-`-Djenkins.install.runSetupWizard=false` option from the systemd unit with
-`sudoedit`, run `sudo systemctl daemon-reload`, skip the remainder of this
-section, and continue with Sections 3.5 and 4.
+JCasC is the required baseline configuration path for initial controller
+installation. It establishes LDAP-backed authentication, matrix authorization,
+the Jenkins URL, and zero built-in executors before first startup.
 
-For the default path, create the protected directory, then create
+Create the protected directory, then create
 `/var/lib/jenkins/jcasc/jenkins.yaml` with `sudoedit` using the following shape.
 Replace every uppercase placeholder, including `${LDAP_BIND_PASSWORD}`, with
 its reviewed value before saving.
@@ -489,11 +491,17 @@ sudo chown jenkins:jenkins /var/lib/jenkins/jcasc/jenkins.yaml
 sudo chmod 0600 /var/lib/jenkins/jcasc/jenkins.yaml
 ```
 
-The systemd unit from Section 3.2 already exports this JCasC path.
+JCasC reapplies the system message, built-in executor count, LDAP security
+realm, complete global matrix entries, and Jenkins URL whenever this file is
+loaded. UI-only changes to those fields are not durable. Section 5 describes
+how to add administrators through the UI and synchronize the matching JCasC
+entries.
 
-### 3.5 Start Jenkins
+The systemd unit from Section 3.3 already exports this JCasC path.
 
-Start Jenkins only after plugins and the selected configuration path are ready:
+### 3.6 Start Jenkins
+
+Start Jenkins only after plugins and the JCasC baseline are ready:
 
 ```bash
 sudo systemctl start jenkins
@@ -507,68 +515,7 @@ changes, restart Jenkins explicitly with `sudo systemctl restart jenkins`.
 Validation observes the enabled and active unit; it does not start or repair
 Jenkins.
 
-## 4. UI-Driven Configuration Fallback
-
-Use this section only when the UI-driven path was selected in Section 3.4 and
-Jenkins is running from Section 3.5.
-
-1. Browse to `http://JENKINS_HOST:JENKINS_HTTP_PORT/`.
-2. Use the initial admin password:
-
-   ```bash
-   sudo cat /var/lib/jenkins/secrets/initialAdminPassword
-   ```
-
-3. Open `Manage Jenkins` > `Plugins` > `Installed plugins` and confirm the
-   staged required plugins are enabled without load errors. Do not replace the
-   reviewed bundle with unreviewed Update Center installs.
-4. Open `Manage Jenkins` > `Security`, select LDAP as the security realm, and
-   enter the reviewed LDAP URL, user search base, group search base, manager DN,
-   and bind secret according to site policy.
-5. Configure authorization with `matrix-auth` from the same `Security` page,
-   granting `Overall/Administer` to the exact reviewed `LDAP_ADMIN_USER` LDAP
-   user. Grant the built-in `authenticated` SID `Overall/Read`, `Job/Read`, and
-   `Job/Build`. Do not create or assume an administrator group.
-6. Save only after the LDAP settings and administrator identity are reviewed.
-   The setup-wizard administrator is a bootstrap identity; its local password
-   does not remain an authentication fallback after LDAP becomes the security
-   realm. Sign out and confirm `LDAP_ADMIN_USER` can sign in and open
-   `Manage Jenkins` before ending the change window.
-7. Open `Manage Jenkins` > `System` and set the Jenkins URL to the reviewed
-   browser URL users enter, normally `JENKINS_URL`.
-8. Open `Manage Jenkins` > `Nodes` > built-in node or `Configure System`,
-   depending on the installed UI, and keep the built-in node executor count at
-   zero.
-9. Defer the `jenkins-gerrit` Gerrit integration account SSH key and Gerrit
-   Trigger configuration until integration-native operations.
-
-## 5. Shared Integration Handoff
-
-### 5.1 Outbound SSH Build Agent Inputs
-
-Do not run builds on the Jenkins controller. Keep the built-in node at zero
-executors and provide build capacity through agents. This deployment uses
-Jenkins' SSH launcher: the controller connects out to the build server over
-SSH. Prepare that host with `docs/operations/native/jenkins-agent.md`.
-
-Complete Section 6 before integration. Controller readiness stops before
-keypair and credential creation, public-key handoff, agent node registration,
-scheduling, Gerrit Trigger configuration, event streaming, and `Verified`
-voting. Perform those cross-role operations with
-`docs/operations/native/integration.md` only after the controller and agent
-host are both ready.
-
-Credential custody remains fixed:
-
-- The Jenkins controller owns the Jenkins-to-Gerrit private key.
-- The Jenkins controller owns the Jenkins-to-agent private key.
-- Gerrit and the Jenkins agent consume only matching public keys.
-- Do not create a separate controller evidence record. Record the required role
-  outcomes only in `docs/operations/native/acceptance-checklist.md`.
-- Do not place private keys, passwords, tokens, LDAP bind secrets, or
-  secret-bearing configuration in the checklist or referenced native manuals.
-
-## 6. Controller-Only Validation
+## 4. Jenkins Controller Role-Local Validation
 
 Run:
 
@@ -608,7 +555,7 @@ Use the Jenkins Web UI to complete the application checks:
 3. Open `Manage Jenkins` and confirm no administrative monitor reports a plugin
    load failure for required plugins.
 4. Open `Manage Jenkins` > `Security` and confirm the active LDAP and
-   authorization settings match the reviewed JCasC or UI-driven configuration
+   authorization settings match the reviewed JCasC configuration
    without exposing bind secrets in the checklist or its references.
 5. Open `Manage Jenkins` > `Nodes` and confirm the built-in node has zero
    executors.
@@ -618,6 +565,120 @@ procedure, wait for the target to return, and rerun the validation above
 without starting, enabling, or repairing Jenkins. Leave the optional checklist
 item unchecked when the check is not performed. If the check is attempted and
 Jenkins does not return to the same ready state, mark the run `BLOCKED`.
+
+## 5. Add Additional Jenkins Administrators
+
+This optional post-install operation adds reviewed LDAP-backed human
+administrators after Section 4 passes. Skip this section when the initial
+`LDAP_ADMIN_USER` is the only required Jenkins administrator. Additional
+administrator names belong in the deployment change or ticket and the
+protected JCasC file, not in the native acceptance checklist.
+
+### 5.1 Review the Additional LDAP Administrator Accounts
+
+Record the exact LDAP login name for each additional administrator in the
+deployment change or ticket. Each account must be a reviewed LDAP-backed human
+account and must remain separate from the Jenkins runtime account, LDAP bind
+account, Jenkins Gerrit integration account, and test user account.
+
+Do not continue unless the initial `LDAP_ADMIN_USER` still has administrator
+access and every additional account is approved for Jenkins administration.
+
+### 5.2 Grant Jenkins Administrator Access in the UI
+
+1. Browse to `JENKINS_URL` and sign in as `LDAP_ADMIN_USER`.
+2. Open `Manage Jenkins` > `Security` and locate the global matrix
+   authorization entries.
+3. Add each reviewed LDAP login name as a user and grant only
+   `Overall/Administer` for the administrator role defined by this manual.
+4. Preserve the original `LDAP_ADMIN_USER` entry and the built-in
+   `authenticated` SID grants for `Overall/Read`, `Job/Read`, and `Job/Build`.
+5. Save the authorization changes. Do not change the LDAP security realm,
+   Jenkins URL, built-in executor count, or other JCasC-owned baseline fields.
+6. Sign out, then confirm each additional administrator can sign in and open
+   `Manage Jenkins`.
+
+Stop if Jenkins cannot resolve an account through LDAP, an administrator
+cannot sign in, or the expected authorization entry is not effective. Do not
+continue to JCasC synchronization with an unproven account.
+
+### 5.3 Synchronize the JCasC Administrator Entries
+
+UI-only changes to global matrix authorization are not durable because JCasC
+reapplies the complete entry list. Edit the protected JCasC file with
+delegated privilege:
+
+```bash
+sudoedit /var/lib/jenkins/jcasc/jenkins.yaml
+```
+
+Add one entry with this shape for each reviewed additional administrator under
+`jenkins.authorizationStrategy.globalMatrix.entries`. Replace the placeholder
+with the exact LDAP login name:
+
+```yaml
+        - user:
+            name: "ADDITIONAL_LDAP_ADMIN_USER"
+            permissions:
+              - "Overall/Administer"
+```
+
+Keep the original `LDAP_ADMIN_USER` entry and the existing `authenticated`
+entry unchanged. Protect the updated file:
+
+```bash
+sudo chown jenkins:jenkins /var/lib/jenkins/jcasc/jenkins.yaml
+sudo chmod 0600 /var/lib/jenkins/jcasc/jenkins.yaml
+```
+
+While signed in as the initial administrator, open `Manage Jenkins` >
+`Configuration as Code` and use the installed UI's `Check Configuration`
+action for the configured JCasC source. The check must accept the updated file.
+Stop before restart if Jenkins reports invalid YAML, an unknown attribute, or
+an invalid authorization entry.
+
+### 5.4 Verify Administrator Access After Restart
+
+Restart Jenkins so JCasC reapplies the durable administrator list, then inspect
+bounded startup output:
+
+```bash
+sudo systemctl restart jenkins
+systemctl is-active jenkins
+journalctl -u jenkins -n 100 --no-pager
+```
+
+`systemctl is-active` must report `active`, and the bounded journal must not
+report a JCasC or authorization failure. Sign in as the initial administrator
+and every additional administrator, confirm each can open `Manage Jenkins`,
+and confirm the `authenticated` read/build grants remain present. These UI
+checks complete the optional administrator operation; do not rerun Section 4.
+
+## 6. Shared Integration Handoff
+
+### 6.1 Outbound SSH Build Agent Inputs
+
+Do not run builds on the Jenkins controller. Keep the built-in node at zero
+executors and provide build capacity through agents. This deployment uses
+Jenkins' SSH launcher: the controller connects out to the build server over
+SSH. Prepare that host with `docs/operations/native/jenkins-agent.md`.
+
+Complete Section 4 before integration. When Section 5 is selected, complete
+Section 5.4 before integration. Controller readiness stops before keypair and
+credential creation, public-key handoff, agent node registration, scheduling,
+Gerrit Trigger configuration, event streaming, and `Verified` voting. Perform
+those cross-role operations with `docs/operations/native/integration.md` only
+after the controller and agent host are both ready.
+
+Credential custody remains fixed:
+
+- The Jenkins controller owns the Jenkins-to-Gerrit private key.
+- The Jenkins controller owns the Jenkins-to-agent private key.
+- Gerrit and the Jenkins agent consume only matching public keys.
+- Do not create a separate controller evidence record. Record the required role
+  outcomes only in `docs/operations/native/acceptance-checklist.md`.
+- Do not place private keys, passwords, tokens, LDAP bind secrets, or
+  secret-bearing configuration in the checklist or referenced native manuals.
 
 ## 7. Backup and Operations
 
@@ -662,9 +723,11 @@ preserves hard links, ACLs, extended attributes, and numeric ownership if
 either `rsync` command reports an unsupported feature.
 
 If copying or comparison fails, the backup failed. Start Jenkins, rerun all
-Section 6 validation to end the outage safely, and investigate before the next
+Section 4 validation to end the outage safely, and investigate before the next
 backup attempt. After a successful copy, start Jenkins and rerun the same
-validation before closing the backup window.
+validation before closing the backup window. When additional administrators
+are configured, also repeat the administrator access checks from Section 5.4
+without repeating its configuration mutations.
 
 Protect every backup with production-equivalent access restrictions and
 encryption in transit and at rest. Retain multiple backup versions. Replicate
@@ -676,8 +739,10 @@ Periodically prove that a backup can be restored in an isolated environment.
 Use the matching Jenkins core and reviewed plugin versions, keep the isolated
 controller stopped while restoring the complete home, and preserve the
 reviewed numeric runtime UID and GID. Start the isolated controller only after
-ownership is verified, then run all Section 6 validation. Never test a restore
-by overwriting an active production Jenkins home.
+ownership is verified, then run all Section 4 validation. Never test a restore
+by overwriting an active production Jenkins home. When additional
+administrators are configured, also repeat the administrator access checks
+from Section 5.4.
 
 Upgrade principles:
 

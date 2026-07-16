@@ -31,8 +31,10 @@ machine-evidence pipelines in a native manual.
 - `native/jenkins-agent.md`
 - `native/integration.md`
 
-Use `native/review-guide.md` to review these manuals consistently and to keep
-static review, native-tool proof, and runtime acceptance distinct.
+Use the common checks and the appropriate role or integration profile in
+`native/review-guide.md` to review these manuals consistently. The role profile
+does not apply directly to the integration manual. Keep static review,
+native-tool proof, and runtime acceptance distinct.
 
 For a release claiming native `target-deployment` readiness, use
 `native/acceptance-checklist.md` as the single end-to-end signoff surface after

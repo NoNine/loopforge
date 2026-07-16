@@ -30,6 +30,12 @@ reject_text() {
   fi
 }
 
+heading_line() {
+  local heading
+  heading="${1:?heading required}"
+  grep -n -m1 -Fx -- "$heading" "$manual" | cut -d: -f1
+}
+
 require_text \
   "$manual" \
   'mkdir -p "$HOME/jenkins-artifacts-bundle/jenkins"' \
@@ -110,20 +116,39 @@ require_text \
   'Reviewed artifact inventories and checksums match the artifacts staged on' \
   'Native acceptance must review artifact inventories without requiring manifests'
 
+previous_heading_line=0
 for heading in \
-  '#### 2.2.2 Stage and Verify the Controller Artifact Bundle' \
-  '## 3. Jenkins Installation and First Startup' \
-  '### 3.1 Create the Runtime Identity and Install Application Artifacts' \
-  '### 3.2 Configure the Jenkins systemd Unit' \
-  '### 3.3 Install Jenkins Plugins' \
-  '### 3.4 Configure the JCasC Baseline' \
-  '### 3.5 Start Jenkins' \
-  '## 4. UI-Driven Configuration Fallback' \
-  '### 5.1 Outbound SSH Build Agent Inputs'; do
-  require_text \
-    "$manual" \
-    "$heading" \
-    "Native Jenkins operator sequence is missing heading: $heading"
+  '## 1. Operator Inputs and Preflight' \
+  '### 1.1 If You Do Not Have Root Privileges' \
+  '## 2. Dependencies and Jenkins Controller Artifact Bundle' \
+  '### 2.1 Install Ubuntu Dependencies' \
+  '### 2.2 Create the Controller Artifact Bundle' \
+  '### 2.3 Stage and Verify the Controller Artifact Bundle' \
+  '## 3. Jenkins Controller Installation and Configuration' \
+  '### 3.1 Create the Runtime Identity and Product Home' \
+  '### 3.2 Install the Jenkins WAR' \
+  '### 3.3 Configure the Jenkins Service' \
+  '### 3.4 Install Jenkins Plugins' \
+  '### 3.5 Configure the JCasC Baseline' \
+  '### 3.6 Start Jenkins' \
+  '## 4. Jenkins Controller Role-Local Validation' \
+  '## 5. Add Additional Jenkins Administrators' \
+  '### 5.1 Review the Additional LDAP Administrator Accounts' \
+  '### 5.2 Grant Jenkins Administrator Access in the UI' \
+  '### 5.3 Synchronize the JCasC Administrator Entries' \
+  '### 5.4 Verify Administrator Access After Restart' \
+  '## 6. Shared Integration Handoff' \
+  '### 6.1 Outbound SSH Build Agent Inputs' \
+  '## 7. Backup and Operations' \
+  '## 8. References'; do
+  current_heading_line="$(heading_line "$heading")"
+  [ -n "$current_heading_line" ] &&
+    [ "$current_heading_line" -gt "$previous_heading_line" ] || {
+    printf 'Native Jenkins heading is missing or out of order: %s\n' \
+      "$heading" >&2
+    exit 1
+  }
+  previous_heading_line="$current_heading_line"
 done
 
 for pattern in \
@@ -157,6 +182,10 @@ for pattern in \
   'operator_group=' \
   'operator_home=' \
   'rm -rf' \
+  'UI-Driven Configuration Fallback' \
+  'initialAdminPassword' \
+  'setup-wizard administrator' \
+  'remove the `CASC_JENKINS_CONFIG`' \
   "if grep -q '[[:space:]]'" \
   'Controller-only bringup stops before cross-role Gerrit and agent integration.' \
   'Later cross-role work belongs to' \
@@ -258,10 +287,43 @@ require_text \
   "$manual" \
   'LOOPFORGE_OPERATOR_ACCOUNT:LOOPFORGE_OPERATOR_GROUP' \
   'Native Jenkins staging must apply the reviewed operator ownership'
+
+staging_section="$(
+  sed -n \
+    '/^### 2\.3 Stage and Verify the Controller Artifact Bundle$/,/^## 3\. Jenkins Controller Installation and Configuration$/p' \
+    "$manual"
+)"
+for staging_check in \
+  'each command separately:' \
+  'sha256sum -c jenkins-artifacts-bundle.tar.gz.sha256' \
+  'sudo test ! -e /var/lib/loopforge/staging/jenkins' \
+  'sha256sum -c checksums.sha256'; do
+  grep -Fq -- "$staging_check" <<<"$staging_section" || {
+    printf 'Native Jenkins staging checkpoint is missing: %s\n' \
+      "$staging_check" >&2
+    exit 1
+  }
+done
+for runtime_mutation in \
+  'sudo groupadd' \
+  'sudo useradd' \
+  '/var/lib/jenkins/war' \
+  'sudo systemctl'; do
+  if grep -Fq -- "$runtime_mutation" <<<"$staging_section"; then
+    printf 'Native Jenkins staging must not perform runtime mutation: %s\n' \
+      "$runtime_mutation" >&2
+    exit 1
+  fi
+done
+
 require_text \
   "$manual" \
-  'Complete Section 6 before integration.' \
-  'Native Jenkins handoff must state the controller readiness boundary once'
+  'Complete Section 4 before integration.' \
+  'Native Jenkins handoff must require role-local validation'
+require_text \
+  "$manual" \
+  'When Section 5 is selected, complete' \
+  'Native Jenkins handoff must require selected administrator verification'
 require_text \
   "$manual" \
   'secret-bearing configuration in the checklist or referenced native manuals.' \
@@ -335,33 +397,70 @@ require_text \
   "$manual" \
   $'        - group:\n            name: "authenticated"\n            permissions:\n              - "Overall/Read"\n              - "Job/Read"\n              - "Job/Build"' \
   'Native Jenkins authorization must grant authenticated LDAP users read and build access'
+
 require_text \
   "$manual" \
-  'setup-wizard administrator is a bootstrap identity' \
-  'Native Jenkins UI fallback must identify the setup administrator as bootstrap-only'
+  'JCasC is the required baseline configuration path' \
+  'Native Jenkins installation must always configure the JCasC baseline'
 require_text \
   "$manual" \
-  'does not remain an authentication fallback' \
-  'Native Jenkins UI fallback must identify the setup administrator as bootstrap-only'
+  'UI-only changes to those fields are not durable.' \
+  'Native Jenkins must identify the JCasC ownership boundary'
+
+administrator_section="$(
+  sed -n \
+    '/^## 5\. Add Additional Jenkins Administrators$/,/^## 6\. Shared Integration Handoff$/p' \
+    "$manual"
+)"
+for administrator_contract in \
+  'reviewed LDAP-backed human' \
+  'Overall/Administer' \
+  'Preserve the original `LDAP_ADMIN_USER` entry' \
+  'Overall/Read' \
+  'Job/Read' \
+  'Job/Build' \
+  'Do not change the LDAP security realm' \
+  'sudoedit /var/lib/jenkins/jcasc/jenkins.yaml' \
+  'ADDITIONAL_LDAP_ADMIN_USER' \
+  'sudo chmod 0600 /var/lib/jenkins/jcasc/jenkins.yaml' \
+  'Check Configuration' \
+  'sudo systemctl restart jenkins' \
+  'do not rerun Section 4'; do
+  grep -Fq -- "$administrator_contract" <<<"$administrator_section" || {
+    printf 'Native Jenkins administrator operation is missing: %s\n' \
+      "$administrator_contract" >&2
+    exit 1
+  }
+done
 
 require_text \
   "$manual" \
   '/var/lib/loopforge/staging/jenkins/plugins/*.jpi' \
   'Native Jenkins must install the Plugin Manager generated JPI set'
 
+identity_line="$(grep -n -m1 'sudo groupadd --gid 61020 jenkins' "$manual" | cut -d: -f1)"
+war_line="$(grep -n -m1 '/var/lib/loopforge/staging/jenkins/jenkins-2.555.3.war' "$manual" | cut -d: -f1)"
 enable_line="$(grep -n -m1 'sudo systemctl enable jenkins' "$manual" | cut -d: -f1)"
 plugins_line="$(grep -n -m1 '/var/lib/loopforge/staging/jenkins/plugins/\*.jpi' "$manual" | cut -d: -f1)"
 jcasc_line="$(grep -n -m1 'sudoedit /var/lib/jenkins/jcasc/jenkins.yaml' "$manual" | cut -d: -f1)"
 start_line="$(grep -n -m1 'sudo systemctl start jenkins' "$manual" | cut -d: -f1)"
-[ "$enable_line" -lt "$plugins_line" ] &&
+validation_line="$(heading_line '## 4. Jenkins Controller Role-Local Validation')"
+administrators_line="$(heading_line '## 5. Add Additional Jenkins Administrators')"
+handoff_line="$(heading_line '## 6. Shared Integration Handoff')"
+[ "$identity_line" -lt "$war_line" ] &&
+  [ "$war_line" -lt "$enable_line" ] &&
+  [ "$enable_line" -lt "$plugins_line" ] &&
   [ "$plugins_line" -lt "$jcasc_line" ] &&
-  [ "$jcasc_line" -lt "$start_line" ] || {
-  printf 'Native Jenkins lifecycle must enable, install plugins, configure JCasC, then start\n' >&2
+  [ "$jcasc_line" -lt "$start_line" ] &&
+  [ "$start_line" -lt "$validation_line" ] &&
+  [ "$validation_line" -lt "$administrators_line" ] &&
+  [ "$administrators_line" -lt "$handoff_line" ] || {
+  printf 'Native Jenkins lifecycle operations are out of order\n' >&2
   exit 1
 }
 startup_section="$(
   sed -n \
-    '/^### 3.5 Start Jenkins$/,/^## 4. UI-Driven Configuration Fallback$/p' \
+    '/^### 3.6 Start Jenkins$/,/^## 4. Jenkins Controller Role-Local Validation$/p' \
     "$manual"
 )"
 [ "$(printf '%s\n' "$startup_section" | grep -Fc 'sudo systemctl start jenkins')" -eq 1 ] || {

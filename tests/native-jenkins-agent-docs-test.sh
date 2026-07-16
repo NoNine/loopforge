@@ -34,6 +34,12 @@ reject_text() {
   fi
 }
 
+heading_line() {
+  local heading
+  heading="${1:?heading required}"
+  grep -n -m1 -Fx -- "$heading" "$manual" | cut -d: -f1
+}
+
 for input in \
   'JENKINS_AGENT_HOST' \
   'JENKINS_AGENT_SSH_PORT' \
@@ -46,8 +52,8 @@ done
 
 for subsection in \
   '### 2.1 Install Ubuntu Dependencies' \
-  '### 2.2 Create The Agent Artifact Bundle' \
-  '### 2.3 Stage And Verify The Agent Artifact Bundle'; do
+  '### 2.2 Create the Agent Artifact Bundle' \
+  '### 2.3 Stage and Verify the Agent Artifact Bundle'; do
   require_text "$manual" "$subsection" \
     "Native agent Section 2 is missing the ordered step: $subsection"
 done
@@ -100,6 +106,39 @@ require_text "$manual" \
 require_text "$manual" \
   $'cd /var/lib/loopforge/staging/jenkins-agent\nsha256sum -c checksums.sha256' \
   'Native agent staging must verify payload checksums before mutation'
+
+staging_section="$(
+  sed -n \
+    '/^### 2\.3 Stage and Verify the Agent Artifact Bundle$/,/^## 3\. Jenkins Agent Installation and Configuration$/p' \
+    "$manual"
+)"
+for staging_check in \
+  'each command separately:' \
+  'getent passwd LOOPFORGE_OPERATOR_ACCOUNT' \
+  'getent group LOOPFORGE_OPERATOR_GROUP' \
+  'sha256sum -c jenkins-agent-artifacts-bundle.tar.gz.sha256' \
+  'sudo test ! -e /var/lib/loopforge/staging/jenkins-agent' \
+  'LOOPFORGE_OPERATOR_ACCOUNT:LOOPFORGE_OPERATOR_GROUP' \
+  'sha256sum -c checksums.sha256'; do
+  grep -Fq -- "$staging_check" <<<"$staging_section" || {
+    printf 'Native agent staging checkpoint is missing: %s\n' \
+      "$staging_check" >&2
+    exit 1
+  }
+done
+for runtime_mutation in \
+  'sudo groupadd' \
+  'sudo useradd' \
+  '/var/lib/jenkins-agent' \
+  '/etc/ssh/sshd_config.d/40-jenkins-agent.conf' \
+  'sudo systemctl'; do
+  if grep -Fq -- "$runtime_mutation" <<<"$staging_section"; then
+    printf 'Native agent staging must not perform runtime mutation: %s\n' \
+      "$runtime_mutation" >&2
+    exit 1
+  fi
+done
+
 reject_text "$manual" \
   'harness_manifest_version' \
   'Native agent payload must not copy the helper manifest schema'
@@ -119,16 +158,31 @@ reject_text "$manual" \
   'sha256sum ~/jenkins-agent-artifacts-bundle.tar.gz' \
   'Native agent checksum must not contain the bundle-factory absolute path'
 
+previous_heading_line=0
 for heading in \
-  '## 1. Operator Inputs and Current Status' \
-  '## 2. Dependencies And Jenkins Agent Artifact Bundle' \
-  '## 3. Jenkins Agent Installation' \
-  '## 4. Shared Integration Handoff' \
-  '## 5. Agent-Only Validation' \
+  '## 1. Operator Inputs and Preflight' \
+  '### 1.1 If You Do Not Have Root Privileges' \
+  '## 2. Dependencies and Jenkins Agent Artifact Bundle' \
+  '### 2.1 Install Ubuntu Dependencies' \
+  '### 2.2 Create the Agent Artifact Bundle' \
+  '### 2.3 Stage and Verify the Agent Artifact Bundle' \
+  '## 3. Jenkins Agent Installation and Configuration' \
+  '### 3.1 Create the Runtime Identity and Product Home' \
+  '### 3.2 Confirm the Site-Managed SSH Listener' \
+  '### 3.3 Install and Validate the Agent Account SSH Policy' \
+  '### 3.4 Enable SSH and Verify Operator Access' \
+  '## 4. Jenkins Agent Role-Local Validation' \
+  '## 5. Shared Integration Handoff' \
   '## 6. Backup and Operations' \
   '## 7. References'; do
-  require_text "$manual" "$heading" \
-    "Native agent procedure is missing the aligned section: $heading"
+  current_heading_line="$(heading_line "$heading")"
+  [ -n "$current_heading_line" ] &&
+    [ "$current_heading_line" -gt "$previous_heading_line" ] || {
+    printf 'Native agent heading is missing or out of order: %s\n' \
+      "$heading" >&2
+    exit 1
+  }
+  previous_heading_line="$current_heading_line"
 done
 
 require_text "$manual" \
@@ -179,6 +233,71 @@ require_text "$manual" \
   'sudo systemctl reload ssh' \
   'Native agent procedure must load the validated account policy'
 
+listener_section="$(
+  sed -n \
+    '/^### 3\.2 Confirm the Site-Managed SSH Listener$/,/^### 3\.3 Install and Validate the Agent Account SSH Policy$/p' \
+    "$manual"
+)"
+for listener_check in \
+  'sudo sshd -T' \
+  'JENKINS_AGENT_SSH_PORT' \
+  'site SSH/network provisioning stop condition'; do
+  grep -Fq -- "$listener_check" <<<"$listener_section" || {
+    printf 'Native agent listener checkpoint is missing: %s\n' \
+      "$listener_check" >&2
+    exit 1
+  }
+done
+for listener_mutation in 'sudoedit' '/etc/ssh/sshd_config.d/' 'systemctl'; do
+  if grep -Fq -- "$listener_mutation" <<<"$listener_section"; then
+    printf 'Native agent listener review must not mutate state: %s\n' \
+      "$listener_mutation" >&2
+    exit 1
+  fi
+done
+
+policy_section="$(
+  sed -n \
+    '/^### 3\.3 Install and Validate the Agent Account SSH Policy$/,/^### 3\.4 Enable SSH and Verify Operator Access$/p' \
+    "$manual"
+)"
+for policy_check in \
+  'sudoedit /etc/ssh/sshd_config.d/40-jenkins-agent.conf' \
+  'sudo chown root:root /etc/ssh/sshd_config.d/40-jenkins-agent.conf' \
+  'sudo chmod 0644 /etc/ssh/sshd_config.d/40-jenkins-agent.conf' \
+  'sudo sshd -t' \
+  'sudo sshd -T -C'; do
+  grep -Fq -- "$policy_check" <<<"$policy_section" || {
+    printf 'Native agent policy checkpoint is missing: %s\n' \
+      "$policy_check" >&2
+    exit 1
+  }
+done
+if grep -Fq -- 'systemctl' <<<"$policy_section"; then
+  printf 'Native agent policy validation must precede SSH service mutation\n' >&2
+  exit 1
+fi
+
+service_section="$(
+  sed -n \
+    '/^### 3\.4 Enable SSH and Verify Operator Access$/,/^## 4\. Jenkins Agent Role-Local Validation$/p' \
+    "$manual"
+)"
+for service_check in \
+  'sudo systemctl enable --now ssh' \
+  'sudo systemctl reload ssh' \
+  'second operator login'; do
+  grep -Fq -- "$service_check" <<<"$service_section" || {
+    printf 'Native agent SSH service checkpoint is missing: %s\n' \
+      "$service_check" >&2
+    exit 1
+  }
+done
+if grep -Fq -- 'sudoedit /etc/ssh/sshd_config.d/' <<<"$service_section"; then
+  printf 'Native agent SSH service checkpoint must not create policy state\n' >&2
+  exit 1
+fi
+
 for validation_check in \
   'systemctl is-enabled ssh' \
   'systemctl is-active ssh' \
@@ -190,7 +309,7 @@ for validation_check in \
 done
 
 validation_section="$(
-  sed -n '/^## 5\. Agent-Only Validation$/,/^## 6\. Backup and Operations$/p' \
+  sed -n '/^## 4\. Jenkins Agent Role-Local Validation$/,/^## 5\. Shared Integration Handoff$/p' \
     "$manual"
 )"
 for replayed_operation in \
@@ -201,7 +320,7 @@ for replayed_operation in \
   'stat -c' \
   'sshd -t' \
   'sshd -T'; do
-  if printf '%s\n' "$validation_section" | grep -Fq -- "$replayed_operation"; then
+  if grep -Fq -- "$replayed_operation" <<<"$validation_section"; then
     printf 'Native agent validation must not replay earlier operation: %s\n' \
       "$replayed_operation" >&2
     exit 1
@@ -240,21 +359,31 @@ require_text "$step_plan" \
   'Jenkins agent step plan must preserve validation ownership'
 
 apt_line="$(grep -n -m1 'sudo apt update' "$manual" | cut -d: -f1)"
-bundle_line="$(grep -n -m1 '^### 2.2 Create The Agent Artifact Bundle$' "$manual" | cut -d: -f1)"
+bundle_line="$(heading_line '### 2.2 Create the Agent Artifact Bundle')"
 stage_line="$(grep -n -m1 'sha256sum -c jenkins-agent-artifacts-bundle.tar.gz.sha256' "$manual" | cut -d: -f1)"
 identity_line="$(grep -n -m1 'sudo groupadd --gid JENKINS_AGENT_GID jenkins-agent' "$manual" | cut -d: -f1)"
+listener_line="$(heading_line '### 3.2 Confirm the Site-Managed SSH Listener')"
 policy_line="$(grep -n -m1 'sudoedit /etc/ssh/sshd_config.d/40-jenkins-agent.conf' "$manual" | cut -d: -f1)"
-handoff_line="$(grep -n -m1 '^## 4. Shared Integration Handoff$' "$manual" | cut -d: -f1)"
-validation_line="$(grep -n -m1 '^## 5. Agent-Only Validation$' "$manual" | cut -d: -f1)"
+policy_validation_line="$(grep -n -m1 'sudo sshd -t' "$manual" | cut -d: -f1)"
+service_line="$(grep -n -m1 'sudo systemctl enable --now ssh' "$manual" | cut -d: -f1)"
+validation_line="$(heading_line '## 4. Jenkins Agent Role-Local Validation')"
+handoff_line="$(heading_line '## 5. Shared Integration Handoff')"
 [ "$apt_line" -lt "$bundle_line" ] &&
   [ "$bundle_line" -lt "$stage_line" ] &&
   [ "$stage_line" -lt "$identity_line" ] &&
-  [ "$identity_line" -lt "$policy_line" ] &&
-  [ "$policy_line" -lt "$handoff_line" ] &&
-  [ "$handoff_line" -lt "$validation_line" ] || {
-  printf 'Native agent lifecycle must install dependencies, prepare and stage artifacts, configure SSH, hand off, then validate\n' >&2
+  [ "$identity_line" -lt "$listener_line" ] &&
+  [ "$listener_line" -lt "$policy_line" ] &&
+  [ "$policy_line" -lt "$policy_validation_line" ] &&
+  [ "$policy_validation_line" -lt "$service_line" ] &&
+  [ "$service_line" -lt "$validation_line" ] &&
+  [ "$validation_line" -lt "$handoff_line" ] || {
+  printf 'Native agent lifecycle operations are out of order\n' >&2
   exit 1
 }
+
+require_text "$manual" \
+  'Complete Section 4 before controller-to-agent integration.' \
+  'Native agent handoff must require role-local validation'
 
 require_text "$integration" \
   '| Jenkins agent runtime group | `jenkins-agent`, local OS group |' \
