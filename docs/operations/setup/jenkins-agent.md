@@ -90,8 +90,10 @@ Produced outputs:
   path, node name, labels, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
 - Runtime identity readiness: fully absent account/group/product-home state is
-  accepted for creation by `install`, fully matching state is accepted for
-  reuse, and partial or conflicting state blocks.
+  accepted for creation by `install`; a fully matching identity with an empty
+  product home is accepted for adoption. Other existing application state,
+  partial state, or conflicting state blocks unless an exact input-bound
+  completion record returns non-mutating `already-complete`.
 
 Side effects:
 
@@ -207,9 +209,11 @@ and access authorization remain later integration work.
 
 The helper creates the configured local runtime group, account, and
 `/var/lib/jenkins-agent` product home during `install` when the complete set is
-absent. It reuses a fully matching set and fails clearly on partial state,
-numeric collisions, a mismatched passwd HOME or primary group, or mismatched
-product-home ownership.
+absent. It may adopt a fully matching identity with an empty product home and
+fails clearly on existing application state, partial state, numeric collisions,
+a mismatched passwd HOME or primary group, or mismatched product-home
+ownership. Exact input-bound completed state returns `already-complete` without
+mutation.
 
 Consumed inputs:
 

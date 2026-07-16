@@ -69,9 +69,11 @@ The reviewed role env file supplies the runtime account name, primary group
 name, UID, and GID before role setup begins. Role preflight validates those
 values without mutation. A role's `install` phase creates its fully absent
 runtime group and account immediately before creating the role product home,
-or reuses a fully matching account/group/home set. Partial state, numeric
-collisions, and mismatches block and require explicit operator cleanup or
-correction; helpers do not reconfigure existing identities.
+or adopts a fully matching account/group/empty-home set for initial setup.
+Partial state, numeric collisions, mismatches, and a non-empty home without the
+exact input-bound completion record block and require explicit operator cleanup
+or correction; helpers do not reconfigure existing identities or application
+state.
 
 This ownership applies only to the Gerrit, Jenkins controller, and Jenkins
 agent runtime identities. The operator account must already exist so it can
@@ -157,8 +159,9 @@ The Jenkins Gerrit integration account is a Gerrit service account. Jenkins
 uses its SSH key to authenticate to Gerrit and stream events, and uses its
 Gerrit-generated HTTP auth token to vote `Verified` through the REST review
 API. It is separate from human admin accounts so automated voting and event
-streaming can be permissioned, audited, rotated, and disabled without changing
-human access.
+streaming can be permissioned, audited, and disabled without changing human
+access. Credential rotation remains site-owned administration outside the
+Loopforge v1 setup surface.
 
 The test user account is an LDAP-backed human-style test account. It verifies
 LDAP-backed login and the disposable Gerrit change workflow. It is separate

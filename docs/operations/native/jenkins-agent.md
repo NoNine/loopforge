@@ -354,7 +354,7 @@ Do not reinstall the artifact bundle to repair an account, key, product home,
 or SSH service. Preserve bounded diagnostics, reprovision a fresh agent target,
 and rerun this procedure. Package-source or site SSH listener failures belong
 to their owning site procedures. Jenkins-to-agent key replacement and rotation
-belong to `docs/operations/native/integration.md`.
+are site-owned administration outside Loopforge v1 setup.
 
 ## 7. References
 

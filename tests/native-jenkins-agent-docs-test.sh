@@ -405,7 +405,7 @@ require_text "$manual" \
   'reprovision a fresh agent target' \
   'Native agent recovery must require explicit fresh-state reprovisioning'
 require_text "$manual" \
-  'Jenkins-to-agent key replacement and rotation' \
-  'Native agent recovery must leave key operations to integration'
+  'are site-owned administration outside Loopforge v1 setup.' \
+  'Native agent recovery must leave key rotation outside v1 setup'
 
 printf 'Native Jenkins agent documentation contract passed\n'

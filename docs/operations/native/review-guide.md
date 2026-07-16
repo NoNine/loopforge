@@ -64,9 +64,11 @@ tasks when combining them would make review or rollback unsafe.
 
 - Search for destructive or recovery-like behavior such as `rm -rf`, implicit
   overwrite, hidden cleanup, stale-state fallback, and `|| true`.
-- Require stale, partial, or conflicting selected state to fail clearly. State
-  explicitly whether fully matching reviewed state may be reused. Cleanup,
-  migration, and recovery remain explicit operator actions.
+- Require stale, partial, conflicting, changed, or unbound selected state to
+  fail clearly. Matching runtime identity with an empty product home may be
+  adopted for initial setup. Only exact input-bound completed state may return
+  non-mutating `already-complete`; cleanup, migration, recovery, and credential
+  rotation remain site-owned actions outside Loopforge v1 setup.
 - Verify runtime, operator, human administrator, integration, test, and LDAP
   bind accounts remain separate.
 - Verify security realm behavior, authorization entries, credential custody,
@@ -128,7 +130,7 @@ Review one bounded integration lifecycle slice at a time:
 5. Shared storage, node registration, and cross-role validation.
 6. Disposable change, trigger, agent execution, and REST vote proof.
 7. Acceptance recording and failure classification.
-8. Rotation, recovery, and whole-document consistency.
+8. Existing-state boundaries and whole-document consistency.
 
 For the integration manual:
 
@@ -149,8 +151,10 @@ For the integration manual:
 - Preserve the owning integration failure classifications so credential,
   event-stream, ACL, scheduling, execution, REST vote, and Gerrit review-state
   failures remain distinguishable.
-- Review key rotation and access recovery for add-and-prove-before-remove
-  ordering and for the required reviewed Gerrit change workflow.
+- Reject setup instructions that reinstall, reconfigure, repair, or rotate
+  existing integration state. Require conflicts to stop for site-owned action
+  or a fresh selected state, while preserving the reviewed Gerrit change
+  workflow for access changes.
 
 ## Regression And Completion
 

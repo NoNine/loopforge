@@ -109,8 +109,10 @@ Produced outputs:
   inventory values, and artifact paths.
 - OS dependency expectation checks for the package/tooling names above.
 - Runtime identity readiness: fully absent account/group/product-home state is
-  accepted for creation by `install`, fully matching state is accepted for
-  reuse, and partial or conflicting state blocks.
+  accepted for creation by `install`; a fully matching identity with an empty
+  product home is accepted for adoption. Other existing application state,
+  partial state, or conflicting state blocks unless an exact input-bound
+  completion record returns non-mutating `already-complete`.
 
 Side effects:
 
@@ -240,9 +242,10 @@ Produced outputs:
 Mutation side effects:
 
 - Creates the reviewed Jenkins primary group, runtime account, and
-  `/var/lib/jenkins` product home when all three are absent, or reuses the
-  fully matching set. It does not repair partial or mismatched state.
-- Creates or updates Jenkins role-local home files.
+  `/var/lib/jenkins` product home when all three are absent, or adopts a fully
+  matching identity with an empty home. It does not repair partial,
+  mismatched, or existing application state.
+- Creates Jenkins role-local home files during initial setup.
 - Uses `JENKINS_RUNTIME_GROUP`, defaulting to `jenkins`, for role-local
   Jenkins home ownership.
 - Does not download Jenkins application artifacts on the target.
@@ -274,9 +277,9 @@ Produced outputs:
 
 Mutation side effects:
 
-- Creates or updates Jenkins role-local runtime service settings.
-- Installs or updates the runtime lifecycle definition; Jenkins starts or
-  restarts only after the plugin and JCasC configuration phases are complete.
+- Creates Jenkins role-local runtime service settings during initial setup.
+- Installs the runtime lifecycle definition; Jenkins starts only after the
+  plugin and JCasC configuration phases are complete.
 - Uses guest systemd for VM simulation and target deployment. Docker retains
   its existing direct-process model.
 
@@ -311,7 +314,7 @@ Produced outputs:
 
 Mutation side effects:
 
-- Creates or updates role-local Jenkins JCasC material.
+- Creates role-local Jenkins JCasC material during initial setup.
 - Records non-secret LDAP metadata only. Operators must provide real bind
   secrets through reviewed secret handling outside evidence.
 

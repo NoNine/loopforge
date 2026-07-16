@@ -20,8 +20,8 @@ Target deployment supports two equivalent operator interfaces:
 
 | Aspect | Native operator procedure | Reviewed-input helper procedure |
 | --- | --- | --- |
-| Execution | Operator performs documented OS and application operations through delegated privilege. | Reads reviewed inputs and performs idempotent target operations through delegated privilege. |
-| Service lifecycle | Creates or updates the documented guest systemd units and uses standard systemd control. | Installs or updates the documented guest systemd units and uses standard systemd control. |
+| Execution | Operator performs the documented initial OS and application operations through delegated privilege, or confirms the exact operation is already complete. | Reads reviewed inputs and performs the same initial target operations through delegated privilege, or returns non-mutating `already-complete` for exact input-bound completed state. |
+| Service lifecycle | Creates the documented guest systemd units during initial setup and uses standard systemd control. | Installs the documented guest systemd units during initial setup and uses standard systemd control. |
 | Validation | Operator performs bounded observational checks and records the result in the native acceptance checklist; detailed logs remain target-owned. | Performs equivalent bounded observational checks and collects redacted evidence. |
 | Scope boundary | Remains role-local until the shared integration workflow. | Remains role-local until the shared integration workflow. |
 
@@ -40,6 +40,10 @@ credential-custody boundary, validation result, or evidence redaction rules.
   application, or service mutation.
 - Configuration establishes the role runtime and validation observes it.
   `docs/contracts/lifecycle-contract.md` owns the detailed phase and reboot semantics.
+- The supported setup surface performs initial installation and configuration
+  only. It does not reinstall, reconfigure, or rotate credentials in existing
+  state. Exact input-bound completed state returns `already-complete` without
+  target mutation; all other existing application or integration state blocks.
 - Validation may consume successful earlier checkpoint outcomes and must not
   replay completed setup checks merely to restate their results.
 - Gerrit and Jenkins controller use guest systemd in VM simulation and target

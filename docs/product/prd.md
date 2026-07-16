@@ -39,6 +39,9 @@ The product must help engineers and operators install and validate:
 - Enterprise secrets-manager integration
 - Broad infrastructure orchestration outside the initial Gerrit/Jenkins
   experiment environment
+- Reinstalling or reconfiguring an existing Gerrit, Jenkins controller, Jenkins
+  agent, or shared integration deployment
+- Helper-driven SSH key, Gerrit HTTP token, or Jenkins credential rotation
 
 ## Product Requirements
 
@@ -99,6 +102,12 @@ The product must help engineers and operators install and validate:
 ### 3. Repeatable Service Installation
 - Operators must be able to install Gerrit, Jenkins controller, and Jenkins
   build-agent with reviewed inputs for the initial experiment environment.
+- v1 repeatability means running initial setup against fresh selected
+  application and integration state. A pre-provisioned matching runtime
+  account, group, and empty product home may be adopted, and an exact
+  input-bound completed operation may return non-mutating `already-complete`.
+  Other existing application, configuration, credential, or integration state
+  must block rather than be reinstalled, reconfigured, or rotated by setup.
 - The install path must support both manual commands and helper commands for
   preflight, artifact preparation, service install, integration, validation,
   and evidence collection.
@@ -137,6 +146,9 @@ The product must help engineers and operators install and validate:
 ## Acceptance Criteria
 - A new operator can follow the package docs and complete a repeatable setup
   without needing the repo history.
+- A repeated operation with the exact completed-state binding reports
+  `already-complete` without mutating the target; changed, partial,
+  conflicting, or unbound selected state fails clearly.
 - Gerrit, Jenkins controller, and the Jenkins agent can be installed and
   started from the documented flow.
 - LDAP auth and Gerrit/Jenkins integration can be configured successfully.

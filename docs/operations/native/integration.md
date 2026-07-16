@@ -330,7 +330,7 @@ passwords, or multi-key payloads.
 
 This appends the reviewed key only when absent. It must not truncate unrelated
 authorized keys. Partial, conflicting, or malformed authorization state blocks
-setup and requires explicit operator repair or rotation.
+setup and requires explicit operator correction or site-owned administration.
 
 Validate controller-to-agent SSH from the Jenkins controller:
 
@@ -566,43 +566,19 @@ Classify failures at the point where proof breaks:
 Failed `Verified` voting must not be collapsed into SSH, stream-events, or job
 scheduling failures.
 
-## 11. Recovery And Rotation
+## 11. Existing State And Site Administration
 
-For Jenkins-to-Gerrit key rotation:
+This is an initial integration procedure. Do not use it to reinstall,
+reconfigure, repair, or rotate an existing integration. The expected
+target-deployment Gerrit review wait may resume only with the same reviewed
+inputs and the same two changes. Exact input-bound completed state returns
+`already-complete` without mutation. Any other existing key, token, credential,
+authorization, node, trigger, or shared-storage state blocks setup.
 
-- Generate a new private key on the Jenkins controller.
-- Register only the new public key with the Gerrit integration account.
-- Update the Jenkins Gerrit credential.
-- Validate Gerrit SSH and stream-events.
-- Remove the old public key from Gerrit only after the new key is proven.
-
-Use the same Gerrit `Settings` > `SSH Keys` page and Jenkins `Manage Jenkins` >
-`Credentials` page used during initial setup. Add the new key and credential
-first, prove SSH and stream-events, then remove the old Gerrit public key and
-old Jenkins credential.
-
-For Jenkins-to-agent key rotation:
-
-- Generate a new private key on the Jenkins controller.
-- Install only the new public key in the agent runtime account's
-  `authorized_keys`.
-- Update the Jenkins agent credential.
-- Validate controller-to-agent SSH and node readiness.
-- Remove the old public key only after the new key is proven.
-
-Use the same Jenkins credential page, agent `authorized_keys` command snippet,
-and node validation steps used during initial setup. Add the new public key and
-credential first, prove controller-to-agent SSH and node readiness, then remove
-the old authorized key and old Jenkins credential.
-
-For Gerrit HTTP token rotation, choose a new reviewed token ID, create the new
-token, update Gerrit Trigger, and prove REST review posting before deleting the
-old token. Do not reuse normal setup to delete and recreate an existing token
-ID.
-
-For Gerrit access or `Verified` label recovery, create reviewed Gerrit config
-changes and wait for approved submission before rerunning integration proof.
-Do not use direct apply in target deployment.
+Cleanup, migration, credential rotation, and access recovery are site-owned
+administration outside Loopforge v1. After such work, use fresh selected state
+for a new Loopforge setup. Gerrit access changes still require reviewed Gerrit
+configuration changes; direct apply remains prohibited in target deployment.
 
 ## 12. References
 

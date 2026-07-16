@@ -92,3 +92,10 @@ preparation and staging, role configuration and validation, integration
 configuration, validation and proof, reboot proof, shutdown, and clean
 rollback. Acceptance must not claim `target-deployment` readiness from VM
 simulation evidence.
+
+Step 13a owns the fresh-state role lifecycle correction and Step 13b owns the
+shared-integration correction discovered during M8. Earlier runs remain
+diagnostic evidence for the prior implementation and do not satisfy the
+refined lifecycle contracts. Step 13 integration acceptance cannot close until
+Steps 13a and 13b complete and a fresh approved VM run passes the Step 13b M5
+gate.

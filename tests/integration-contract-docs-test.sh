@@ -3,12 +3,19 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+prd="$repo_root/docs/product/prd.md"
 architecture="$repo_root/docs/architecture/system-model.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
+operator_contract="$repo_root/docs/contracts/operator-execution-contract.md"
 integration_contract="$repo_root/docs/contracts/gerrit-trigger-integration.md"
 evidence_contract="$repo_root/docs/contracts/validation-and-evidence.md"
 native_manual="$repo_root/docs/operations/native/integration.md"
 setup_manual="$repo_root/docs/operations/setup/integration.md"
+implementation_plan="$repo_root/docs/planning/implementation-plan.md"
+role_step_plan="$repo_root/docs/planning/steps/step-13a-fresh-state-role-lifecycle.md"
+integration_step_plan="$repo_root/docs/planning/steps/step-13b-shared-integration-lifecycle.md"
+boundary_plan="$repo_root/docs/planning/steps/step-14-boundary-checks.md"
+final_acceptance="$repo_root/docs/planning/steps/step-15-final-acceptance.md"
 
 require_text() {
   local file pattern message
@@ -58,15 +65,33 @@ require_text "$lifecycle" \
   'marker existence alone is not a valid prerequisite.' \
   'Lifecycle must bind integration markers to reviewed state'
 require_text "$lifecycle" \
-  'add the new credential or public key, prove it, and remove the old' \
-  'Lifecycle must require add-and-prove-before-remove rotation'
+  'the only resumable mutation boundary.' \
+  'Lifecycle must limit mutation resume to Gerrit external review'
+require_text "$lifecycle" \
+  'returns non-mutating `already-complete`.' \
+  'Lifecycle must define exact completed-state no-op behavior'
+require_text "$lifecycle" \
+  'v1 role helpers do not reinstall or reconfigure it.' \
+  'Lifecycle must reject role reinstall and reconfiguration'
+
+for non_goal in \
+  'Reinstalling or reconfiguring an existing Gerrit' \
+  'Helper-driven SSH key, Gerrit HTTP token, or Jenkins credential rotation'; do
+  require_text "$prd" "$non_goal" "PRD is missing v1 non-goal: $non_goal"
+done
+require_text "$operator_contract" \
+  'returns non-mutating `already-complete` for exact input-bound completed state.' \
+  'Operator contract must define the exact completed-state no-op'
+reject_text "$operator_contract" \
+  'idempotent target operations' \
+  'Operator contract must not promise generic idempotent operations'
 
 for contract_rule in \
   'creates two reviewable configuration changes through REST' \
   '`blocked`, and stops without shared-setup success' \
   'without truncating unrelated authorized keys' \
   'disposable Gerrit change. The change emits `patchset-created`' \
-  'Normal configuration must not delete or rotate an existing Gerrit token'; do
+  'Loopforge v1 does not perform rotation.'; do
   require_text "$integration_contract" "$contract_rule" \
     "Integration contract is missing rule: $contract_rule"
 done
@@ -102,6 +127,12 @@ require_text "$native_manual" \
 require_text "$native_manual" \
   '`docs/contracts/gerrit-trigger-integration.md`' \
   'Native integration must link the owning integration contract'
+require_text "$native_manual" \
+  '## 11. Existing State And Site Administration' \
+  'Native integration must keep rotation outside initial setup'
+reject_text "$native_manual" \
+  'For Jenkins-to-Gerrit key rotation:' \
+  'Native integration must not provide a v1 rotation procedure'
 
 require_text "$setup_manual" \
   'workflow creates two reviewed Gerrit changes.' \
@@ -118,5 +149,45 @@ reject_text "$setup_manual" \
 reject_text "$setup_manual" \
   '--yes validate-integration' \
   'Observational validation must not require mutation confirmation'
+
+require_text "$implementation_plan" \
+  '`docs/planning/steps/step-13a-fresh-state-role-lifecycle.md`' \
+  'Roadmap must link the fresh-state role lifecycle step'
+require_text "$implementation_plan" \
+  '`docs/planning/steps/step-13b-shared-integration-lifecycle.md`' \
+  'Roadmap must link the shared integration lifecycle step'
+for milestone in \
+  '## M1: Shared State Authority And Marker Semantics' \
+  '## M2: Gerrit Role Lifecycle' \
+  '## M3: Jenkins Controller Role Lifecycle' \
+  '## M4: Jenkins Agent Role Lifecycle' \
+  '## M5: Role Gates, Evidence, And Runtime Acceptance'; do
+  require_text "$role_step_plan" "$milestone" \
+    "Step 13a is missing milestone: $milestone"
+done
+for milestone in \
+  '## M1: State, Preflight, And Gerrit Reviewed Access' \
+  '## M2: Jenkins Controller And Agent SSH Custody' \
+  '## M3: Shared Storage, Node, And Gerrit Trigger Setup' \
+  '## M4: Observational Validation And Active Proof' \
+  '## M5: Evidence, Simulation Alignment, And Runtime Acceptance'; do
+  require_text "$integration_step_plan" "$milestone" \
+    "Step 13b is missing milestone: $milestone"
+done
+require_text "$integration_step_plan" \
+  'Do not add compatibility fallbacks for old generated integration state.' \
+  'Step 13b must require explicit stale-state recovery'
+reject_text "$integration_step_plan" \
+  'native rotation procedure' \
+  'Step 13b must not depend on a Loopforge rotation procedure'
+require_text "$boundary_plan" \
+  'only after Step 13a fresh-state role lifecycle and Step 13b shared' \
+  'Boundary checks must depend on Steps 13a and 13b'
+require_text "$final_acceptance" \
+  '13a, and 13b are accepted and Step 14 boundary checks pass.' \
+  'Final acceptance must depend on Steps 13a and 13b'
+reject_text "$final_acceptance" \
+  '--yes validate-integration' \
+  'Final acceptance must keep integration validation observational'
 
 printf 'Integration documentation contract passed\n'

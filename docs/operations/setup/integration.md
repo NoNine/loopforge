@@ -39,8 +39,9 @@ For the REST path, the helper generates a Gerrit HTTP auth token for the
 `jenkins-gerrit` service account during `configure-integration` and stores it
 only in Jenkins Gerrit Trigger configuration. Operators do not provide the
 service-account REST token as a normal env input. Normal configuration must not
-delete or rotate an existing token; rotation uses a new reviewed token ID and
-the explicit add-and-prove-before-remove procedure in the integration contract.
+delete or rotate an existing token. Existing credential state that is not part
+of the exact input-bound completed integration state blocks setup; credential
+rotation is site-owned administration outside Loopforge v1.
 
 Helper-generated shared state and helper logs on target environments live
 under `/var/lib/loopforge/` and `/var/log/loopforge/`.
@@ -73,6 +74,10 @@ Before running the shared helper:
 - The Jenkins agent host can run the NFS server for
   `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared`, and the
   Jenkins controller host can mount that agent export at the same path.
+- Shared application and credential state is fresh. The only permitted
+  existing state is the target-deployment review wait bound to the same two
+  Gerrit changes, or exact input-bound completed state that returns
+  `already-complete` without mutation.
 - Operators have confirmed that any public internet fallback on target hosts is
   simulation-only and will be labeled that way in docs, logs, and evidence.
 

@@ -91,8 +91,10 @@ Produced outputs:
 - OS dependency expectation checks for the package/tooling names above.
 - Normal-mode disk-space, host-resolution, LDAP bind/search, and Gerrit
   runtime identity checks. Fully absent account/group/product-home state is
-  accepted for creation by `install`; fully matching state is accepted for
-  reuse; partial or conflicting state blocks.
+  accepted for creation by `install`; a fully matching identity with an empty
+  product home is accepted for adoption. Other existing application state,
+  partial state, or conflicting state blocks unless an exact input-bound
+  completion record returns non-mutating `already-complete`.
 - Jenkins Gerrit integration account, group, and public-key handoff values are
   not Step 7 prerequisites. They are reviewed and applied in the later
   integration step.
@@ -219,9 +221,10 @@ Produced outputs:
 Mutation side effects:
 
 - Creates the reviewed Gerrit primary group, runtime account, and
-  `/srv/gerrit` product home when all three are absent, or reuses the fully
-  matching set. It does not repair partial or mismatched state.
-- Creates or updates Gerrit role-local site files.
+  `/srv/gerrit` product home when all three are absent, or adopts a fully
+  matching identity with an empty home. It does not repair partial,
+  mismatched, or existing application state.
+- Creates Gerrit role-local site files during initial setup.
 - Does not download application artifacts on the target.
 - Fails before mutation if the staged Gerrit WAR is not a valid archive.
 - Does not install, remove, or validate external Gerrit plugin jars.
@@ -251,7 +254,7 @@ Produced outputs:
 
 Mutation side effects:
 
-- Creates or updates Gerrit role-local config files.
+- Creates Gerrit role-local config files during initial setup.
 - Records non-secret LDAP metadata and writes `secure.config` from reviewed
   secret input without committing the secret to evidence.
 - Establishes the real Gerrit runtime after configuration is complete. In VM

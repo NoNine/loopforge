@@ -358,10 +358,11 @@ sudo install -m 0644 -o jenkins -g jenkins \
 test -s /var/lib/jenkins/war/jenkins.war
 ```
 
-For artifact recovery, rerun the archive and payload checksum checks before
-reinstalling the WAR. The Plugin Installation Manager remains a bundle-factory
-tool in the staged release unit; Jenkins does not consume it at runtime. OS
-package recovery uses the approved internal Ubuntu/OS package repository path.
+If the installed WAR is missing or differs from the verified staged payload,
+stop. Do not reinstall it through this initial setup procedure; retain bounded
+diagnostics and select a freshly provisioned controller target.
+The Plugin Installation Manager remains a bundle-factory tool in the staged
+release unit; Jenkins does not consume it at runtime.
 
 ### 3.3 Configure the Jenkins Service
 

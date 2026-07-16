@@ -91,22 +91,26 @@ controller-write/agent-read proof.
     reviews, public key fingerprints, shared storage result, change, build,
     event delivery, vote, bounded logs, and verification mode.
 
-## State And Rotation
+## State And Existing Credentials
 
 Integration phase markers must bind to the reviewed input set, target
 identities, mode, run or selected state, and both Gerrit review identifiers.
 Marker existence without that binding does not satisfy a later prerequisite.
 
-Fully matching state may be reused. Stale, partial, conflicting, or unbound
-state fails clearly and requires explicit cleanup, migration, rotation, or a
-fresh selected state. An expected target-deployment review wait may resume only
-with its original bound reviews and inputs.
+An expected target-deployment review wait may resume only with its original
+bound reviews and inputs. This is the only resumable mutation boundary. Exact
+input-bound completed integration state returns non-mutating
+`already-complete`. Stale, partial, conflicting, changed, or unbound state
+fails clearly and requires explicit cleanup, migration, site-owned credential
+administration, or a fresh selected state.
 
 Normal configuration must not delete or rotate an existing Gerrit token, key,
 Jenkins credential, node, or agent authorization. It must not truncate
-`authorized_keys` or delete Jenkins-agent role state. Rotation is explicit:
-add a newly identified token, credential, or public key, prove the replacement,
-and remove the old state only after the new path succeeds.
+`authorized_keys` or delete Jenkins-agent role state.
+Loopforge v1 does not perform rotation. Existing state that requires token,
+key, or credential replacement blocks normal setup. A site may perform
+rotation through its own separately controlled administration outside the
+Loopforge v1 helper and native setup surfaces.
 
 ## Templates
 
