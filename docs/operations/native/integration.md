@@ -103,6 +103,11 @@ Credential custody:
 - Do not place private keys, passwords, tokens, LDAP bind secrets, or
   secret-bearing configuration in the checklist or its three references.
 
+Sections 2 through 7 are the shared integration setup checkpoint. Their
+immediate expected-result checks establish that each setup operation completed;
+they do not replace the observational cross-role validation in Section 8 or
+the active end-to-end proof in Section 9.
+
 ## 2. Jenkins-To-Gerrit SSH
 
 Create a Jenkins-to-Gerrit SSH keypair on the Jenkins controller under protected
@@ -159,36 +164,25 @@ Gerrit bare repositories, mutate site Git state, or directly apply access and
 label changes as a shortcut. Direct apply is simulation-only unless a future
 reviewed production policy explicitly changes that boundary.
 
-Create reviewable config changes for:
+Create exactly two reviewable Gerrit configuration changes through the site's
+approved Gerrit REST reviewed-change procedure:
 
-- Global `Verified` label definition in `All-Projects`.
-- Global `stream-events` capability for the reviewed Jenkins integration group.
-- Scoped project/ref read access for the reviewed Jenkins integration group.
-- Scoped `label-Verified -1..+1` grant for the reviewed project/ref scope.
+1. Create an `All-Projects` change containing the global `[label "Verified"]`
+   definition and the global `streamEvents` capability grant for the reviewed
+   Jenkins integration group.
+2. Create a change in the reviewed target project containing read access and
+   `label-Verified -1..+1` for that group on the reviewed ref pattern.
+3. Record both change IDs and URLs, add the reviewers required by site policy,
+   and stop until both changes are approved and submitted externally.
+4. Resume with the same reviewed project, ref pattern, integration group, and
+   two review identifiers. Do not continue shared setup until Gerrit reports
+   both global and project/ref state as effective.
 
-Use the Gerrit Web UI for the reviewed change workflow:
-
-1. Open `Browse` > `Repositories` > `All-Projects` > `Commands` >
-   `EDIT REPO CONFIG`.
-2. Edit `project.config` to add the global `[label "Verified"]` definition.
-   This label definition is config state, not an Access UI grant.
-3. Save or publish the generated config change for review, add reviewers
-   required by site policy, and wait for approval/submission.
-4. After the `Verified` label definition is submitted, open `Browse` >
-   `Repositories` > `All-Projects` > `Access`.
-5. Use `Edit` or the installed Gerrit UI's equivalent project-access editor to
-   add the global `stream-events` capability grant for the reviewed Jenkins
-   integration group.
-6. Open `Browse` > `Repositories` > the reviewed project > `Access`.
-7. Use `Edit` to grant read access and `label-Verified -1..+1` only on the
-   reviewed project/ref scope.
-8. Save for review instead of direct submit when Gerrit offers both choices,
-   add reviewers required by site policy, and wait for approval/submission.
-
-The Gerrit REST label API is an approved reviewed automation path for creating
-the label definition when the site uses reviewed automation. For this native
-operator manual, the human Web UI path is the reviewed `project.config` edit
-through `EDIT REPO CONFIG`; use the Access UI only for capabilities and grants.
+Do not place the target-project read or vote grant in `All-Projects`; that
+would broaden Jenkins authority to other projects that inherit the ref grant.
+The Gerrit Web UI may be used to inspect, review, approve, and submit the two
+changes, but target deployment must not use direct access mutation as a
+substitute for the reviewed REST workflow.
 
 The reviewable change should leave these facts clear in its commit message or
 review description:
@@ -230,10 +224,12 @@ In the Jenkins Web UI:
    the agent host.
 7. Save the credential.
 
-In Gerrit, generate or rotate an HTTP auth token for the Gerrit integration
-account using the reviewed token ID, normally `jenkins-trigger`. The token is
-for Gerrit REST review posting by Gerrit Trigger. It is not an LDAP password,
-and it is not used for `stream-events` SSH authentication.
+For initial setup, generate an HTTP auth token for the Gerrit integration
+account using an absent reviewed token ID, normally `jenkins-trigger`. The token
+is for Gerrit REST review posting by Gerrit Trigger. It is not an LDAP password,
+and it is not used for `stream-events` SSH authentication. If that token ID
+already exists but matching completed Jenkins trigger state cannot be proven,
+stop; do not delete or rotate it as part of normal configuration.
 
 In the Gerrit Web UI, sign in as the reviewed integration account or use the
 site-approved administrator UI for that account. Open `Settings` >
@@ -317,19 +313,24 @@ Install only the public key on the Jenkins agent host:
 sudo install -d -m 0700 \
   -o jenkins-agent -g jenkins-agent \
   /var/lib/jenkins-agent/.ssh
-sudo install -m 0600 \
-  -o jenkins-agent -g jenkins-agent \
-  /dev/null /var/lib/jenkins-agent/.ssh/authorized_keys
-sudo sh -c 'cat /path/to/reviewed/jenkins-agent.pub >> /var/lib/jenkins-agent/.ssh/authorized_keys'
+sudo touch /var/lib/jenkins-agent/.ssh/authorized_keys
 sudo chown jenkins-agent:jenkins-agent \
   /var/lib/jenkins-agent/.ssh/authorized_keys
 sudo chmod 0600 /var/lib/jenkins-agent/.ssh/authorized_keys
+sudo grep -Fqx -f /path/to/reviewed/jenkins-agent.pub \
+  /var/lib/jenkins-agent/.ssh/authorized_keys || \
+  sudo -u jenkins-agent sh -c \
+  'cat /path/to/reviewed/jenkins-agent.pub >> /var/lib/jenkins-agent/.ssh/authorized_keys'
 ```
 
 Replace `/path/to/reviewed/jenkins-agent.pub` with the reviewed public-key file
 transferred from the Jenkins controller. The transferred file must contain
 exactly one OpenSSH public-key line. Reject private keys, PEM blocks, tokens,
 passwords, or multi-key payloads.
+
+This appends the reviewed key only when absent. It must not truncate unrelated
+authorized keys. Partial, conflicting, or malformed authorization state blocks
+setup and requires explicit operator repair or rotation.
 
 Validate controller-to-agent SSH from the Jenkins controller:
 
@@ -451,7 +452,38 @@ In the Jenkins Web UI, verify `Manage Jenkins` > `Nodes` shows the reviewed
 node online. Open the node page and confirm the label string, executor count,
 remote root directory, and recent launch log.
 
-## 8. End-To-End Proof
+## 8. Cross-Role Validation
+
+Run this observational checkpoint after Sections 2 through 7 have completed.
+It may use read-only SSH, Gerrit, Jenkins, and OS queries, but it must not create
+directories, credentials, nodes, jobs, builds, changes, storage files, events,
+or votes, and it must not repair setup.
+
+Confirm all of these current observations:
+
+- Both recorded Gerrit configuration changes are submitted, and Gerrit shows
+  the global `Verified` label and `streamEvents` grant plus target-project read
+  and `label-Verified -1..+1` authority on the reviewed ref pattern.
+- The read-only Jenkins-to-Gerrit SSH command from Section 2 succeeds as the
+  integration account.
+- Gerrit Trigger reports the reviewed server connected for SSH event streaming
+  and REST review posting.
+- The read-only Jenkins-to-agent SSH command from Section 5 succeeds as the
+  agent runtime account.
+- The agent export, controller mount source, shared group/GID, setgid mode, and
+  `root_squash` policy match the reviewed storage state. Consume the successful
+  setup-owned write/read result from Section 6 without creating another file.
+- Jenkins reports the reviewed node online with the expected remote filesystem,
+  executor count, and scheduling labels.
+
+Both SSH observations must use already-reviewed host-key state and must not
+prompt for or update host keys during validation.
+
+Stop and classify any failure at its owning boundary. Record only the required
+outcomes in `docs/operations/native/acceptance-checklist.md`; this checkpoint
+does not create a helper-style evidence record.
+
+## 9. End-To-End Proof
 
 Create a disposable Gerrit change in the reviewed verification project/ref
 scope. Use a disposable Jenkins job or reviewed existing validation job that:
@@ -503,7 +535,7 @@ ran on `JENKINS_AGENT_NODE_NAME` or the reviewed scheduling label. In the Gerrit
 Web UI, open the disposable change and confirm the latest patch set shows the
 expected `Verified +1` vote from the Jenkins Gerrit integration account.
 
-## 9. Acceptance And Failure Classification
+## 10. Acceptance And Failure Classification
 
 Record the final result in
 `docs/operations/native/acceptance-checklist.md`. Do not create a separate
@@ -534,7 +566,7 @@ Classify failures at the point where proof breaks:
 Failed `Verified` voting must not be collapsed into SSH, stream-events, or job
 scheduling failures.
 
-## 10. Recovery And Rotation
+## 11. Recovery And Rotation
 
 For Jenkins-to-Gerrit key rotation:
 
@@ -563,11 +595,16 @@ and node validation steps used during initial setup. Add the new public key and
 credential first, prove controller-to-agent SSH and node readiness, then remove
 the old authorized key and old Jenkins credential.
 
+For Gerrit HTTP token rotation, choose a new reviewed token ID, create the new
+token, update Gerrit Trigger, and prove REST review posting before deleting the
+old token. Do not reuse normal setup to delete and recreate an existing token
+ID.
+
 For Gerrit access or `Verified` label recovery, create reviewed Gerrit config
 changes and wait for approved submission before rerunning integration proof.
 Do not use direct apply in target deployment.
 
-## 11. References
+## 12. References
 
 - Gerrit native operations:
   `docs/operations/native/gerrit.md`
@@ -578,4 +615,4 @@ Do not use direct apply in target deployment.
 - Shared integration helper manual:
   `docs/operations/setup/integration.md`
 - Gerrit Trigger integration contract:
-  `gerrit-trigger-integration.md`
+  `docs/contracts/gerrit-trigger-integration.md`

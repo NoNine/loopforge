@@ -23,27 +23,24 @@ integration communication surface.
 mutation boundaries, and resume/rerun rules. This manual applies that contract
 only to the shared integration helper workflow.
 
-Current implementation caveat: the script still executes only the Docker
-simulation path until the SSH target-interface refactor is implemented. That
-temporary implementation must fail closed outside `docker-simulation` and must
-not be presented as `target-deployment` support.
-
 The shared integration helper owns cross-role work only: Jenkins-to-Gerrit SSH,
 Jenkins-to-agent SSH, Gerrit Trigger configuration, Jenkins node readiness,
 trigger verification, `Verified` voting, Jenkins shared storage, and
 integration evidence. It does not replace the role setup manuals and it does
 not provide native OS operation instructions.
 
-`target-deployment` workflow defaults to a global `Verified` CI label in
-reviewed `All-Projects` configuration. Jenkins read access and
-`label-Verified -1..+1` grants stay scoped to the reviewed project and ref
-pattern. The `stream-events` permission remains a global capability grant.
+`target-deployment` workflow creates two reviewed Gerrit changes. The
+`All-Projects` change contains the global `Verified` CI label and
+`stream-events` capability. The target-project change contains Jenkins read
+access and `label-Verified -1..+1` grants on the reviewed ref pattern.
 Jenkins Gerrit Trigger uses SSH for authentication and event streaming, while
 the Gerrit REST review API is the default path for posting `Verified` votes.
 For the REST path, the helper generates a Gerrit HTTP auth token for the
 `jenkins-gerrit` service account during `configure-integration` and stores it
 only in Jenkins Gerrit Trigger configuration. Operators do not provide the
-service-account REST token as a normal env input.
+service-account REST token as a normal env input. Normal configuration must not
+delete or rotate an existing token; rotation uses a new reviewed token ID and
+the explicit add-and-prove-before-remove procedure in the integration contract.
 
 Helper-generated shared state and helper logs on target environments live
 under `/var/lib/loopforge/` and `/var/log/loopforge/`.
@@ -89,8 +86,8 @@ Required operator inputs include:
 - Reviewed shared integration env file, normally copied from
   `examples/integration.env.example`.
 - Gerrit admin credential or approved automation credential for creating the
-  reviewed `All-Projects` label/config change, project/ref access change, and
-  Jenkins Gerrit integration auth token.
+  reviewed `All-Projects` label/capability change, target-project access
+  change, and Jenkins Gerrit integration auth token.
 - Jenkins admin credential or approved automation credential for credential,
   Gerrit Trigger, node, and job configuration.
 - Jenkins Gerrit integration account or group.
@@ -192,13 +189,15 @@ The shared helper supports these ACL workflow modes:
 
 | Mode | Default environment | Behavior |
 | --- | --- | --- |
-| `create-review` | `target-deployment` | Create reviewable Gerrit config changes through REST, record change IDs and URLs, and stop until an external approved submit makes the label/access effective. |
-| `create-review-and-submit` | `docker-simulation`, `vm-simulation` | Create the same Gerrit config review changes, auto-submit them under simulation policy, and then validate effective label/access state. |
+| `create-review` | `target-deployment` | Create the reviewable `All-Projects` and target-project changes through REST, record both change IDs and URLs, and return `blocked` without setup success until external approved submission makes both effective. |
+| `create-review-and-submit` | `docker-simulation`, `vm-simulation` | Create the same two Gerrit config reviews, auto-submit them under simulation policy, and then validate effective global and project/ref state. |
 | `apply-direct` | Explicit simulation-only fallback | Directly apply Gerrit REST label/access changes only when explicitly opted in and labeled `simulation-only direct Gerrit REST apply`. |
 
-`target-deployment` validation must fail closed until the created review has
-been submitted and Gerrit reports the global `Verified` label,
-`stream-events`, and scoped `label-Verified -1..+1` permissions as effective.
+`target-deployment` setup resumes only with the same reviewed inputs, targets,
+selected state, ACL mode, and two review identifiers. It must fail closed until
+both reviews have been submitted and Gerrit reports the global `Verified`
+label, `stream-events`, and scoped read and `label-Verified -1..+1`
+permissions as effective.
 
 `create-review-and-submit` is not a `target-deployment` default. It may be
 introduced for `target-deployment` only by a future documented automation
@@ -221,7 +220,7 @@ common_args=(
 )
 ```
 
-Review the Jenkins-to-Gerrit SSH plan without mutation:
+Review the complete integration plan and validate its inputs without mutation:
 
 ```bash
 scripts/integration-setup.sh "${common_args[@]}" --dry-run configure-integration
@@ -233,10 +232,16 @@ Apply Jenkins-to-Gerrit SSH setup after review:
 scripts/integration-setup.sh "${common_args[@]}" --yes configure-integration
 ```
 
+In `target-deployment`, the first mutating invocation creates the two Gerrit
+reviews and returns `blocked` without a setup-success marker. After external
+approval and submission, rerun the same command with the same reviewed inputs
+to validate both reviews and complete shared setup. Do not change inputs or
+replace review identifiers across that resume boundary.
+
 Validate cross-role readiness:
 
 ```bash
-scripts/integration-setup.sh "${common_args[@]}" --yes validate-integration
+scripts/integration-setup.sh "${common_args[@]}" validate-integration
 ```
 
 Run end-to-end integration proof:
@@ -257,42 +262,38 @@ votes, or evidence that claims runtime success.
 
 ## Validation Contract
 
-`validate-integration` and `prove-integration` must prove real cross-role behavior
-or fail closed with a clear classification. Passing integration evidence must
-cover:
+`validate-integration` is observational. It requires matching shared-setup
+state and performs read-only SSH and application queries for:
 
-Current `validate-integration` evidence proves Docker simulation runtime
-checks. `target-deployment` and other non-simulation evidence additionally requires
-the global label and scoped vote permission checks below.
+- Both Gerrit reviews submitted and effective.
+- Jenkins-to-Gerrit SSH authentication as the integration account.
+- Global `Verified`, `stream-events`, and target-project read/vote authority.
+- Jenkins-to-agent SSH authentication from the controller.
+- Shared group, export, mount, and storage permissions, while consuming the
+  setup-owned write/read result without creating another proof file.
+- Jenkins node configuration and online state.
+- Gerrit Trigger server configuration and connection state.
 
-- Jenkins-to-Gerrit SSH authentication as the Jenkins Gerrit integration
-  account.
-- `stream-events` capability for Gerrit Trigger event consumption.
-- Global `Verified` label exists in reviewed `All-Projects` configuration.
-- Jenkins integration actor or group can vote `label-Verified -1..+1` on the
-  reviewed project and ref scope.
-- Jenkins-to-agent SSH authentication from the controller to the agent runtime
-  account.
-- Jenkins shared storage is exported by the Jenkins agent host, mounted by the
-  controller at `JENKINS_SHARED_STORAGE_PATH`, and writable/readable through
-  the reviewed runtime accounts and shared group.
-- Jenkins node readiness for the reviewed node name and executor policy.
-- Jenkins job scheduling on the selected scheduling label.
-- Gerrit REST review API posts `Verified +1` for the disposable verification
-  change.
-- Gerrit review state shows the expected `Verified +1` result on the
-  disposable change and patch set.
+Validation writes only bounded local status, logs, and evidence. It must not
+create target directories, credentials, nodes, jobs, builds, changes, storage
+files, events, or votes, and it must not repair shared setup.
 
-Jenkins Gerrit Trigger must use SSH for authentication and `stream-events`.
-REST vote posting does not replace the SSH event-stream proof.
+`prove-integration` requires the matching validation marker. It creates the
+labeled disposable verification job and one Gerrit change, observes
+`patchset-created` delivery over Gerrit SSH, schedules and runs the build on the
+selected agent, verifies REST `Verified +1`, and confirms Gerrit review state.
+It must not invoke validation implicitly. REST vote posting does not replace
+the SSH event-delivery proof.
 
 ## Evidence And Failure Classification
 
 `collect-evidence` emits integration-scoped records using the common evidence
 contract. Records must identify the verification mode, timestamp, command,
-checkpoint, reviewed input fingerprint, public key fingerprints, credential
-IDs where safe, endpoints, disposable artifact IDs, observed checks, bounded
-log references, redaction status, and final status.
+checkpoint, reviewed input and selected-state binding, both Gerrit review IDs
+and URLs, public key fingerprints, credential IDs where safe, endpoints,
+disposable artifact IDs, observed checks, bounded log references, redaction
+status, and final status. Partial collection must not promote a blocked or
+incomplete checkpoint to pass.
 
 Classify failures at the point where proof breaks:
 

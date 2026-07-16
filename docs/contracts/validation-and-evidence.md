@@ -133,10 +133,11 @@ Recommended checkpoints:
 - Artifact staging and checksum verification.
 - Service installation and startup.
 - Role readiness.
-- Integration readiness.
-- Jenkins agent validation.
-- Gerrit Trigger acceptance.
-- End-to-end acceptance.
+- Integration preflight.
+- Reviewed integration access.
+- Shared integration setup.
+- Observational cross-role validation.
+- End-to-end trigger proof.
 - Final aggregation.
 
 ## Role-Local Evidence
@@ -162,13 +163,30 @@ Machine-generated role records are the primary inputs to global aggregation.
 
 ## Integration-Local Evidence
 
-The shared integration helper owns cross-role evidence for Jenkins-to-Gerrit
-SSH, Jenkins-to-agent SSH, Gerrit Trigger configuration, agent scheduling,
-trigger delivery, `Verified` voting, shared Jenkins controller/agent storage,
-and Gerrit ACL reviewed-workflow planning. These records are not substitutes
-for role-local readiness records and are not the final evidence package. They
-are additional inputs consumed by Docker/VM simulation utilities and by global
-aggregation.
+The shared integration helper owns separate evidence for reviewed access,
+shared setup, observational cross-role validation, and active end-to-end proof.
+These records are not substitutes for role-local readiness records and are not
+the final evidence package. They are additional inputs consumed by Docker/VM
+simulation utilities and by global aggregation.
+
+- Reviewed-access evidence records both Gerrit reviews and a non-success
+  `blocked` state while target-deployment approval or submission is pending.
+- Shared-setup evidence records public key fingerprints, credential and node
+  identifiers, trigger configuration, shared storage state, and its bounded
+  controller-write/agent-read setup result without claiming validation.
+- Cross-role validation evidence records effective ACL observations, read-only
+  SSH results, key custody, storage configuration, node configuration and online
+  state, and Gerrit Trigger connection state. It must not result from target or
+  application mutation performed by validation.
+- End-to-end proof evidence records the disposable job and change, SSH event
+  delivery, agent scheduling and execution, REST vote, and Gerrit review state.
+
+Every integration phase record and prerequisite marker must bind to the same
+reviewed input set, target identities, mode, run or selected state, and both
+Gerrit review identifiers. A constant label or marker existence alone is not a
+reviewed-input fingerprint and must not authorize a later phase. Public
+evidence records only the redacted binding; private state may retain the
+protected detail needed to verify that binding.
 
 `examples/integration.env.example` is the single reviewed source for the
 cross-role Jenkins shared group name, shared group GID, and shared storage
@@ -199,12 +217,14 @@ perform the required read/write proof. VM records must use `vm-simulation` and
 ACL planning records must include:
 
 - `target_project`
-- `inherited_scope`
+- `target_ref_scope`
 - `acl_mode`
 - `gerrit_version`
-- `review_change_id` or `not-created`
-- `review_url` or `not-created`
-- `submit_actor` or `not-applicable`
+- `all_projects_review_change_id` or `not-created`
+- `all_projects_review_url` or `not-created`
+- `target_project_review_change_id` or `not-created`
+- `target_project_review_url` or `not-created`
+- submit actor and effective-state result for each review, or `not-applicable`
 - `integration_actor_or_group`
 - `service_api_origin`
 - target SSH alias or reviewed host identifier for each target involved

@@ -260,24 +260,29 @@ interpretation of the proof.
 
 ## Integration ACL Model
 
-The initial environment uses one Gerrit configuration review in `All-Projects`
-for Jenkins integration ACL and label delivery. This is a deliberate
-simplification of the reviewed Gerrit configuration workflow.
+The initial environment uses two Gerrit configuration reviews so global
+integration state and project-local authority remain separate.
 
-The single `All-Projects` review contains:
+The `All-Projects` review contains:
 
 - The global `Verified` label definition.
-- Read and `label-Verified -1..+1` permissions for the Jenkins Gerrit
-  integration actor or group on the reviewed ref pattern.
 - The `streamEvents` global capability grant.
+
+The reviewed target-project change contains:
+
+- Read permission for the Jenkins Gerrit integration actor or group.
+- `label-Verified -1..+1` permission on the reviewed ref pattern.
+
+The target-project grant must not be moved to `All-Projects`; doing so would
+broaden Jenkins authority to every project that inherits the ref grant.
 
 Mode-specific behavior:
 
 | Mode | ACL behavior |
 | --- | --- |
-| `target-deployment` | Create one reviewable `All-Projects` config change through Gerrit REST and wait for approved submission outside the helper. Validation blocks until the change is submitted and effective. |
-| `docker-simulation` | Create the same `All-Projects` config review and auto-submit it as simulation test automation, then validate effective state. |
-| `vm-simulation` | Create the same `All-Projects` config review and auto-submit it as simulation test automation, then validate effective state. |
+| `target-deployment` | Create the reviewable `All-Projects` and target-project changes through Gerrit REST, record both review identifiers and URLs, and stop with a non-success `blocked` result until both are approved, submitted, and effective. |
+| `docker-simulation` | Create the same two reviews and auto-submit them as simulation test automation, then validate effective state. |
+| `vm-simulation` | Create the same two reviews and auto-submit them as simulation test automation, then validate effective state. |
 
 Direct ACL mutation without a review is an explicit simulation-only fallback.
 It is a narrow waiver for lab automation only, not an alternate product path.
@@ -285,10 +290,9 @@ It must require explicit opt-in, must be labeled `simulation-only direct
 Gerrit REST apply` in docs, logs, and evidence, must validate effective state
 after mutation, and must fail closed outside simulation modes.
 
-Project selection for Jenkins Trigger and disposable verification is still
-configured in trigger/job inputs. In v1, the Gerrit ACL review itself is owned
-by `All-Projects` and is scoped by ref pattern rather than by a separate
-project-level Gerrit config review.
+Project selection for Jenkins Trigger and disposable verification must match
+the target project named by the project-level access review. The ref pattern in
+that review must match the trigger and verification-job inputs.
 
 ## Evidence Relationship
 
@@ -300,9 +304,9 @@ bounded logs, and redaction status.
 
 - Integration evidence must distinguish role-local readiness from cross-role
   readiness and end-to-end trigger proof.
-- Gerrit ACL evidence must record ACL mode, `All-Projects` change identifier
-  when one exists, review URL or `not-created`, submit behavior when
-  applicable, effective permission checks, integration actor or group, bounded
+- Gerrit ACL evidence must record ACL mode, both Gerrit change identifiers and
+  review URLs or `not-created`, submit behavior when applicable, effective
+  global and project/ref permission checks, integration actor or group, bounded
   log references, and redaction status.
 - Simulation evidence must be labeled as `docker-simulation` or
   `vm-simulation` and must not imply target-deployment acceptance.

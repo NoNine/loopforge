@@ -112,9 +112,11 @@ they must preserve the checkpoint semantics defined here.
 | Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target staging and verify target-side checksums plus any interface-required manifest. This checkpoint changes staging state only; role-local setup owns runtime identity, product-home, application, and service mutation. |
 | Role-local setup | Role helpers or native operator procedure | Create or verify the reviewed role runtime group, account, and product home; install/configure role-local target state; and establish its runtime for Gerrit, Jenkins controller, or Jenkins agent. |
 | Role-local validation | Role helpers or native operator procedure | Combine successful earlier checkpoint outcomes with current observational service, endpoint, and application checks, without replaying completed setup checks, making cross-role integration claims, or repairing state. |
-| Shared integration setup | `scripts/integration-setup.sh` | Create or validate cross-role keys, ACL workflow, credentials, node registration, trigger server, jobs, and shared storage. |
-| Cross-role validation | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove Jenkins-to-Gerrit SSH, `stream-events`, effective Gerrit label/access state, Jenkins-to-agent SSH, node readiness, and scheduling. |
-| End-to-end trigger verification | `scripts/integration-setup.sh` plus simulation/verifier utility | Prove disposable Gerrit change, event delivery, Jenkins build, agent execution, REST vote posting, and Gerrit review state. |
+| Integration preflight | `scripts/integration-setup.sh` or native operator procedure | Observe the three role-readiness handoffs, reviewed inputs, target inventory, administrator access, selected state, and mode support. No target mutation. |
+| Reviewed integration access | `scripts/integration-setup.sh` or native operator procedure | Create or validate the integration account and group plus the reviewed `All-Projects` and target-project changes. Target deployment stops with `blocked` until both changes are externally submitted and effective. |
+| Shared integration setup | `scripts/integration-setup.sh` or native operator procedure | After reviewed access is effective, create or validate controller-held keys, public-key authorization, token and credentials, shared storage, node registration, and Gerrit Trigger. A bounded storage write/read check is setup-owned mutation. |
+| Cross-role validation | `scripts/integration-setup.sh` or native operator procedure | Observe effective label/access state, read-only Jenkins-to-Gerrit and Jenkins-to-agent SSH, key custody, shared storage configuration, node configuration and online state, and Gerrit Trigger connection without creating, repairing, or replacing state. |
+| End-to-end trigger verification | `scripts/integration-setup.sh` or native operator procedure | Create the disposable verification job and change, observe SSH event delivery, schedule and run the build on the selected agent, post the REST vote, and verify Gerrit review state. |
 | Evidence audit | Global evidence collector and actor review | Validate evidence completeness, redaction, manifests, checksums, mode labels, and bounded log references. |
 
 Each mutating checkpoint must have a reviewed input source, a bounded log
@@ -122,6 +124,11 @@ reference, and a resumable status or evidence boundary. Passing evidence must
 represent real runtime checks for the claimed checkpoint. Unsupported,
 unimplemented, unavailable, or modeled behavior must be reported as
 `blocked`, `unsupported`, or `not-applicable`, not as `pass`.
+
+Integration preflight must reject an unsupported ACL mode or unavailable
+review workflow before any account, token, key, credential, node, storage, or
+trigger mutation. A target-deployment approval stop is an expected resumable
+boundary, but it is not shared integration setup success.
 
 ## Operator Workflow Contract
 
@@ -137,7 +144,11 @@ transcript. Operator manuals own exact commands and role-specific procedure.
 | Gerrit readiness | Gerrit host | Gerrit role helper or native procedure | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Creates or verifies the reviewed runtime identity and product home, creates or updates local runtime files, and starts or restarts Gerrit during configuration. | Validation observes a running Gerrit service, LDAP, HTTP/SSH, and bounded logs before Jenkins integration mutation. |
 | Jenkins controller readiness | Jenkins controller | Jenkins controller role helper or native procedure | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Creates or verifies the reviewed runtime identity and product home, creates or updates Jenkins runtime files and plugins, then starts or restarts Jenkins after configuration. | Validation observes a running Jenkins service, LDAP/JCasC, required plugins, and bounded logs before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
 | Jenkins agent readiness | Jenkins agent | Jenkins agent role helper or native procedure | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Creates or verifies the reviewed runtime identity and product home and creates or updates agent-host runtime files and SSH service state. | Readiness combines successful dependency, identity, filesystem, artifact, and SSH-policy checkpoint outcomes with validation that observes Java, the enabled/active SSH service, the reviewed endpoint, and bounded status before credential transfer, controller node registration, or scheduling proof. |
-| Shared integration | Jenkins controller, Gerrit host, and Jenkins agent | `scripts/integration-setup.sh` | Consumes reviewed role env files plus reviewed integration env values. Produces Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, Gerrit Trigger, node, validation, vote, and integration evidence. | Creates or updates controller-held key material, Gerrit public-key registration, reviewed Gerrit config changes, Jenkins credentials, Jenkins node config, disposable verification artifacts, and review votes. | Run after all three role manuals complete. Follow `docs/operations/setup/integration.md` for the cross-role command sequence and stop/review points. |
+| Integration preflight | Operator workstation and three role targets | `configure-integration --dry-run` or native input/readiness procedure | Consumes the three role-readiness handoffs plus reviewed role and integration inputs. | None. | Mode support, target inventory, administrator access, selected state, and reviewed inputs pass before mutation. |
+| Reviewed integration access | Gerrit host | `configure-integration` or native reviewed Gerrit procedure | Produces the integration account/group and two Gerrit config reviews. | Creates Gerrit account/group state and reviewable `All-Projects` and target-project changes. | In target deployment, report `blocked` without a setup-success marker until both reviews are externally submitted and effective. |
+| Shared integration setup | Jenkins controller, Gerrit host, and Jenkins agent | Resumed `configure-integration` or native setup procedure | Consumes effective reviewed access and produces keys, public-key authorization, token, credentials, shared storage, node, trigger server, and a bounded storage proof. | Mutates only shared integration state after all preconditions pass. | Setup state is complete and bound to the reviewed inputs; no cross-role validation or end-to-end success is claimed. |
+| Cross-role validation | Jenkins controller, Gerrit host, and Jenkins agent | `validate-integration` or native validation procedure | Observes effective ACLs, both SSH paths, key custody, storage, node, and trigger connection. | Writes only bounded local logs, evidence, and status; target and application state remain unchanged. | All observations pass for the same reviewed-input and run/state identity as setup. |
+| End-to-end trigger proof | Gerrit and Jenkins | `prove-integration` or native proof procedure | Creates a labeled disposable job and change and records event, build, agent, vote, and review-state outcomes. | Creates only declared disposable proof artifacts and their runtime records. | Requires the matching validation result and does not replay or repair setup or validation. |
 | Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
 
 ## Sequencing Rules
@@ -164,13 +175,37 @@ transcript. Operator manuals own exact commands and role-specific procedure.
 - Use `docs/operations/setup/integration.md` for the approved cross-role helper
   command workflow. Role manuals must hand off to that document instead of
   duplicating the full integration command sequence.
-- Treat role-local `validate` as role-only readiness validation. Treat shared
-  `validate-integration` and `prove-integration` as later cross-role
-  acceptance for Gerrit SSH, event streaming, Jenkins agent scheduling, REST
-  vote posting, and Gerrit review state.
+- Treat role-local `validate` as role-only readiness validation.
+- Treat `validate-integration` as observational cross-role validation. It may
+  execute read-only SSH and application queries, but it must not create target
+  directories, credentials, nodes, jobs, builds, changes, storage proof files,
+  events, or votes, and it must not repair shared setup.
+- Treat `prove-integration` as the active end-to-end proof for Gerrit event
+  streaming, Jenkins agent scheduling and execution, REST vote posting, and
+  Gerrit review state. It requires matching validation state and must not invoke
+  validation implicitly.
 - Treat a service started by configuration as a prerequisite for role
   validation. Validation does not supply missing lifecycle work or replay
   successful owning-checkpoint operations.
+
+## Integration Resume And Rotation
+
+Integration status and evidence boundaries must bind to the same reviewed
+input set, target identities, mode, run or selected state, and Gerrit review
+identifiers. A later phase must reject a marker from different inputs or state;
+marker existence alone is not a valid prerequisite.
+
+An interrupted target-deployment review wait may resume only with the same
+bound inputs and the same two review changes. Fully matching completed state
+may be reused. Stale, partial, conflicting, or unbound state fails clearly and
+requires explicit operator cleanup, migration, rotation, or a fresh selected
+state.
+
+Normal configuration must not rotate existing tokens or keys, truncate
+`authorized_keys`, remove a working Jenkins credential or node, or delete
+role-owned agent runtime state. Key and token rotation is a separate explicit
+operation: add the new credential or public key, prove it, and remove the old
+state only after the replacement succeeds.
 
 ## Simulation Command Relationship
 
