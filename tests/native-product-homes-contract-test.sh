@@ -449,8 +449,8 @@ require_pattern scripts/jenkins-agent-setup.sh \
   'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"' \
   'Jenkins agent configure-runtime must render the staged runtime profile through delegated runtime-owned install'
 require_pattern scripts/jenkins-agent-setup.sh \
-  'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"' \
-  'Jenkins agent configure-runtime must render the staged SSH policy through delegated runtime-owned install'
+  'render_template_as_root "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_SSH_POLICY_PATH"' \
+  'Jenkins agent configure-runtime must install the staged SSH policy with OS custody'
 reject_pattern scripts/jenkins-agent-setup.sh \
   'render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/' \
   'Jenkins agent configure-runtime must not read service-owned template copies as the operator'

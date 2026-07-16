@@ -288,7 +288,7 @@ grep -Fq -- \
   'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/agent-runtime-profile.env.template"' \
   "$repo_root/scripts/jenkins-agent-setup.sh"
 grep -Fq -- \
-  'render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template"' \
+  'render_template_as_root "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template"' \
   "$repo_root/scripts/jenkins-agent-setup.sh"
 if grep -Fq -- \
   'render_template_as_agent "$JENKINS_AGENT_STATE_DIR/templates/' \

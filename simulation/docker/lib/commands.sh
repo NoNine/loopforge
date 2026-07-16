@@ -740,6 +740,31 @@ cmd_configure_role() {
   return "$rc"
 }
 
+validate_jenkins_controller_authorization() {
+  local service log
+  service="${1:?service required}"
+  log="${2:?log required}"
+  compose exec -T -u jenkins "$service" sh -c '
+    set -eu
+    crumb_json="$(mktemp /tmp/jenkins-auth-crumb.XXXXXX)"
+    cookie_jar="$(mktemp /tmp/jenkins-auth-cookie.XXXXXX)"
+    script_out="$(mktemp /tmp/jenkins-auth-script.XXXXXX)"
+    trap '\''rm -f "$crumb_json" "$cookie_jar" "$script_out"'\'' EXIT
+    curl -fsS -u jenkins-admin:admin-password -c "$cookie_jar" \
+      "http://jenkins-controller-target:8080/crumbIssuer/api/json" >"$crumb_json"
+    crumb="$(sed -n '\''s/.*"crumb":"\([^"]*\)".*/\1/p'\'' "$crumb_json")"
+    crumb_field="$(sed -n '\''s/.*"crumbRequestField":"\([^"]*\)".*/\1/p'\'' "$crumb_json")"
+    test -n "$crumb"
+    test -n "$crumb_field"
+    curl -fsS -u jenkins-admin:admin-password -b "$cookie_jar" \
+      -H "$crumb_field:$crumb" \
+      --data-urlencode script@/workspace/simulation/docker/scripts/verify-jenkins-authorization.groovy \
+      "http://jenkins-controller-target:8080/scriptText" >"$script_out"
+    grep -Fxq "jenkins-authorization=ready strategy=global-matrix admin=jenkins-admin authenticated=read,job-read,job-build" "$script_out"
+    cat "$script_out"
+  ' >>"$log" 2>&1
+}
+
 cmd_validate_role() {
   local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
@@ -777,6 +802,7 @@ cmd_validate_role() {
     jenkins-controller)
       if compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" validate >>"$log" 2>&1 &&
         compose_exec_with_ldap_password "$service" "$helper_path" --env "$role_env_file" collect-evidence >>"$log" 2>&1 &&
+        validate_jenkins_controller_authorization "$service" "$log" &&
         normalize_jenkins_controller_role_evidence_logs "$log"; then
         rc=0
       else

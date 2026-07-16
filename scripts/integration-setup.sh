@@ -1682,6 +1682,7 @@ cmd_configure_integration() {
   load_inputs
   require_runtime_mode_supported_for_mutation
   confirm_mutation configure-integration || return 0
+  ensure_dirs
   log="$(bounded_log_path configure-integration)"
   configure_gerrit_ssh_impl
   configure_agent_ssh_impl

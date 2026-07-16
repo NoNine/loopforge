@@ -12,8 +12,18 @@ jenkins:
           userSearchBase: "{{LDAP_USER_BASE}}"
           groupSearchBase: "{{LDAP_GROUP_BASE}}"
   authorizationStrategy:
-    loggedInUsersCanDoAnything:
-      allowAnonymousRead: false
+    globalMatrix:
+      entries:
+        - user:
+            name: "{{JENKINS_ADMIN_ACCOUNT}}"
+            permissions:
+              - "Overall/Administer"
+        - group:
+            name: "authenticated"
+            permissions:
+              - "Overall/Read"
+              - "Job/Read"
+              - "Job/Build"
 
 unclassified:
   location:

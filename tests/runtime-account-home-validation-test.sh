@@ -134,7 +134,6 @@ LDAP_BIND_PASSWORD="readonly-password"
 LDAP_USER_BASE="ou=people,dc=example,dc=test"
 LDAP_GROUP_BASE="ou=groups,dc=example,dc=test"
 JENKINS_ADMIN_ACCOUNT="jenkins-admin"
-JENKINS_ADMIN_GROUP="jenkins-admins"
 JENKINS_VERIFICATION_MODE="docker-simulation"
 JENKINS_EVIDENCE_DIR="/unused/evidence"
 EOF

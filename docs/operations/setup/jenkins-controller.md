@@ -42,8 +42,8 @@ Consumed inputs:
   file.
 - Jenkins URL, host, HTTP port, runtime account, runtime group, and Jenkins
   home path.
-- LDAP URL, read-only bind DN, user base, group base, Jenkins admin account,
-  and Jenkins admin group.
+- LDAP URL, read-only bind DN, user base, group base, and the exact LDAP user
+  selected as the Jenkins administrator account.
 - Gerrit HTTP URL, SSH host and port, Gerrit Trigger server name, Jenkins
   Gerrit integration account, and Jenkins credential ID.
 - Jenkins build-agent host, SSH port, runtime account, label, remote
@@ -380,7 +380,10 @@ Validation evidence covers:
   `JENKINS_PLUGIN_LIST` is installed from staged artifacts at the exact
   accepted version, and Jenkins startup log checks prevent plugin-load
   failures from passing validation.
-- JCasC readiness: LDAP realm exists and the built-in node has zero executors.
+- JCasC readiness: the LDAP realm exists, matrix authorization grants
+  `Overall/Administer` to `JENKINS_ADMIN_ACCOUNT`, the built-in
+  `authenticated` SID has read and build access, and the built-in node has
+  zero executors.
 - Gerrit SSH connectivity: deferred to the later integration step.
 - Gerrit Trigger readiness: deferred to the later integration step.
 - Agent readiness: deferred to the later integration step.

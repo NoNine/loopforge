@@ -16,6 +16,7 @@ readonly JENKINS_AGENT_NATIVE_REMOTE_FS="/var/lib/jenkins-agent"
 readonly JENKINS_AGENT_BUNDLE_FACTORY_WORK_DIR="/var/lib/loopforge/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"
 readonly JENKINS_AGENT_STAGED_BUNDLE_PAYLOAD_DIR="/var/lib/loopforge/staging/jenkins-agent"
 readonly JENKINS_AGENT_ARTIFACT_BUNDLE_NAME="jenkins-agent-artifacts-bundle"
+readonly JENKINS_AGENT_SSH_POLICY_PATH="/etc/ssh/sshd_config.d/40-jenkins-agent.conf"
 
 usage() {
   cat <<'USAGE'
@@ -262,6 +263,13 @@ is_docker_simulation() {
     [ "$JENKINS_AGENT_VERIFICATION_MODE" = "docker-simulation" ]
 }
 
+is_systemd_runtime() {
+  case "$JENKINS_AGENT_VERIFICATION_MODE" in
+    vm-simulation|target-deployment) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 reject_control_chars() {
   local name value
   name="${1:?name required}"
@@ -480,6 +488,15 @@ install_file_as_agent() {
   run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$target_dir") && install -m $(shell_quote "$mode") -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$source") $(shell_quote "$target")"
 }
 
+install_file_as_root() {
+  local source target mode target_dir
+  source="${1:?source required}"
+  target="${2:?target required}"
+  mode="${3:?mode required}"
+  target_dir="$(dirname "$target")"
+  run_with_privilege "install -d -m 0755 -o root -g root $(shell_quote "$target_dir") && install -m $(shell_quote "$mode") -o root -g root $(shell_quote "$source") $(shell_quote "$target")"
+}
+
 copy_tree_as_agent() {
   local source target
   source="${1:?source required}"
@@ -524,6 +541,16 @@ render_template_as_agent() {
   tmp="$(mktemp)"
   render_template "$source" "$tmp"
   install_file_as_agent "$tmp" "$target" 0644
+  rm -f "$tmp"
+}
+
+render_template_as_root() {
+  local source target tmp
+  source="${1:?source required}"
+  target="${2:?target required}"
+  tmp="$(mktemp)"
+  render_template "$source" "$tmp"
+  install_file_as_root "$tmp" "$target" 0644
   rm -f "$tmp"
 }
 
@@ -764,7 +791,8 @@ cmd_install() {
   reset_agent_state_for_install
   install_file_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/jenkins-agent-bootstrap.txt" "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" 0644
   copy_tree_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates" "$JENKINS_AGENT_STATE_DIR/templates"
-  write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/install.status" "installed"
+  write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/install.status" \
+    "installed artifact_manifest=$JENKINS_AGENT_STAGED_ARTIFACT_DIR/manifest.txt checksum_reference=$JENKINS_AGENT_STAGED_ARTIFACT_DIR/checksums.sha256 checksum_verification=pass"
   printf 'status=pass command=install state_dir=%s staged=%s runtime_identity=%s\n' \
     "$JENKINS_AGENT_STATE_DIR" "$JENKINS_AGENT_STAGED_ARTIFACT_DIR" "$identity_action"
 }
@@ -793,32 +821,78 @@ runtime_account_home() {
   getent passwd "$JENKINS_AGENT_ACCOUNT" | awk -F: '{print $6}'
 }
 
-validate_os_sshd_service() {
-  local log_file sshd_config sshd_bin
-  log_file="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
-  sshd_config="$JENKINS_AGENT_STATE_DIR/etc/sshd_config"
+validate_reviewed_sshd_listener() {
+  local log_file sshd_bin
+  log_file="${1:?log file required}"
   sshd_bin="$(command -v sshd)"
+  if ! run_with_privilege "$(shell_quote "$sshd_bin") -T 2>>$(shell_quote "$log_file")" |
+    awk -v port="$JENKINS_AGENT_SSH_PORT" \
+      '$1 == "port" && $2 == port { found=1 } END { exit !found }'; then
+    die "Reviewed Jenkins agent SSH port is not present in effective site sshd configuration: $JENKINS_AGENT_SSH_PORT"
+  fi
+}
+
+validate_effective_agent_sshd_policy() {
+  local log_file sshd_bin effective
+  log_file="${1:?log file required}"
+  sshd_bin="$(command -v sshd)"
+  effective="$(mktemp)"
+  if ! run_with_privilege "$(shell_quote "$sshd_bin") -t >>$(shell_quote "$log_file") 2>&1"; then
+    rm -f "$effective"
+    die "sshd configuration validation failed; log=$log_file"
+  fi
+  if ! run_with_privilege "$(shell_quote "$sshd_bin") -T -C user=$(shell_quote "$JENKINS_AGENT_ACCOUNT"),host=$(shell_quote "$JENKINS_AGENT_HOST"),addr=127.0.0.1 2>>$(shell_quote "$log_file")" >"$effective"; then
+    rm -f "$effective"
+    die "Effective Jenkins agent sshd policy inspection failed; log=$log_file"
+  fi
+  if ! awk '
+      $1 == "authenticationmethods" && $2 == "publickey" { methods=1 }
+      $1 == "pubkeyauthentication" && $2 == "yes" { publickey=1 }
+      $1 == "passwordauthentication" && $2 == "no" { password=1 }
+      $1 == "kbdinteractiveauthentication" && $2 == "no" { interactive=1 }
+      $1 == "permitemptypasswords" && $2 == "no" { empty=1 }
+      END { exit !(methods && publickey && password && interactive && empty) }
+    ' "$effective"; then
+    rm -f "$effective"
+    die "Effective Jenkins agent sshd policy does not enforce public-key-only authentication"
+  fi
+  rm -f "$effective"
+}
+
+systemd_sshd_unit() {
+  local unit load_state
+  for unit in ssh.service sshd.service; do
+    load_state="$(systemctl show "$unit" --property=LoadState --value 2>/dev/null || true)"
+    if [ "$load_state" = "loaded" ]; then
+      printf '%s\n' "$unit"
+      return 0
+    fi
+  done
+  die "Target OS SSH service unit is not loaded"
+}
+
+reload_os_sshd_service() {
+  local log_file unit pid
+  log_file="${1:?log file required}"
+  if is_systemd_runtime; then
+    unit="$(systemd_sshd_unit)"
+    run_with_privilege "systemctl enable --now $(shell_quote "$unit") >>$(shell_quote "$log_file") 2>&1"
+    run_with_privilege "systemctl reload $(shell_quote "$unit") >>$(shell_quote "$log_file") 2>&1"
+  else
+    pid="$(pgrep -xo -u 0 sshd)" || die "Docker target sshd daemon process is not running"
+    run_with_privilege "kill -HUP $(shell_quote "$pid") >>$(shell_quote "$log_file") 2>&1"
+  fi
+}
+
+configure_os_sshd_service() {
+  local log_file tmp_log
+  log_file="$JENKINS_AGENT_STATE_DIR/logs/sshd.log"
   run_with_privilege "install -d -m 0755 -o $(shell_quote "$JENKINS_AGENT_ACCOUNT") -g $(shell_quote "$JENKINS_AGENT_GROUP") $(shell_quote "$JENKINS_AGENT_STATE_DIR/logs") $(shell_quote "$JENKINS_AGENT_STATE_DIR/etc") && : >$(shell_quote "$log_file") && chown $(shell_quote "$JENKINS_AGENT_ACCOUNT:$JENKINS_AGENT_GROUP") $(shell_quote "$log_file")"
-  run_with_privilege "ssh-keygen -A >>$(shell_quote "$log_file") 2>&1"
-  local tmp_config tmp_log
-  tmp_config="$(mktemp)"
+  validate_reviewed_sshd_listener "$log_file"
+  render_template_as_root "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_SSH_POLICY_PATH"
+  assert_no_unresolved_placeholders "$JENKINS_AGENT_SSH_POLICY_PATH"
+  validate_effective_agent_sshd_policy "$log_file"
   tmp_log="$(mktemp)"
-  cat >"$tmp_config" <<EOF
-Port $JENKINS_AGENT_SSH_PORT
-ListenAddress 0.0.0.0
-HostKey /etc/ssh/ssh_host_ed25519_key
-HostKey /etc/ssh/ssh_host_rsa_key
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-PubkeyAuthentication yes
-PermitRootLogin no
-AllowUsers $JENKINS_AGENT_ACCOUNT
-UsePAM no
-LogLevel VERBOSE
-Subsystem sftp internal-sftp
-EOF
-  install_file_as_agent "$tmp_config" "$sshd_config" 0644
-  rm -f "$tmp_config"
   {
     printf 'timestamp=%s\n' "$(iso_timestamp_utc)"
     printf 'service=os-sshd\n'
@@ -827,12 +901,13 @@ EOF
     printf 'node_name=%s\n' "$JENKINS_AGENT_NODE_NAME"
     printf 'labels=%s\n' "$JENKINS_AGENT_LABELS"
     printf 'remote_fs=%s\n' "$JENKINS_AGENT_REMOTE_FS"
-    printf 'sshd_config=%s\n' "$sshd_config"
+    printf 'sshd_policy=%s\n' "$JENKINS_AGENT_SSH_POLICY_PATH"
+    printf 'effective_policy=publickey-only\n'
     printf 'ownership=target-os-control-plane\n'
   } >"$tmp_log"
   run_with_privilege "cat $(shell_quote "$tmp_log") >>$(shell_quote "$log_file")"
   rm -f "$tmp_log"
-  run_with_privilege "$(shell_quote "$sshd_bin") -t -f $(shell_quote "$sshd_config") >>$(shell_quote "$log_file") 2>&1" || die "sshd configuration validation failed; log=$log_file"
+  reload_os_sshd_service "$log_file"
   check_os_sshd_process
 }
 
@@ -855,12 +930,10 @@ cmd_configure_runtime() {
   account_home="$(runtime_account_home)"
   [ -n "$account_home" ] || die "Could not determine home directory for $JENKINS_AGENT_ACCOUNT"
   render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/agent-runtime-profile.env.template" "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
-  render_template_as_agent "$JENKINS_AGENT_STAGED_ARTIFACT_DIR/templates/sshd-policy.conf.template" "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
   assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/agent-runtime-profile.env"
-  assert_no_unresolved_placeholders "$JENKINS_AGENT_STATE_DIR/etc/sshd-policy.conf"
+  configure_os_sshd_service
   write_text_file_as_agent "$JENKINS_AGENT_STATE_DIR/state/runtime.status" \
-    "account=$JENKINS_AGENT_ACCOUNT group=$JENKINS_AGENT_GROUP home=$account_home remote_fs=$JENKINS_AGENT_REMOTE_FS node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS ssh_port=$JENKINS_AGENT_SSH_PORT executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT"
-  validate_os_sshd_service
+    "account=$JENKINS_AGENT_ACCOUNT group=$JENKINS_AGENT_GROUP home=$account_home remote_fs=$JENKINS_AGENT_REMOTE_FS node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS ssh_port=$JENKINS_AGENT_SSH_PORT ssh_policy=$JENKINS_AGENT_SSH_POLICY_PATH effective_policy=publickey-only service_configured=pass executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT"
   check_ssh_reachability >/dev/null
   printf 'status=pass command=configure-runtime account=%s remote_fs=%s SSH_port=%s ssh_daemon=target-os-existing\n' \
     "$JENKINS_AGENT_ACCOUNT" "$JENKINS_AGENT_REMOTE_FS" "$JENKINS_AGENT_SSH_PORT"
@@ -900,27 +973,22 @@ sshd_process_running() {
 }
 
 systemd_sshd_main_pid() {
-  local require_enabled unit load_state pid
+  local require_enabled unit pid
   require_enabled="${1:-0}"
-  for unit in ssh.service sshd.service; do
-    load_state="$(systemctl show "$unit" --property=LoadState --value 2>/dev/null || true)"
-    [ "$load_state" = "loaded" ] || continue
-    systemctl is-active --quiet "$unit" ||
-      die "Target OS SSH service is not active: $unit"
-    if [ "$require_enabled" = "1" ]; then
-      systemctl is-enabled --quiet "$unit" ||
-        die "Target OS SSH service is not enabled: $unit"
-    fi
-    pid="$(systemctl show "$unit" --property=MainPID --value 2>/dev/null || true)"
-    case "$pid" in
-      ''|0|*[!0-9]*)
-        die "Target OS SSH service has no valid MainPID: $unit"
-        ;;
-    esac
-    printf '%s\n' "$pid"
-    return 0
-  done
-  die "Target OS SSH service unit is not loaded"
+  unit="$(systemd_sshd_unit)"
+  systemctl is-active --quiet "$unit" ||
+    die "Target OS SSH service is not active: $unit"
+  if [ "$require_enabled" = "1" ]; then
+    systemctl is-enabled --quiet "$unit" ||
+      die "Target OS SSH service is not enabled: $unit"
+  fi
+  pid="$(systemctl show "$unit" --property=MainPID --value 2>/dev/null || true)"
+  case "$pid" in
+    ''|0|*[!0-9]*)
+      die "Target OS SSH service has no valid MainPID: $unit"
+      ;;
+  esac
+  printf '%s\n' "$pid"
 }
 
 check_os_sshd_process() {
@@ -943,15 +1011,25 @@ check_os_sshd_process() {
     die "Target OS sshd process is not running"
 }
 
+check_java_runtime() {
+  local version
+  version="$(java -version 2>&1 | sed -n '1p')"
+  printf '%s\n' "$version" | grep -Eq 'version "21([.]|\")' ||
+    die "Jenkins agent Java runtime is not OpenJDK 21"
+}
+
 check_runtime_readiness() {
-  verify_staged_artifacts
+  local install_status runtime_status
   validate_agent_render_inputs
-  check_os_dependency_expectations
-  [ -s "$JENKINS_AGENT_STATE_DIR/state/install.status" ] || die "Install marker missing"
-  [ -s "$JENKINS_AGENT_STATE_DIR/state/runtime.status" ] || die "Runtime marker missing"
-  [ -s "$JENKINS_AGENT_STATE_DIR/bootstrap/jenkins-agent-bootstrap.txt" ] || die "Agent bootstrap marker is missing"
-  check_runtime_account
-  check_remote_fs_ownership
+  install_status="$JENKINS_AGENT_STATE_DIR/state/install.status"
+  runtime_status="$JENKINS_AGENT_STATE_DIR/state/runtime.status"
+  [ -s "$install_status" ] || die "Install marker missing"
+  [ -s "$runtime_status" ] || die "Runtime marker missing"
+  grep -Fq 'checksum_verification=pass' "$install_status" || die "Install checkpoint does not record successful staged artifact verification"
+  grep -Fq "ssh_policy=$JENKINS_AGENT_SSH_POLICY_PATH" "$runtime_status" || die "Runtime checkpoint does not record the canonical SSH policy"
+  grep -Fq 'effective_policy=publickey-only' "$runtime_status" || die "Runtime checkpoint does not record effective public-key-only SSH policy"
+  grep -Fq 'service_configured=pass' "$runtime_status" || die "Runtime checkpoint does not record successful SSH service configuration"
+  check_java_runtime
   check_os_sshd_process 1
   check_ssh_reachability >/dev/null
 }
@@ -962,7 +1040,7 @@ cmd_validate() {
   validate_agent_render_inputs
   check_runtime_readiness
   cmd_collect_evidence >/dev/null
-  printf 'status=pass command=validate proof=real-agent-host-side SSH=pass ssh_daemon_banner=pass remote_fs=pass runtime_account=pass node_name=%s labels=%s executor_context=%s evidence_dir=%s\n' \
+  printf 'status=pass command=validate proof=real-agent-host-side Java=pass SSH=pass ssh_daemon_banner=pass prior_install_checkpoint=pass prior_runtime_checkpoint=pass node_name=%s labels=%s executor_context=%s evidence_dir=%s\n' \
     "$JENKINS_AGENT_NODE_NAME" "$JENKINS_AGENT_LABELS" "$JENKINS_AGENT_EXECUTOR_CONTEXT" "$JENKINS_AGENT_EVIDENCE_DIR"
 }
 
@@ -987,7 +1065,7 @@ cmd_collect_evidence() {
     printf 'verification_mode=%s\n' "$JENKINS_AGENT_VERIFICATION_MODE"
     printf 'artifact_manifest=%s\n' "$manifest"
     printf 'checksum_reference=%s\n' "$checksum"
-    printf 'observed=static-os-dependency-baseline,dependency-commands,ssh-reachability,real-sshd-banner,remote-filesystem,runtime-account-ownership\n'
+    printf 'observed=java-21,ssh-service-state,ssh-reachability,real-sshd-banner,prior-install-checkpoint,prior-runtime-policy-checkpoint\n'
     printf 'account=%s\n' "$JENKINS_AGENT_ACCOUNT"
     printf 'group=%s\n' "$JENKINS_AGENT_GROUP"
     printf 'node_name=%s\n' "$JENKINS_AGENT_NODE_NAME"
@@ -1007,7 +1085,7 @@ cmd_collect_evidence() {
   q_input="$(json_quote "$input_fingerprint")"
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
-  q_checks="$(json_quote "real agent-host-side readiness: static OS dependency baseline, dependency commands including java, ssh, and sshd, SSH reachability, real sshd banner, remote filesystem ownership, runtime account ownership; node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT")"
+  q_checks="$(json_quote "Real agent-host-side readiness: OpenJDK 21, enabled and active OS SSH service or Docker sshd process, SSH reachability, real sshd banner, successful prior install checkpoint, and successful prior effective account-policy checkpoint; node_name=$JENKINS_AGENT_NODE_NAME labels=$JENKINS_AGENT_LABELS executor_context=$JENKINS_AGENT_EXECUTOR_CONTEXT")"
   q_log="$(json_quote "$bounded_log")"
   q_service_log="$(json_quote "$service_log")"
   q_redaction="$(json_quote "secrets-redacted; private keys, passwords, tokens, and LDAP bind secrets not recorded")"

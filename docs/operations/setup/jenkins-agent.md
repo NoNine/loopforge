@@ -221,7 +221,9 @@ Produced outputs:
 
 - Runtime filesystem at `JENKINS_AGENT_REMOTE_FS`.
 - Runtime profile rendered from the staged template.
-- SSH daemon policy rendered from the staged template.
+- Account-scoped SSH policy rendered from the staged template and installed as
+  `/etc/ssh/sshd_config.d/40-jenkins-agent.conf` with `root:root 0644`
+  custody.
 - Runtime readiness marker under `state/runtime.status`.
 
 Mutation side effects:
@@ -231,18 +233,25 @@ Mutation side effects:
   `JENKINS_AGENT_GROUP`, defaulting to `jenkins-agent`.
 - Creates the remote filesystem with reviewed ownership when the complete
   runtime identity state is absent; it does not repair existing mismatches.
-- Requires the guest OS to manage OpenSSH as `ssh.service` or `sshd.service`
-  in VM simulation and target deployment. The agent remains an outbound SSH
-  node and does not need a separate Jenkins agent daemon.
-- Validates the existing OpenSSH daemon and the rendered SSH policy without
-  taking ownership of controller-held key material or node scheduling.
+- Requires the reviewed `JENKINS_AGENT_SSH_PORT` to exist in effective
+  site-owned OpenSSH configuration before installing the role policy. The
+  helper does not add `Port`, `ListenAddress`, or `AllowUsers` directives.
+- Installs a `Match User` policy that requires public-key authentication and
+  disables password, keyboard-interactive, and empty-password authentication
+  for the agent account only.
+- Runs `sshd -t` and account-specific `sshd -T -C` checks before service
+  mutation. Invalid or ineffective policy blocks without reloading SSH.
+- Enables, starts, and reloads the existing guest SSH service in VM simulation
+  and target deployment. The agent remains an outbound SSH node and does not
+  need a separate Jenkins agent daemon.
 - Leaves `authorized_keys` creation and Jenkins public-key installation to
   integration-native operations or the shared helper workflow.
 - Leaves the shared Jenkins integration group and shared storage path to
   `scripts/integration-setup.sh` with `examples/integration.env.example`.
 
-Docker simulation keeps its direct `sshd` process and does not claim guest-OS
-service or reboot behavior. Operator-interface parity rules are defined in
+Docker simulation validates the same effective account policy and reloads its
+existing root-owned `sshd` master process. It does not claim guest-OS systemd
+or reboot behavior. Operator-interface parity rules are defined in
 `docs/contracts/operator-execution-contract.md`.
 
 Helper:
@@ -271,13 +280,13 @@ Jenkins controller scheduling, build execution, Gerrit Trigger events, or a
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
-- Staged manifest and checksums.
-- Runtime account, runtime group, remote filesystem, and SSH readiness state.
+- Successful install and runtime checkpoint markers.
+- Current Java, SSH service, and reviewed endpoint state.
 
 Produced outputs:
 
-- Validation result for SSH reachability, remote filesystem readiness, runtime
-  account ownership, staged artifact checks, and bounded logs.
+- Validation result for OpenJDK 21, SSH service or Docker daemon state, SSH
+  endpoint reachability, prior setup checkpoints, and bounded logs.
 - Role-local evidence from `collect-evidence`.
 
 Validation checks:
@@ -286,10 +295,12 @@ Validation checks:
   the Docker target has a root-owned `sshd` daemon process.
 - The OpenSSH banner is reachable at
   `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the selected harness.
-- The dedicated runtime account exists.
-- `JENKINS_AGENT_REMOTE_FS` exists and is owned by the runtime account and
-  role-local runtime group.
-- Staged artifact checksums still verify before readiness is reported.
+- Java reports OpenJDK 21.
+- The install checkpoint records successful staged-artifact verification.
+- The runtime checkpoint records the canonical effective public-key-only SSH
+  policy and successful service configuration.
+- Validation does not repeat artifact checksum, runtime identity, filesystem,
+  account shadow, or effective-policy setup checks.
 
 Helper:
 
@@ -302,9 +313,9 @@ Jenkins controller scope:
 - Jenkins controller node registration, credential selection, label/executor
   policy, controller-to-agent scheduling, and later integration validation
   jobs are deferred to `scripts/integration-setup.sh`.
-- Step 9 proves only agent host-side readiness: SSH daemon reachability,
-  runtime account ownership, remote filesystem readiness, staged artifact
-  checks, bounded logs, and evidence.
+- Step 9 proves only agent host-side readiness: completed artifact, identity,
+  filesystem, and policy checkpoints plus current Java, SSH service, endpoint,
+  bounded-log, and evidence observations.
 - Real cross-role trigger execution and `Verified` voting are aggregated by
   the later shared integration step after role helpers are compliant.
 - After Gerrit, Jenkins controller, and Jenkins agent role manuals are
@@ -339,11 +350,10 @@ Observed checks recorded:
 - Command name.
 - Pass/fail status.
 - Reviewed input fingerprint.
-- Artifact manifest and checksum references.
-- Checksum verification result.
-- SSH reachability.
-- Runtime account ownership.
-- Remote filesystem readiness.
+- Prior staged-artifact verification checkpoint and its manifest/checksum
+  references.
+- Prior effective account-policy and service-configuration checkpoint.
+- OpenJDK 21, SSH service state, and SSH endpoint reachability.
 - Jenkins agent label and executor context as controller-owned metadata only.
 - Bounded log references.
 - Redaction status.

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 # shellcheck source=common.sh
 . "$script_dir/common.sh"
@@ -224,7 +224,6 @@ LDAP_BIND_DN
 LDAP_USER_BASE
 LDAP_GROUP_BASE
 JENKINS_ADMIN_ACCOUNT
-JENKINS_ADMIN_GROUP
 JENKINS_VERIFICATION_MODE
 JENKINS_EVIDENCE_DIR
 "
@@ -333,7 +332,6 @@ apply_env_defaults() {
   LDAP_USER_BASE="${LDAP_USER_BASE:-ou=people,dc=example,dc=test}"
   LDAP_GROUP_BASE="${LDAP_GROUP_BASE:-ou=groups,dc=example,dc=test}"
   JENKINS_ADMIN_ACCOUNT="${JENKINS_ADMIN_ACCOUNT:-jenkins-admin}"
-  JENKINS_ADMIN_GROUP="${JENKINS_ADMIN_GROUP:-jenkins-admins}"
 }
 
 load_env() {
@@ -518,6 +516,7 @@ render_template() {
   text="${text//\{\{LDAP_BIND_PASSWORD\}\}/$ldap_bind_password}"
   text="${text//\{\{LDAP_USER_BASE\}\}/$LDAP_USER_BASE}"
   text="${text//\{\{LDAP_GROUP_BASE\}\}/$LDAP_GROUP_BASE}"
+  text="${text//\{\{JENKINS_ADMIN_ACCOUNT\}\}/$JENKINS_ADMIN_ACCOUNT}"
   text="${text//\{\{VERIFICATION_MODE\}\}/$JENKINS_VERIFICATION_MODE}"
   mkdir -p "$(dirname "$target")"
   printf '%s\n' "$text" >"$target"
@@ -1179,7 +1178,17 @@ cmd_configure_jcasc() {
   runtime_file_contains "$CASC_JENKINS_CONFIG" 'numExecutors: 0' || die "JCasC must keep built-in node executors at zero"
   runtime_file_contains "$CASC_JENKINS_CONFIG" 'ldap:' || die "JCasC LDAP security realm is missing"
   runtime_file_contains "$CASC_JENKINS_CONFIG" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
-  write_text_file_as_runtime "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_group=$JENKINS_ADMIN_GROUP"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'globalMatrix:' || die "JCasC matrix authorization strategy is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" "name: \"$JENKINS_ADMIN_ACCOUNT\"" || die "JCasC administrator account is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'name: "authenticated"' || die "JCasC authenticated SID is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Overall/Administer"' || die "JCasC administrator permission is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Overall/Read"' || die "JCasC authenticated read permission is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Job/Read"' || die "JCasC authenticated job read permission is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Job/Build"' || die "JCasC authenticated job build permission is missing"
+  if runtime_file_contains "$CASC_JENKINS_CONFIG" 'loggedInUsersCanDoAnything:'; then
+    die "JCasC must not use loggedInUsersCanDoAnything authorization"
+  fi
+  write_text_file_as_runtime "$JENKINS_HOME/state/jcasc.status" "configured ldap=$LDAP_URL admin_account=$JENKINS_ADMIN_ACCOUNT authorization=global-matrix"
   start_jenkins_runtime
   printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$CASC_JENKINS_CONFIG"
 }
@@ -1294,6 +1303,16 @@ check_jcasc_readiness() {
   runtime_file_contains "$CASC_JENKINS_CONFIG" 'ldap:' || die "JCasC LDAP realm is missing"
   runtime_file_contains "$CASC_JENKINS_CONFIG" 'managerPasswordSecret:' || die "JCasC LDAP manager password secret is missing"
   runtime_file_contains "$CASC_JENKINS_CONFIG" 'numExecutors: 0' || die "JCasC built-in executor policy is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'globalMatrix:' || die "JCasC matrix authorization strategy is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" "name: \"$JENKINS_ADMIN_ACCOUNT\"" || die "JCasC administrator account is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" 'name: "authenticated"' || die "JCasC authenticated SID is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Overall/Administer"' || die "JCasC administrator permission is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Overall/Read"' || die "JCasC authenticated read permission is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Job/Read"' || die "JCasC authenticated job read permission is missing"
+  runtime_file_contains "$CASC_JENKINS_CONFIG" '"Job/Build"' || die "JCasC authenticated job build permission is missing"
+  if runtime_file_contains "$CASC_JENKINS_CONFIG" 'loggedInUsersCanDoAnything:'; then
+    die "JCasC must not use loggedInUsersCanDoAnything authorization"
+  fi
 }
 
 verify_base_readiness_facts() {
@@ -1338,7 +1357,7 @@ cmd_collect_evidence() {
   fi
   runtime_status="$JENKINS_HOME/state/runtime.status"
   jenkins_pid="$JENKINS_HOME/run/jenkins.pid"
-  input_fingerprint="$(printf '%s\n%s\n%s\n%s\n' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$LDAP_URL" "$JENKINS_HOME" | sha256sum | awk '{print $1}')"
+  input_fingerprint="$(printf '%s\n%s\n%s\n%s\n%s\n' "$JENKINS_HOST" "$JENKINS_HTTP_PORT" "$LDAP_URL" "$JENKINS_HOME" "$JENKINS_ADMIN_ACCOUNT" | sha256sum | awk '{print $1}')"
   manifest="$JENKINS_STAGED_ARTIFACT_DIR/manifest.txt"
   checksum="$JENKINS_STAGED_ARTIFACT_DIR/checksums.sha256"
   {
@@ -1350,7 +1369,7 @@ cmd_collect_evidence() {
     printf 'step11_required_for_real_execution=false\n'
     printf 'artifact_manifest=%s\n' "$manifest"
     printf 'checksum_reference=%s\n' "$checksum"
-    printf 'observed=staged-artifacts,real-jenkins-startup,http-endpoint,api-json,ldap,plugins,JCasC,service-manager\n'
+    printf 'observed=staged-artifacts,real-jenkins-startup,http-endpoint,api-json,ldap,plugins,JCasC-global-matrix,service-manager\n'
     printf 'redaction=secrets-not-recorded\n'
   } >"$bounded_log"
   [ -s "$bounded_log" ] || die "Bounded evidence log was not written: $bounded_log"
@@ -1366,7 +1385,7 @@ cmd_collect_evidence() {
   q_input="$(json_quote "$input_fingerprint")"
   q_manifest="$(json_quote "$manifest")"
   q_checksum="$(json_quote "$checksum")"
-  q_checks="$(json_quote "Real Jenkins controller process started from staged WAR, responded on /login and /api/json, retained plugin and JCasC readiness, and wrote bounded logs without secrets.")"
+  q_checks="$(json_quote "Real Jenkins controller process started from staged WAR, responded on /login and /api/json, retained plugin and JCasC global-matrix readiness for the reviewed administrator account and authenticated SID, and wrote bounded logs without secrets.")"
   q_log="$(json_quote "$bounded_log")"
   q_service_log="$(json_quote "$service_log")"
   q_runtime_status="$(json_quote "$runtime_status")"
@@ -1460,4 +1479,6 @@ main() {
   esac
 }
 
-main "$@"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

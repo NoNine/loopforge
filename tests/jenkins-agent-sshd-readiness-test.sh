@@ -32,6 +32,12 @@ case "$*" in
   "is-active --quiet sshd.service")
     [ "${FAKE_SSHD_ACTIVE:-yes}" = yes ]
     ;;
+  "is-enabled --quiet ssh.service")
+    [ "${FAKE_SSH_ENABLED:-yes}" = yes ]
+    ;;
+  "is-enabled --quiet sshd.service")
+    [ "${FAKE_SSHD_ENABLED:-yes}" = yes ]
+    ;;
   "show ssh.service --property=MainPID --value")
     printf '%s\n' "${FAKE_SSH_MAIN_PID:-4100}"
     ;;
@@ -70,6 +76,11 @@ esac
 EOF
 
 chmod +x "$fake_bin/systemctl" "$fake_bin/pgrep" "$fake_bin/ps"
+cat >"$fake_bin/java" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'openjdk version "21.0.8"' >&2
+EOF
+chmod +x "$fake_bin/java"
 export PATH="$fake_bin:/usr/bin:/bin"
 export FAKE_CALLS="$calls"
 
@@ -123,16 +134,17 @@ FAKE_PS_ARGS=/usr/bin/unrelated expect_failure 'Target OS sshd process is not ru
 
 state_dir="$tmp_dir/state-dir"
 mkdir -p "$state_dir/state" "$state_dir/bootstrap"
-printf 'installed\n' >"$state_dir/state/install.status"
-printf 'configured\n' >"$state_dir/state/runtime.status"
+printf 'installed checksum_verification=pass\n' >"$state_dir/state/install.status"
+printf 'configured ssh_policy=/etc/ssh/sshd_config.d/40-jenkins-agent.conf effective_policy=publickey-only service_configured=pass\n' >"$state_dir/state/runtime.status"
 printf 'bootstrap\n' >"$state_dir/bootstrap/jenkins-agent-bootstrap.txt"
 JENKINS_AGENT_STATE_DIR="$state_dir"
-verify_staged_artifacts() { :; }
 validate_agent_render_inputs() { :; }
-check_os_dependency_expectations() { :; }
-check_runtime_account() { :; }
-check_remote_fs_ownership() { :; }
 check_ssh_reachability() { printf 'SSH-2.0-OpenSSH_test\n'; }
+
+verify_staged_artifacts() { printf 'Validation replayed artifact verification\n' >&2; return 1; }
+check_os_dependency_expectations() { printf 'Validation replayed dependency verification\n' >&2; return 1; }
+check_runtime_account() { printf 'Validation replayed account verification\n' >&2; return 1; }
+check_remote_fs_ownership() { printf 'Validation replayed filesystem verification\n' >&2; return 1; }
 
 check_runtime_readiness
 [ ! -e "$state_dir/run/os-sshd.pid" ]

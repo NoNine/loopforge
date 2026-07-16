@@ -1,6 +1,8 @@
-Port {{JENKINS_AGENT_SSH_PORT}}
-Protocol 2
-PubkeyAuthentication yes
-PasswordAuthentication no
-PermitRootLogin no
-AllowUsers {{JENKINS_AGENT_ACCOUNT}}
+# Port and ListenAddress are site-owned.
+Match User {{JENKINS_AGENT_ACCOUNT}}
+    AuthenticationMethods publickey
+    PubkeyAuthentication yes
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    PermitEmptyPasswords no
+Match all
