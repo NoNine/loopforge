@@ -6,11 +6,15 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 run_id="vm-m4-$$"
 vm_set_id="m4-$$"
+debug_run_id="vm-m4-bake-debug-$$"
+debug_vm_set_id="m4-bake-debug-$$"
 generated_root="$repo_root/generated/simulation/vm"
 cleanup() {
   [ "${VM_TEST_KEEP_TMP:-0}" -eq 1 ] ||
     rm -rf "$tmp_dir" "$generated_root/$run_id" \
-      "$generated_root/vm-sets/$vm_set_id"
+      "$generated_root/vm-sets/$vm_set_id" \
+      "$generated_root/$debug_run_id" \
+      "$generated_root/vm-sets/$debug_vm_set_id"
 }
 trap cleanup EXIT
 
@@ -28,6 +32,7 @@ sed \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+  -e 's/^VM_DEBUG_PRESERVE_FAILED_BAKE=.*/VM_DEBUG_PRESERVE_FAILED_BAKE=1/' \
   "$repo_root/simulation/vm/examples/vm.env.example" >"$env_file"
 
 cp "$repo_root/tests/fixtures/vm-libvirt-stub.sh" "$stub_bin/virsh"
@@ -241,6 +246,18 @@ fi
 STUB
 chmod +x "$stub_bin/ssh"
 
+invalid_debug_env="$tmp_dir/harness-invalid-debug.env"
+sed 's/^VM_DEBUG_PRESERVE_FAILED_BAKE=.*/VM_DEBUG_PRESERVE_FAILED_BAKE=yes/' \
+  "$env_file" >"$invalid_debug_env"
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$invalid_debug_env" preflight \
+  >"$tmp_dir/preflight-invalid-debug.out" 2>&1; then
+  printf 'VM bake debug preservation must reject non-boolean values\n' >&2
+  exit 1
+fi
+grep -Fq 'VM_DEBUG_PRESERVE_FAILED_BAKE must be 0 or 1' \
+  "$tmp_dir/preflight-invalid-debug.out"
+
 [ -f "$repo_root/simulation/vm/ldap/50-harness-seed.ldif" ]
 grep -Fq 'uid=gerrit-admin' "$repo_root/simulation/vm/ldap/50-harness-seed.ldif"
 grep -Fq 'cn=jenkins-admins' "$repo_root/simulation/vm/ldap/50-harness-seed.ldif"
@@ -303,6 +320,13 @@ grep -Fq 'ldap-seed-entry=ready type=user id=jenkins-admin' "$create_log"
 grep -Fq 'ldap-seed-entry=ready type=group id=jenkins-admins' "$create_log"
 grep -Fq 'ldap-consumer-bind-search=ready machine=gerrit id=test-user' "$create_log"
 grep -Fq 'baseline-prereqs=ready marker=' "$create_log"
+[ ! -e "$generated_root/vm-sets/$vm_set_id/.loopforge-vm-bake-debug.env" ]
+if find "$generated_root/vm-sets/$vm_set_id/libvirt" -maxdepth 1 \
+  -type d -name 'bake-work-*' -print -quit | grep -q .; then
+  printf 'successful debug-enabled bake must remove its work directory\n' >&2
+  exit 1
+fi
+[ ! -e "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-base-image-bake.state" ]
 
 ldap_evidence="$(find "$generated_root/$run_id/host/evidence/harness" -name 'create-ldap-*.json' -print | sort | tail -1)"
 [ -n "$ldap_evidence" ]
@@ -380,6 +404,8 @@ grep -Fq 'HARNESS_LDAP_HOST=ldap.example.test' "$runtime_env"
 grep -Fq 'HARNESS_LDAP_HOST=ldap.example.test' "$rendered_env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$runtime_env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$rendered_env"
+grep -Fq 'VM_DEBUG_PRESERVE_FAILED_BAKE=1' "$runtime_env"
+grep -Fq 'VM_DEBUG_PRESERVE_FAILED_BAKE=1' "$rendered_env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id/host/runtime-inputs/harness.env"
 if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$generated_root/$run_id"; then
   printf 'VM runtime files must not replace the simulation LDAP bind password with a redaction marker\n' >&2
@@ -417,7 +443,7 @@ grep -Fq 'base_image_fingerprint=incompatible' "$machine_metadata"
 mv "$machine_metadata_backup" "$machine_metadata"
 
 run_fail_closed_case() {
-  local mode case_base_image case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
+  local mode case_bake_domain case_base_image case_run_id case_vm_set_id case_env case_generated case_marker case_failure_text
   mode="${1:?mode required}"
   case_failure_text="${2:?failure text required}"
   case_run_id="vm-m4-$mode-$$"
@@ -425,6 +451,7 @@ run_fail_closed_case() {
   case_env="$tmp_dir/harness-$mode.env"
   case_generated="$generated_root/$case_run_id"
   case_marker="$generated_root/vm-sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
+  case_bake_domain="loopforge-vm-$case_run_id-$case_vm_set_id-base-image-bake"
   case_base_image="$base_image"
   if [ "$mode" = apt ] || [ "$mode" = image-info ]; then
     case_base_image="$tmp_dir/noble-server-cloudimg-amd64-$mode.img"
@@ -455,6 +482,13 @@ run_fail_closed_case() {
     [ -n "$case_create_log" ]
     grep -Fq "$case_failure_text" "$case_create_log"
   fi
+  [ ! -e "$stub_state/domains/$case_bake_domain.state" ]
+  if [ -d "$generated_root/vm-sets/$case_vm_set_id/libvirt" ] &&
+    find "$generated_root/vm-sets/$case_vm_set_id/libvirt" -maxdepth 1 \
+      -type d -name 'bake-work-*' -print -quit | grep -q .; then
+    printf 'default bake failure cleanup must remove its work directory\n' >&2
+    exit 1
+  fi
   rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id"
 }
 
@@ -464,3 +498,71 @@ run_fail_closed_case slapd 'forced slapd failure'
 run_fail_closed_case ldap-consumer 'forced ldap consumer failure'
 run_fail_closed_case ldap-empty 'Missing exact VM LDAP seed proof'
 run_fail_closed_case ldap-add 'forced ldapadd failure'
+
+debug_env="$tmp_dir/harness-bake-debug.env"
+debug_base_image="$tmp_dir/noble-server-cloudimg-amd64-bake-debug.img"
+printf 'stub cloud image for %s\n' "$debug_run_id" >"$debug_base_image"
+sed \
+  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$debug_run_id/" \
+  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$debug_vm_set_id/" \
+  -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$debug_base_image|" \
+  -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
+  -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
+  -e 's/^VM_DEBUG_PRESERVE_FAILED_BAKE=.*/VM_DEBUG_PRESERVE_FAILED_BAKE=1/' \
+  "$repo_root/simulation/vm/examples/vm.env.example" >"$debug_env"
+
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$debug_env" init-run \
+  >"$tmp_dir/init-run-bake-debug.out"
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_MODE=apt \
+  "$repo_root/simulation/vm/simulate.sh" --env "$debug_env" create \
+  >"$tmp_dir/create-bake-debug.out" 2>&1; then
+  printf 'debug-enabled bake must still fail closed\n' >&2
+  exit 1
+fi
+grep -Fq 'create: failed reason=vm-set-create' "$tmp_dir/create-bake-debug.out"
+
+debug_set_dir="$generated_root/vm-sets/$debug_vm_set_id"
+debug_marker="$debug_set_dir/.loopforge-vm-bake-debug.env"
+debug_domain="loopforge-vm-$debug_run_id-$debug_vm_set_id-base-image-bake"
+[ -f "$debug_marker" ]
+[ "$(stat -c '%a' "$debug_marker")" = 600 ]
+grep -Fq 'schema=1' "$debug_marker"
+grep -Fq 'status=failed-preserved' "$debug_marker"
+grep -Fq "domain=$debug_domain" "$debug_marker"
+grep -Fq 'cleanup_command=destroy' "$debug_marker"
+debug_work_dir="$(sed -n 's/^work_dir=//p' "$debug_marker")"
+debug_bake_disk="$(sed -n 's/^bake_disk=//p' "$debug_marker")"
+debug_seed_iso="$(sed -n 's/^seed_iso=//p' "$debug_marker")"
+debug_domain_xml="$(sed -n 's/^domain_xml=//p' "$debug_marker")"
+[ -d "$debug_work_dir" ]
+[ -f "$debug_bake_disk" ]
+[ -f "$debug_seed_iso" ]
+[ -f "$debug_domain_xml" ]
+grep -Fq 'running' "$stub_state/domains/$debug_domain.state"
+debug_create_log="$(find "$generated_root/$debug_run_id/host/logs/harness" \
+  -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'base-image-bake-debug=preserved' "$debug_create_log"
+grep -Fq 'cleanup=destroy' "$debug_create_log"
+
+debug_marker_sha="$(sha256sum "$debug_marker" | awk '{print $1}')"
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$debug_env" create \
+  >"$tmp_dir/create-bake-debug-rerun.out" 2>&1; then
+  printf 'create must not replace preserved bake evidence\n' >&2
+  exit 1
+fi
+debug_rerun_log="$(find "$generated_root/$debug_run_id/host/logs/harness" \
+  -name 'create-*.log' -print | sort | tail -1)"
+grep -Fq 'Preserved VM base-image bake state exists' "$debug_rerun_log"
+[ "$(sha256sum "$debug_marker" | awk '{print $1}')" = "$debug_marker_sha" ]
+[ -d "$debug_work_dir" ]
+grep -Fq 'running' "$stub_state/domains/$debug_domain.state"
+
+PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
+  "$repo_root/simulation/vm/simulate.sh" --env "$debug_env" destroy \
+  >"$tmp_dir/destroy-bake-debug.out"
+grep -Fxq "destroy: ok vm-set=$debug_vm_set_id removed" \
+  "$tmp_dir/destroy-bake-debug.out"
+[ ! -e "$debug_set_dir" ]
+[ ! -e "$stub_state/domains/$debug_domain.state" ]

@@ -263,6 +263,59 @@ vm_libvirt_cleanup_bake_domain() {
   __vm_libvirt_cleanup_bake_domain
 }
 
+__vm_libvirt_write_bake_debug_marker() {
+  local domain marker status tmp
+  status="${1:?bake debug status required}"
+  marker="$(vm_path_vm_set_bake_debug_marker)"
+  domain="$(__vm_libvirt_bake_domain_name)"
+  mkdir -p "$(dirname "$marker")" || return $?
+  tmp="$(mktemp "${marker}.XXXXXX")" || return $?
+  if ! cat >"$tmp" <<EOF
+schema=$VM_BAKE_DEBUG_MARKER_SCHEMA_VERSION
+status=$status
+timestamp=$(iso_timestamp_utc)
+run_id=$HARNESS_RUN_ID
+vm_set_id=$LOOPFORGE_VM_SET_ID
+project_name=$HARNESS_PROJECT_NAME
+domain=$domain
+work_dir=$(__vm_libvirt_bake_work_dir)
+bake_disk=$(__vm_libvirt_bake_disk_path)
+base_image=$(vm_libvirt_baked_base_image_path)
+seed_iso=$(__vm_libvirt_bake_seed_iso_path)
+domain_xml=$(__vm_libvirt_bake_domain_xml_path)
+cleanup_command=destroy
+EOF
+  then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod 0600 "$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  mv -- "$tmp" "$marker"
+}
+
+__vm_libvirt_require_no_preserved_bake_debug() {
+  local marker status
+  marker="$(vm_path_vm_set_bake_debug_marker)"
+  [ -e "$marker" ] || return 0
+  status="$(marker_value "$marker" status 2>/dev/null || printf 'unknown')"
+  printf 'ERROR: Preserved VM base-image bake state exists: %s status=%s. Run ownership-checked destroy for VM set %s before creating fresh state.\n' \
+    "$marker" "$status" "$LOOPFORGE_VM_SET_ID" >&2
+  return 1
+}
+
+__vm_libvirt_preserve_failed_bake_debug() {
+  local domain marker work_dir
+  marker="$(vm_path_vm_set_bake_debug_marker)"
+  domain="$(__vm_libvirt_bake_domain_name)"
+  work_dir="$(__vm_libvirt_bake_work_dir)"
+  __vm_libvirt_write_bake_debug_marker failed-preserved || true
+  printf 'base-image-bake-debug=preserved domain=%s work-dir=%s marker=%s cleanup=destroy\n' \
+    "$domain" "$work_dir" "$marker"
+}
+
 __vm_libvirt_write_baked_base_image_marker() {
   local image marker packages pool target volume baked_sha256 tmp
   image="$(vm_libvirt_baked_base_image_path)"
@@ -347,9 +400,10 @@ vm_libvirt_baked_base_image_ready() {
 }
 
 __vm_libvirt_bake_base_image() {
-  local final_image packages script tmp_image
+  local debug_marker final_image packages script tmp_image
   final_image="$(vm_libvirt_baked_base_image_path)"
   tmp_image="$(__vm_libvirt_bake_disk_path)"
+  debug_marker="$(vm_path_vm_set_bake_debug_marker)"
   packages="$(vm_libvirt_base_image_superset_packages_csv)"
   if [ -e "$final_image" ] || [ -e "$(vm_libvirt_baked_base_image_marker_path)" ]; then
     printf 'ERROR: Refusing to replace an existing invalid VM-set base image: %s\n' \
@@ -358,12 +412,9 @@ __vm_libvirt_bake_base_image() {
   fi
   mkdir -p "$(dirname "$final_image")" "$(__vm_libvirt_bake_work_dir)" || return $?
   vm_libvirt_make_storage_path_searchable "$(dirname "$final_image")" || return $?
-  __vm_libvirt_cleanup_bake_domain || return $?
-  rm -f "$tmp_image" || return $?
-  qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$tmp_image" >/dev/null || return $?
-  qemu-img resize "$tmp_image" "$VM_DOMAIN_DISK_SIZE" >/dev/null || return $?
-  __vm_libvirt_render_bake_seed_media || return $?
-  __vm_libvirt_render_bake_domain_xml || return $?
+  if [ "$VM_DEBUG_PRESERVE_FAILED_BAKE" = 1 ]; then
+    __vm_libvirt_write_bake_debug_marker in-progress || return $?
+  fi
   script="$(__vm_libvirt_os_baseline_install_script base-image-bake "$packages")
 $(vm_libvirt_os_baseline_verify_script "$packages")
 sudo rm -f /etc/ssh/ssh_host_* || true
@@ -375,27 +426,41 @@ sudo apt-get clean || true
 sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
 "
   if ! {
-    virsh -c "$VM_LIBVIRT_URI" define "$(__vm_libvirt_bake_domain_xml_path)" >/dev/null &&
+    __vm_libvirt_cleanup_bake_domain &&
+      rm -f "$tmp_image" &&
+      qemu-img create -f qcow2 -F qcow2 -b "$VM_BASE_IMAGE_PATH" "$tmp_image" >/dev/null &&
+      qemu-img resize "$tmp_image" "$VM_DOMAIN_DISK_SIZE" >/dev/null &&
+      __vm_libvirt_render_bake_seed_media &&
+      __vm_libvirt_render_bake_domain_xml &&
+      virsh -c "$VM_LIBVIRT_URI" define "$(__vm_libvirt_bake_domain_xml_path)" >/dev/null &&
       virsh -c "$VM_LIBVIRT_URI" start "$(__vm_libvirt_bake_domain_name)" >/dev/null &&
       __vm_libvirt_bake_wait_ready &&
       __vm_libvirt_bake_run 'command -v cloud-init >/dev/null 2>&1 && sudo cloud-init status --wait >/dev/null || true' &&
       __vm_libvirt_bake_run "$script" &&
-      __vm_libvirt_shutdown_bake_domain
+      __vm_libvirt_shutdown_bake_domain &&
+      __vm_libvirt_cleanup_bake_domain &&
+      mv "$tmp_image" "$final_image" &&
+      virsh -c "$VM_LIBVIRT_URI" pool-refresh "$(vm_libvirt_baked_base_image_pool_name)" >/dev/null &&
+      { __vm_libvirt_baked_base_image_volume_ready || {
+        printf 'ERROR: VM baked base image is not a valid libvirt-managed qcow2 volume: %s\n' \
+          "$final_image" >&2
+        false
+      }; } &&
+      __vm_libvirt_write_baked_base_image_marker
   }; then
-    __vm_libvirt_cleanup_bake_domain || true
-    rm -rf "$(__vm_libvirt_bake_work_dir)" || true
+    if [ "$VM_DEBUG_PRESERVE_FAILED_BAKE" = 1 ]; then
+      __vm_libvirt_preserve_failed_bake_debug
+    else
+      __vm_libvirt_cleanup_bake_domain || true
+      rm -rf "$(__vm_libvirt_bake_work_dir)" || true
+    fi
     return 1
   fi
-  __vm_libvirt_cleanup_bake_domain || return $?
-  mv "$tmp_image" "$final_image" || return $?
-  virsh -c "$VM_LIBVIRT_URI" pool-refresh "$(vm_libvirt_baked_base_image_pool_name)" >/dev/null || return $?
-  __vm_libvirt_baked_base_image_volume_ready || {
-    printf 'ERROR: VM baked base image is not a valid libvirt-managed qcow2 volume: %s\n' \
-      "$final_image" >&2
+  rm -rf "$(__vm_libvirt_bake_work_dir)" || {
+    [ "$VM_DEBUG_PRESERVE_FAILED_BAKE" != 1 ] || __vm_libvirt_preserve_failed_bake_debug
     return 1
   }
-  __vm_libvirt_write_baked_base_image_marker || return $?
-  rm -rf "$(__vm_libvirt_bake_work_dir)" || return $?
+  [ "$VM_DEBUG_PRESERVE_FAILED_BAKE" != 1 ] || rm -f "$debug_marker" || return $?
   printf 'base-image-ownership=libvirt-managed pool=%s volume=%s image=%s\n' \
     "$(vm_libvirt_baked_base_image_pool_name)" \
     "$(vm_libvirt_baked_base_image_volume_name)" "$final_image"
@@ -416,6 +481,10 @@ vm_libvirt_ensure_baked_base_image() {
     return 1
   }
   if ! vm_libvirt_ensure_storage_pool; then
+    exec {lock_fd}>&-
+    return 1
+  fi
+  if ! __vm_libvirt_require_no_preserved_bake_debug; then
     exec {lock_fd}>&-
     return 1
   fi

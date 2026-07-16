@@ -376,6 +376,31 @@ These paths are generated runtime output unless a file in the tree states
 otherwise. Keep them ignored or documented as generated when created by
 simulation steps.
 
+## Failed Bake Debugging
+
+`VM_DEBUG_PRESERVE_FAILED_BAKE=1` is an opt-in diagnostic setting. The default
+is `0`, which keeps normal failure cleanup unchanged. The setting is persisted
+by `init-run` but does not change the baked-image content fingerprint.
+
+When enabled, a failed base-image bake retains its transient libvirt domain,
+qcow2 work disk, seed media, domain XML, and private VM-set debug marker. The
+`create` command still fails nonzero and does not emit readiness markers. Its
+bounded log reports the retained domain, work directory, marker, and required
+cleanup action.
+
+Do not rerun `create` against that VM set. The harness fails closed while the
+debug marker exists so the next attempt cannot replace diagnostic evidence.
+Inspect the retained guest and files, then remove the selected state with its
+retained environment file:
+
+```bash
+simulation/vm/simulate.sh --env FILE destroy
+```
+
+`down`, `clean`, and another `create` do not recover preserved bake state.
+The ownership-checked `destroy` command removes the transient domain, bake
+work directory, marker, network, storage, and remaining selected VM-set state.
+
 ## Cleanup And Destruction
 
 Host-wide libvirt recovery is available as a separate operator tool:

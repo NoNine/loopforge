@@ -207,7 +207,10 @@ set is down. `clean` removes mutable generated run state only.
 `clean` must preserve review artifacts.
 It must not delete the reusable VM set. Only `destroy` removes
 simulation-owned VM resources. This includes the selected VM set's local baked
-base image.
+base image. When VM bake debug preservation is enabled, a failed bake's
+transient domain and work directory remain selected VM-set state. Later
+`create` attempts must fail without replacing that evidence, and only the
+ownership-checked `destroy` command may remove it.
 
 ## Evidence Obligations
 

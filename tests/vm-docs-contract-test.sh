@@ -50,6 +50,9 @@ require_doc_text docs/contracts/lifecycle-contract.md \
 require_doc_text docs/contracts/lifecycle-contract.md \
   'simulation-owned VM resources.' \
   'Lifecycle contract must identify deleted VM resources'
+require_doc_text docs/contracts/lifecycle-contract.md \
+  "a failed bake's transient domain and work directory remain selected VM-set state" \
+  'Lifecycle contract must preserve failed VM bake debug state until destroy'
 reject_doc_text docs/contracts/lifecycle-contract.md \
   '| VM command | Lifecycle checkpoint |' \
   'Lifecycle contract must not duplicate the VM command reference table'
@@ -314,6 +317,15 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'VM-set-local base image' \
   'VM README must document VM-set-local base-image ownership'
+require_doc_text simulation/vm/README.md \
+  '`VM_DEBUG_PRESERVE_FAILED_BAKE=1`' \
+  'VM README must document failed bake debug preservation'
+require_doc_text simulation/vm/README.md \
+  'fails closed while the debug marker exists' \
+  'VM README must protect preserved bake evidence from create reruns'
+require_doc_text simulation/vm/examples/vm.env.example \
+  'VM_DEBUG_PRESERVE_FAILED_BAKE=0' \
+  'VM example environment must keep bake debug preservation opt-in'
 require_doc_text simulation/vm/README.md \
   'become libvirt-managed volumes' \
   'VM README must define libvirt-managed image ownership'

@@ -123,6 +123,10 @@ vm_path_vm_set_base_image_marker() {
   printf '%s/base-image.env\n' "$(vm_path_vm_set_libvirt_dir)"
 }
 
+vm_path_vm_set_bake_debug_marker() {
+  printf '%s/.loopforge-vm-bake-debug.env\n' "$HARNESS_VM_SET_DIR"
+}
+
 vm_path_vm_set_base_image_lock() {
   printf '%s/.locks/base-image.lock\n' "$HARNESS_VM_SET_DIR"
 }
