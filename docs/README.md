@@ -19,6 +19,7 @@ apply that fact instead of restating the full policy.
 - `baselines/` owns component versions and package prerequisites.
 - `operations/` contains setup manuals and native operation references.
 - `planning/` contains the implementation roadmap and per-step plans.
+- `issues/` contains historical issue reports and root-cause analyses.
 - `references/` contains non-authoritative research and historical input.
 
 Simulation realization documents remain beside the implementation they
@@ -89,6 +90,18 @@ future docs changes, but they do not define current Loopforge behavior.
 When reference material conflicts with authority docs, update the authority
 doc only when the product decision changes. Otherwise, treat the reference
 material as stale or contextual input.
+
+## Issue Reports
+
+`docs/issues/` contains historical issue reports and root-cause analyses for
+maintainers, reviewers, and operators. These reports preserve observed impact,
+timelines, evidence references, causal analysis, resolutions, and remaining
+validation at the time they are written.
+
+Issue reports are not product, lifecycle, simulation, or mutable-state
+authorities. Current behavior remains in the authority and simulation docs,
+and current resume state remains in `project-state/execution-status.md`. When
+an issue report conflicts with either, treat the report as historical context.
 
 ## Execution Ledger Role
 

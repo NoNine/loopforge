@@ -180,7 +180,17 @@ if [ -z "$script" ] && [ "${@: -1}" = "printf ready" ]; then
   printf ready
   exit 0
 fi
-if printf '%s\n' "$script" | grep -Fq 'cloud-init status --wait'; then
+cloud_init_command="$(printf '%s\n%s\n' "$*" "$script")"
+if printf '%s\n' "$cloud_init_command" | grep -Fq 'cloud-init status --wait'; then
+  if printf '%s\n' "$cloud_init_command" | grep -Fq '|| true'; then
+    printf 'cloud-init readiness must not tolerate failure\n' >&2
+    exit 48
+  fi
+  printf '%s\n' "cloud-init $host" >>"$state_dir/calls"
+  if [ "${VM_STUB_FAIL_MODE:-}" = cloud-init ]; then
+    printf 'forced cloud-init failure\n' >&2
+    exit 47
+  fi
   exit 0
 fi
 file_host="$(printf '%s\n' "$host" | tr -c 'A-Za-z0-9_.-' '_')"
@@ -245,6 +255,27 @@ elif printf '%s\n' "$script" | grep -Fq 'LDAP consumer diagnostics'; then
 fi
 STUB
 chmod +x "$stub_bin/ssh"
+
+assert_operator_seed_policy() {
+  local user_data
+  user_data="${1:?user data required}"
+  [ -f "$user_data" ]
+  grep -Fq 'lock_passwd: true' "$user_data"
+  grep -Fq 'disable_root: true' "$user_data"
+  grep -Fq 'path: /etc/ssh/sshd_config.d/40-loopforge-operator.conf' "$user_data"
+  grep -Fq 'owner: root:root' "$user_data"
+  grep -Fq "Match User ci-operator" "$user_data"
+  grep -Fq 'AuthenticationMethods publickey' "$user_data"
+  grep -Fq 'PasswordAuthentication no' "$user_data"
+  grep -Fq 'KbdInteractiveAuthentication no' "$user_data"
+  grep -Fq 'PermitEmptyPasswords no' "$user_data"
+  grep -Fq '/usr/sbin/sshd -t && systemctl enable --now ssh && systemctl reload ssh' \
+    "$user_data"
+  if grep -Fq 'ssh_pwauth:' "$user_data" || grep -Eq 'systemctl[[:space:]]+restart[[:space:]]+ssh' "$user_data"; then
+    printf 'VM seed must not trigger a cloud-init SSH restart: %s\n' "$user_data" >&2
+    exit 1
+  fi
+}
 
 invalid_debug_env="$tmp_dir/harness-invalid-debug.env"
 sed 's/^VM_DEBUG_PRESERVE_FAILED_BAKE=.*/VM_DEBUG_PRESERVE_FAILED_BAKE=yes/' \
@@ -320,6 +351,11 @@ grep -Fq 'ldap-seed-entry=ready type=user id=jenkins-admin' "$create_log"
 grep -Fq 'ldap-seed-entry=ready type=group id=jenkins-admins' "$create_log"
 grep -Fq 'ldap-consumer-bind-search=ready machine=gerrit id=test-user' "$create_log"
 grep -Fq 'baseline-prereqs=ready marker=' "$create_log"
+awk '
+  /^cloud-init / && !cloud_init { cloud_init=NR }
+  /^os-baseline / && !os_baseline { os_baseline=NR }
+  END { exit !(cloud_init && os_baseline && cloud_init < os_baseline) }
+' "$stub_state/calls"
 [ ! -e "$generated_root/vm-sets/$vm_set_id/.loopforge-vm-bake-debug.env" ]
 if find "$generated_root/vm-sets/$vm_set_id/libvirt" -maxdepth 1 \
   -type d -name 'bake-work-*' -print -quit | grep -q .; then
@@ -327,6 +363,10 @@ if find "$generated_root/vm-sets/$vm_set_id/libvirt" -maxdepth 1 \
   exit 1
 fi
 [ ! -e "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-base-image-bake.state" ]
+for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
+  assert_operator_seed_policy \
+    "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine/user-data"
+done
 
 ldap_evidence="$(find "$generated_root/$run_id/host/evidence/harness" -name 'create-ldap-*.json' -print | sort | tail -1)"
 [ -n "$ldap_evidence" ]
@@ -349,6 +389,7 @@ PY
 
 baked_marker="$generated_root/vm-sets/$vm_set_id/libvirt/base-image.env"
 [ -f "$baked_marker" ]
+grep -Fq 'schema=7' "$baked_marker"
 grep -Fq 'status=ready' "$baked_marker"
 grep -Fq 'image_ownership=libvirt-managed' "$baked_marker"
 grep -Fq "baked_image=$generated_root/vm-sets/$vm_set_id/libvirt/disks/base.qcow2" "$baked_marker"
@@ -453,7 +494,7 @@ run_fail_closed_case() {
   case_marker="$generated_root/vm-sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
   case_bake_domain="loopforge-vm-$case_run_id-$case_vm_set_id-base-image-bake"
   case_base_image="$base_image"
-  if [ "$mode" = apt ] || [ "$mode" = image-info ]; then
+  if [ "$mode" = apt ] || [ "$mode" = image-info ] || [ "$mode" = cloud-init ]; then
     case_base_image="$tmp_dir/noble-server-cloudimg-amd64-$mode.img"
     printf 'stub cloud image for forced %s failure\n' "$mode" >"$case_base_image"
   fi
@@ -469,6 +510,7 @@ run_fail_closed_case() {
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$case_env" init-run >"$tmp_dir/init-run-$mode.out"
 
+  : >"$stub_state/calls"
   if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_MODE="$mode" \
     "$repo_root/simulation/vm/simulate.sh" --env "$case_env" create >"$tmp_dir/create-$mode.out" 2>&1; then
     printf 'create must fail closed for forced %s failure\n' "$mode" >&2
@@ -483,6 +525,10 @@ run_fail_closed_case() {
     grep -Fq "$case_failure_text" "$case_create_log"
   fi
   [ ! -e "$stub_state/domains/$case_bake_domain.state" ]
+  if [ "$mode" = cloud-init ] && grep -Fq 'os-baseline ' "$stub_state/calls"; then
+    printf 'package installation must not run after cloud-init failure\n' >&2
+    exit 1
+  fi
   if [ -d "$generated_root/vm-sets/$case_vm_set_id/libvirt" ] &&
     find "$generated_root/vm-sets/$case_vm_set_id/libvirt" -maxdepth 1 \
       -type d -name 'bake-work-*' -print -quit | grep -q .; then
@@ -493,6 +539,7 @@ run_fail_closed_case() {
 }
 
 run_fail_closed_case apt 'forced apt failure'
+run_fail_closed_case cloud-init 'forced cloud-init failure'
 run_fail_closed_case image-info 'VM baked base image is not a valid libvirt-managed qcow2 volume'
 run_fail_closed_case slapd 'forced slapd failure'
 run_fail_closed_case ldap-consumer 'forced ldap consumer failure'
@@ -539,6 +586,7 @@ debug_domain_xml="$(sed -n 's/^domain_xml=//p' "$debug_marker")"
 [ -f "$debug_bake_disk" ]
 [ -f "$debug_seed_iso" ]
 [ -f "$debug_domain_xml" ]
+assert_operator_seed_policy "$debug_work_dir/seed/user-data"
 grep -Fq 'running' "$stub_state/domains/$debug_domain.state"
 debug_create_log="$(find "$generated_root/$debug_run_id/host/logs/harness" \
   -name 'create-*.log' -print | sort | tail -1)"

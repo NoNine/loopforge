@@ -318,6 +318,12 @@ require_doc_text simulation/vm/README.md \
   'VM-set-local base image' \
   'VM README must document VM-set-local base-image ownership'
 require_doc_text simulation/vm/README.md \
+  'account-scoped OpenSSH policy' \
+  'VM README must document the operator SSH seed policy'
+require_doc_text simulation/vm/README.md \
+  'failed cloud-init module blocks readiness' \
+  'VM README must require successful cloud-init completion'
+require_doc_text simulation/vm/README.md \
   '`VM_DEBUG_PRESERVE_FAILED_BAKE=1`' \
   'VM README must document failed bake debug preservation'
 require_doc_text simulation/vm/README.md \

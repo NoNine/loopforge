@@ -264,19 +264,10 @@ __vm_libvirt_write_seed_iso() {
   }
 }
 
-__vm_libvirt_render_seed_media() {
-  local machine work_dir user_data meta_data network_config seed_iso mac public_key dns_gateway
-  machine="${1:?machine required}"
-  work_dir="$(__vm_libvirt_seed_work_dir "$machine")"
-  user_data="$work_dir/user-data"
-  meta_data="$work_dir/meta-data"
-  network_config="$work_dir/network-config"
-  seed_iso="$(__vm_libvirt_seed_iso_path "$machine")"
-  mac="$(__vm_libvirt_machine_mac "$machine")"
+__vm_libvirt_write_operator_user_data() {
+  local public_key user_data
+  user_data="${1:?user data path required}"
   public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
-  dns_gateway="$(__vm_libvirt_network_gateway)"
-  mkdir -p "$work_dir"
-  chmod "$LF_MODE_PRIVATE_DIR" "$work_dir"
   cat >"$user_data" <<EOF
 #cloud-config
 users:
@@ -289,12 +280,38 @@ users:
     lock_passwd: true
     ssh_authorized_keys:
       - $public_key
-ssh_pwauth: false
 disable_root: true
 package_update: false
+write_files:
+  - path: /etc/ssh/sshd_config.d/40-loopforge-operator.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      Match User $VM_OPERATOR_USER
+          AuthenticationMethods publickey
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitEmptyPasswords no
+      Match all
 runcmd:
-  - [ cloud-init-per, once, loopforge-ssh-enable, systemctl, enable, --now, ssh ]
+  - [ /bin/sh, -ec, '/usr/sbin/sshd -t && systemctl enable --now ssh && systemctl reload ssh' ]
 EOF
+}
+
+__vm_libvirt_render_seed_media() {
+  local machine work_dir user_data meta_data network_config seed_iso mac dns_gateway
+  machine="${1:?machine required}"
+  work_dir="$(__vm_libvirt_seed_work_dir "$machine")"
+  user_data="$work_dir/user-data"
+  meta_data="$work_dir/meta-data"
+  network_config="$work_dir/network-config"
+  seed_iso="$(__vm_libvirt_seed_iso_path "$machine")"
+  mac="$(__vm_libvirt_machine_mac "$machine")"
+  dns_gateway="$(__vm_libvirt_network_gateway)"
+  mkdir -p "$work_dir"
+  chmod "$LF_MODE_PRIVATE_DIR" "$work_dir"
+  __vm_libvirt_write_operator_user_data "$user_data"
   cat >"$meta_data" <<EOF
 instance-id: $HARNESS_PROJECT_NAME-$machine
 local-hostname: $machine
@@ -318,35 +335,17 @@ EOF
 }
 
 __vm_libvirt_render_bake_seed_media() {
-  local work_dir user_data meta_data network_config seed_iso mac public_key dns_gateway
+  local work_dir user_data meta_data network_config seed_iso mac dns_gateway
   work_dir="$(__vm_libvirt_bake_seed_work_dir)"
   user_data="$work_dir/user-data"
   meta_data="$work_dir/meta-data"
   network_config="$work_dir/network-config"
   seed_iso="$(__vm_libvirt_bake_seed_iso_path)"
   mac="$(__vm_libvirt_bake_machine_mac)"
-  public_key="$(cat "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub")"
   dns_gateway="$(__vm_libvirt_network_gateway)"
   mkdir -p "$work_dir"
   chmod "$LF_MODE_PRIVATE_DIR" "$work_dir"
-  cat >"$user_data" <<EOF
-#cloud-config
-users:
-  - default
-  - name: $VM_OPERATOR_USER
-    gecos: Loopforge simulation operator
-    groups: sudo
-    shell: /bin/bash
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    lock_passwd: true
-    ssh_authorized_keys:
-      - $public_key
-ssh_pwauth: false
-disable_root: true
-package_update: false
-runcmd:
-  - [ cloud-init-per, once, loopforge-ssh-enable, systemctl, enable, --now, ssh ]
-EOF
+  __vm_libvirt_write_operator_user_data "$user_data"
   cat >"$meta_data" <<EOF
 instance-id: $HARNESS_PROJECT_NAME-base-image-bake
 local-hostname: base-image-bake

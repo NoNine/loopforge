@@ -347,6 +347,11 @@ with the rest of that VM set.
 The target OS SSH identity is also VM-set state because its public key is
 seeded into reusable guest disks during cloud-init. SSH `known_hosts` trust
 state remains run-scoped and is recreated for each selected run.
+Seed media installs a root-owned, account-scoped OpenSSH policy that requires
+public-key authentication for the VM operator without changing site listener
+settings. Cloud-init validates and reloads that policy without restarting the
+socket-activated listener. `create` and `up` require successful cloud-init
+completion; a missing command or failed cloud-init module blocks readiness.
 
 | Output kind | VM generated pattern |
 | --- | --- |

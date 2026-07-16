@@ -435,7 +435,7 @@ sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
       virsh -c "$VM_LIBVIRT_URI" define "$(__vm_libvirt_bake_domain_xml_path)" >/dev/null &&
       virsh -c "$VM_LIBVIRT_URI" start "$(__vm_libvirt_bake_domain_name)" >/dev/null &&
       __vm_libvirt_bake_wait_ready &&
-      __vm_libvirt_bake_run 'command -v cloud-init >/dev/null 2>&1 && sudo cloud-init status --wait >/dev/null || true' &&
+      __vm_libvirt_bake_run 'command -v cloud-init >/dev/null 2>&1 && sudo -n cloud-init status --wait >/dev/null' &&
       __vm_libvirt_bake_run "$script" &&
       __vm_libvirt_shutdown_bake_domain &&
       __vm_libvirt_cleanup_bake_domain &&

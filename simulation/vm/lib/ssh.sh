@@ -209,7 +209,7 @@ vm_ssh_wait_cloud_init() {
   machine="${1:?machine required}"
   host="$(vm_ssh_machine_host "$machine")"
   ssh $(vm_ssh_common_options) "$VM_OPERATOR_USER@$host" \
-    'command -v cloud-init >/dev/null 2>&1 && sudo cloud-init status --wait >/dev/null || true'
+    'command -v cloud-init >/dev/null 2>&1 && sudo -n cloud-init status --wait >/dev/null'
 }
 
 vm_ssh_capture_known_host() {

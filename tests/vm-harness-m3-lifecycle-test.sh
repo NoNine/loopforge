@@ -155,6 +155,14 @@ last="${@: -1}"
 if [ "$last" = "printf ready" ]; then
   printf ready
 elif printf '%s\n' "$*" | grep -Fq 'cloud-init status --wait'; then
+  if printf '%s\n' "$*" | grep -Fq '|| true'; then
+    printf 'cloud-init readiness must not tolerate failure\n' >&2
+    exit 48
+  fi
+  if [ "${VM_STUB_FAIL_CLOUD_INIT:-0}" = 1 ]; then
+    printf 'forced cloud-init failure\n' >&2
+    exit 47
+  fi
   exit 0
 elif [ "$last" = bash ] || [ "$last" = -s ]; then
   script="$(cat)"
@@ -239,6 +247,16 @@ for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
     "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.xml"
   grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
 done
+
+if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_CLOUD_INIT=1 \
+  "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/up-cloud-init-failure.out" 2>&1; then
+  printf 'up must fail when cloud-init completion fails\n' >&2
+  exit 1
+fi
+grep -Fq 'up: failed reason=vm-set-up' "$tmp_dir/up-cloud-init-failure.out"
+cloud_init_failure_log="$(find "$generated_root/$run_id/host/logs/harness" \
+  -name 'up-*.log' -print | sort | tail -1)"
+grep -Fq 'forced cloud-init failure' "$cloud_init_failure_log"
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" up >"$tmp_dir/up.out"
