@@ -156,6 +156,22 @@ permission errors, or timeouts invalidates `os-baseline`,
 `base-image-bake=ready`, `base-image=ready`, `ldap-service=ready`,
 `ldap-consumer=... reachable`, and `baseline-prereqs=ready` for that run.
 
+## Shared Base-Image Service Waiver Gate
+
+For M4 or later acceptance under the VM-only waiver, bounded read-only
+evidence must prove:
+
+- the selected libvirt network uses NAT, local-only DNS, and no inbound port
+  forwarding;
+- non-LDAP VMs have no seeded identities and non-agent VMs have no NFS
+  exports;
+- consumers use the configured LDAP FQDN, every guest is healthy, and role and
+  integration proofs pass.
+
+`audit-state: ok` is necessary but not sufficient because it validates
+ownership rather than service isolation. Any failed condition blocks the
+waiver, which cannot support target-deployment evidence.
+
 ## Review Use
 
 Reviewers should use this document when deciding whether a VM milestone can be

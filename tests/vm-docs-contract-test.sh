@@ -51,7 +51,7 @@ require_doc_text docs/contracts/lifecycle-contract.md \
   'simulation-owned VM resources.' \
   'Lifecycle contract must identify deleted VM resources'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  "a failed bake's transient domain and work directory remain selected VM-set state" \
+  'transient domain and work directory remain selected VM-set state' \
   'Lifecycle contract must preserve failed VM bake debug state until destroy'
 reject_doc_text docs/contracts/lifecycle-contract.md \
   '| VM command | Lifecycle checkpoint |' \
@@ -306,6 +306,18 @@ require_doc_text simulation/vm/README.md \
   'VM simulation is expected to be near target deployment for lifecycle' \
   'VM README must require near-target checkpoint execution'
 require_doc_text simulation/vm/README.md \
+  '## Shared Base-Image Service Waiver' \
+  'VM README must document the shared-image service waiver'
+require_doc_text simulation/vm/README.md \
+  'does not apply to target deployment' \
+  'VM service waiver must not weaken target deployment'
+require_doc_text simulation/vm/docs/verification.md \
+  '## Shared Base-Image Service Waiver Gate' \
+  'VM verification must define the shared-image waiver gate'
+require_doc_text simulation/vm/docs/verification.md \
+  '`audit-state: ok` is necessary but not sufficient' \
+  'VM waiver verification must not rely on audit-state alone'
+require_doc_text simulation/vm/README.md \
   'VM provisioning must satisfy the role target OS dependency baselines before' \
   'VM README must place role OS dependencies before baseline snapshot'
 require_doc_text simulation/vm/README.md \
@@ -327,7 +339,7 @@ require_doc_text simulation/vm/README.md \
   '`VM_DEBUG_PRESERVE_FAILED_BAKE=1`' \
   'VM README must document failed bake debug preservation'
 require_doc_text simulation/vm/README.md \
-  'fails closed while the debug marker exists' \
+  'debug marker exists so the next attempt cannot replace diagnostic evidence' \
   'VM README must protect preserved bake evidence from create reruns'
 require_doc_text simulation/vm/examples/vm.env.example \
   'VM_DEBUG_PRESERVE_FAILED_BAKE=0' \

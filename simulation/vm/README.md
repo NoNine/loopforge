@@ -94,6 +94,28 @@ these runtimes, while `validate-role` only observes enabled/active units,
 runtime ownership, endpoints, and bounded logs. The VM harness manages VM
 lifecycle, not application service lifecycle.
 
+## Shared Base-Image Service Waiver
+
+The shared baked image installs all roles' OS packages, which leaves `slapd`,
+`nfs-server`, and `rpcbind` running on every VM. This is accepted for v1 VM
+simulation only; LDAP remains owned by the LDAP VM and the NFS export by the
+Jenkins agent.
+
+The waiver requires:
+
+- the selected network is libvirt NAT with local-only DNS and no inbound port
+  forwarding;
+- credentials and entries are simulation-only, non-LDAP VMs contain no seeded
+  identities, and consumers use the configured LDAP FQDN;
+- non-agent VMs publish no NFS exports, while the Jenkins agent exports only
+  the reviewed shared-storage path;
+- all guests are healthy and required role and integration proofs pass.
+
+This waiver does not apply to target deployment, external VM exposure, real
+credentials or data, or extra NFS exports. `audit-state` alone does not prove
+the conditions. Retire the waiver by quiescing package-enabled services in the
+baked image and enabling only role-owned services on each VM.
+
 ## Milestone Verification Gates
 
 VM milestone completion requires fail-closed runtime proof. Terminal summaries,
