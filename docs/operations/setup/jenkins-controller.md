@@ -374,8 +374,10 @@ Validation evidence covers:
 - Endpoint reachability: HTTP checks reach the running Jenkins controller.
 - Artifact freshness: staged artifacts and rendered config are verified by
   manifest/checksum before mutation.
-- LDAP access: the Jenkins controller target can open a TCP connection to the
-  reviewed LDAP endpoint.
+- LDAP access: the Jenkins controller target binds and searches the configured
+  LDAP user and group bases with `ldapsearch`. If `ldapsearch` or the reviewed
+  bind/search credentials are unavailable, validation blocks; TCP reachability
+  alone is not LDAP access proof.
 - Plugin readiness: every accepted direct plugin pin from
   `JENKINS_PLUGIN_LIST` is installed from staged artifacts at the exact
   accepted version, and Jenkins startup log checks prevent plugin-load

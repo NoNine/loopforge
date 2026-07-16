@@ -78,6 +78,8 @@ Record these values before installation:
 | LDAP bind DN | `uid=jenkins-ldap-bind,LDAP_USER_BASE` or provided bind DN |
 | LDAP user base | `LDAP_USER_BASE` |
 | LDAP group base | `LDAP_GROUP_BASE` |
+| LDAP user proof base | `LDAP_USER_PROOF_BASE_DN`, resolved absolute user base DN |
+| LDAP group proof base | `LDAP_GROUP_PROOF_BASE_DN`, resolved absolute group base DN |
 | LDAP Jenkins administrator | `LDAP_ADMIN_USER`, reviewed site-specific LDAP user |
 | Network mode | Approved internal OS repositories for target-host OS dependencies |
 | Operator account | `LOOPFORGE_OPERATOR_ACCOUNT`, default `ci-operator` |
@@ -154,6 +156,7 @@ sudo apt install -y \
   ca-certificates \
   curl \
   fontconfig \
+  ldap-utils \
   nfs-common \
   openjdk-21-jre \
   openssh-client \
@@ -161,6 +164,20 @@ sudo apt install -y \
   tar \
   wget
 java -version
+```
+
+Prove that the reviewed LDAP bind account can search both configured bases.
+`LDAP_USER_PROOF_BASE_DN` and `LDAP_GROUP_PROOF_BASE_DN` are the absolute DNs
+used for this proof. When Jenkins configuration uses `LDAP_ROOT_DN` plus
+relative search bases, resolve each complete DN before running these commands.
+Each command prompts for the LDAP bind password without placing it in shell
+history. Stop if either command fails:
+
+```bash
+ldapsearch -x -H LDAP_URL -D LDAP_BIND_DN -W \
+  -b LDAP_USER_PROOF_BASE_DN -s base dn
+ldapsearch -x -H LDAP_URL -D LDAP_BIND_DN -W \
+  -b LDAP_GROUP_PROOF_BASE_DN -s base dn
 ```
 
 The Jenkins controller application is staged as a reviewed WAR artifact in the

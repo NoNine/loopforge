@@ -2,8 +2,8 @@
 
 This document is the consolidated requirements reference for Ubuntu 24.04.
 It has two parts: host prerequisites by mode, and layered package
-requirements. A package can be required by the product runtime, by the
-Loopforge helper scripts, or only by Docker simulation.
+requirements. A package can be required by the product runtime, by native
+operator or helper validation, or only by Docker simulation.
 
 `docs/baselines/version-baseline.md` owns the default Ubuntu, Java, Gerrit, Jenkins,
 plugin-manager, and Jenkins agent/tooling versions. This document owns the
@@ -25,13 +25,13 @@ installation is simulation-only.
 
 ## Package Matrix
 
-| Context | Product/runtime packages | Helper-script packages | Simulation-only packages | Notes |
+| Context | Product/runtime packages | Operator/helper packages | Simulation-only packages | Notes |
 | --- | --- | --- | --- | --- |
-| Gerrit target | `openjdk-21-jre-headless` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar` | Shared Docker image also carries `git`, `ldap-utils`, `procps`, `unzip`, and `wget` for helper/runtime proof paths | Native Gerrit service needs Java. Docker validation also proves LDAP and Gerrit runtime behavior. |
-| Jenkins controller target | `fontconfig`, `nfs-common`, `openjdk-21-jre` | `ca-certificates`, `curl`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins `.deb` is staged as an application artifact, not installed from an apt repository setup path. The controller mounts the Jenkins-agent-hosted shared storage export at `JENKINS_SHARED_STORAGE_PATH`. |
+| Gerrit target | `openjdk-21-jre-headless` | `ca-certificates`, `curl`, `ldap-utils`, `openssh-client`, `rsync`, `tar` | Shared Docker image also carries `git`, `procps`, `unzip`, and `wget` for helper/runtime proof paths | Gerrit needs Java; `ldap-utils` supports native and helper bind/search proof without becoming a Gerrit runtime dependency. |
+| Jenkins controller target | `fontconfig`, `nfs-common`, `openjdk-21-jre` | `ca-certificates`, `curl`, `ldap-utils`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins is staged as a reviewed application artifact; `ldap-utils` supports native and helper bind/search proof without becoming a Jenkins runtime dependency. The controller mounts the Jenkins-agent-hosted shared storage export at `JENKINS_SHARED_STORAGE_PATH`. |
 | Jenkins agent target | `nfs-kernel-server`, `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access and hosts the NFS export for shared Jenkins storage. Workload-specific build tools are out of scope. |
 | Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
-| Docker shared target image | Union of role product packages | Union of role helper packages | `sudo`, `procps`, `ldap-utils`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
+| Docker shared target image | Union of role product packages | Union of role operator/helper packages | `sudo`, `procps`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
 | VM simulation host | None: not a product target runtime | `python3`, SSH client tools, checksum/archive tooling, and `flock` used by the harness | libvirt/KVM tooling such as `virsh`, image or install tooling, and cloud-init or seed media tooling | VM tooling provisions and inspects simulation-owned VMs; it is not a native target package baseline. NFS server/client packages for shared Jenkins storage are installed in the Jenkins agent and controller VMs, not on the VM control host. |
 | VM LDAP guest | `slapd` for the simulation-owned LDAP service | `ldap-utils` for LDAP bind/search readiness and seed proof | Simulation-owned LDAP seed data and test credentials | Applies only to the LDAP VM in `vm-simulation`; native target deployment uses approved target-owned LDAP instead. |
 
@@ -40,7 +40,7 @@ installation is simulation-only.
 | Layer | Meaning | Where it belongs |
 | --- | --- | --- |
 | Product/runtime | Packages required for the role service to run. | Native role install command and this document. |
-| Helper-script | Packages required because Loopforge helper scripts validate, stage, configure, or collect evidence. | Helper defaults, env examples, setup manuals, and this document. |
+| Operator/helper | Packages required because native operators or Loopforge helpers validate, stage, configure, or collect evidence. | Native install commands, helper defaults, env examples, setup manuals, and this document. |
 | Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker README and this document. |
 
 VM simulation realizes role target OS dependency baselines during VM
@@ -58,8 +58,8 @@ document owns the layered rationale.
 
 | Target role | Native install packages |
 | --- | --- |
-| Gerrit | `ca-certificates`, `curl`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`, `tar` |
-| Jenkins controller | `ca-certificates`, `curl`, `fontconfig`, `nfs-common`, `openjdk-21-jre`, `openssh-client`, `rsync`, `tar`, `wget` |
+| Gerrit | `ca-certificates`, `curl`, `ldap-utils`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`, `tar` |
+| Jenkins controller | `ca-certificates`, `curl`, `fontconfig`, `ldap-utils`, `nfs-common`, `openjdk-21-jre`, `openssh-client`, `rsync`, `tar`, `wget` |
 | Jenkins agent | `ca-certificates`, `curl`, `nfs-kernel-server`, `openjdk-21-jre-headless`, `openssh-server`, `rsync`, `tar`, `wget` |
 
 ## Evidence Map
@@ -74,7 +74,7 @@ document owns the layered rationale.
 | Docker shared target image | `simulation/docker/target/Dockerfile` installs the shared superset used by Gerrit, Jenkins controller, and Jenkins agent target containers. |
 | Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
 | Docker `procps` layer | `simulation/docker/simulate.sh`, Gerrit helper runtime checks, and Jenkins agent SSH readiness checks use process inspection inside slim containers. |
-| Docker `ldap-utils` layer | `scripts/gerrit-setup.sh` requires `ldapsearch` to prove LDAP bind/search readiness. |
+| Target-host `ldap-utils` layer | The Gerrit and Jenkins native procedures and role helpers use `ldapsearch` to prove bind/search readiness. |
 | Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
 | VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, and SSH client tools. |
 | VM LDAP guest service | `simulation/vm/README.md` documents the real LDAP service and seeded directory contract; VM evidence proves service readiness, seeded entries, and bind/search behavior. |
@@ -94,5 +94,7 @@ document owns the layered rationale.
 - Do not treat `sudo` as a native role dependency. It is an operator privilege
   mechanism, and in Docker it supports the default example `ci-operator`
   orchestration account.
+- Do not treat `ldap-utils` as a Gerrit or Jenkins runtime dependency. It is a
+  target-host operator/helper validation prerequisite.
 - Do not treat bundle-factory packages as target-host service dependencies.
 - Do not use artifact bundles as offline Ubuntu package bundles.

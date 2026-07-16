@@ -10,12 +10,11 @@ hosts use approved internal Ubuntu/OS package repositories for OS dependencies.
 Public internet fallback on target hosts is simulation-only and must be labeled
 as such in docs, logs, and verification summaries.
 
-Gerrit application artifact bundles are key-free. They may contain reviewed
-Gerrit application files, templates, manifests, and checksums, but not external
-Gerrit plugin jars, SSH private keys, public keys, `authorized_keys`, or
-generated public-key handoff files. Jenkins-to-Gerrit keypair generation and
-public-key handoff are integration operations after Gerrit role-local readiness
-is proven.
+Gerrit application artifact bundles are key-free. The native Gerrit payload
+contains the reviewed Gerrit WAR and its checksum file, but not external Gerrit
+plugin jars, SSH private keys, public keys, `authorized_keys`, or generated
+public-key handoff files. Jenkins-to-Gerrit keypair generation and public-key
+handoff are integration operations after Gerrit role-local readiness is proven.
 
 
 Audience: production operators installing Gerrit on Ubuntu 24.04 LTS without Docker.
@@ -62,49 +61,51 @@ Record these values before installation:
 
 | Item | Value |
 | --- | --- |
-| Hostname | `GERRIT_HOST` |
-| IP address | `GERRIT_IP` |
-| DNS name | `gerrit.example.internal` |
+| Hostname | `GERRIT_HOST`, a site-approved stable FQDN or DNS name |
 | Browser URL | `GERRIT_CANONICAL_WEB_URL`, such as `https://gerrit.example.internal/` |
-| HTTP port | `8080` or chosen port |
-| SSH port | `29418` |
-| LDAP URL | `ldap://LDAP_HOST:389` or `ldaps://LDAP_HOST:636` |
+| HTTP port | `GERRIT_HTTP_PORT`, default `8080` |
+| SSH port | `GERRIT_SSH_PORT`, default `29418` |
+| LDAP URL | `LDAP_URL`, such as `ldap://LDAP_HOST:389` or `ldaps://LDAP_HOST:636` |
 | LDAP bind DN | `uid=gerrit-ldap-bind,LDAP_USER_BASE` or provided bind DN |
 | LDAP user base | `LDAP_USER_BASE` |
 | LDAP group base | `LDAP_GROUP_BASE` |
+| Gerrit administrator | `GERRIT_ADMIN_ACCOUNT`, reviewed LDAP-backed account |
+| Gerrit administrator group | `GERRIT_ADMIN_GROUP`, reviewed LDAP group |
+| Gerrit test user | Reviewed LDAP-backed test account |
 | Network mode | Approved internal OS repositories for target-host OS dependencies |
+| Operator account | `LOOPFORGE_OPERATOR_ACCOUNT`, default `ci-operator` |
+| Operator group | `LOOPFORGE_OPERATOR_GROUP`, default `ci-operator` |
 | Gerrit runtime user | `gerrit`, local OS account |
 | Gerrit runtime group | `gerrit`, local OS group |
-| Jenkins Gerrit integration account | `jenkins-gerrit`, Gerrit-internal account |
+| Gerrit runtime UID | `61010`, or reviewed site value |
+| Gerrit runtime GID | `61010`, or reviewed site value |
 | Data directory | `/srv/gerrit`, owned by `gerrit:gerrit` |
 
 Run on the Gerrit host:
 
 ```bash
-lsb_release -a
+cat /etc/os-release
 hostnamectl
 timedatectl
-ip addr
-ip route
-df -h
+df -h /srv
 free -h
-java -version || true
-apt policy
-dpkg -l | egrep 'openjdk|git|curl|wget|openssh|rsync|unzip' || true
 systemctl --failed
-ss -lntup
 getent hosts GERRIT_HOST
-getent passwd gerrit
-getent group gerrit
-nc -vz LDAP_HOST 389 || true
-nc -vz LDAP_HOST 636 || true
 ```
 
-Use port `389` for LDAP with StartTLS if required. Use port `636` for LDAPS.
+Confirm `/etc/os-release` reports Ubuntu `24.04` and `noble`, the hostname and
+time settings match reviewed inventory, `/srv` has sufficient capacity, and
+any failed systemd units have an approved disposition. The final command must
+resolve `GERRIT_HOST`; stop and correct endpoint identity before continuing if
+it does not.
 
-The Gerrit runtime user and group are local OS identities. Create or confirm
-`gerrit:gerrit` before installation, or use your site's chosen local runtime
-account consistently everywhere this manual shows `gerrit`.
+Use the site-approved `LDAP_URL`. Use an `ldaps://` URL when directory policy
+requires TLS and the directory exposes LDAPS.
+
+The Gerrit runtime user and group are reviewed local OS identities. This
+clean-install procedure creates them during installation. If your site uses
+different names or numeric identities, substitute the reviewed values
+consistently everywhere this manual shows the defaults.
 
 The LDAP bind DN used by Gerrit should be a dedicated read-only Gerrit bind
 account. It must have permission to search the configured user and group bases.
@@ -142,10 +143,11 @@ The package rationale and layered classification are maintained in
 Run on the Gerrit host:
 
 ```bash
-apt update
-apt install -y \
+sudo apt update
+sudo apt install -y \
   ca-certificates \
   curl \
+  ldap-utils \
   openssh-client \
   openjdk-21-jre-headless \
   rsync \
@@ -154,6 +156,17 @@ java -version
 ```
 
 Expected result: OpenJDK 21.
+
+Prove that the reviewed LDAP bind account can search both configured bases.
+Each command prompts for the LDAP bind password without placing it in shell
+history. Stop if either command fails:
+
+```bash
+ldapsearch -x -H LDAP_URL -D LDAP_BIND_DN -W \
+  -b LDAP_USER_BASE -s base dn
+ldapsearch -x -H LDAP_URL -D LDAP_BIND_DN -W \
+  -b LDAP_GROUP_BASE -s base dn
+```
 
 ### 2.2 Gerrit Artifact Bundle
 
@@ -173,13 +186,20 @@ https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
 
 #### 2.2.1 Create the Gerrit Artifact Bundle
 
-Run on the bundle-factory VM:
+Run on the bundle-factory VM. The owning bundle-factory prerequisite baseline
+is defined in `docs/contracts/artifact-bundle-contract.md` and
+`docs/baselines/package-requirements.md`. Verify the selected output paths are
+fresh before creating the bundle. Stop and select a new bundle path if any
+check fails:
 
 ```bash
-mkdir -p ~/gerrit-artifacts-bundle/gerrit
-cd ~/gerrit-artifacts-bundle/gerrit
+test ! -e "$HOME/gerrit-artifacts-bundle"
+test ! -e "$HOME/gerrit-artifacts-bundle.tar.gz"
+test ! -e "$HOME/gerrit-artifacts-bundle.tar.gz.sha256"
+mkdir -p "$HOME/gerrit-artifacts-bundle/gerrit"
+cd "$HOME/gerrit-artifacts-bundle/gerrit"
 wget -q --show-progress=off --tries=5 --timeout=30 --read-timeout=60 \
-  --continue -O gerrit-3.13.6.war \
+  -O gerrit-3.13.6.war \
   https://gerrit-releases.storage.googleapis.com/gerrit-3.13.6.war
 ```
 
@@ -190,29 +210,15 @@ installed and validated core Gerrit.
 Verify the Gerrit WAR archive:
 
 ```bash
-cd ~/gerrit-artifacts-bundle/gerrit
+cd "$HOME/gerrit-artifacts-bundle/gerrit"
 unzip -t gerrit-3.13.6.war >/dev/null
 ```
 
-Create manifests, checksums, and archive:
+Create the payload checksum and archive:
 
 ```bash
-cd ~/gerrit-artifacts-bundle
-cat > gerrit/manifest.txt <<'EOF'
-harness_manifest_version=1
-role=gerrit
-bundle_name=gerrit-artifacts-bundle
-ubuntu_release=24.04
-ubuntu_codename=noble
-java_version=21
-gerrit_version=3.13.6
-jenkins_version=not-applicable
-jenkins_plugin_manager_version=not-applicable
-war=gerrit-3.13.6.war
-template_count=2
-EOF
-(cd gerrit && find . -type f ! -name checksums.sha256 -print0 \
-  | sort -z | xargs -0 sha256sum > checksums.sha256)
+cd "$HOME/gerrit-artifacts-bundle/gerrit"
+sha256sum gerrit-3.13.6.war > checksums.sha256
 cd "$HOME"
 tar -czf gerrit-artifacts-bundle.tar.gz -C gerrit-artifacts-bundle gerrit
 sha256sum gerrit-artifacts-bundle.tar.gz \
@@ -238,8 +244,8 @@ operator_home="$(getent passwd "$operator_account" | cut -d: -f6)"
 
 cd "$operator_home"
 sha256sum -c gerrit-artifacts-bundle.tar.gz.sha256
+sudo test ! -e /var/lib/loopforge/staging/gerrit
 sudo install -d -m 0750 -o "$operator_account" -g "$operator_group" /var/lib/loopforge/staging
-sudo rm -rf /var/lib/loopforge/staging/gerrit
 sudo tar -xzf gerrit-artifacts-bundle.tar.gz -C /var/lib/loopforge/staging
 sudo chown -R "$operator_account:$operator_group" /var/lib/loopforge/staging/gerrit
 cd /var/lib/loopforge/staging/gerrit
@@ -275,9 +281,11 @@ sudo install -d -o gerrit -g gerrit -m 0755 /srv/gerrit/plugins
 sudo install -d -o gerrit -g gerrit -m 0750 /srv/gerrit/etc
 ```
 
-For artifact recovery, rerun only the artifact archive checksum, extraction,
-and WAR copy commands. OS package recovery uses the approved internal
-Ubuntu/OS package repository path.
+If staging, extraction, checksum verification, or installation fails, preserve
+bounded diagnostics and reprovision a fresh Gerrit target before starting a new
+clean-install run. Do not overwrite or repair the selected staging or product
+state in place. OS package-source failures belong to the approved internal
+Ubuntu/OS package repository procedure.
 
 ## 3. Gerrit Installation
 
@@ -294,13 +302,9 @@ test "$(getent passwd gerrit | cut -d: -f6)" = /srv/gerrit
 test "$(stat -c '%U:%G' /srv/gerrit)" = gerrit:gerrit
 ```
 
-Place the Gerrit WAR from the staged bundle-factory artifact bundle. Target
-hosts must not download Gerrit application artifacts as fallback.
-
-```bash
-cp /var/lib/loopforge/staging/gerrit/gerrit-3.13.6.war /srv/gerrit/bin/gerrit.war
-chown gerrit:gerrit /srv/gerrit/bin/gerrit.war
-```
+The preceding role-local installation step placed the verified Gerrit WAR from
+the staged bundle. Target hosts must not download Gerrit application artifacts
+as fallback or replay the completed artifact installation here.
 
 ### 3.2 Initialize Gerrit
 
@@ -315,8 +319,8 @@ Recommended answers:
 - Git repositories: `/srv/gerrit/git`
 - Index type: `lucene`
 - Authentication method: `LDAP`
-- HTTP daemon listen URL: `http://*:8080/`
-- SSH daemon listen port: `29418`
+- HTTP daemon listen URL: `http://*:GERRIT_HTTP_PORT/`
+- SSH daemon listen port: `GERRIT_SSH_PORT`
 - Built-in plugin prompts: install only site-approved built-in plugins; keep
   plugin scope minimal.
 
@@ -324,13 +328,19 @@ For offline installation, do not allow `init` to fetch optional libraries from t
 
 ### 3.3 Configure Gerrit
 
-Edit `/srv/gerrit/etc/gerrit.config`:
+Update the generated configuration with the reviewed values below:
+
+```bash
+sudoedit /srv/gerrit/etc/gerrit.config
+```
+
+Preserve the `serverId` created by Gerrit initialization; changing it after
+NoteDb state exists makes that state unusable.
 
 ```ini
 [gerrit]
   basePath = git
   canonicalWebUrl = GERRIT_CANONICAL_WEB_URL
-  serverId = REPLACE_WITH_GENERATED_OR_STABLE_UUID
 
 [index]
   type = lucene
@@ -340,17 +350,17 @@ Edit `/srv/gerrit/etc/gerrit.config`:
   gitBasicAuthPolicy = HTTP_LDAP
 
 [ldap]
-  server = ldap://LDAP_HOST:389
+  server = LDAP_URL
   username = LDAP_BIND_DN
   accountBase = LDAP_USER_BASE
   groupBase = LDAP_GROUP_BASE
   referral = follow
 
 [httpd]
-  listenUrl = http://*:8080/
+  listenUrl = http://*:GERRIT_HTTP_PORT/
 
 [sshd]
-  listenAddress = *:29418
+  listenAddress = *:GERRIT_SSH_PORT
 
 [container]
   javaHome = /usr/lib/jvm/java-21-openjdk-amd64
@@ -371,7 +381,15 @@ LDAP-backed users can still authenticate with LDAP passwords, while Gerrit
 service accounts such as `jenkins-gerrit` use Gerrit-generated HTTP auth
 tokens.
 
-Store LDAP bind password in `/srv/gerrit/etc/secure.config`:
+Protect the secure configuration before editing it, then store the LDAP bind
+password:
+
+```bash
+sudo touch /srv/gerrit/etc/secure.config
+sudo chown gerrit:gerrit /srv/gerrit/etc/secure.config
+sudo chmod 0600 /srv/gerrit/etc/secure.config
+sudoedit /srv/gerrit/etc/secure.config
+```
 
 ```ini
 [ldap]
@@ -381,8 +399,10 @@ Store LDAP bind password in `/srv/gerrit/etc/secure.config`:
 Set permissions:
 
 ```bash
-chown -R gerrit:gerrit /srv/gerrit
-chmod 0600 /srv/gerrit/etc/secure.config
+sudo chown gerrit:gerrit /srv/gerrit/etc/gerrit.config
+sudo chmod 0640 /srv/gerrit/etc/gerrit.config
+sudo chown gerrit:gerrit /srv/gerrit/etc/secure.config
+sudo chmod 0600 /srv/gerrit/etc/secure.config
 ```
 
 ### 3.4 Install Gerrit Plugins
@@ -409,14 +429,19 @@ control path.
 Manual operator example:
 
 ```bash
-install -d -o gerrit -g gerrit /srv/gerrit/plugins
-install -m 0644 -o gerrit -g gerrit /approved/plugin.jar /srv/gerrit/plugins/plugin.jar
+sudo install -d -o gerrit -g gerrit /srv/gerrit/plugins
+sudo install -m 0644 -o gerrit -g gerrit \
+  /approved/plugin.jar /srv/gerrit/plugins/plugin.jar
 sha256sum /srv/gerrit/plugins/plugin.jar
 ```
 
 ### 3.5 Create Gerrit systemd Service
 
-Create `/etc/systemd/system/gerrit.service`:
+Create the unit with delegated privilege:
+
+```bash
+sudoedit /etc/systemd/system/gerrit.service
+```
 
 ```ini
 [Unit]
@@ -442,11 +467,11 @@ WantedBy=multi-user.target
 Enable and start:
 
 ```bash
-systemctl daemon-reload
-systemctl enable --now gerrit
+sudo systemctl daemon-reload
+sudo systemctl enable --now gerrit
 systemctl status gerrit
-journalctl -u gerrit -n 100 --no-pager
-tail -n 100 /srv/gerrit/logs/gerrit.log
+sudo journalctl -u gerrit -n 100 --no-pager
+sudo tail -n 100 /srv/gerrit/logs/gerrit.log
 ```
 
 Subsequent validation observes the enabled and active unit, its runtime owner,
@@ -486,17 +511,25 @@ Run:
 java -version
 systemctl is-enabled gerrit
 systemctl is-active gerrit
-curl -I http://GERRIT_HOST:8080/
-ssh -p 29418 USER@GERRIT_HOST gerrit version
-tail -n 100 /srv/gerrit/logs/gerrit.log
+systemctl show gerrit \
+  --property=User --property=Group --property=MainPID --no-pager
+curl -fsSI http://GERRIT_HOST:GERRIT_HTTP_PORT/
+ssh-keyscan -T 5 -p GERRIT_SSH_PORT GERRIT_HOST
+sudo tail -n 100 /srv/gerrit/logs/gerrit.log
 ```
+
+`systemctl is-enabled` must report `enabled`, and `systemctl is-active` must
+report `active`. The `systemctl show` output must report the reviewed Gerrit
+runtime user and group and a nonzero `MainPID`. `curl` must return a successful
+HTTP response, and `ssh-keyscan` must return Gerrit SSH host-key output from the
+reviewed endpoint. Stop if any result differs.
 
 Acceptance checks:
 
 - OpenJDK 21 is active.
 - Gerrit starts under systemd.
 - LDAP users can log in.
-- Gerrit SSH works on port `29418`.
+- Gerrit SSH responds on `GERRIT_SSH_PORT`.
 - Jenkins integration prerequisites from Section 4 are deferred to
   `docs/operations/native/integration.md`.
 
@@ -520,22 +553,62 @@ Use the Gerrit Web UI to complete the application checks:
 
 ## 6. Backup and Operations
 
-Back up:
+Treat the complete `/srv/gerrit` tree as the recovery unit. It includes Gerrit
+configuration, repositories and NoteDb data, plugins, indexes, runtime data,
+and the secret-bearing `etc/secure.config` file.
 
-- `/srv/gerrit/etc`
-- `/srv/gerrit/git`
-- `/srv/gerrit/db`
-- `/srv/gerrit/index` if fast restore is required
-- `/srv/gerrit/plugins`
-- `/srv/gerrit/logs` according to retention policy
+Before a backup, record:
 
-Example:
+- `GERRIT_BACKUP_ROOT`: approved protected local or mounted backup storage.
+- `BACKUP_ID`: a unique timestamp or change identifier that does not already
+  exist below `GERRIT_BACKUP_ROOT`.
+
+Prefer a site-approved filesystem or storage snapshot that atomically covers
+the complete Gerrit site. Retain the snapshot under the unique `BACKUP_ID` and
+use the storage platform's native validation to confirm it is complete and
+readable.
+
+When a consistent snapshot is unavailable, schedule Gerrit downtime and copy
+the stopped site. Run each command separately:
 
 ```bash
-rsync -aH --numeric-ids /srv/gerrit/ BACKUP_HOST:/backups/gerrit/
+sudo systemctl stop gerrit
+systemctl is-active gerrit
+sudo test ! -e GERRIT_BACKUP_ROOT/gerrit-BACKUP_ID
+sudo install -d -m 0700 -o root -g root \
+  GERRIT_BACKUP_ROOT/gerrit-BACKUP_ID
+sudo rsync -aHAX --numeric-ids \
+  /srv/gerrit/ \
+  GERRIT_BACKUP_ROOT/gerrit-BACKUP_ID/
+sudo rsync -aHAXnc --delete --numeric-ids --itemize-changes \
+  /srv/gerrit/ \
+  GERRIT_BACKUP_ROOT/gerrit-BACKUP_ID/
+sudo systemctl start gerrit
 ```
 
-Protect `/srv/gerrit/etc/secure.config`; losing it can break LDAP or service authentication.
+`systemctl is-active` must report `inactive` before the copy. The `test`
+command must succeed so an existing backup is never overwritten. The checksum
+comparison must produce no itemized changes. Stop and select storage that
+preserves hard links, ACLs, extended attributes, and numeric ownership if
+either `rsync` command reports an unsupported feature.
+
+If copying or comparison fails, the backup failed. Start Gerrit, rerun all
+Section 5 validation to end the outage safely, and investigate before the next
+backup attempt. After a successful copy, start Gerrit and rerun the same
+validation before closing the backup window.
+
+Protect every backup with production-equivalent access restrictions and
+encryption in transit and at rest. Retain multiple backup versions. Replicate
+the completed local or mounted backup to remote storage only through the
+site-approved protected transfer path; do not stream a live Gerrit site
+directly to a remote destination.
+
+Periodically prove that a backup can be restored in an isolated environment.
+Use the matching Gerrit WAR, Java version, and reviewed plugin versions, keep
+the isolated Gerrit service stopped while restoring the complete site, and
+preserve the reviewed numeric runtime UID and GID. Verify ownership before
+starting the isolated service, then run all Section 5 validation. Never test a
+restore by overwriting an active production Gerrit site.
 
 Upgrade principles:
 

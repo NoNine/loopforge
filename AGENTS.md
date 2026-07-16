@@ -103,6 +103,23 @@ argument creates a separate paragraph.
 - Before every commit or amend, verify that the staged path list excludes
   `project-state/execution-status.md` unless that explicit exception applies.
 
+## Command Preflight
+
+Construct safely, validate fast, then run long. Identify every interpreter and
+which layer owns each expansion before composing a command. Prefer direct
+arguments, shell arrays, quoted heredocs, temporary scripts, and environment
+variables over nested inline command strings.
+
+Before any time-consuming operation, verify the exact command with cheap
+checks: validate syntax and quoting, confirm expansion at each interpreter
+boundary, check paths, arguments, environment, and prerequisites, and use a
+dry run or minimal harmless probe when available. Confirm log capture before
+starting the full operation.
+
+If a command fails, identify the parsing or execution layer that broke and fix
+the construction method. Do not blindly add escapes and retry the expensive
+operation.
+
 ## Log Handling
 
 Never stream verbose Docker, Jenkins, Gerrit, package-manager, build, download,

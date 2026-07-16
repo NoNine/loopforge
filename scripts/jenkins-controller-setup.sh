@@ -323,7 +323,7 @@ apply_env_defaults() {
   JENKINS_WAR_SOURCE="${JENKINS_WAR_SOURCE:-}"
   JENKINS_PLUGIN_MANAGER_SOURCE="${JENKINS_PLUGIN_MANAGER_SOURCE:-}"
   JENKINS_PLUGIN_SOURCE_DIR="${JENKINS_PLUGIN_SOURCE_DIR:-}"
-  JENKINS_OS_DEPENDENCIES="${JENKINS_OS_DEPENDENCIES:-ca-certificates,curl,fontconfig,openjdk-21-jre,openssh-client,rsync,tar,wget}"
+  JENKINS_OS_DEPENDENCIES="${JENKINS_OS_DEPENDENCIES:-ca-certificates,curl,fontconfig,ldap-utils,openjdk-21-jre,openssh-client,rsync,tar,wget}"
   JENKINS_DIRECT_PLUGIN_NAMES="${JENKINS_DIRECT_PLUGIN_NAMES:-configuration-as-code,credentials,git,gerrit-trigger,ldap,matrix-auth,ssh-credentials,ssh-slaves,workflow-aggregator,job-dsl,timestamper,ws-cleanup}"
   JENKINS_PLUGIN_LIST="${JENKINS_PLUGIN_LIST:-configuration-as-code:2100.vb_fd699d2a_09c,credentials:1506.v948b_b_b_7dec44,git:5.10.1,gerrit-trigger:3.1983.v57096fe9923c,ldap:807.809.vd3a_4e5e4ec98,matrix-auth:3.2.10,ssh-credentials:372.va_250881b_08cd,ssh-slaves:3.1097.v868116049892,workflow-aggregator:608.v67378e9d3db_1,job-dsl:3654.vdf58f53e2d15,timestamper:1.30,ws-cleanup:0.49}"
   LDAP_URL="${LDAP_URL:-ldap://ldap:389}"
@@ -801,6 +801,7 @@ check_os_dependency_command() {
     ca-certificates) command_name="update-ca-certificates" ;;
     curl) command_name="curl" ;;
     fontconfig) command_name="fc-cache" ;;
+    ldap-utils) command_name="ldapsearch" ;;
     openjdk-21-jre|openjdk-21-jre-headless) command_name="java" ;;
     openssh-client) command_name="ssh" ;;
     rsync) command_name="rsync" ;;
@@ -1193,26 +1194,6 @@ cmd_configure_jcasc() {
   printf 'status=pass command=configure-jcasc jcasc=%s ldap=configured\n' "$CASC_JENKINS_CONFIG"
 }
 
-ldap_host_port() {
-  local target host port
-  target="${LDAP_URL#ldap://}"
-  target="${target#ldaps://}"
-  target="${target%%/*}"
-  host="${target%%:*}"
-  port="${target##*:}"
-  if [ "$port" = "$target" ]; then
-    port="389"
-  fi
-  printf '%s %s\n' "$host" "$port"
-}
-
-check_tcp_connect() {
-  local host port
-  host="${1:?host required}"
-  port="${2:?port required}"
-  timeout 5 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "$host" "$port"
-}
-
 tcp_exchange() {
   local host port request
   host="${1:?host required}"
@@ -1246,12 +1227,19 @@ check_jenkins_api() {
     die "Jenkins API endpoint did not report Jenkins 2.555.3"
 }
 
-check_ldap_access() {
-  local host port
-  read -r host port <<EOF
-$(ldap_host_port)
-EOF
-  check_tcp_connect "$host" "$port" || die "LDAP endpoint is not reachable: $host:$port"
+check_ldap_bind_search() {
+  local secret
+  command -v ldapsearch >/dev/null 2>&1 ||
+    die "BLOCKED: ldapsearch is required to prove LDAP bind/search readiness"
+  secret="$(ldap_bind_password_value)"
+  ldapsearch -x -H "$LDAP_URL" -D "$LDAP_BIND_DN" \
+    -y <(printf '%s' "$secret") -b "$LDAP_USER_BASE" -s base dn \
+    >/dev/null 2>&1 ||
+    die "BLOCKED: LDAP bind/search proof failed for configured user base"
+  ldapsearch -x -H "$LDAP_URL" -D "$LDAP_BIND_DN" \
+    -y <(printf '%s' "$secret") -b "$LDAP_GROUP_BASE" -s base dn \
+    >/dev/null 2>&1 ||
+    die "BLOCKED: LDAP bind/search proof failed for configured group base"
 }
 
 check_plugin_readiness() {
@@ -1326,7 +1314,7 @@ verify_base_readiness_facts() {
   check_jcasc_readiness
   [ -s "$JENKINS_HOME/state/runtime.status" ] || die "Jenkins runtime status marker is missing"
   check_runtime_plugin_load_log
-  check_ldap_access
+  check_ldap_bind_search
 }
 
 cmd_validate() {
