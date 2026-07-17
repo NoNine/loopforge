@@ -22,6 +22,39 @@ Both layers use the same five-machine topology:
 | Jenkins controller | Container | VM | Runs Jenkins, LDAP/JCasC configuration, Gerrit Trigger, and agent registration. |
 | Jenkins agent | Container | VM | Runs SSH build jobs scheduled by Jenkins. |
 
+## Shared Terminology And Backend Mapping
+
+Use the shared terms in lifecycle contracts, command summaries, evidence, and
+cross-backend plans. Use Docker or libvirt terms only when describing the
+concrete backend mechanism.
+
+| Recommended term | Meaning |
+| --- | --- |
+| Simulation set | One reusable backend environment selected by `HARNESS_SET_ID`. It owns durable runtime, baseline state, backend resources, and one active-run pointer. |
+| Run | One immutable setup and validation attempt selected by `HARNESS_RUN_ID`. |
+| Active run | The run referenced by the simulation set's non-secret `active-run.env` pointer. |
+| Set root | Backend-local generated storage for reusable resources, durable runtime, baseline metadata, and the active-run pointer. |
+| Run root | Backend-local generated storage for one run's inputs, checkpoints, evidence, logs, and exported artifacts. |
+| Durable runtime | State preserved by `stop` and reset only by `restore-baseline`. |
+| Baseline | The set-owned clean pre-setup state used by `restore-baseline`. |
+
+The two backends realize the same concepts differently:
+
+| Shared concept | Docker realization | VM realization |
+| --- | --- | --- |
+| Simulation set | Compose-managed containers, network, project-built images, bind state, and baseline archives | Libvirt domains, networks, volumes, seed media, baked image, and baseline snapshots |
+| Resource namespace | Compose project name derived from `HARNESS_SET_ID` | Libvirt resource prefix derived from `HARNESS_SET_ID` |
+| Baseline | Checksummed image/Compose identity and bind-data archives | Checksummed VM metadata and clean disk snapshots |
+| Durable runtime | Container writable layers and simulation-set bind data | Per-machine VM disks |
+| Runtime definition | Retained Compose-created containers | Retained libvirt domain definitions |
+| Running instance | Container processes | Running libvirt domains |
+
+`HARNESS_SET_ID` and `HARNESS_RUN_ID` are the only shared operator-facing
+simulation identities. `HARNESS_SET_ID` defaults to `default` when omitted in
+either backend. Derived backend namespaces are stable for the life of a
+simulation set, must not include `HARNESS_RUN_ID`, and are recorded as backend
+resource metadata rather than treated as additional operator identities.
+
 ## Harness Implementation Direction
 
 Docker and VM simulation use separate public CLIs:
@@ -36,8 +69,8 @@ manifest/checksum helpers, evidence helpers, and lifecycle marker utilities.
 Layer lifecycle and transport stay local to each harness until real VM code
 proves a stable boundary. Docker-specific Compose, image, container,
 bind-mount, `docker cp`, loopback-port, and cleanup behavior belongs in the
-Docker harness. VM-specific libvirt/KVM domains, VM sets, snapshots, guest
-reboot, guest SSH readiness, guest-owned NFS-backed shared storage, and VM
+Docker harness. VM-specific libvirt/KVM domains, resource groups, snapshots,
+guest reboot, guest SSH readiness, guest-owned NFS-backed shared storage, and VM
 `create`/`clean`/`destroy` behavior belongs in the VM harness.
 
 Docker simulation may use explicit simulation-only waivers where containers
@@ -74,7 +107,7 @@ separate `jenkins-share` integration group from
 `examples/integration.env.example`, not a shared controller/agent UID. The
 default shared group is `jenkins-share` with no UID and GID `61040`. The
 default shared path is `/data/jenkins-shared`; Docker models it with a
-run-local bind mount, while VM simulation must model the target-deployment
+simulation-set-local bind mount, while VM simulation must model the target-deployment
 shape by exporting it from the Jenkins agent VM and mounting it on the Jenkins
 controller VM. `scripts/integration-setup.sh` owns creating or validating the
 shared group, shared storage permissions, export or mount state, and
@@ -130,33 +163,30 @@ Ubuntu dependency bundle workflows are not supported.
 
 ## Output Locations
 
-Generated runtime output is not committed. Docker v1 writes lifecycle output
-under a single repo-local generated run root so lifecycle and cleanup commands
-share the same path contract:
+Generated runtime output is not committed. Both backends store reusable
+simulation-set state separately from immutable run output:
 
 ```text
+generated/simulation/docker/sets/<set-id>/
 generated/simulation/docker/<run-id>/
-```
-
-Docker lifecycle and cleanup commands do not support arbitrary generated
-roots in v1. Use a distinct run ID to isolate separate runs.
-
-VM simulation writes reusable VM-set state and run-scoped output under the
-repo-local VM generated root. VM set state persists across runs until explicit
-destruction, while run-scoped output is tied to `HARNESS_RUN_ID`:
-
-```text
-generated/simulation/vm/vm-sets/<vm-set-id>/
+generated/simulation/vm/sets/<set-id>/
 generated/simulation/vm/<run-id>/
 ```
 
+Lifecycle and cleanup commands do not support arbitrary generated roots in
+v1. `HARNESS_SET_ID` selects reusable resources and their baseline.
+`HARNESS_RUN_ID` identifies one immutable attempt and is generated by
+`init-run` when omitted. Simulation-set state persists across runs until
+explicit destruction.
+
 Docker uses these subpath patterns:
 
-| Output kind | Run-scoped pattern |
+| Output kind | Generated pattern |
 | --- | --- |
-| State | `generated/simulation/docker/<run-id>/target/helper-state/` |
-| Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
-| Staged artifacts | `generated/simulation/docker/<run-id>/target/artifacts/staging/<role>/` |
+| Active-run pointer and baseline | `generated/simulation/docker/sets/<set-id>/` |
+| Durable integration state | `generated/simulation/docker/sets/<set-id>/runtime/helper-state/` |
+| Product runtime homes | `generated/simulation/docker/sets/<set-id>/runtime/product-homes/` |
+| Staged artifacts | `generated/simulation/docker/sets/<set-id>/runtime/artifacts/staging/<role>/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
 | Harness evidence | `generated/simulation/docker/<run-id>/host/evidence/harness/` |
 | Harness bounded logs | `generated/simulation/docker/<run-id>/host/logs/harness/` |
@@ -164,9 +194,10 @@ Docker uses these subpath patterns:
 | Target role evidence | `generated/simulation/docker/<run-id>/target/evidence/<role>/` |
 | Target role bounded logs | `generated/simulation/docker/<run-id>/target/logs/<role>/` |
 
-`<run-id>` is a unique run identifier, such as a UTC timestamp plus a short
-label. `<environment>` is one of `bundle-factory`, `ldap`, `gerrit`,
-`jenkins-controller`, or `jenkins-agent`.
+`<run-id>` uniquely identifies one validation attempt. Operators may supply it
+for CI or audit workflows; normal interactive use lets `init-run` generate it.
+`<environment>` is one of `bundle-factory`, `ldap`,
+`gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
 These paths are generated runtime output unless a file in the tree states
 otherwise. Keep them ignored or documented as generated when created by
@@ -182,21 +213,16 @@ not silently discard review evidence.
 
 Never repair stale or inconsistent simulation state in place. Lifecycle
 commands must fail clearly when selected generated state, container bind
-mounts, VM-set metadata, snapshots, or libvirt resources do not match
-the selected run. Recover with the explicit cleanup commands owned by
-the layer README, then use a fresh run identity for new validation.
+mounts, simulation-set metadata, snapshots, or libvirt resources do not match
+the selected run and reusable set. Recover with explicit `stop`,
+`restore-baseline`, and `clean` operations, then let `init-run` generate a new
+run ID for the same set. Use `destroy` only for reusable backend resource
+removal. When reusable resource identity is suspect, select a fresh
+`HARNESS_SET_ID` rather than repairing that set.
 
-Docker recovery uses `down`, `clean`, or `destroy` for the selected run and a
-fresh `HARNESS_RUN_ID` for follow-up validation. Docker `destroy` removes
-selected LoopForge-labeled containers, the selected harness network, and
-selected project-built images. Docker host-wide cleanup is a separate operator
-recovery path for Compose-labeled LoopForge containers, networks, and
-project-built images; it is not selected-run cleanup. VM
-recovery uses `down`, `restore-baseline`, `clean`, or `destroy` for the
-selected VM set and run; when resource identity is suspect, select both a
-fresh `HARNESS_RUN_ID` and a fresh `LOOPFORGE_VM_SET_ID` for follow-up
-validation. VM host-wide libvirt cleanup is also a separate operator recovery
-path and is not selected-run cleanup.
+Docker host-wide cleanup and VM host-wide libvirt cleanup remain separate
+operator recovery paths. They are not selected-run baseline restoration or
+generated-state cleanup.
 
 `audit-state` is read-only inspection. `run`, role phases, integration
 phases, and verification commands must not call cleanup, teardown,
@@ -210,25 +236,25 @@ commands preserve the same review and recovery boundaries:
 | Concern | Docker simulation | VM simulation | Lifecycle meaning |
 | --- | --- | --- | --- |
 | External base artifact | Ubuntu/base Docker image | Source Ubuntu cloud image | External input or cache, not selected simulation ownership. |
-| Reusable simulation artifact | Project-built Docker images | VM-set-local baked base image and baseline snapshots | Created or verified by `create`; removed by `destroy`. |
-| Runtime definition | Compose service/container definition | Libvirt domain definition | Docker derives it from Compose; VM defines it in `create` and undefines it in `destroy`. |
-| Runtime instance | Container process/runtime | Running libvirt domain | `up` starts; `down` stops. |
-| Persistent runtime filesystem | Container writable layer plus bind mounts | Per-machine VM disks | Docker `down` removes container writable layers and preserves bind mounts; VM `down` preserves disks. |
-| Fresh runtime from reusable artifact | Recreated containers from project images | VM disks restored from baseline snapshots | Docker gets fresh container layers from `up`; VM uses `restore-baseline` after `down`. |
-| Generated host-side state | `generated/simulation/docker/<run-id>/` bind-mounted state | `generated/simulation/vm/<run-id>/` rendered inputs, SSH material, markers, logs, and evidence | Preserved by `down`; removed by `clean` except retained review output. |
+| Reusable simulation artifact | Project-built Docker images | Set-local baked base image and baseline snapshots | Created or verified by `create`; removed by `destroy`. |
+| Runtime definition | Compose-created retained containers | Libvirt domain definition | Both are established by `create` and removed by `destroy`. |
+| Runtime instance | Container process/runtime | Running libvirt domain | `start` starts; `stop` stops without deleting the definition. |
+| Persistent runtime filesystem | Container writable layers plus bind mounts | Per-machine VM disks | Preserved by ordinary `stop` and reset only by `restore-baseline`. |
+| Fresh runtime from reusable artifact | Recreated containers plus restored checksummed bind data | VM disks restored from baseline snapshots | `restore-baseline` requires the selected simulation set to be stopped. |
+| Generated host-side state | `generated/simulation/docker/<run-id>/` immutable run output | `generated/simulation/vm/<run-id>/` immutable run output | Mutable portions are removed by `clean`; retained review output remains. |
 | Clean generated state | `clean` removes mutable generated run data | `clean` removes mutable generated run data | Does not reset Docker images or VM disks. |
-| Reset durable runtime state | Usually not needed for container writable layers; bind mounts still require `clean` | `restore-baseline` resets VM disks to the clean baseline snapshot | Must happen after `down`; does not clean generated state. |
-| Remove reusable artifacts/resources | `destroy` removes selected containers, the harness network, and project-built images | `destroy` removes the selected VM set: domains, disks, baked base image, seed media, networks, and metadata | Removes selected backend resources without deleting generated review output. |
+| Reset durable runtime state | Recreate stopped containers from pinned images and restore the clean bind baseline | Reset VM disks to the clean baseline snapshot | `restore-baseline` does not clean generated state. |
+| Remove reusable artifacts/resources | `destroy` removes selected containers, the harness network, and project-built images | `destroy` removes the selected simulation set's domains, disks, baked base image, seed media, networks, and metadata | Removes selected backend resources without deleting generated review output. |
 
 | Goal | Docker sequence | VM sequence |
 | --- | --- | --- |
-| Start | `up` | `up` |
-| Stop | `down` | `down` |
-| Restart without cleaning generated state | `up -> down -> up` | `up -> down -> up` |
-| Fresh runtime filesystem | `up -> down -> up` | `up -> down -> restore-baseline -> up` |
-| Clean generated host-side state | `down -> clean` | `down -> clean` |
-| Full rerun-oriented reset | `down -> clean -> init-run -> up` | `down -> restore-baseline -> clean -> init-run -> up` |
-| Remove reusable backend artifacts | `down -> destroy` | `down -> destroy` |
+| Start | `start` | `start` |
+| Stop | `stop` | `stop` |
+| Restart without cleaning generated state | `start -> stop -> start` | `start -> stop -> start` |
+| Fresh durable runtime | `stop -> restore-baseline` | `stop -> restore-baseline` |
+| Clean generated host-side state | `stop -> restore-baseline -> clean` | `stop -> restore-baseline -> clean` |
+| Full rerun-oriented reset | `stop -> restore-baseline -> clean -> init-run -> start` | `stop -> restore-baseline -> clean -> init-run -> start` |
+| Remove reusable backend artifacts | `stop -> destroy` | `stop -> destroy` |
 
 ## Shared Command Semantics
 
@@ -239,9 +265,9 @@ When a layer uses these command names, the shared simulation semantics are:
 | --- | --- |
 | `run` | Normal workflow composite for the selected run. It does not run cleanup, teardown, destruction, or audit commands. |
 | `preflight` | Read-only prerequisite check before service mutation. |
-| `init-run` | Input review/rendering, private runtime input copy creation, and selected run marker creation. |
-| `create` | Optional layer-specific environment preparation before startup, such as Docker project image builds or VM set creation. |
-| `up` | Start or attach the selected simulation environment after rendered run state exists. |
+| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate `HARNESS_RUN_ID` when omitted, create private runtime inputs and the run marker, and claim the selected set's active-run pointer. It rejects an active set or existing run root. |
+| `create` | Establish or verify the selected reusable simulation set and its clean pre-setup baseline. It leaves the set stopped. |
+| `start` | Start the selected simulation set without setup mutation. Start prerequisites from baseline state or already-configured services from exact completed state; other state blocks. |
 | `status` | Read-only inspection of selected live simulation state. |
 | `ssh` | Operator-account target OS control-plane SSH, not Gerrit service SSH. |
 | `prepare-artifacts` | Artifact preparation through role helpers in the bundle factory. |
@@ -251,16 +277,19 @@ When a layer uses these command names, the shared simulation semantics are:
 | `configure-integration` | Shared integration setup through `scripts/integration-setup.sh`. |
 | `validate-integration` | Passive cross-role readiness validation. |
 | `prove-integration` | Active end-to-end trigger proof after matching validation passed. |
-| `audit-state` | Explicit read-only generated-state and environment consistency inspection. |
-| `down` | Stop the selected simulation environment while retaining review output. |
-| `restore-baseline` | Layer-specific durable runtime reset outside normal checkpoint progression, such as VM guest disk rollback to a clean baseline snapshot. |
-| `clean` | Remove mutable selected-run generated state while preserving retained artifacts, evidence, and logs. |
+| `audit-state` | Explicit read-only generated-state and simulation-set consistency inspection. |
+| `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state and review output. |
+| `restore-baseline` | Require a stopped simulation set and reset its durable runtime to the selected clean pre-setup baseline without cleaning generated state. |
+| `clean` | After matching baseline restoration, clear the selected set's active-run pointer and mutable run state while preserving retained artifacts, evidence, logs, and baseline resources. |
 | `destroy` | Layer-specific destructive cleanup outside normal checkpoint progression, such as Docker project-built image removal or VM resource deletion. |
 
 Layers may add simulation-specific lifecycle commands, such as VM `reboot`,
 but unsupported or unavailable proof must fail closed or report blocked rather
 than produce synthetic success. Docker does not expose `reboot` because it
 does not claim guest reboot persistence.
+
+`up` and `down` are removed command names. Layers must reject them rather than
+retain aliases that hide the selected resource transition.
 
 ## Terminal Output Convention
 
@@ -306,7 +335,7 @@ and checksum data on the target side under `/var/lib/loopforge/staging`
 before service mutation. Simulation backing paths and transfer mechanisms may
 support this lifecycle, but helper-visible paths remain product-like.
 
-Target operations still install or update native product-owned paths such as
+Initial target operations install native product-owned paths such as
 `/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
 `$JENKINS_HOME/.ssh/known_hosts`, and agent `authorized_keys`. Transient
 target-local files under `/tmp` are acceptable when they stage payloads for
@@ -323,17 +352,19 @@ state.
 ## State Consistency And Recovery
 
 A selected simulation run is consistent only when its generated run marker,
-rendered runtime config, runtime input copies, fingerprints, and selected
-environment markers agree. Runtime input copies must exist for the harness,
-Gerrit, Jenkins controller, Jenkins agent, and integration env files before
-phases that need them. Layer-specific checks add Docker bind-mount liveness or
-VM-set ownership and snapshot validation.
+immutable run ID, selected set's active-run pointer, rendered runtime config,
+runtime input copies, fingerprints, baseline identity, and simulation-set markers
+agree.
+Runtime input copies must exist for the harness, Gerrit, Jenkins controller,
+Jenkins agent, and integration env files before phases that need them.
+Layer-specific checks add Docker container/bind-baseline identity or VM resource
+ownership and snapshot validation.
 
-If generated state, environment ownership metadata, bind mounts, snapshots, or
+If generated state, simulation-set ownership metadata, bind mounts, snapshots, or
 other selected lifecycle state are inconsistent, lifecycle phases fail clearly
 instead of recreating state or rerunning earlier phases. Recovery must use the
 explicit layer cleanup or teardown commands for the selected run or selected
-VM set.
+simulation set.
 
 ## Lifecycle Realization
 

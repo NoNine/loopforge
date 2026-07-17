@@ -1,10 +1,10 @@
-## Step 13b: Align Shared Integration Lifecycle
+## Step 13c: Align Shared Integration Lifecycle
 
 Align `scripts/integration-setup.sh`, the native and helper integration
 procedures, integration evidence, and both simulation backends with the shared
 integration contracts refined in commit `049636e`.
 
-This is a cross-role implementation step. It follows accepted Step 13a
+This is a cross-role implementation step. It follows accepted Step 13b
 fresh-state role handoffs and the Step 13 M8 discovery work, but it is not
 VM-specific. Step 13 integration acceptance, Step 14 boundary checks, and Step
 15 final acceptance depend on this step.
@@ -61,7 +61,7 @@ repair an earlier milestone failure.
 
 | Milestone | Scope | Dependency |
 | --- | --- | --- |
-| M1 | Integration state, preflight, and Gerrit reviewed access | Accepted Step 13a role handoffs |
+| M1 | Integration state, preflight, and Gerrit reviewed access | Accepted Step 13b role handoffs |
 | M2 | Jenkins controller and agent SSH custody | M1 reviewed access effective |
 | M3 | Shared storage, node, and Gerrit Trigger setup | M2 SSH custody complete |
 | M4 | Observational validation and active proof | M3 setup marker complete |
@@ -232,11 +232,11 @@ Verification order:
 
 1. Run focused shell and documentation tests plus `bash -n` and
    `git diff --check` after every milestone.
-2. Run Docker integration phases individually from a fresh `HARNESS_RUN_ID`,
+2. Run Docker integration phases individually from a newly generated run ID,
    then run the composite Docker workflow.
-3. Run VM integration phases individually from a fresh `HARNESS_RUN_ID` and,
-   when identity is suspect, a fresh `LOOPFORGE_VM_SET_ID`; then run the
-   composite VM workflow on an explicitly approved remote KVM target.
+3. Run VM integration phases individually from a newly generated run ID and,
+   when resource identity is suspect, a fresh `HARNESS_SET_ID`; then run
+   the composite VM workflow on an explicitly approved remote KVM target.
 4. Run native target-like acceptance only with explicit approval for the
    selected hosts and actions.
 
@@ -253,11 +253,11 @@ Acceptance:
 - Do not add compatibility fallbacks for old generated integration state.
 - Inspect stale state read-only, then use documented explicit cleanup and a
   fresh run/state identity.
-- Docker recovery uses `down` or `clean` for the old run before selecting a
-  fresh `HARNESS_RUN_ID`.
-- VM recovery follows the retained env file and documented `down`, `clean`, or
-  `destroy` boundaries. Host-wide libvirt cleanup requires the documented dry
-  run and explicit approval.
+- Docker recovery uses `stop`, `restore-baseline`, and `clean` before
+  `init-run` generates a new run ID for the selected Docker project.
+- VM recovery follows the retained env file and documented `stop`,
+  `restore-baseline`, `clean`, or `destroy` boundaries. Host-wide libvirt
+  cleanup requires the documented dry run and explicit approval.
 - Never repair remote targets, VMs, containers, Jenkins, or Gerrit without
   explicit approval for that target and action.
 
@@ -269,6 +269,6 @@ Do not combine remote runtime evidence or execution-ledger state with the
 implementation commit.
 
 Prior Step 13 M8 runs remain diagnostic evidence for the old implementation.
-They do not satisfy Step 13b or final integration acceptance. Step 13b is
+They do not satisfy Step 13c or final integration acceptance. Step 13c is
 complete only after M1-M5 pass their gates and fresh Docker and approved VM
 runtime evidence confirms the refined contract.

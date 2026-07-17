@@ -8,10 +8,11 @@ Run final acceptance in this order:
 4. Docker full verification through `simulate.sh`.
 5. Global evidence aggregation.
 6. Shared simulation library checks from Step 12.
-7. Fresh-state role lifecycle checks from Step 13a.
-8. Shared integration lifecycle checks from Step 13b.
-9. VM simulation checks from Step 13 when VM implementation is in scope.
-10. Native `target-deployment` acceptance through
+7. Reusable simulation lifecycle checks from Step 13a.
+8. Fresh-state role lifecycle checks from Step 13b.
+9. Shared integration lifecycle checks from Step 13c.
+10. VM simulation checks from Step 13 when VM implementation is in scope.
+11. Native `target-deployment` acceptance through
    `docs/operations/native/acceptance-checklist.md` when the release claims
    native target readiness.
 
@@ -33,7 +34,7 @@ scripts/collect-evidence.sh --help
 simulation/docker/simulate.sh preflight
 simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh create
-simulation/docker/simulate.sh up
+simulation/docker/simulate.sh start
 simulation/docker/simulate.sh prepare-artifacts
 simulation/docker/simulate.sh stage-artifacts
 simulation/docker/simulate.sh configure-role
@@ -44,22 +45,25 @@ simulation/docker/simulate.sh prove-integration
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example validate-integration
 scripts/integration-setup.sh --gerrit-env examples/gerrit.env.example --jenkins-controller-env examples/jenkins-controller.env.example --jenkins-agent-env examples/jenkins-agent.env.example --integration-env examples/integration.env.example --yes prove-integration
 scripts/collect-evidence.sh
-simulation/docker/simulate.sh down
+simulation/docker/simulate.sh stop
+simulation/docker/simulate.sh restore-baseline
+simulation/docker/simulate.sh clean
 simulation/docker/simulate.sh destroy
 simulation/vm/simulate.sh --help
 simulation/vm/simulate.sh preflight --env simulation/vm/examples/vm.env.example
 ```
 
 When Step 13 is in scope for the release, also run the VM lifecycle through
-`prove-integration`, `reboot --all`, `down`, and `clean` in an approved VM
-environment. When Step 13 is not in scope, final acceptance must say it was
-skipped and must not claim VM readiness or VM end-to-end verification.
+`prove-integration`, `reboot --all`, `stop`, `restore-baseline`, and `clean` in
+an approved VM environment. When Step 13 is not in scope, final acceptance
+must say it was skipped and must not claim VM readiness or VM end-to-end
+verification.
 
 Native `target-deployment` acceptance is a manual operation, not part of the
 minimum helper and simulation command set above. Run it only after Steps 13,
-13a, and 13b are accepted and Step 14 boundary checks pass. One operator who
-did not author the native procedures follows the four native references on freshly
-provisioned targets and records outcomes in the acceptance checklist. The
+13a, 13b, and 13c are accepted and Step 14 boundary checks pass. One operator who
+did not author the native procedures follows the four native references on
+freshly provisioned targets and records outcomes in the acceptance checklist. The
 checklist does not require machine-generated evidence, global aggregation, or
 copied service logs. Retain the completed checklist in the approved
 change-management system, not in the repository.
@@ -83,9 +87,11 @@ Final acceptance criteria:
 - Step 12 shared library extraction preserves Docker behavior.
 - Step 13 VM simulation either passes in an approved VM environment or is
   explicitly documented as out of scope without claiming VM readiness.
-- Step 13a fresh-state role lifecycle alignment passes its focused, Docker,
+- Step 13a reusable simulation lifecycle alignment passes its focused, Docker,
   and approved VM acceptance gates.
-- Step 13b shared integration lifecycle alignment passes its focused, Docker,
+- Step 13b fresh-state role lifecycle alignment passes its focused, Docker,
+  and approved VM acceptance gates.
+- Step 13c shared integration lifecycle alignment passes its focused, Docker,
   and approved VM acceptance gates.
 - A release claiming native `target-deployment` readiness has one completed
   `ACCEPTED` checklist with a deployment/change ticket, disposable Gerrit

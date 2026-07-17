@@ -52,7 +52,7 @@ Expected command surface:
 ```text
 simulation/docker/simulate.sh preflight
 simulation/docker/simulate.sh init-run
-simulation/docker/simulate.sh up
+simulation/docker/simulate.sh start
 simulation/docker/simulate.sh status
 simulation/docker/simulate.sh prepare-artifacts --role gerrit
 simulation/docker/simulate.sh prepare-artifacts --role jenkins-controller
@@ -66,7 +66,7 @@ simulation/docker/simulate.sh configure-role --role jenkins-controller
 simulation/docker/simulate.sh validate-role --role jenkins-controller
 simulation/docker/simulate.sh configure-role --role jenkins-agent
 simulation/docker/simulate.sh validate-role --role jenkins-agent
-simulation/docker/simulate.sh down
+simulation/docker/simulate.sh stop
 ```
 
 Implementation notes:
@@ -112,11 +112,11 @@ bash -n simulation/docker/simulate.sh
 simulation/docker/simulate.sh --help
 simulation/docker/simulate.sh preflight
 simulation/docker/simulate.sh init-run
-simulation/docker/simulate.sh up
+simulation/docker/simulate.sh start
 ! simulation/docker/simulate.sh prepare-artifacts --role unknown
 ! simulation/docker/simulate.sh configure-role --role gerrit
 ! simulation/docker/simulate.sh validate-role --role gerrit
-simulation/docker/simulate.sh down
+simulation/docker/simulate.sh stop
 rg -n "dummy success|operation-plan-only|planned-checks-only|modeled" docs/planning/implementation-plan.md
 rg -n "bundle-factory-helper|prepare-offline-deps|install-offline-deps" simulation/docker docs scripts templates examples
 ```
@@ -136,4 +136,3 @@ Acceptance criteria:
 - The harness is reusable by the Gerrit, Jenkins controller, Jenkins agent,
   and full Docker simulation steps.
 - No supported offline Ubuntu dependency bundle workflow is introduced.
-

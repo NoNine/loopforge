@@ -1,8 +1,9 @@
 ## Step 14: Add Cross-Repository Boundary Checks
 
-Run this step only after Step 13a fresh-state role lifecycle and Step 13b shared
-integration lifecycle alignment are accepted. Boundary checks must inspect the
-aligned helper and documentation surfaces rather than preserve earlier
+Run this step only after Step 13a reusable simulation lifecycle, Step 13b
+fresh-state role lifecycle, and Step 13c shared integration lifecycle
+alignment are accepted. Boundary checks must inspect the aligned helper and
+documentation surfaces rather than preserve earlier lifecycle command,
 reinstall, reconfigure, rotation, or unbound-rerun behavior.
 
 Add a lightweight verification check that prevents old reference language from
@@ -14,6 +15,7 @@ Recommended checks:
 rg -n "strict air-gapped|supported offline|offline Ubuntu dependency|prepare-offline-deps|install-offline-deps" docs scripts templates simulation examples
 rg -n "simulation-only" docs scripts templates simulation examples
 rg -n "reinstall|reconfigure|rotate|idempotent target operations" docs scripts templates simulation examples
+rg -n "(^|[^[:alnum:]-])(up|down)([^[:alnum:]-]|$)" simulation docs/planning tests
 ```
 
 Implementation notes:
@@ -27,6 +29,9 @@ Implementation notes:
 - Matches from the third command are acceptable only in non-goals,
   prohibitions, historical context, site-owned administration boundaries, or
   tests that reject the old behavior.
+- Matches from the fourth command are acceptable only where tests or contracts
+  explicitly reject the removed commands or where ordinary prose uses the
+  words outside simulation command context.
 
 Acceptance criteria:
 
@@ -38,3 +43,5 @@ Acceptance criteria:
   resumable during mutation.
 - No v1 helper or native setup procedure claims reinstall, reconfiguration,
   repair, or credential rotation support.
+- Docker and VM expose `start`, `stop`, and `restore-baseline`, reject `up` and
+  `down`, and bind every active checkpoint to one immutable run ID.

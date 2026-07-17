@@ -108,6 +108,14 @@ The product must help engineers and operators install and validate:
   input-bound completed operation may return non-mutating `already-complete`.
   Other existing application, configuration, credential, or integration state
   must block rather than be reinstalled, reconfigured, or rotated by setup.
+- Docker and VM simulation must expose equivalent reusable-environment
+  lifecycle commands: `create`, `start`, `stop`, `restore-baseline`, `clean`,
+  and `destroy`. Baseline restoration plus generated-state cleanup may prepare
+  the same reusable backend environment for another automatically identified
+  run; operators need not invent a new `HARNESS_RUN_ID` for every fresh
+  simulation setup.
+- Both simulation backends use `HARNESS_SET_ID` for the reusable simulation
+  set and `HARNESS_RUN_ID` for one immutable setup and validation attempt.
 - The install path must support both manual commands and helper commands for
   preflight, artifact preparation, service install, integration, validation,
   and evidence collection.

@@ -76,9 +76,9 @@ the changed subsystem can affect them:
 - fresh run with an empty selected VM set;
 - fresh run that reuses a retained selected VM set;
 - resume run with an existing selected run marker;
-- `create -> up -> down -> create` VM-set reuse;
-- `clean -> init-run -> create -> up` with the retained VM-set SSH identity;
-- `down -> restore-baseline -> clean` generated-state cleanup;
+- `create -> start -> stop -> create` VM-set reuse;
+- `clean -> init-run -> create -> start` with retained VM-set SSH identity;
+- `stop -> restore-baseline -> clean` generated-state cleanup;
 - `clean` after stale metadata that is irrelevant to teardown ownership;
 - `destroy` after partial create or missing VM-set metadata;
 - `reboot` with SSH host-key and guest service readiness diagnostics;
@@ -94,7 +94,7 @@ and explicit cleanup commands. Ready-baseline reuse verifies retained seed
 media; it must not rewrite or chmod-normalize valid retained seed media as a
 hidden repair path.
 
-Recovery remains explicit. Only `down`, `restore-baseline`, `clean`, and
+Recovery remains explicit. Only `stop`, `restore-baseline`, `clean`, and
 `destroy` may recover VM lifecycle state as defined by
 `docs/contracts/lifecycle-contract.md` and `simulation/vm/README.md`. Other commands
 must fail clearly on inconsistent state instead of deleting, repairing,
@@ -106,7 +106,7 @@ re-owning, or bypassing stale state.
 | --- | --- |
 | M1 | CLI dispatch, env custody, generated paths, summaries, and read-only state checks pass without VM, libvirt, host, guest, Gerrit, Jenkins, or agent mutation. |
 | M2 | Libvirt/KVM tooling and VM-set ownership checks are read-only, fail on inconsistent selected resources, and do not repair state. |
-| M3 | `create`, `up`, `status`, `ssh --role ROLE`, and `down` prove real VM definitions, guest boot, stable SSH host keys, target OS SSH readiness as the operator account, and clean shutdown. |
+| M3 | `create`, `start`, `status`, `ssh --role ROLE`, and `stop` prove real VM definitions, guest boot, stable SSH host keys, target OS SSH readiness as the operator account, and clean shutdown. |
 | M4 | `create` proves role OS dependency installation, expected command availability, real LDAP service readiness, seeded entries, local LDAP bind/search, and Gerrit/Jenkins controller LDAP bind/search before writing baseline readiness. |
 | M5 | Baseline snapshot, `restore-baseline`, `clean`, `destroy`, and `audit-state` prove selected VM-set ownership before rollback, generated-state cleanup, or deletion and do not touch unowned resources. |
 | M6 | `prepare-artifacts` and `stage-artifacts` prove artifact manifests, checksums, source-boundary labels, transfer, and target-side staging paths before mutation. |

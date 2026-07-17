@@ -75,7 +75,7 @@ sequenceDiagram
   LC-->>CLI: compact create summary
 ```
 
-## up
+## start
 
 ```mermaid
 sequenceDiagram
@@ -86,12 +86,12 @@ sequenceDiagram
   participant LV as libvirt.sh
   participant SSH as ssh.sh
 
-  CLI->>LC: vm_cmd_up(env)
+  CLI->>LC: vm_cmd_start(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>SET: vm_set_verify_run_and_set()
   LC->>LV: vm_libvirt_start_set()
   LC->>SSH: vm_ssh_prepare_all()
-  LC-->>CLI: compact up summary
+  LC-->>CLI: compact start summary
 ```
 
 ## status
@@ -329,7 +329,7 @@ sequenceDiagram
   LC-->>CLI: compact audit-state summary
 ```
 
-## down
+## stop
 
 ```mermaid
 sequenceDiagram
@@ -339,11 +339,11 @@ sequenceDiagram
   participant SET as vm-set.sh
   participant LV as libvirt.sh
 
-  CLI->>LC: vm_cmd_down(env)
+  CLI->>LC: vm_cmd_stop(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>SET: vm_set_verify_marker_for_teardown()
   LC->>LV: vm_libvirt_shutdown_set()
-  LC-->>CLI: compact down summary
+  LC-->>CLI: compact stop summary
 ```
 
 ## restore-baseline
@@ -421,7 +421,7 @@ sequenceDiagram
   LC->>LC: vm_cmd_preflight()
   LC->>LC: vm_cmd_init_run()
   LC->>LC: vm_cmd_create()
-  LC->>LC: vm_cmd_up()
+  LC->>LC: vm_cmd_start()
   LC->>LC: vm_cmd_status()
   LC->>LC: vm_cmd_prepare_artifacts()
   LC->>LC: vm_cmd_stage_artifacts()

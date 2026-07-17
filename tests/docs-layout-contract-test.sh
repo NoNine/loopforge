@@ -49,8 +49,9 @@ for path in \
   docs/operations/native/review-guide.md \
   docs/planning/implementation-plan.md \
   docs/planning/steps/step-01-repository-structure.md \
-  docs/planning/steps/step-13a-fresh-state-role-lifecycle.md \
-  docs/planning/steps/step-13b-shared-integration-lifecycle.md \
+  docs/planning/steps/step-13a-reusable-simulation-lifecycle.md \
+  docs/planning/steps/step-13b-fresh-state-role-lifecycle.md \
+  docs/planning/steps/step-13c-shared-integration-lifecycle.md \
   docs/planning/steps/step-15-final-acceptance.md \
   project-state/execution-status.md \
   simulation/README.md \

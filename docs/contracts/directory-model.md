@@ -74,8 +74,10 @@ Role preflight accepts a fully absent runtime account/group/product-home set
 after checking that its reviewed names and numeric identities can be created.
 After staged artifact verification, role `install` creates that complete set
 and then verifies its ownership before writing product files. A fully matching
-set is reused on rerun. Partial state, a non-directory path, or mismatched
-ownership blocks instead of being repaired in place.
+identity with an empty product home may be adopted for initial setup. Exact
+input-bound completed state returns `already-complete` without mutation.
+Partial, changed, unbound, or mismatched application state blocks instead of
+being reused or repaired in place.
 
 | Path | Environment | Lifecycle owner | OS owner/group | Permission model | Contents | Sensitivity | Evidence and cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -165,19 +167,42 @@ path, log, and evidence labels must say `simulation-only`.
 ## Retained Simulation Output
 
 Simulation cleanup preserves review output: exported artifact archives,
-evidence, and bounded logs. When a cleanup command clears active retained
-output directories for later run reuse, it first backs those outputs up to a
-host-owned retained-output snapshot such as
-`host/retained-output-backups/<timestamp>/` inside the selected generated run
-root.
+evidence, and bounded logs under the immutable run root. Cleanup removes
+mutable runtime inputs, checkpoints, and active-run ownership without clearing,
+overwriting, or moving retained review output into a reusable backend set.
+Layer-specific lifecycle commands may stop resources, restore baselines, or
+delete selected-run scratch, but they must not silently discard retained
+evidence, logs, or exported artifacts.
 
-Backup snapshots are review artifacts. Cleanup must not convert active
-target-dominated outputs into host-owned outputs in place; it may copy them
-into retained host-owned review locations before clearing active runtime
-directories. Layer-specific lifecycle commands may remove mutable generated
-state, stop containers, restore VM snapshots, or delete selected-run scratch,
-but they must not silently discard retained evidence, logs, or exported
-artifacts.
+## Simulation Baselines And Run Identity
+
+`HARNESS_RUN_ID` identifies one immutable setup and validation attempt.
+`init-run` generates it when omitted and rejects an explicitly supplied value
+whose canonical run root already exists. Active runtime inputs, markers,
+evidence, and helper state record that run ID.
+
+Reusable backend identity is separate. `HARNESS_SET_ID` owns one simulation
+set in either backend. Each reusable set stores a non-secret `active-run.env`
+pointer to at most one run ID. `start` and `stop` preserve it. After successful
+baseline restoration, `clean` removes that
+pointer and mutable run state but preserves the immutable run's review output.
+
+Docker durable baseline state includes the selected project image and Compose
+digests, clean container definition, checksummed LDAP data, empty product homes
+with reviewed numeric ownership, empty shared storage, and target SSH identity.
+It is owned under the selected Docker simulation-set root and is separate from
+run-scoped checkpoint state. Docker `restore-baseline` may use an
+ownership-restricted temporary container to restore numeric ownership and
+metadata, but normal lifecycle and setup commands must not do so.
+
+VM durable baseline state remains owned by `HARNESS_SET_ID` and consists of
+the set-local base image, domain/disk metadata, seed media, and clean
+baseline snapshots. A run references that reusable set without owning it.
+
+`clean` removes mutable active run data and preserves baseline state.
+`restore-baseline` resets durable runtime state and preserves generated review
+output. `destroy` removes the selected backend baseline and reusable resources
+but preserves retained artifacts, evidence, and bounded logs.
 
 ## Artifact Extraction Paths
 
@@ -192,14 +217,19 @@ the helper-visible payload directories after archive and checksum validation.
 
 ## Docker Simulation Backing
 
-Docker simulation realizes canonical paths under one generated run root:
+Docker simulation separates reusable simulation-set state from immutable run
+output:
 
 ```text
+generated/simulation/docker/sets/<set-id>/
 generated/simulation/docker/<run-id>/
 ```
 
-| Docker run path | Canonical or container-visible path | Content dominance | Purpose |
+| Docker generated path | Canonical or container-visible path | Content dominance | Purpose |
 | --- | --- | --- | --- |
+| `sets/<set-id>/active-run.env` | Selected Docker active-run pointer | Host-dominated | Non-secret immutable run ID and marker fingerprint; removed only by successful `clean` or set destruction |
+| `sets/<set-id>/baseline/` | Docker clean baseline | Host-dominated | Checksummed image/Compose identity, bind-data archives, numeric ownership, and target SSH identity used only by `restore-baseline` |
+| `sets/<set-id>/runtime/` | Docker durable bind roots | Target-dominated | LDAP data, product homes, shared storage, integration helper state, and target staging for the selected reusable simulation set |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, run markers, and public manifest contract; rendered env files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
 | `host/bundle-factory/rendered/` | Host-side reviewed bundle-factory input copies | Host-dominated | Operator review copy before Docker `cp` input transfer |
@@ -210,15 +240,6 @@ generated/simulation/docker/<run-id>/
 | `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs, review-sensitive and bounded |
 | `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
 | `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
-| `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Host-owned backups of retained outputs before active dirs are cleared |
-| `target/helper-state/integration/` | Shared integration helper state | Target-dominated | Cross-role integration status and helper state for the host-orchestrated integration utility |
-| `target/shared-jenkins-storage/` | `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Shared Jenkins controller/agent integration storage |
-| `target/ldap/data/` | `/var/lib/ldap` in LDAP container | Target-dominated | Simulation-owned LDAP data |
-| `target/ldap/config/` | `/etc/ldap/slapd.d` in LDAP container | Target-dominated | Simulation-owned LDAP configuration |
-| `target/product-homes/gerrit/` | `/srv/gerrit` in Gerrit target | Target-dominated | Docker-backed Gerrit product home |
-| `target/product-homes/jenkins-controller/` | `/var/lib/jenkins` in Jenkins controller target | Target-dominated | Docker-backed Jenkins controller home |
-| `target/product-homes/jenkins-agent/` | `/var/lib/jenkins-agent` in Jenkins agent target | Target-dominated | Docker-backed Jenkins agent home |
-| `target/artifacts/staging/<role>/` | Host-to-target transfer scratch | Target-dominated | Docker simulation staging scratch, not a product API |
 | `target/artifacts/exported/` | Operator-facing artifact export | Target-dominated | Exported archive handoff files and checksums |
 | `target/evidence/<role>/` | `/var/lib/loopforge/evidence` in one target container | Target-dominated | Retained role-local Docker simulation evidence, recursively helper-owned while active |
 | `target/logs/<role>/` | `/var/log/loopforge` in one target container | Target-dominated | Retained role-local bounded Docker simulation logs, recursively helper-owned while active |
@@ -235,30 +256,30 @@ durable meaningful content, not POSIX ownership of host review copies.
 Host-side generated paths use the local host account that runs the simulation
 harness; this host account is not required to be named `ci-operator`.
 
-Docker `clean` backs up retained outputs to
-`host/retained-output-backups/<timestamp>/`, whose copied contents are
-host-owned review artifacts. It clears active retained output directories and
-removes mutable generated runtime data under `host/` and `target/` for the
-selected run root. `clean` must not convert active target-owned outputs into
-host-owned outputs in place.
+Docker `clean` leaves exported artifacts, evidence, and logs under the
+immutable run root. It removes runtime inputs, checkpoints, target SSH client
+material, the run marker, and the selected set's active-run pointer only after
+successful baseline restoration. It does not delete or rewrite durable set
+state or retained review output.
 
 ## VM Simulation Backing
 
-VM simulation separates reusable VM-set state from run-scoped output:
+VM simulation separates reusable simulation-set state from run-scoped output:
 
 ```text
-generated/simulation/vm/vm-sets/<vm-set-id>/
+generated/simulation/vm/sets/<set-id>/
 generated/simulation/vm/<run-id>/
 ```
 
 | VM path | Canonical or VM-visible path | Content dominance | Purpose |
 | --- | --- | --- | --- |
-| `vm-sets/<vm-set-id>/` | VM-set registry root | Host-dominated | Ownership marker, selected VM set identity, and reusable resource records |
-| `vm-sets/<vm-set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
-| `vm-sets/<vm-set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | VM-set-local base image and mutable qcow2 machine volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
-| `vm-sets/<vm-set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
-| `vm-sets/<vm-set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
-| `vm-sets/<vm-set-id>/target-ssh/` | VM-set target SSH identity | Host-dominated | Target OS SSH private/public keypair seeded into reusable VM-set disks; removed only with the selected VM set |
+| `sets/<set-id>/` | Simulation-set registry root | Host-dominated | Ownership marker, selected simulation-set identity, and reusable VM resource records |
+| `sets/<set-id>/active-run.env` | Selected simulation-set active-run pointer | Host-dominated | Non-secret immutable run ID and marker fingerprint; removed only by successful `clean` or set destruction |
+| `sets/<set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
+| `sets/<set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | Set-local base image and mutable qcow2 machine volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
+| `sets/<set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
+| `sets/<set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
+| `sets/<set-id>/target-ssh/` | Simulation-set target SSH identity | Host-dominated | Target OS SSH private/public keypair seeded into reusable VM disks; removed only with the selected simulation set |
 | Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, run markers, and manifest contract; rendered env and inventory files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
@@ -268,7 +289,6 @@ generated/simulation/vm/<run-id>/
 | `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
 | `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
 | `host/artifacts/exported/` | Operator-facing artifact review copies | Host-dominated | Exported bundle archives and checksums copied back for review; not a target transfer path |
-| `host/retained-output-backups/<timestamp>/` | Operator-facing clean backup snapshot | Host-dominated | Backups of retained outputs before active dirs are cleared |
 | `target/evidence/<role>/` | `/var/lib/loopforge/evidence` on one target VM | Target-dominated | Retained role-local VM simulation evidence |
 | `target/logs/<role>/` | `/var/log/loopforge` on one target VM | Target-dominated | Retained role-local bounded VM simulation logs |
 
@@ -277,12 +297,13 @@ the guest-local canonical staging path `/var/lib/loopforge/staging/<role>/`.
 The VM generated run tree may keep host-owned artifact review copies, but it
 must not model transfer with a generated `target/artifacts/staging/` sideband.
 
-VM-set state persists across runs until `destroy`. Run-scoped output belongs
-to one `HARNESS_RUN_ID` and may be cleaned independently. `clean` rolls the
-selected VM set back to the clean baseline snapshot and removes mutable
-selected-run state, while preserving exported artifacts, evidence, bounded
-logs, and retained-output backups. `destroy` is the only command that removes
-simulation-owned VM domains, the VM-set-local base image, machine disks,
+Simulation-set state persists across runs until `destroy`. Active output
+belongs to one immutable `HARNESS_RUN_ID` and may be cleaned independently.
+`restore-baseline` rolls the stopped selected simulation set back to its
+clean snapshot. `clean` removes only active generated state while preserving
+exported artifacts, evidence, bounded logs, and the simulation set. `destroy` is the
+only command that removes
+simulation-owned VM domains, the set-local base image, machine disks,
 snapshots, seed media, or networks after ownership validation or exact selected
 resource recovery. VM shared Jenkins storage is not VM-host state; it is
 guest-local data on the Jenkins agent VM and is removed only as part of owned

@@ -51,7 +51,7 @@ Composite command:
 
 | Command | Purpose |
 | --- | --- |
-| `run [--env FILE]` | Runs the normal Docker simulation workflow. It reports whether the run is `fresh` or `resume`, then executes `preflight` through `prove-integration`. It does not run `down`, `clean`, `destroy`, or `audit-state`. |
+| `run [--env FILE]` | Runs the normal Docker simulation workflow for the selected immutable run, then executes `preflight` through `prove-integration`. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
 | `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
@@ -59,9 +59,9 @@ Phase and lifecycle commands:
 | Command | Purpose |
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
-| `init-run [--env FILE]` | Loads the bootstrap env file, copies the harness, role, and integration env inputs into private run-scoped runtime inputs, resolves browser ports, writes rendered/runtime env files, and writes the artifact manifest contract. Terminal output is a short `init-run: ok run-id=...` summary. |
-| `create [--env FILE]` | Builds the selected Docker simulation project images after rendered runtime config exists. It does not start containers or create checkpoint evidence beyond the harness image-build record. Success prints `create: ok images=project-built`. |
-| `up` | Starts the bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target containers from the selected project images. It does not build images; run `create` first after `init-run`. Success prints one short `up: started ...` summary. |
+| `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates `HARNESS_RUN_ID` when omitted, rejects an existing run root or active simulation set, copies reviewed inputs into private runtime inputs, resolves browser ports, writes rendered/runtime files, and claims the set's active-run pointer. |
+| `create [--env FILE]` | Builds the selected project images, creates retained stopped containers and the network, transiently starts prerequisites when needed, captures the clean pre-setup bind baseline and target SSH identity, then leaves the simulation set stopped. |
+| `start [--env FILE]` | Starts the exact retained containers. From baseline state it starts environment prerequisites only; from exact completed state it also starts already-configured Gerrit and Jenkins without rewriting configuration. Other state blocks. |
 | `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/var/lib/loopforge/staging/gerrit`, `/var/lib/loopforge/staging/jenkins`, or `/var/lib/loopforge/staging/jenkins-agent`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
@@ -71,8 +71,9 @@ Phase and lifecycle commands:
 | `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
 | `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
 | `audit-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
-| `down [--env FILE]` | Stops harness containers while retaining generated state, logs, artifacts, and evidence. Success prints `down: stopped harness containers`. |
-| `clean [--env FILE]` | Stops harness containers with orphan removal and deletes only mutable generated runtime data from the selected run. It preserves exported artifacts, evidence, and logs. |
+| `stop [--env FILE]` | Gracefully stops configured Gerrit and Jenkins runtimes, then stops the exact containers without removing them. It retains writable layers, bind-mounted runtime data, generated state, logs, artifacts, and evidence. |
+| `restore-baseline [--env FILE]` | Requires stopped owned containers, verifies the baseline manifest, recreates containers from the pinned images and Compose definition, restores the clean checksummed bind baseline and target SSH identity, and leaves the environment stopped. |
+| `clean [--env FILE]` | Requires the simulation set to be stopped and successfully restored, clears the set's active-run pointer, and deletes mutable run state. It preserves the immutable run's review output, Docker baseline, and reusable resources. |
 | `destroy [--env FILE]` | Removes selected LoopForge-labeled containers, the selected harness network, and images built for the selected Docker simulation project. It does not remove generated state, base images, artifacts, evidence, or logs. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`.
@@ -99,39 +100,57 @@ mode `0600`. `init-run` also writes a run marker under
 `generated/simulation/docker/<run-id>/`. Later lifecycle and cleanup commands
 load the private runtime config and verify that marker before operating.
 
+`HARNESS_SET_ID` is the stable reusable simulation-set identity and defaults
+to `default` when omitted.
+`HARNESS_RUN_ID` identifies one immutable attempt; `init-run` generates it when
+omitted, while an explicit value must not already exist. The simulation set
+stores one non-secret `active-run.env` pointer. `stop` and `start` preserve it.
+Only `stop`, `restore-baseline`, and `clean` clear it before another generated
+run ID can claim the same set.
+
+The Docker harness derives its Compose project name from `HARNESS_SET_ID`.
+That name is backend resource metadata, remains stable across runs of the set,
+and must not include `HARNESS_RUN_ID` or act as another operator identity.
+
 `harness.env` is the rendered harness record for inspection. The private
 `harness.runtime.env` retains lifecycle values and points at the runtime input
 copies. Non-secret run markers and manifest contracts are public/read-only
 metadata, not secret material.
 
 For v1, Docker simulation does not support arbitrary generated/output roots.
-All lifecycle and cleanup commands use the repo-local
-`generated/simulation/docker/<run-id>/` tree.
+Reusable resources and run output use these repo-local roots:
+
+```text
+generated/simulation/docker/sets/<set-id>/
+generated/simulation/docker/<run-id>/
+```
 
 ## Simulation Accounts
 
 The shared simulation account contract, including seeded LDAP login accounts,
 is defined in `simulation/README.md`. The Docker target image realizes that
 contract with the default simulation operator and product runtime accounts.
-For a fresh run, `up` initializes the empty bind-mounted product-home roots to
-the baked runtime accounts' reviewed numeric ownership before role setup.
-Later starts only validate that ownership. Drift blocks and requires explicit
-cleanup with a fresh run; the harness does not repair populated product homes.
+During `create`, the clean baseline initializes empty bind-mounted product-home
+roots to the baked runtime accounts' reviewed numeric ownership. Later
+`start` operations validate ownership without changing it. Drift blocks and
+requires `stop` plus `restore-baseline`; the harness does not repair populated
+product homes during normal startup.
 
-Docker realizes Jenkins shared storage by bind-mounting one run-local
-`target/shared-jenkins-storage` directory into both the Jenkins controller and
+Docker realizes Jenkins shared storage by bind-mounting one simulation-set-local
+`runtime/shared-jenkins-storage` directory into both the Jenkins controller and
 Jenkins agent containers at `JENKINS_SHARED_STORAGE_PATH`, normally
 `/data/jenkins-shared`. `configure-integration` applies the shared
 `jenkins-share` group, setgid group-writable permissions, and read/write proof
 inside those containers.
 
-Use `simulate.sh status --env FILE` after `up` to inspect the selected
-running simulation. The status command prints the run ID, Compose project,
-live browser URLs, and seeded Docker simulation login accounts. It is read-only
+Use `simulate.sh status --env FILE` after `start` to inspect the selected
+running simulation. The status command prints the run ID, set ID, derived
+Compose project name, live browser URLs, and seeded Docker simulation login
+accounts. It is read-only
 and fails when the selected run's containers are not running, so it does not
 rely on stale port data from rendered config files.
 
-Use `simulate.sh ssh --role ROLE` after `up` to log into a target OS
+Use `simulate.sh ssh --role ROLE` after `start` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The
 command uses the rendered
 `INTEGRATION_*_TARGET_SSH_*` values and the run-scoped target SSH key and
@@ -149,18 +168,19 @@ does not use Docker exec and it is separate from Gerrit's service SSH on port
 
 ## Output Locations
 
-Docker-generated runtime output is not committed. Docker v1 uses one
-repo-local generated run root:
+Docker-generated runtime output is not committed. Reusable simulation-set state and
+immutable run output use separate roots:
 
 ```text
+generated/simulation/docker/sets/<set-id>/
 generated/simulation/docker/<run-id>/
 ```
 
-| Output kind | Docker run-scoped pattern |
+| Output kind | Docker generated pattern |
 | --- | --- |
+| Active-run pointer and baseline | `generated/simulation/docker/sets/<set-id>/` |
+| Durable bind state | `generated/simulation/docker/sets/<set-id>/runtime/` |
 | Host-contributed inputs | `generated/simulation/docker/<run-id>/host/` |
-| Product runtime homes | `generated/simulation/docker/<run-id>/target/product-homes/` |
-| Transfer scratch | `generated/simulation/docker/<run-id>/target/artifacts/staging/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
 | Harness evidence | `generated/simulation/docker/<run-id>/host/evidence/harness/` |
 | Harness bounded logs | `generated/simulation/docker/<run-id>/host/logs/harness/` |
@@ -169,8 +189,7 @@ generated/simulation/docker/<run-id>/
 | Target role bounded logs | `generated/simulation/docker/<run-id>/target/logs/<role>/` |
 
 Implementation-specific harness state can live below child directories inside
-those roots, but the operator-facing Docker model has one run-scoped output
-layout. Shared simulation contracts for input custody, helper-visible paths,
+those roots. Shared simulation contracts for input custody, helper-visible paths,
 artifact staging, LDAP secret handling, retained outputs, and integration key
 custody live in `simulation/README.md`, `docs/contracts/artifact-bundle-contract.md`,
 and `docs/contracts/directory-model.md`.
@@ -190,7 +209,7 @@ sources, and explicitly labeled Docker `cp` waivers:
   `cp` input waiver before helper execution.
 - The run-scoped target SSH public key is staged as Docker control-plane input
   and installed as the target-local `ci-operator` `authorized_keys` file during
-  `up`; the private key remains only under `host/target-ssh/`.
+  `start`; the private key remains only under `host/target-ssh/`.
 - The host collector copies bounded evidence and logs from containers with a
   labeled Docker `cp` collector waiver.
 
@@ -210,29 +229,38 @@ actions without mutation. No-option execution is also a dry run. Actual
 cleanup uses `--destroy`, removes matching containers first, then networks,
 then project-built images, and fails if matching resources remain. It does not
 remove generated workspaces, bind-mounted data, base images, artifacts,
-evidence, or logs. This is a host-wide recovery tool, not the selected-run
-behavior of `down`, `clean`, or `destroy`.
+evidence, or logs. This is a host-wide recovery tool, not selected-run
+`stop`, `restore-baseline`, `clean`, or `destroy` behavior.
 
-`down` and `clean` are deliberately separate. `down` maps to Docker Compose
-teardown and retains generated output for review. Docker bind mounts can leave
-host files owned by container users, and Compose does not delete those
-bind-mounted directories, so `clean` is the explicit housekeeping command.
+`stop`, `restore-baseline`, and `clean` are deliberately separate. `stop` uses
+Docker Compose stop behavior and preserves containers, writable layers, bind
+data, active-run ownership, and generated output. `restore-baseline` is the explicit durable reset;
+it may recreate only the stopped ownership-validated selected containers and
+restore only the selected checksummed bind baseline. `clean` clears active-run
+ownership and mutable run state but does not reset containers or bind data.
+
+The Docker baseline lives under the selected simulation-set root and contains a
+manifest binding image digests, Compose config digest, bind archive digests,
+numeric ownership, target SSH identity, set identity, derived Compose project
+name, and implementation revision.
+It contains clean LDAP data, empty product homes, and empty shared storage from
+before artifact staging or setup. It must not contain setup credentials,
+private integration keys, application configuration, or proof artifacts.
 
 `clean` follows the shared retained-output contract from
 `docs/contracts/directory-model.md`. It verifies the selected run marker and operates
-only under the canonical repo-local generated run root. It backs up retained
-outputs, clears active retained output directories for later run reuse, and
-removes Docker mutable generated runtime data: host rendered inputs and target
-SSH material, `target/helper-state/`, `target/product-homes/`,
-`target/artifacts/staging/`, `target/ldap/`, and
-`target/shared-jenkins-storage/`. `target/helper-state/` is retained only for
-host-orchestrated integration helper state, not role helper roots. If the host
-user cannot remove container-owned files, `clean` may use a one-shot cleanup
-container mounted only to the validated run root.
+only under the canonical repo-local generated run root. It leaves retained
+review output under that immutable root and removes runtime inputs,
+checkpoint state, target SSH client material, the run marker, and the set
+active-run pointer. Durable product homes, LDAP data, shared storage, stopped
+container layers, and baseline state belong to `restore-baseline`, not
+`clean`. If the host user cannot remove
+container-owned generated files, `clean` may use a one-shot cleanup container
+mounted only to the validated generated-state paths.
 
 See `docs/contracts/lifecycle-contract.md` for phase behavior rules and
-`docs/contracts/directory-model.md` for generated path ownership, host/target dominance,
-and retained-output backup ownership.
+`docs/contracts/directory-model.md` for generated path ownership and
+host/target dominance.
 
 ## State Consistency And Recovery
 
@@ -251,40 +279,42 @@ project exists, whether it is running or stopped. Docker consistency additionall
 requires these Docker-specific generated paths and bind sources:
 
 - The canonical run root exists under `generated/simulation/docker/<run-id>/`.
+- The selected set root exists under
+  `generated/simulation/docker/sets/<set-id>/` and its active-run
+  pointer matches the run marker.
 - Helper env files under `host/runtime-inputs/helper-envs/` exist for phases
   that need them.
 - Expected generated bind source directories exist before container lifecycle
   phases use them.
 
 When selected containers already exist, resume/rerun phases also validate that
-container bind mounts still point at the selected canonical run root. A host
+container bind mounts still point at the selected simulation-set runtime root. A host
 probe written to each required bind source must be visible at the expected
 container destination before a phase relies on that mount.
 
-If generated state or bind-mount liveness is inconsistent, lifecycle phases
-fail clearly instead of recreating state or rerunning earlier phases. Recover
-with `down` or `clean`.
+If generated state, container identity, or bind-mount liveness is inconsistent,
+lifecycle phases fail clearly instead of recreating state or rerunning earlier
+phases. Inspect with `audit-state`; use `stop`, `restore-baseline`, `clean`, or
+ownership-checked `destroy` according to the failed state boundary.
 
 | Situation | Expected behavior |
 | --- | --- |
-| No selected containers and no generated run state | `init-run` may create the selected generated run state. `up` requires rendered runtime config first. |
-| Selected containers exist and generated bind mounts match the selected run | Resume/rerun phases may continue after validating their own prerequisites. Use `audit-state` for explicit bind-mount inspection. |
-| Selected containers exist but `generated/` was removed or recreated | Resume/rerun phases fail because existing containers are bound to missing or stale host paths. Use `down` or `clean` before starting again. |
-| No selected containers exist but a previous generated folder remains | `init-run` may create or overwrite generated runtime config for the selected run. Later phases use the newly rendered state. |
-| Partial or inconsistent generated state exists | Lifecycle phases fail clearly. If containers exist, use `down` or `clean`; if no containers exist, rerun `init-run`. |
+| No selected resources and no baseline | `init-run` creates or accepts a unique run ID; `create` establishes the reusable stopped environment and clean baseline. |
+| Stopped selected containers and matching generated/baseline state | `start` may continue after validating container, bind, active-run, and checkpoint state. |
+| Running selected containers and exact completed state | `stop` gracefully stops services and retains all durable state. |
+| Stopped exact completed state | `start` starts the already-configured services without setup mutation. |
+| Stopped selected containers with a valid baseline | `restore-baseline` may recreate only those containers and restore only selected bind data. |
+| The selected simulation set has an active run | `init-run` fails; use `stop`, `restore-baseline`, and `clean` before generating another run ID. |
+| Partial or inconsistent state | Normal phases and `start` fail clearly; recovery commands operate only when their ownership prerequisites can be proved. |
 
-`down` stops and removes selected simulation containers while retaining
-generated output for review. It supports bootstrap-only recovery when runtime
-config is missing or inconsistent because stale containers may be the problem
-being recovered from.
+`stop` must not remove containers or the selected network. When configuration
+is exact and complete, it uses native Gerrit and Jenkins stop operations before
+Compose stop so container shutdown does not become an ungraceful application
+reset. From baseline state it stops prerequisites only.
 
-`clean` may share the same container cleanup recovery as `down`. It must not
-delete generated files outside the canonical run root. If runtime config is
-missing or inconsistent but the canonical run root still exists, `clean` may
-remove selected containers, remove known mutable generated paths, back up
-retained outputs, and clear active retained output directories. If the
-canonical run root is missing, it reports that host generated cleanup was
-skipped.
+`restore-baseline` is the only normal selected-run command that may remove and
+recreate containers. It must reject running containers, image/Compose drift,
+an invalid baseline manifest, unowned resources, or target SSH identity drift.
 
 `audit-state` is the explicit read-only command for the expensive container
 and bind-mount sweep. It checks live selected containers against the selected
@@ -296,13 +326,14 @@ Typical flows:
 ```bash
 simulation/docker/simulate.sh --env FILE init-run
 simulation/docker/simulate.sh --env FILE create
-simulation/docker/simulate.sh --env FILE up
+simulation/docker/simulate.sh --env FILE start
 simulation/docker/simulate.sh --env FILE configure-role
 simulation/docker/simulate.sh --env FILE validate-role
 simulation/docker/simulate.sh --env FILE configure-integration
 simulation/docker/simulate.sh --env FILE validate-integration
 simulation/docker/simulate.sh --env FILE prove-integration
-simulation/docker/simulate.sh --env FILE down
+simulation/docker/simulate.sh --env FILE stop
+simulation/docker/simulate.sh --env FILE restore-baseline
 simulation/docker/simulate.sh --env FILE clean
 simulation/docker/simulate.sh --env FILE destroy
 ```
@@ -315,11 +346,15 @@ Use `audit-state` when you need the slower bind-mount audit for an existing
 run. Normal lifecycle phases keep the cheap runtime-config check only.
 
 Docker `destroy` removes only selected LoopForge-labeled Docker resources for
-the selected project and run: containers, the harness network, and
-project-built images. It can recover the selected Docker resources from the
-env identity when rendered runtime state has already been removed. It leaves
+the selected simulation set: containers, the harness network, and
+project-built images. It can recover the derived Compose project name from the
+set identity when rendered runtime state has already been removed. It leaves
 upstream/base images such as `HARNESS_UBUNTU_IMAGE` and `HARNESS_LDAP_IMAGE`
-intact and leaves generated run output for review or explicit `clean`.
+intact, removes the selected baseline state, and leaves retained run output for
+review.
+
+`up` and `down` are unsupported command names. The CLI must reject them and
+must not provide compatibility aliases.
 
 ## Integration Boundary
 

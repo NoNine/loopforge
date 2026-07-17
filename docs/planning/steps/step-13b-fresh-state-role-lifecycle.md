@@ -1,12 +1,13 @@
-# Step 13a: Align Fresh-State Role Lifecycle
+# Step 13b: Align Fresh-State Role Lifecycle
 
 Align the Gerrit, Jenkins controller, and Jenkins agent helpers, native and
 helper procedures, role evidence, and simulation role gates with the v1
 fresh-state lifecycle contract.
 
-This step repairs the role-local contract before shared integration consumes
+This step follows accepted Step 13a reusable simulation lifecycle behavior and
+repairs the role-local contract before shared integration consumes
 role-readiness handoffs. Implement it role by role in dependency order. Step
-13b shared integration, Step 14 boundary checks, and Step 15 final acceptance
+13c shared integration, Step 14 boundary checks, and Step 15 final acceptance
 depend on its accepted handoffs.
 
 ## Authorities And Required Reading
@@ -201,10 +202,10 @@ Verification order:
 
 1. Run each role's focused shell and documentation tests, `bash -n`, and
    `git diff --check` after its milestone.
-2. Run role phases individually in Docker from a fresh `HARNESS_RUN_ID`, then
+2. Run role phases individually in Docker from a newly generated run ID, then
    the composite role workflow.
 3. Run role phases individually in VM simulation from a fresh
-   `HARNESS_RUN_ID` and, when needed, a fresh `LOOPFORGE_VM_SET_ID`; remote VM
+   `HARNESS_RUN_ID` and, when needed, a fresh `HARNESS_SET_ID`; remote VM
    mutation requires explicit approval for the selected target.
 4. Run native target-like acceptance only with explicit approval for the
    selected hosts and actions.
@@ -215,7 +216,7 @@ Acceptance:
   state consistently.
 - Fresh Docker and approved VM runs pass without implicit repair or cleanup.
 - Exact role reruns are proven non-mutating, and changed bindings fail closed.
-- The three accepted role-readiness handoffs are suitable inputs to Step 13b.
+- The three accepted role-readiness handoffs are suitable inputs to Step 13c.
 
 ## State And Recovery Rules
 
@@ -233,7 +234,7 @@ the owning helper, focused regression tests, directly affected consumer docs,
 and bounded verification. Do not combine remote runtime evidence or the
 execution ledger with implementation commits.
 
-Step 13a is complete only after M1-M5 pass their gates and fresh Docker plus
+Step 13b is complete only after M1-M5 pass their gates and fresh Docker plus
 approved VM evidence confirms the role contract. Older successful role runs
 remain diagnostic evidence for the previous implementation and do not satisfy
 this step.

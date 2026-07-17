@@ -34,15 +34,15 @@ layer README files as command contracts.
 
 ```text
 preflight: ok mode=vm libvirt=available
-init-run: ok run-id=step13-m3-202607082136
+init-run: ok run-id=step13-m3-202607082136-a1b2c3d4
 prepare-artifacts[gerrit]: ok bundle=gerrit-artifacts.tar.gz
 stage-artifacts[jenkins-controller]: ok verified=manifest,checksums
 ```
 
 ```text
-up: failed reason=jenkins-controller ssh readiness timed out
-log=generated/simulation/vm/step13-m3-202607082136/host/logs/harness/up.log
-evidence=generated/simulation/vm/step13-m3-202607082136/host/evidence/harness/
+start: failed reason=jenkins-controller ssh readiness timed out
+log=generated/simulation/vm/step13-m3/host/logs/harness/start.log
+evidence=generated/simulation/vm/step13-m3/host/evidence/harness/
 ```
 
 ## Status Convention
@@ -52,10 +52,11 @@ starts with a compact state line such as `status: running` or
 `status: initialized`, then prints a `Run` section with selected run identity
 and layer-appropriate access information.
 
-Docker may show the Compose project and loopback browser URLs. VM simulation
-may show the VM set, project, pending product browser URLs, and target OS SSH
-access rows. Layers must not force identical fields when their access models
-differ.
+Both backends show the shared set and run IDs. Docker may additionally show
+the derived Compose project name and loopback browser URLs. VM simulation may
+show the derived libvirt resource prefix, pending product browser URLs, and
+target OS SSH access rows. Layers must not force identical backend fields when
+their access models differ.
 
 When seeded simulation login accounts are useful to operators, status output
 uses the shared `Login accounts` table convention: system, username, default
@@ -77,7 +78,8 @@ status: running
 
 Run
   Run ID        summary-12345
-  Project       summary-12345
+  Set ID        default
+  Compose       loopforge-docker-default
   Gerrit URL    http://127.0.0.1:18081/
   Jenkins URL   http://127.0.0.1:18082/login
 
@@ -101,8 +103,8 @@ status: running
 
 Run
   Run ID        step13-m3-202607082136
-  VM set        step13-m3-202607082136
-  Project       lf-m3-202607082136
+  Set ID        default
+  VM prefix     loopforge-vm-default
   Gerrit URL    http://192.168.126.133:8080/
   Jenkins URL   http://192.168.126.87:8080/login
 

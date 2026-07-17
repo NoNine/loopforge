@@ -96,6 +96,14 @@ Role configuration and role validation have separate responsibilities.
 - In `docker-simulation`, the existing container/direct-process model remains
   the lifecycle implementation. Docker does not claim guest-OS reboot
   persistence or provide systemd units.
+- Simulation `start` is service lifecycle, not setup. From clean baseline state
+  it starts only environment prerequisites. From exact input-bound completed
+  state it may start the already-configured Gerrit, Jenkins, and SSH runtimes
+  without rewriting configuration. Partial, changed, conflicting, or unbound
+  state blocks before service mutation.
+- Simulation `stop` gracefully stops configured services before stopping the
+  selected environment. It preserves durable runtime and generated review
+  state and does not turn completed state into fresh setup state.
 - After a VM or target-host reboot, a role is ready only when its expected
   service has recovered before validation begins. A later validation failure
   must remain a failure; it must not repair the service and then report a
@@ -105,7 +113,7 @@ Role configuration and role validation have separate responsibilities.
 
 | Concern | Docker simulation | VM simulation |
 | --- | --- | --- |
-| Environment lifecycle | Docker Compose starts and stops containers. | The VM harness starts, stops, and reboots guest machines. |
+| Environment lifecycle | Docker Compose creates, starts, and stops retained containers; explicit baseline restore recreates them. | The VM harness creates, starts, stops, restores, and reboots guest machines. |
 | Gerrit and Jenkins controller | Existing direct role processes inside the target container. | Guest systemd services. |
 | Jenkins SSH agent | Container entrypoint starts the direct `sshd` daemon. | Guest `ssh.service` or `sshd.service`. |
 | Role validation | Observes an existing process and endpoint. | Observes enabled/active units, runtime ownership, and endpoints. |
@@ -236,34 +244,67 @@ defined here: input review, artifact preparation, artifact staging,
 role-local setup, role-local validation, shared integration setup, cross-role
 validation, end-to-end trigger verification, and evidence audit.
 
-Simulation lifecycle and convenience commands such as `up`, `create`,
-`status`, `ssh`, `audit-state`, `reboot`, `down`, `restore-baseline`,
-`clean`, and `destroy` are outside the checkpoint progression unless a layer
-README explicitly ties one of them to a checkpoint. These commands must not
-silently rerun earlier phases or claim checkpoint success without checkpoint
-evidence.
+Simulation lifecycle and convenience commands such as `create`, `start`,
+`status`, `ssh`, `audit-state`, `reboot`, `stop`, `restore-baseline`, `clean`,
+and `destroy` are outside the checkpoint progression unless a layer README
+explicitly ties one to a checkpoint. These commands must not silently rerun
+setup phases or claim checkpoint success without checkpoint evidence.
 
-For Docker simulation, `down`, `clean`, and `destroy` are the commands allowed
-to recover selected Docker lifecycle state. `down` and `clean` recover from
-stale existing containers. Docker `destroy` removes selected LoopForge-labeled
-containers, the selected harness network, and selected project-built images;
-it is not generated-state recovery. Other commands must report inconsistent
-state and stop.
-`simulation/docker/README.md` owns the detailed Docker generated-state,
-stale-container, image lifecycle, and cleanup rules.
+Both simulation backends expose the same resource-state transitions:
 
-For VM simulation, `down`, `restore-baseline`, `clean`, and `destroy` are the
-only commands allowed to recover from inconsistent VM lifecycle state. Other
-commands must report inconsistent state and stop. `restore-baseline` resets
-guest disks to the selected VM set's clean baseline snapshot only after the VM
-set is down. `clean` removes mutable generated run state only.
-`clean` must preserve review artifacts.
-It must not delete the reusable VM set. Only `destroy` removes
-simulation-owned VM resources. This includes the selected VM set's local baked
-base image. When VM bake debug preservation is enabled, a failed bake's
-transient domain and work directory remain selected VM-set state. Later
-`create` attempts must fail without replacing that evidence, and only the
-ownership-checked `destroy` command may remove it.
+```text
+absent -> create -> stopped -> start -> running
+running -> stop -> stopped
+stopped -> restore-baseline -> baseline-ready
+stopped -> destroy -> absent
+```
+
+`create` establishes or verifies the selected reusable simulation set and its
+clean pre-setup baseline. `start` and `stop` preserve the selected durable
+runtime. `restore-baseline` requires the simulation set to be stopped and resets
+durable runtime state without cleaning generated run state. `clean` requires
+matching successful baseline restoration, clears the selected set's active-run
+pointer, and removes mutable run state while retaining review artifacts. It
+does not reset durable runtime or delete reusable resources.
+`destroy` removes only ownership-validated reusable backend resources and their
+baseline, not retained review output.
+
+`HARNESS_RUN_ID` identifies exactly one setup and validation attempt. When the
+operator omits it, `init-run` generates a collision-resistant immutable value;
+an explicitly supplied value must not already exist. Checkpoints, completion
+markers, runtime inputs, evidence, and status bind to that run ID.
+
+Reusable backend identity is separate: `HARNESS_SET_ID` selects one simulation
+set in either backend and defaults to `default` when omitted. Each set owns one
+non-secret active-run pointer.
+`init-run` rejects a set with an active run.
+`stop` and `start` preserve that pointer and run ID. Only successful
+`stop -> restore-baseline -> clean` clears it, after which `init-run` creates a
+new run ID automatically. Retained evidence from the old run remains under its
+immutable run root and cannot satisfy the new run.
+
+Backend resource namespaces are derived implementation details, not additional
+operator identities. Docker derives a Compose project name from
+`HARNESS_SET_ID`; VM simulation derives a libvirt resource prefix from it.
+Both values are stable across runs of the same simulation set and must not
+include `HARNESS_RUN_ID`.
+
+For Docker simulation, baseline restoration recreates stopped containers from
+the exact pinned project images and Compose definition, restores the clean
+checksummed bind-mounted baseline, and verifies target SSH identity. Ordinary
+`stop` preserves containers and their writable layers. Stale or recreated
+containers outside `restore-baseline` block. Docker `destroy` removes selected
+containers, network, project-built images, and baseline state.
+
+For VM simulation, `restore-baseline` resets guest disks to the selected
+simulation set's clean baseline snapshot after the set is stopped. `clean`
+preserves the reusable simulation set. Only `destroy` removes VM resources,
+including the set-local baked image. Preserved failed-bake debug state remains
+selected simulation-set state; later `create` attempts fail, and only
+ownership-checked `destroy` removes it.
+
+`up` and `down` are not Loopforge simulation commands. Do not retain aliases or
+compatibility dispatch for them.
 
 ## Evidence Obligations
 

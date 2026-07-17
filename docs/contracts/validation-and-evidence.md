@@ -193,15 +193,21 @@ cross-role Jenkins shared group name, shared group GID, and shared storage
 path. Helper-generated shared state and helper logs live under
 `/var/lib/loopforge/` and `/var/log/loopforge/` on target environments.
 
+Docker and VM harness checkpoint evidence must identify the immutable
+`run_id`. Evidence from one run must never satisfy another run using the same
+reusable simulation set.
+
 Docker simulation evidence must prove the shared path is mounted into both
 Jenkins containers by writing a file as the controller runtime account and
 reading it as the agent runtime account.
 
-VM simulation evidence must identify the selected `vm_set_id` and `run_id`
-for every VM harness checkpoint. Harness records should include relevant
-libvirt domain names, VM hostnames or reviewed aliases, baseline snapshot
-records, VM-set ownership metadata, generated run marker references, guest SSH
-readiness, and cloud-init or seed readiness where applicable.
+Docker and VM harness checkpoint evidence must identify the selected `set_id`.
+Harness records may additionally identify the derived Docker Compose project
+name or VM libvirt resource prefix as backend resource metadata. VM records
+should include relevant libvirt domain names, VM hostnames or reviewed aliases,
+baseline snapshot records, simulation-set ownership metadata, generated run
+marker references, guest SSH readiness, and
+cloud-init or seed readiness where applicable.
 VM LDAP evidence must record LDAP service readiness, seeded account/group
 presence, bind/search proof, LDAP endpoint identity, simulation/test LDAP
 labeling, and redaction status without LDAP passwords or bind secrets.

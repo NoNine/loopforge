@@ -170,10 +170,10 @@ target_run_as <gerrit|jenkins-controller|jenkins-agent> <account> <command>
 
 Those primitives must use SSH plus `scp` or `rsync`. The integration helper
 must not call Docker APIs, derive container names, or require
-`HARNESS_PROJECT_NAME`. Docker simulation may use Docker APIs only to create,
-start, stop, inspect, and wire the simulation; it must expose logical targets
-through the same SSH and service interfaces used by VM simulation and
-`target-deployment`.
+the derived Compose project name. Docker simulation may use Docker APIs only
+to create, start, stop, inspect, and wire the simulation; it must expose
+logical targets through the same SSH and service interfaces used by VM
+simulation and `target-deployment`.
 
 Service API calls may originate from the control node or from a target over
 SSH when network reachability requires it. Evidence must record the selected

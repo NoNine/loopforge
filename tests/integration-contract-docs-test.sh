@@ -12,8 +12,8 @@ evidence_contract="$repo_root/docs/contracts/validation-and-evidence.md"
 native_manual="$repo_root/docs/operations/native/integration.md"
 setup_manual="$repo_root/docs/operations/setup/integration.md"
 implementation_plan="$repo_root/docs/planning/implementation-plan.md"
-role_step_plan="$repo_root/docs/planning/steps/step-13a-fresh-state-role-lifecycle.md"
-integration_step_plan="$repo_root/docs/planning/steps/step-13b-shared-integration-lifecycle.md"
+role_step_plan="$repo_root/docs/planning/steps/step-13b-fresh-state-role-lifecycle.md"
+integration_step_plan="$repo_root/docs/planning/steps/step-13c-shared-integration-lifecycle.md"
 boundary_plan="$repo_root/docs/planning/steps/step-14-boundary-checks.md"
 final_acceptance="$repo_root/docs/planning/steps/step-15-final-acceptance.md"
 
@@ -151,10 +151,10 @@ reject_text "$setup_manual" \
   'Observational validation must not require mutation confirmation'
 
 require_text "$implementation_plan" \
-  '`docs/planning/steps/step-13a-fresh-state-role-lifecycle.md`' \
+  '`docs/planning/steps/step-13b-fresh-state-role-lifecycle.md`' \
   'Roadmap must link the fresh-state role lifecycle step'
 require_text "$implementation_plan" \
-  '`docs/planning/steps/step-13b-shared-integration-lifecycle.md`' \
+  '`docs/planning/steps/step-13c-shared-integration-lifecycle.md`' \
   'Roadmap must link the shared integration lifecycle step'
 for milestone in \
   '## M1: Shared State Authority And Marker Semantics' \
@@ -163,7 +163,7 @@ for milestone in \
   '## M4: Jenkins Agent Role Lifecycle' \
   '## M5: Role Gates, Evidence, And Runtime Acceptance'; do
   require_text "$role_step_plan" "$milestone" \
-    "Step 13a is missing milestone: $milestone"
+    "Step 13b is missing milestone: $milestone"
 done
 for milestone in \
   '## M1: State, Preflight, And Gerrit Reviewed Access' \
@@ -172,20 +172,20 @@ for milestone in \
   '## M4: Observational Validation And Active Proof' \
   '## M5: Evidence, Simulation Alignment, And Runtime Acceptance'; do
   require_text "$integration_step_plan" "$milestone" \
-    "Step 13b is missing milestone: $milestone"
+    "Step 13c is missing milestone: $milestone"
 done
 require_text "$integration_step_plan" \
   'Do not add compatibility fallbacks for old generated integration state.' \
-  'Step 13b must require explicit stale-state recovery'
+  'Step 13c must require explicit stale-state recovery'
 reject_text "$integration_step_plan" \
   'native rotation procedure' \
-  'Step 13b must not depend on a Loopforge rotation procedure'
+  'Step 13c must not depend on a Loopforge rotation procedure'
 require_text "$boundary_plan" \
-  'only after Step 13a fresh-state role lifecycle and Step 13b shared' \
-  'Boundary checks must depend on Steps 13a and 13b'
+  'fresh-state role lifecycle, and Step 13c shared integration lifecycle' \
+  'Boundary checks must depend on Steps 13a through 13c'
 require_text "$final_acceptance" \
-  '13a, and 13b are accepted and Step 14 boundary checks pass.' \
-  'Final acceptance must depend on Steps 13a and 13b'
+  '13a, 13b, and 13c are accepted and Step 14 boundary checks pass.' \
+  'Final acceptance must depend on Steps 13a through 13c'
 reject_text "$final_acceptance" \
   '--yes validate-integration' \
   'Final acceptance must keep integration validation observational'

@@ -185,13 +185,15 @@ fresh selected state.
 - Use `audit-state` for read-only state inspection, not recovery.
 - Do not hide recovery inside `run`, role phases, integration phases, or
   verification commands.
-- Treat `down`, `clean`, and VM `destroy` as explicit cleanup/recovery
-  commands with their documented side effects.
-- For Docker simulation, use a fresh `HARNESS_RUN_ID`/generated run root
-  for new validation after running `down` or `clean` for the old run.
-- For VM simulation, use a fresh `HARNESS_RUN_ID` and, when resource
-  identity is suspect, a fresh `LOOPFORGE_VM_SET_ID`; clean up old VM
-  sets only with their retained env file.
+- Treat `stop`, `restore-baseline`, `clean`, and `destroy` as explicit
+  lifecycle/recovery commands with their documented side effects.
+- For Docker and VM simulation, `stop` followed by `start` continues the same
+  immutable `HARNESS_RUN_ID`. Begin new validation only after `stop`,
+  `restore-baseline`, and `clean`; then let `init-run` generate a fresh run ID.
+- Never reuse an old run ID, completion marker, or retained evidence as a new
+  validation prerequisite.
+- When reusable resource identity is suspect, select a fresh `HARNESS_SET_ID`;
+  clean up old simulation sets only with their retained env file.
 - VM host-wide libvirt cleanup must run
   `simulation/vm/tools/cleanup-libvirt-resources.sh --dry-run` first.
   Actual host-wide cleanup requires explicit approval for that target

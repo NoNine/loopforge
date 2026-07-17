@@ -77,7 +77,7 @@ mutation requires explicit approval for the specific target and action.
 | Milestone | Additional verification beyond earlier milestones |
 | --- | --- |
 | M2 | Add `tests/vm-harness-terminal-summary-test.sh`; re-run M1 checks with libvirt preflight and VM-set ownership validation enabled. |
-| M3 | Run `create`, `up`, `status`, `ssh --role ROLE`, and `down`; verify target OS SSH access without role mutation. |
+| M3 | Run `create`, `start`, `status`, `ssh --role ROLE`, and `stop`; verify target OS SSH access without role mutation. |
 | M4 | Add `tests/vm-harness-ldap-seed-test.sh`; verify role OS dependency baseline readiness, LDAP readiness, seed, bind/search, and consumer reachability before baseline snapshot capture. |
 | M5 | Run `restore-baseline`, `clean`, `destroy`, and `audit-state`; verify rollback, generated-state cleanup, and destruction ownership checks after baseline prerequisites are proven. |
 | M6 | Add `tests/vm-harness-artifact-lifecycle-test.sh`; run `prepare-artifacts` and `stage-artifacts`; verify target-side manifests and checksums. |
@@ -93,9 +93,9 @@ configuration, validation and proof, reboot proof, shutdown, and clean
 rollback. Acceptance must not claim `target-deployment` readiness from VM
 simulation evidence.
 
-Step 13a owns the fresh-state role lifecycle correction and Step 13b owns the
-shared-integration correction discovered during M8. Earlier runs remain
-diagnostic evidence for the prior implementation and do not satisfy the
-refined lifecycle contracts. Step 13 integration acceptance cannot close until
-Steps 13a and 13b complete and a fresh approved VM run passes the Step 13b M5
-gate.
+Step 13a owns reusable simulation lifecycle alignment, Step 13b owns the
+fresh-state role correction, and Step 13c owns the shared-integration
+correction discovered during M8. Earlier runs remain diagnostic evidence for
+the prior implementation and do not satisfy the refined lifecycle contracts.
+Step 13 integration acceptance cannot close until Steps 13a-13c complete and a
+new generated VM run passes the Step 13c M5 gate.

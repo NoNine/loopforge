@@ -96,11 +96,11 @@ run identity resolution, and rendered endpoint values that are not large
 enough to justify a separate inventory module.
 
 `paths.sh` owns generated path contracts for run-scoped output and reusable
-VM-set state:
+Simulation-set state:
 
 ```text
 generated/simulation/vm/<run-id>/
-generated/simulation/vm/vm-sets/<vm-set-id>/
+generated/simulation/vm/sets/<set-id>/
 ```
 
 Other modules should ask `paths.sh` for generated locations instead of
@@ -121,7 +121,7 @@ remote readiness checks, and SSH file transfer. Artifact transfer to service
 VMs should use this module rather than a separate early transport abstraction.
 
 `lifecycle.sh` owns command orchestration for VM lifecycle commands such as
-`run`, `create`, `up`, `status`, `ssh`, `reboot`, `down`, `clean`, `destroy`,
+`run`, `create`, `start`, `status`, `ssh`, `reboot`, `stop`, `clean`, `destroy`,
 and `audit-state`. It coordinates other modules but should keep low-level
 libvirt, SSH, role helper, and integration details delegated.
 
@@ -225,7 +225,7 @@ stateDiagram-v2
 
   NoRun --> RunInitialized: init-run
   RunInitialized --> VMSetCreated: create
-  VMSetCreated --> Running: up
+  VMSetCreated --> Running: start
   Running --> ArtifactsPrepared: prepare-artifacts
   ArtifactsPrepared --> ArtifactsStaged: stage-artifacts
   ArtifactsStaged --> RolesConfigured: configure-role
@@ -234,14 +234,14 @@ stateDiagram-v2
   IntegrationConfigured --> IntegrationValidated: validate-integration
   IntegrationValidated --> IntegrationProven: prove-integration
 
-  Running --> Stopped: down
-  Stopped --> Running: up
-  IntegrationProven --> Stopped: down
+  Running --> Stopped: stop
+  Stopped --> Running: start
+  IntegrationProven --> Stopped: stop
 
   VMSetCreated --> BaselineRestored: restore-baseline
   Stopped --> BaselineRestored: restore-baseline
   Stopped --> Stopped: clean
-  BaselineRestored --> Running: up
+  BaselineRestored --> Running: start
 
   VMSetCreated --> Destroyed: destroy
   Stopped --> Destroyed: destroy
@@ -262,7 +262,7 @@ and proof after reboot.
 
 `prove-integration` must require a matching `validate-integration` marker for
 the same run. `run` is a composite over normal workflow commands only; it must
-not call `down`, `clean`, `destroy`, or `audit-state`.
+not call `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`.
 
 ## Post-Baseline Boundary Diagram
 
@@ -424,8 +424,8 @@ execution so failures expose the exact boundary that is not ready.
 | --- | --- | --- | --- |
 | M1 Harness skeleton and read-only run state | `preflight`, `init-run`, partial `status`, partial `audit-state` | `simulate.sh`, `config.sh`, `paths.sh`, `state.sh`, shared `simulation/lib/*` | CLI dispatch works, env inputs are copied to private runtime inputs, the run marker exists, compact summaries print, and no VM or libvirt mutation occurs. |
 | M2 VM-set ownership and libvirt preflight | `preflight`, `audit-state` | `state.sh`, `libvirt.sh`, `lifecycle.sh` | Local tooling and libvirt access are checked read-only, the VM-set metadata contract is defined, inconsistent selected resources fail clearly, and no repair occurs. |
-| M3 Create/up/down with SSH-ready base VMs | `create`, `up`, `down`, `status`, `ssh` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, `config.sh` | The VM set can be created, started, reached over target OS SSH as `ci-operator`, inspected, and shut down; missing domains, host keys, leases, or SSH readiness fail closed. |
-| M4 Baseline prerequisites: role OS dependencies and LDAP proof | `create`, `up`, `status`, `audit-state` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, folded LDAP logic | VM provisioning proves role OS dependency installation, command availability, real LDAP service readiness, seed entries, local bind/search, and Gerrit/Jenkins controller LDAP reachability before baseline readiness is written. |
+| M3 Create/start/stop with SSH-ready base VMs | `create`, `start`, `stop`, `status`, `ssh` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, `config.sh` | The VM set can be created, started, reached over target OS SSH as `ci-operator`, inspected, and stopped; missing domains, host keys, leases, or SSH readiness fail closed. |
+| M4 Baseline prerequisites: role OS dependencies and LDAP proof | `create`, `start`, `status`, `audit-state` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, folded LDAP logic | VM provisioning proves role OS dependency installation, command availability, real LDAP service readiness, seed entries, local bind/search, and Gerrit/Jenkins controller LDAP reachability before baseline readiness is written. |
 | M5 Baseline snapshot, restore, clean, and destroy | `create`, `restore-baseline`, `clean`, `destroy`, `audit-state` | `libvirt.sh`, `state.sh`, `lifecycle.sh` | The baseline snapshot is captured after M4 prerequisites and before Loopforge mutation, `restore-baseline` rolls back only the stopped selected owned VM set, `clean` removes generated run state only, and `destroy` deletes only validated simulation-owned resources. |
 | M6 Artifact prepare/stage over target-like paths | `prepare-artifacts`, `stage-artifacts` | `artifacts.sh`, `ssh.sh`, `paths.sh` | The bundle factory runs helper artifact preparation, host review copies are retained, service VMs receive artifacts through SSH, and target-side manifests and checksums verify under `/var/lib/loopforge/staging/<role>`. |
 | M7 Role configure/validate phases | `configure-role`, `validate-role`, `reboot` | `roles.sh`, `ssh.sh`, `lifecycle.sh` | Role helpers run over target OS SSH, role evidence is captured, real service/runtime readiness is proven, and any readiness claim after reboot is re-established by validation. |
@@ -487,7 +487,7 @@ Loopforge lifecycle checkpoints:
 - synthetic role or integration success markers
 
 Host-side libvirt/KVM operations remain valid for VM infrastructure commands
-such as `up`, `down`, `clean`, and `destroy`, subject to ownership checks and
+such as `start`, `stop`, `clean`, and `destroy`, subject to ownership checks and
 operator approval requirements.
 
 ## Review Checks

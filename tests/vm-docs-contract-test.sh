@@ -39,19 +39,19 @@ require_doc_text docs/contracts/lifecycle-contract.md \
   'outside the checkpoint progression' \
   'Lifecycle contract must keep utility commands outside checkpoint progression'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  '`clean` must preserve review artifacts' \
+  "clears the selected set's active-run" \
   'Lifecycle contract must preserve VM clean review artifacts'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  'must not delete the reusable VM set' \
+  'preserves the reusable simulation set. Only `destroy` removes VM resources' \
   'Lifecycle contract must separate VM clean from destroy'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  'Only `destroy` removes' \
+  'Only `destroy` removes VM resources' \
   'Lifecycle contract must define VM destroy as resource deletion'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  'simulation-owned VM resources.' \
+  'Only `destroy` removes VM resources' \
   'Lifecycle contract must identify deleted VM resources'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  'transient domain and work directory remain selected VM-set state' \
+  'selected simulation-set state;' \
   'Lifecycle contract must preserve failed VM bake debug state until destroy'
 reject_doc_text docs/contracts/lifecycle-contract.md \
   '| VM command | Lifecycle checkpoint |' \
@@ -67,16 +67,16 @@ require_doc_text docs/contracts/directory-model.md \
   '## VM Simulation Backing' \
   'Directory model must own VM simulation backing paths'
 require_doc_text docs/contracts/directory-model.md \
-  'generated/simulation/vm/vm-sets/<vm-set-id>/' \
-  'Directory model must document reusable VM-set state root'
+  'generated/simulation/vm/sets/<set-id>/' \
+  'Directory model must document reusable simulation-set state root'
 require_doc_text docs/contracts/directory-model.md \
   'generated/simulation/vm/<run-id>/' \
   'Directory model must document VM run-scoped output root'
 require_doc_text docs/contracts/directory-model.md \
-  '`vm-sets/<vm-set-id>/libvirt/`' \
+  '`sets/<set-id>/libvirt/`' \
   'Directory model must document VM libvirt metadata backing'
 require_doc_text docs/contracts/directory-model.md \
-  '`vm-sets/<vm-set-id>/snapshots/`' \
+  '`sets/<set-id>/snapshots/`' \
   'Directory model must document VM baseline snapshot records'
 require_doc_text docs/contracts/directory-model.md \
   'Jenkins-agent-hosted shared storage exported to the controller VM' \
@@ -171,8 +171,11 @@ require_doc_text docs/baselines/package-requirements.md \
   'Package requirements must keep role helpers out of OS dependency installation'
 
 require_doc_text docs/contracts/validation-and-evidence.md \
-  'VM simulation evidence must identify the selected `vm_set_id` and `run_id`' \
-  'Evidence contract must require VM set and run identity'
+  'Docker and VM harness checkpoint evidence must identify the immutable' \
+  'Evidence contract must require immutable run identity'
+require_doc_text docs/contracts/validation-and-evidence.md \
+  'Docker and VM harness checkpoint evidence must identify the selected `set_id`.' \
+  'Evidence contract must require shared simulation-set identity'
 require_doc_text docs/contracts/validation-and-evidence.md \
   'baseline snapshot' \
   'Evidence contract must require VM baseline snapshot evidence'
@@ -254,7 +257,7 @@ require_doc_text simulation/docs/terminal-output.md \
   'The `status` command is an operator-facing summary, not an audit report.' \
   'Terminal output companion doc must keep status operator-facing'
 require_doc_text simulation/docs/terminal-output.md \
-  'Layers must not force identical fields when their access models' \
+  'Layers must not force identical backend fields when' \
   'Terminal output companion doc must allow layer-specific status fields'
 require_doc_text simulation/docs/terminal-output.md \
   'uses the shared `Login accounts` table convention' \
@@ -327,8 +330,8 @@ require_doc_text simulation/vm/README.md \
   'successful LDAP operation with no matching entries is a failure' \
   'VM README must require exact LDAP entry proof'
 require_doc_text simulation/vm/README.md \
-  'VM-set-local base image' \
-  'VM README must document VM-set-local base-image ownership'
+  'set-local base image' \
+  'VM README must document simulation-set-local base-image ownership'
 require_doc_text simulation/vm/README.md \
   'account-scoped OpenSSH policy' \
   'VM README must document the operator SSH seed policy'
@@ -339,7 +342,7 @@ require_doc_text simulation/vm/README.md \
   '`VM_DEBUG_PRESERVE_FAILED_BAKE=1`' \
   'VM README must document failed bake debug preservation'
 require_doc_text simulation/vm/README.md \
-  'debug marker exists so the next attempt cannot replace diagnostic evidence' \
+  'while the debug marker exists so the next attempt' \
   'VM README must protect preserved bake evidence from create reruns'
 require_doc_text simulation/vm/examples/vm.env.example \
   'VM_DEBUG_PRESERVE_FAILED_BAKE=0' \
@@ -357,8 +360,8 @@ require_doc_text docs/contracts/directory-model.md \
   'Libvirt directory-pool target' \
   'Directory model must identify libvirt-managed VM image paths'
 require_doc_text simulation/vm/README.md \
-  'Legacy VM sets rejected by normal lifecycle commands remain eligible only for' \
-  'VM README must document ownership-checked legacy VM-set cleanup'
+  'Legacy simulation sets rejected by normal lifecycle commands remain eligible' \
+  'VM README must document ownership-checked legacy simulation-set cleanup'
 require_doc_text simulation/vm/README.md \
   'size, and VM package matrix' \
   'VM README must document baked base-image invalidation inputs'
@@ -387,7 +390,7 @@ require_doc_text simulation/vm/README.md \
   'modeled success without' \
   'VM README must prohibit modeled VM checkpoint success'
 require_doc_text simulation/vm/README.md \
-  '`create [--env FILE]` | Defines or verifies the selected reusable libvirt/KVM VM set' \
+  '`create [--env FILE]` | Defines or verifies the selected reusable simulation set' \
   'VM README must document create behavior'
 require_doc_text simulation/vm/README.md \
   'LDAP service readiness, and LDAP seed verification' \
@@ -408,23 +411,23 @@ require_doc_text simulation/vm/README.md \
   '`restore-baseline` is destructive to guest disk changes made after the' \
   'VM README must document restore-baseline as snapshot rollback, not VM deletion'
 require_doc_text simulation/vm/README.md \
-  '`clean [--env FILE]` | Requires the selected VM set to be down and deletes mutable generated runtime data' \
+  '`clean [--env FILE]` | Requires the selected simulation set to be stopped' \
   'VM README must document clean as generated-state cleanup only'
 require_doc_text simulation/vm/README.md \
-  'Use `destroy` only when the reusable VM set should be permanently removed.' \
-  'VM README must document destroy as permanent VM-set removal'
+  'Use `destroy` only when the reusable simulation set should be permanently removed.' \
+  'VM README must document destroy as permanent simulation-set removal'
 require_doc_text simulation/vm/README.md \
   '`destroy [--env FILE]`' \
   'VM README must document destroy command'
 require_doc_text simulation/vm/README.md \
-  'VM-set-local base image' \
+  'set-local base image' \
   'VM README must document destroy removes local base image'
 require_doc_text docs/contracts/lifecycle-contract.md \
-  "This includes the selected VM set's local baked" \
+  'including the set-local' \
   'Lifecycle contract must define local VM base-image destruction'
 require_doc_text docs/contracts/directory-model.md \
-  'VM-set-local base image' \
-  'Directory model must define VM-set-local base-image ownership'
+  'set-local base image' \
+  'Directory model must define simulation-set-local base-image ownership'
 require_doc_text simulation/vm/README.md \
   'cleanup-libvirt-resources.sh --dry-run' \
   'VM README must document host cleanup dry-run'

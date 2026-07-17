@@ -83,15 +83,18 @@ require_doc_text simulation/README.md \
 require_doc_text simulation/README.md \
   '`scripts/integration-setup.sh` owns creating or' \
   'Simulation README must assign shared storage setup to integration setup'
+require_doc_text simulation/README.md \
+  'simulation-set-local bind mount' \
+  'Simulation README must keep Docker durable storage outside run roots'
 
 require_doc_text simulation/docker/README.md \
   'The shared simulation account contract, including seeded LDAP login accounts,' \
   'Docker README must point to the shared simulation account contract'
 require_doc_text simulation/docker/README.md \
-  'Docker realizes Jenkins shared storage by bind-mounting one run-local' \
+  'Docker realizes Jenkins shared storage by bind-mounting one simulation-set-local' \
   'Docker README must document Docker shared storage realization'
 require_doc_text simulation/docker/README.md \
-  '`target/shared-jenkins-storage` directory into both the Jenkins controller and' \
+  '`runtime/shared-jenkins-storage` directory into both the Jenkins controller and' \
   'Docker README must document Docker shared storage bind source'
 reject_doc_text simulation/docker/README.md \
   'This local `ci-operator` OS account has' \

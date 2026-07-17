@@ -68,8 +68,9 @@ These gates apply to every implementation step:
 | 12 | Accepted | `docs/planning/steps/step-12-shared-simulation-support-library.md` | Extract backend-neutral simulation helpers. |
 | 12a | Accepted | `docs/planning/steps/step-12a-docker-harness-modularization.md` | Modularize Docker harness internals. |
 | 13 | In progress | `docs/planning/steps/step-13-vm-simulation-harness.md` | Implement VM simulation harness milestone by milestone. |
-| 13a | Pending | `docs/planning/steps/step-13a-fresh-state-role-lifecycle.md` | Align fresh-state role behavior in Gerrit, controller, and agent dependency order. |
-| 13b | Pending | `docs/planning/steps/step-13b-shared-integration-lifecycle.md` | Align shared integration after the role handoffs are accepted. |
+| 13a | Pending | `docs/planning/steps/step-13a-reusable-simulation-lifecycle.md` | Align simulation-set lifecycle, baseline restore, and run identity behavior. |
+| 13b | Pending | `docs/planning/steps/step-13b-fresh-state-role-lifecycle.md` | Align fresh-state role behavior in Gerrit, controller, and agent dependency order. |
+| 13c | Pending | `docs/planning/steps/step-13c-shared-integration-lifecycle.md` | Align shared integration after the role handoffs are accepted. |
 | 14 | Pending | `docs/planning/steps/step-14-boundary-checks.md` | Add cross-repository boundary checks. |
 | 15 | Pending | `docs/planning/steps/step-15-final-acceptance.md` | Run and document final end-to-end acceptance. |
 
@@ -78,9 +79,10 @@ These gates apply to every implementation step:
 Step 13 is the active implementation area. Its detailed plan is
 `docs/planning/steps/step-13-vm-simulation-harness.md`; follow that file plus
 its named companion docs for VM harness implementation work. Step 13a first
-aligns the three role lifecycles; Step 13b then aligns shared integration with
-those accepted handoffs. Both are required before Step 13 integration
-acceptance can close and before Steps 14 and 15 begin.
+aligns reusable simulation lifecycle behavior, Step 13b aligns the three role
+lifecycles, and Step 13c aligns shared integration with those accepted
+handoffs. All three are required before Step 13 integration acceptance can
+close and before Steps 14 and 15 begin.
 
 ## Commit Strategy
 

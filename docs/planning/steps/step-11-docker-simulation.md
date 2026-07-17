@@ -20,14 +20,14 @@ simulation/docker/simulate.sh [--env FILE] init-run
 simulation/docker/simulate.sh [--env FILE] status
 simulation/docker/simulate.sh [--env FILE] prepare-artifacts
 simulation/docker/simulate.sh [--env FILE] stage-artifacts
-simulation/docker/simulate.sh [--env FILE] up
+simulation/docker/simulate.sh [--env FILE] start
 simulation/docker/simulate.sh [--env FILE] configure-role
 simulation/docker/simulate.sh [--env FILE] validate-role
 simulation/docker/simulate.sh [--env FILE] configure-integration
 simulation/docker/simulate.sh [--env FILE] validate-integration
 simulation/docker/simulate.sh [--env FILE] prove-integration
 simulation/docker/simulate.sh [--env FILE] audit-state
-simulation/docker/simulate.sh [--env FILE] down
+simulation/docker/simulate.sh [--env FILE] stop
 simulation/docker/simulate.sh [--env FILE] clean
 ```
 
@@ -90,7 +90,7 @@ simulation/docker/simulate.sh init-run
 simulation/docker/simulate.sh status
 simulation/docker/simulate.sh prepare-artifacts
 simulation/docker/simulate.sh stage-artifacts
-simulation/docker/simulate.sh up
+simulation/docker/simulate.sh start
 simulation/docker/simulate.sh configure-role
 simulation/docker/simulate.sh validate-role
 simulation/docker/simulate.sh configure-integration
@@ -118,4 +118,3 @@ Acceptance criteria:
 - A successful `prove-integration` summary does not use modeled pass results for
   required runtime outcomes and must include proof from the real Gerrit,
   Jenkins controller, and Jenkins agent services.
-
