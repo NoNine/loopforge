@@ -54,16 +54,16 @@ Composite command:
 | Command | Purpose |
 | --- | --- |
 | `run [--env FILE]` | Initializes fresh state or resumes the exact active immutable run at its next required phase, leaving the set running. An exact completed run returns `already-complete`; interrupted, conflicting, restored, run-ID-mismatched, or input-changed state blocks. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
-| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
+| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the published effective target inventory verified by `start`. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
 
 | Command | Purpose |
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
-| `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates `HARNESS_RUN_ID` when omitted, rejects an existing run root or active simulation set, copies reviewed inputs into private runtime inputs, resolves browser ports, writes rendered/runtime files, and claims the set's active-run pointer. |
+| `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates `HARNESS_RUN_ID` when omitted, rejects an existing run root or active simulation set, snapshots selected source templates, writes source-bound run state, and claims the set with effective inputs pending. |
 | `create [--env FILE]` | Builds and creates an absent claimed set, captures its clean baseline, and leaves it stopped. For an exact stopped existing set it verifies set metadata and returns non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, unowned, or mismatched state blocks. |
-| `start [--env FILE]` | Starts the exact retained containers. From baseline state it starts environment prerequisites only; from exact-bound state it also starts already-configured Gerrit and Jenkins without rewriting configuration. An exact running set returns `state=already-running`; other state blocks. |
+| `start [--env FILE]` | Starts the exact retained containers, verifies published target access, and atomically renders stable effective inputs on the first successful start. From baseline state it starts environment prerequisites only; from exact-bound state it also starts already-configured Gerrit and Jenkins without rewriting configuration. Repeated start verifies rather than rewrites effective inputs. An exact running set returns `state=already-running`; other state blocks. |
 | `status [--env FILE]` | Reports coherent absent, unclaimed, stopped, or running Docker state, including set/run identity, durable classification, reset gate, and live access data when available. Contradictory state reports `conflicting` and exits nonzero. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/var/lib/loopforge/staging/gerrit`, `/var/lib/loopforge/staging/jenkins`, or `/var/lib/loopforge/staging/jenkins-agent`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
@@ -95,12 +95,13 @@ HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
 HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 ```
 
-During `init-run`, the selected harness, role, and integration env files
-are copied to
-`generated/simulation/docker/<run-id>/host/runtime-inputs/` with
-mode `0600`. `init-run` also writes a run marker under
-`generated/simulation/docker/<run-id>/`. Later lifecycle and cleanup commands
-load the private runtime config and verify that marker before operating.
+During `init-run`, the selected harness, role, and integration templates are
+copied to `generated/simulation/docker/<run-id>/host/source-inputs/` with mode
+`0600`, and their fingerprint is bound to the run marker. The first successful
+`start` renders and atomically publishes stable effective helper files under
+`host/runtime-inputs/` plus `host/state/effective-inputs.env`. Later commands
+verify both bindings before operating, and no workflow phase rewrites the
+effective files.
 
 `HARNESS_SET_ID` is the stable reusable simulation-set identity and defaults
 to `default` when omitted. It must contain 1-24 lowercase ASCII letters,
@@ -158,9 +159,8 @@ port data.
 
 Use `simulate.sh ssh --role ROLE` after `start` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The
-command uses the rendered
-`INTEGRATION_*_TARGET_SSH_*` values and the run-scoped target SSH key and
-known-hosts file:
+command uses the published effective `INTEGRATION_*_TARGET_SSH_*` values and
+the run-scoped target SSH key and known-hosts file:
 
 ```bash
 simulation/docker/simulate.sh ssh --role gerrit
@@ -212,7 +212,7 @@ sources, and explicitly labeled Docker `cp` waivers:
 - `stage-artifacts` copies archive pairs into target containers with a Docker
   simulation-only `docker cp` waiver, then extracts and verifies them under
   `/var/lib/loopforge/staging`.
-- Full reviewed helper env files remain under `host/runtime-inputs/`; Docker
+- Effective helper env files remain under `host/runtime-inputs/`; Docker
   copies them to `/home/ci-operator/loopforge-inputs` with a labeled Docker
   `cp` input waiver before helper execution.
 - The run-scoped target SSH public key is staged as Docker control-plane input
@@ -291,8 +291,9 @@ requires these Docker-specific generated paths and bind sources:
 - The selected set root exists under
   `generated/simulation/docker/sets/<set-id>/` and its active-run
   pointer matches the run marker.
-- The strict run-scoped `workflow-state.env` and its hash-linked checkpoint
-  records match the pointer, marker, baseline, and reviewed input fingerprints.
+- The strict run-scoped `workflow-state.env`, effective-input record, and
+  hash-linked checkpoint records match the pointer, marker, baseline, and
+  source/effective input fingerprints.
 - Helper env files under `host/runtime-inputs/helper-envs/` exist for phases
   that need them.
 - Expected generated bind source directories exist before container lifecycle

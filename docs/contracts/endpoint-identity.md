@@ -16,7 +16,7 @@ policy.
 | Environment | Prefer | Use IP Only When |
 | --- | --- | --- |
 | Docker simulation | Docker service names inside containers; `127.0.0.1` with published ports from the host | Never use container IP addresses as stable endpoint identity. |
-| VM simulation | Stable VM FQDNs published by the VM network DNS | DNS is unavailable and the VM IP address is static for the run. |
+| VM simulation | Stable VM FQDNs for service identity; current DHCP leases for harness-to-guest target OS SSH transport | The harness has verified selected domain ownership and SSH identity; the address remains ephemeral transport, not stable identity. |
 | Target deployment | Site-approved FQDNs or DNS names | Bootstrap, break-glass, or site policy requires reviewed static IP inventory. |
 
 ## Applied To Loopforge
@@ -29,8 +29,8 @@ policy.
 | `JENKINS_URL` | Internal default `http://jenkins-controller-target:8080/`; host browser status URL `http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login` | Browser-reachable VM URL, preferably hostname-based | Jenkins root URL matching reverse proxy and TLS configuration |
 | `JENKINS_AGENT_HOST` | `jenkins-agent-target` for container/service access | VM FQDN such as `jenkins-agent.example.test` | FQDN or site inventory hostname for the agent |
 | `LDAP_URL` | `ldap://ldap:389` | VM LDAP FQDN such as `ldap.example.test` | Enterprise LDAP FQDN, normally `ldaps://...` when site policy requires TLS |
-| `INTEGRATION_*_TARGET_SSH_HOST` | `127.0.0.1` with the published Docker SSH port | VM FQDN preferred | FQDN preferred; reviewed static IP inventory is acceptable by site policy |
-| `INTEGRATION_*_TARGET_SSH_KNOWN_HOSTS_FILE` | Entries match `127.0.0.1:published-port` SSH inventory | Entries match the selected VM SSH host strings | Entries match the selected deployment SSH host strings |
+| `INTEGRATION_*_TARGET_SSH_HOST` | `127.0.0.1` with the published Docker SSH port | Current DHCP address resolved after `start`; supplied only as simulation invocation transport | FQDN preferred; reviewed static IP inventory is acceptable by site policy |
+| `INTEGRATION_*_TARGET_SSH_KNOWN_HOSTS_FILE` | Entries match `127.0.0.1:published-port` SSH inventory | Entries match the current transport address and the selected VM's verified SSH identity | Entries match the selected deployment SSH host strings |
 
 ## Identity Invariants
 
@@ -44,10 +44,16 @@ policy.
   run.
 - Use `127.0.0.1` only for Docker published host ports or an explicit VM port
   forward. It is not a cross-host target-deployment identity.
-- Prefer stable FQDNs for VM simulation and target deployment.
-- Raw IP addresses are allowed only as a reviewed static inventory fallback.
+- Prefer stable FQDNs for VM service identity and target-deployment inventory.
+- VM harness-to-guest target OS SSH may use the current DHCP address after
+  selected ownership and SSH identity verification. The address is refreshed
+  after every `start`, excluded from stable effective inputs, and never treated
+  as target identity.
+- Outside that VM simulation transport exception, raw IP addresses are allowed
+  only as reviewed static target-deployment inventory.
 - `known_hosts` files must be generated and checked for the exact SSH host
-  string and port recorded in reviewed inventory.
+  string and port used for the connection. VM simulation must additionally bind
+  the observed key to the selected owned VM when the DHCP address changes.
 - Browser URLs must be the URLs users and integrations actually use, not
   incidental process bind addresses.
 
@@ -57,7 +63,7 @@ policy.
 | --- | --- | --- |
 | Browser URL | `GERRIT_CANONICAL_WEB_URL`, `JENKINS_URL` | Use the browser-visible URL. In production this normally means an HTTPS FQDN, even when the service listens internally on HTTP. |
 | Service host | `GERRIT_HOST`, `JENKINS_HOST`, `JENKINS_AGENT_HOST` | Use the stable name reachable from the component that consumes the service endpoint. |
-| Target OS SSH inventory | `INTEGRATION_*_TARGET_SSH_HOST`, `INTEGRATION_*_TARGET_SSH_PORT`, `INTEGRATION_*_TARGET_SSH_KNOWN_HOSTS_FILE` | Use the operator/control-plane SSH identity and ensure host-key material matches that exact identity. |
+| Target OS SSH inventory | `INTEGRATION_*_TARGET_SSH_HOST`, `INTEGRATION_*_TARGET_SSH_PORT`, `INTEGRATION_*_TARGET_SSH_KNOWN_HOSTS_FILE` | Use the operator/control-plane SSH transport and ensure host-key material matches the selected target identity. VM simulation may overlay only the current DHCP host at helper invocation. |
 | Directory endpoint | `LDAP_URL` | Use the LDAP endpoint identity approved for the mode. Simulation-owned LDAP names must not be copied into target deployment. |
 
 ## Evidence Expectations
@@ -81,11 +87,13 @@ Gerrit and Jenkins both distinguish service internals from the URL users and
 integrations should use. Gerrit exposes `gerrit.canonicalWebUrl`; Jenkins
 reverse-proxy guidance requires the externally used URL and context path to
 match the configured service URL. Loopforge therefore treats browser URLs as
-reviewed endpoint identity.
+mode-appropriate bound endpoint identity.
 
 OpenSSH host-key trust is tied to the host string or address used for the SSH
 connection. Loopforge `known_hosts` files must match the SSH host strings and
-ports recorded in reviewed inventory.
+ports used for target deployment or simulation transport. VM simulation also
+retains selected-VM identity checks so a new DHCP address cannot authorize a
+different host key.
 
 ## References
 

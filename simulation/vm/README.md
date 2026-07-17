@@ -155,16 +155,16 @@ Composite commands:
 | Command | Purpose |
 | --- | --- |
 | `run [--env FILE]` | Initializes fresh state or resumes the exact active immutable run at its next required phase, leaving the set running. An exact completed run returns `already-complete`; interrupted, conflicting, restored, run-ID-mismatched, or input-changed state blocks. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
-| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
+| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using current target access resolved and verified by `start`. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
 
 | Command | Purpose |
 | --- | --- |
 | `preflight [--env FILE]` | Validates required local tooling, including `flock`, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
-| `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accepts an unused explicit value, copies selected inputs into private runtime inputs, writes rendered/runtime env files, records VM inventory expectations, and creates the simulation set's active-run pointer. It rejects a set with an active run. |
+| `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accepts an unused explicit value, snapshots selected source templates, writes source-bound run state and VM inventory expectations, and creates the simulation set's active-run pointer with effective inputs pending. It rejects a set with an active run. |
 | `create [--env FILE]` | Defines and baselines an absent claimed set, leaving it stopped. For an exact stopped existing set it verifies set metadata and returns non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, unowned, or mismatched state blocks. |
-| `start [--env FILE]` | Starts the selected simulation set and waits for control-plane readiness. From exact-bound state, guest systemd starts configured services without setup mutation. An exact running set returns `state=already-running`; other state blocks. |
+| `start [--env FILE]` | Starts the selected simulation set, waits for current DHCP and SSH readiness, and atomically publishes stable effective inputs on the first successful start. From exact-bound state, guest systemd starts configured services without setup mutation. Repeated start verifies stable inputs and refreshes only live access. An exact running set returns `state=already-running`; other state blocks. |
 | `status [--env FILE]` | Reports coherent absent, unclaimed, stopped, or running VM state, including set/run identity, durable classification, reset gate, and access data when available. Contradictory state reports `conflicting` and exits nonzero. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Transfers prepared artifact archives from the bundle factory VM to the target VM, verifies archive manifests and checksums on the target side, and stages them under the helper-visible staging path before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
@@ -227,17 +227,26 @@ If `--env FILE` is omitted, the harness uses the committed
 defined by the VM harness. Copy committed examples outside the examples tree
 before using real operator values.
 
-The harness env file must identify role and integration env inputs using the
-same role boundaries as Docker simulation. During `init-run`, the selected
-harness, role, and integration env files are copied to the run-scoped
-`host/runtime-inputs/` directory with mode `0600`. Later lifecycle and cleanup
-commands load the private runtime config and verify run and simulation-set
-markers before operating. `init-run` rejects a set with an active-run pointer or an
-explicit run ID whose canonical root already exists. After `stop`, successful
+The harness env file must identify role and integration source templates using
+the same role boundaries as Docker simulation. During `init-run`, the selected
+files are copied to the run-scoped `host/source-inputs/` directory with mode
+`0600` and bound to the run marker. The first successful `start` verifies VM
+ownership, DHCP, and SSH identity before rendering stable helper files under
+`host/runtime-inputs/` and atomically publishing
+`host/state/effective-inputs.env`. Later commands verify both bindings before
+operating. `init-run` rejects a set with an active-run pointer or an explicit
+run ID whose canonical root already exists. After `stop`, successful
 `restore-baseline`, and `clean`, it generates a new run ID when omitted.
 
-The rendered harness record is written for inspection. Private runtime env
-files retain lifecycle values and point at the runtime input copies.
+DHCP addresses are live target access and are not written to the stable
+effective files. Each `start` refreshes them. Integration phases verify the
+owned running domains and SSH identity, copy only the effective
+`integration.env` to a private temporary file, overlay the three current target
+SSH host fields, invoke the shared helper, and delete the temporary file. Role
+env files and stable integration values are never rewritten after publication.
+
+The rendered harness record is written for inspection. Private runtime config
+retains lifecycle values and points at the published effective input files.
 Non-secret run markers and manifest contracts are public/read-only metadata,
 not secret material.
 
@@ -354,8 +363,8 @@ unit files, or persistent network files.
 
 Use `simulate.sh ssh --role ROLE` after `start` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The
-command uses the rendered `INTEGRATION_*_TARGET_SSH_*` values and the
-simulation-set target SSH key plus run-scoped known-hosts file:
+command resolves current start-owned target access and uses the simulation-set
+target SSH key plus run-scoped known-hosts file:
 
 ```bash
 simulation/vm/simulate.sh ssh --role gerrit
@@ -399,7 +408,9 @@ completion; a missing command or failed cloud-init module blocks readiness.
 | Libvirt XML, seed metadata, and baseline snapshot records | `generated/simulation/vm/sets/<set-id>/libvirt/` |
 | Target OS SSH identity | `generated/simulation/vm/sets/<set-id>/target-ssh/` |
 | Host-contributed run inputs | `generated/simulation/vm/<run-id>/host/` |
-| Private runtime input copies | `generated/simulation/vm/<run-id>/host/runtime-inputs/` |
+| Private source-template snapshots | `generated/simulation/vm/<run-id>/host/source-inputs/` |
+| Private effective runtime inputs | `generated/simulation/vm/<run-id>/host/runtime-inputs/` |
+| Effective-input binding | `generated/simulation/vm/<run-id>/host/state/effective-inputs.env` |
 | Target OS SSH known hosts | `generated/simulation/vm/<run-id>/host/target-ssh/` |
 | Harness evidence | `generated/simulation/vm/<run-id>/host/evidence/harness/` |
 | Harness bounded logs | `generated/simulation/vm/<run-id>/host/logs/harness/` |
@@ -507,11 +518,12 @@ libvirt resources agree:
   exist and carry the selected ownership identity.
 - The generated run marker exists under `generated/simulation/vm/<run-id>/`
   and matches the simulation set's `active-run.env` pointer.
-- The strict run-scoped `workflow-state.env` and its hash-linked checkpoint
-  records match the pointer, marker, baseline, and reviewed input fingerprints.
+- The strict run-scoped `workflow-state.env`, effective-input record, and
+  hash-linked checkpoint records match the pointer, marker, baseline, and
+  source/effective input fingerprints.
 - Rendered runtime config exists and fingerprints match the run marker.
-- Runtime input copies exist for the harness, Gerrit, Jenkins controller,
-  Jenkins agent, and integration env files.
+- Effective runtime inputs exist for the harness, Gerrit, Jenkins controller,
+  Jenkins agent, and integration env files before workflow phases.
 - VM SSH host fingerprints match the rendered inventory or are recorded as a
   deliberate first-use capture before mutation.
 

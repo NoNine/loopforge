@@ -42,7 +42,10 @@ concrete backend mechanism.
 | Set root | Backend-local generated storage for reusable resources, durable runtime, baseline metadata, and the active-run pointer. |
 | Run root | Backend-local generated storage for one run's inputs, checkpoints, evidence, logs, and exported artifacts. |
 | Workflow state | The selected run's mutable checkpoint head in `workflow-state.env`; it cannot claim a set without a matching active-run pointer. |
-| Exact bound | Durable state whose ownership, baseline, reviewed inputs, and completed checkpoint chain all agree with no open target mutation. |
+| Source inputs | Actor-selected simulation env templates and supported overrides snapshotted by `init-run`. |
+| Effective inputs | Stable helper env files rendered and atomically published by the first successful `start`. |
+| Live target access | Backend-assigned transport addresses and verified SSH access refreshed by every `start`; not persistent input authority. |
+| Exact bound | Durable state whose ownership, baseline, source and effective inputs, and completed checkpoint chain all agree with no open target mutation. |
 | Durable runtime | State preserved by `stop` and reset only by `restore-baseline`. |
 | Baseline | The set-owned clean pre-setup state used by `restore-baseline`. |
 
@@ -282,9 +285,9 @@ When a layer uses these command names, the shared simulation semantics are:
 | --- | --- |
 | `run` | State-aware normal workflow composite. It initializes fresh state, resumes the exact active run at its next phase, or returns `already-complete`; it leaves the set running and never runs cleanup, restoration, destruction, or audit commands. |
 | `preflight` | Read-only prerequisite check before service mutation. |
-| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate `HARNESS_RUN_ID` when omitted, create private runtime inputs and the run marker, and claim the selected set's active-run pointer. It rejects an active set or existing run root. |
+| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate `HARNESS_RUN_ID` when omitted, snapshot selected source templates, write the source-bound run marker, and claim the selected set's active-run pointer with effective inputs pending. It rejects an active set or existing run root. |
 | `create` | Create an absent claimed set and clean baseline, or verify an exact stopped existing set with non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, or mismatched state blocks. |
-| `start` | Start the selected simulation set without setup mutation. Start prerequisites from baseline state or already-configured services from exact-bound state; an exact running set returns `state=already-running`, and other state blocks. |
+| `start` | Start the selected simulation set without setup mutation, verify owned target access, refresh ephemeral transport values, and atomically publish stable effective inputs on the first successful start. Repeated start verifies rather than rewrites effective inputs; an exact running set returns `state=already-running`, and other state blocks. |
 | `status` | Read-only inspection of coherent absent, unclaimed, stopped, or running state; contradictory state reports `conflicting` and exits nonzero. |
 | `ssh` | Operator-account target OS control-plane SSH, not Gerrit service SSH. |
 | `prepare-artifacts` | Artifact preparation through role helpers in the bundle factory. |
@@ -313,8 +316,8 @@ Set mutations use the stable nonblocking lock at
 `set busy`. The set-scoped `active-run.env` owns claim and reset gating. The
 run-scoped `workflow-state.env` owns only checkpoint activity and progression.
 Strict readers cross-check both records with the immutable run marker,
-baseline, reviewed-input fingerprints, backend ownership, and hash-linked
-checkpoint records. Details and exact transitions are authoritative in
+baseline, source/effective-input fingerprints, backend ownership, and
+hash-linked checkpoint records. Details and exact transitions are authoritative in
 `simulation/docs/lifecycle-state-model.md`.
 
 ## Terminal Output Convention
@@ -326,13 +329,21 @@ entrypoints.
 
 ## Input And Secret Handling
 
-Simulation harnesses copy selected harness, role, and integration input files
-into private run-scoped runtime input locations during `init-run`. The
-rendered harness record is for inspection; private runtime env files retain
-lifecycle values and point at the runtime input copies. Full reviewed helper
-env files remain operator inputs and are transferred only to helper execution
-input locations. They are not helper-owned state and must not be embedded in
-artifact bundles.
+Simulation env examples are source templates. During `init-run`, harnesses
+snapshot the selected harness, role, and integration templates plus supported
+overrides under private run-scoped source-input custody. The first successful
+`start` renders stable backend values, validates the complete helper env set,
+and atomically publishes private effective inputs. The rendered harness record
+is for inspection; private runtime config points at the effective files.
+
+Role and integration phases transfer or consume the published effective files
+without rewriting them. Backend-assigned transport hosts are refreshed after
+every `start` and remain outside source and effective fingerprints. For
+simulation integration only, a harness may create a private temporary copy of
+the effective `integration.env`, overlay only the three current target SSH host
+fields, invoke `scripts/integration-setup.sh` through its existing env-file
+interface, and delete the temporary file. That invocation adapter is not
+retained input state or evidence.
 
 Docker and VM simulation may use simulation-owned fake LDAP bind passwords for
 their own LDAP environments. The default example values are not real
@@ -348,7 +359,7 @@ with modeled success or with real organization LDAP secrets.
 ## Harness And Helper Boundary
 
 Simulation harnesses provide the environment work they must provide: generated
-run roots, reviewed input custody, environment lifecycle, network or SSH
+run roots, source/effective input custody, environment lifecycle, network or SSH
 control-plane access, and explicitly labeled simulation transfer waivers.
 Role helpers still own role-local lifecycle work inside helper-visible paths,
 including creation of `/var/lib/loopforge` and `/var/log/loopforge`, artifact
@@ -365,8 +376,8 @@ Initial target operations install native product-owned paths such as
 `/srv/gerrit`, `/var/lib/jenkins`, `/var/lib/jenkins-agent`,
 `$JENKINS_HOME/.ssh/known_hosts`, and agent `authorized_keys`. Transient
 target-local files under `/tmp` are acceptable when they stage payloads for
-normal target APIs or runtime installation, but they must not bypass reviewed
-helper inputs or helper-owned state.
+normal target APIs or runtime installation, but they must not bypass published
+effective helper inputs or helper-owned state.
 
 Generated evidence, logs, and exported artifacts may be collected for review.
 Jenkins-owned private keys under integration key storage are the deliberate
@@ -379,10 +390,11 @@ state.
 
 A selected simulation run is consistent only when its generated run marker,
 immutable run ID, selected set's active-run pointer, run-scoped workflow head,
-hash-linked checkpoint records, rendered runtime config, runtime input copies,
-fingerprints, baseline identity, and simulation-set markers agree.
-Runtime input copies must exist for the harness, Gerrit, Jenkins controller,
-Jenkins agent, and integration env files before phases that need them.
+hash-linked checkpoint records, rendered runtime config, source/effective input
+bindings, baseline identity, and simulation-set markers agree.
+Source snapshots must agree with the run marker. Effective role and integration
+inputs plus their strict binding record must exist before workflow phases that
+need them. Live target access must be re-established after every `start`.
 Layer-specific checks add Docker container/bind-baseline identity or VM resource
 ownership and snapshot validation.
 
@@ -403,8 +415,9 @@ Simulation-specific realization notes:
 
 - `preflight` checks local tooling, command surfaces, run naming, and
   version/source-boundary constraints before service mutation.
-- Input rendering records the exact operator-selected config for a run,
-  including redacted env values and layer-specific rendered inputs.
+- `init-run` records actor-selected source templates, while the first
+  successful `start` publishes stable layer-specific effective inputs and each
+  later `start` refreshes only live target access.
 - Artifact preparation runs role helper `prepare-artifacts` commands in the
   bundle factory.
 - Artifact staging verifies manifest and checksum data on the target side

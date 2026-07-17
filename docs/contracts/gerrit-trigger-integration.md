@@ -52,8 +52,9 @@ controller-write/agent-read proof.
 
 ## Integration Sequence
 
-1. Integration preflight observes the three role-readiness handoffs, reviewed
-   inputs, target inventory, administrator access, selected state, and ACL mode.
+1. Integration preflight observes the three role-readiness handoffs,
+   mode-appropriate bound inputs, target inventory, administrator access,
+   selected state, and ACL mode.
    Unsupported or unavailable behavior fails before mutation.
 2. Gerrit creates or validates the Jenkins Gerrit integration service account
    and group. The account remains separate from human administrators.
@@ -66,8 +67,9 @@ controller-write/agent-read proof.
    externally approved and submitted. Docker and VM simulation create the same
    reviews and may auto-submit them under simulation policy.
 5. A matching resume validates that both changes are effective before further
-   mutation. The resume must use the same reviewed inputs, targets, ACL mode,
-   selected state, and review identifiers.
+   mutation. The resume must use the same reviewed target-deployment inputs or
+   published effective simulation inputs, targets, ACL mode, selected state,
+   and review identifiers.
 6. Jenkins controller creates or validates the Jenkins-to-Gerrit and
    Jenkins-to-agent keypairs. Gerrit and the agent receive only the matching
    public keys, without truncating unrelated authorized keys.
@@ -87,14 +89,15 @@ controller-write/agent-read proof.
     disposable Gerrit change. The change emits `patchset-created`, Gerrit
     Trigger schedules the job on the reviewed agent, and the successful build
     posts `Verified +1` through Gerrit REST.
-12. Evidence records the reviewed-input and selected-state binding, both ACL
-    reviews, public key fingerprints, shared storage result, change, build,
-    event delivery, vote, bounded logs, and verification mode.
+12. Evidence records the mode-appropriate input and selected-state binding,
+    both ACL reviews, public key fingerprints, shared storage result, change,
+    build, event delivery, vote, bounded logs, and verification mode.
 
 ## State And Existing Credentials
 
-Integration phase markers must bind to the reviewed input set, target
-identities, mode, run or selected state, and both Gerrit review identifiers.
+Integration phase markers must bind to the reviewed target-deployment input set
+or published effective simulation input set, target identities, mode, run or
+selected state, and both Gerrit review identifiers.
 Marker existence without that binding does not satisfy a later prerequisite.
 
 An expected target-deployment review wait may resume only with its original
@@ -142,8 +145,8 @@ use REST for the same reason.
 
 Apply modes:
 
-- `--dry-run` reads reviewed inputs and renders a bounded planned ACL summary
-  without mutation.
+- `--dry-run` reads mode-appropriate bound inputs and renders a bounded planned
+  ACL summary without mutation.
 - `create-review` is the `target-deployment` default. It creates Gerrit config
   reviews through REST, records change IDs and URLs, and waits for external
   approval/submission before validation can pass.
@@ -252,7 +255,7 @@ End-to-end verification must report these failures separately:
 | --- | --- |
 | Integration mode or reviewed-change workflow is unsupported during preflight | Unsupported integration mode or ACL workflow; no mutation attempted. |
 | Target-deployment reviews exist but either is not submitted and effective | `blocked` awaiting external Gerrit review approval/submission. |
-| A later phase marker does not match the reviewed inputs, targets, mode, state, or review IDs | Integration state-binding failure. |
+| A later phase marker does not match the mode-appropriate bound inputs, targets, mode, state, or review IDs | Integration state-binding failure. |
 | Jenkins cannot authenticate to Gerrit over SSH | SSH credential or Gerrit integration account setup failure. |
 | SSH works but event streaming fails | `stream-events` permission or Gerrit Trigger server connectivity failure. |
 | Global `Verified` label or `streamEvents` is absent | `All-Projects` reviewed-state failure. |

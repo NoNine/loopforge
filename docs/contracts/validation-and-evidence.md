@@ -45,7 +45,8 @@ utilities. Every machine-generated evidence record must include:
 - Command name.
 - Status: `pass`, `fail`, `blocked`, `unsupported`, or `not-applicable`.
 - Hostnames and service endpoints.
-- Sanitized config input manifest or reviewed input fingerprint.
+- Sanitized config input manifest; reviewed target-deployment input fingerprint;
+  or simulation source and effective input fingerprints.
 - Artifact manifest reference.
 - Checksum reference and checksum verification result.
 - Service startup checks where applicable.
@@ -128,7 +129,8 @@ to track the corresponding outcomes without producing checkpoint records.
 
 Recommended checkpoints:
 
-- Inputs and reviewed env files.
+- Target-deployment reviewed env files, or simulation source/effective input
+  publication.
 - Artifact preparation.
 - Artifact staging and checksum verification.
 - Service installation and startup.
@@ -182,15 +184,19 @@ simulation utilities and by global aggregation.
   delivery, agent scheduling and execution, REST vote, and Gerrit review state.
 
 Every integration phase record and prerequisite marker must bind to the same
-reviewed input set, target identities, mode, run or selected state, and both
-Gerrit review identifiers. A constant label or marker existence alone is not a
-reviewed-input fingerprint and must not authorize a later phase. Public
-evidence records only the redacted binding; private state may retain the
-protected detail needed to verify that binding.
+target-deployment reviewed input set or published simulation effective input
+set, target identities, mode, run or selected state, and both Gerrit review
+identifiers. A constant label or marker existence alone is not an input
+fingerprint and must not authorize a later phase. Public evidence records only
+the redacted binding; private state may retain the protected detail needed to
+verify that binding. Ephemeral simulation transport hosts may be recorded as
+observations but are not part of the stable effective-input fingerprint.
 
-`examples/integration.env.example` is the single reviewed source for the
-cross-role Jenkins shared group name, shared group GID, and shared storage
-path. Helper-generated shared state and helper logs live under
+For target deployment, `examples/integration.env.example` is the template for
+the single reviewed source of the cross-role Jenkins shared group name, shared
+group GID, and shared storage path. In simulation it is a source template whose
+stable values are published in the effective input bundle. Helper-generated
+shared state and helper logs live under
 `/var/lib/loopforge/` and `/var/log/loopforge/` on target environments.
 
 Docker and VM harness checkpoint evidence must identify the immutable

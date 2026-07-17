@@ -45,7 +45,8 @@ resource.
 | Durable content | `none`, `baseline`, `exact-bound`, `active-incomplete`, `conflicting` | Classification of container/VM durable state against the selected baseline and run |
 | Run ownership | `unclaimed`, `claimed(<run-id>)` | Whether `active-run.env` binds the set to one immutable run |
 | Reset gate | `normal`, `restored-pending-clean` | Whether successful restoration requires cleanup before further execution |
-| Checkpoint progression | `none` or the last valid run checkpoint | Run-scoped workflow progress bound to the active run and reviewed inputs |
+| Input publication | `pending`, `ready` | Whether only source templates are bound or stable effective helper inputs have been atomically published |
+| Checkpoint progression | `none` or the last valid run checkpoint | Run-scoped workflow progress bound to the active run and source/effective inputs |
 | Checkpoint activity | `idle`, `observing`, `mutating`, `waiting` | Whether no phase is open, an observational phase is open, target mutation is open, or the declared integration review wait is bound |
 
 `exact-bound` means all durable state currently present is complete and bound
@@ -63,8 +64,8 @@ durable state. `conflicting` state always blocks normal mutation.
 - `HARNESS_RUN_ID` identifies exactly one immutable attempt and is never
   reused.
 - A set has at most one active run.
-- The active-run pointer, run marker, workflow state, runtime config,
-  reviewed-input fingerprints, backend ownership, baseline identity, and
+- The active-run pointer, run marker, workflow state, runtime config, source and
+  effective input fingerprints, backend ownership, baseline identity, and
   checkpoint record chain must agree.
 - `stop` preserves every state dimension except power.
 - `restore-baseline` changes durable content to `baseline` but deliberately
@@ -120,7 +121,9 @@ set_id=default
 run_id=run-A
 run_marker_sha256=<sha256>
 baseline_fingerprint=<sha256-or-none>
-reviewed_inputs_fingerprint=<sha256>
+source_inputs_fingerprint=<sha256>
+input_state=pending
+effective_inputs_fingerprint=none
 activity=idle
 active_checkpoint=none
 last_checkpoint=none
@@ -133,11 +136,32 @@ output and cannot claim or resume the set. The pointer does not copy the
 mutable workflow-head hash; both records bind independently to the immutable
 run marker and must agree on their shared identities and fingerprints.
 
+The immutable run marker binds the private source snapshots and records
+`source_inputs_fingerprint`. On the first successful `start`, the harness
+renders stable helper inputs in a private sibling directory and atomically
+publishes `host/runtime-inputs/` plus a strict
+`host/state/effective-inputs.env` record such as:
+
+```text
+schema_version=1
+backend=docker
+set_id=default
+run_id=run-A
+run_marker_sha256=<sha256>
+source_inputs_fingerprint=<sha256>
+effective_inputs_fingerprint=<sha256>
+```
+
+The effective-input record is published before workflow state changes to
+`input_state=ready` with the matching fingerprint. A repeated `start` verifies
+the existing directory and record byte-for-byte and does not republish them.
+Workflow phases require `input_state=ready`.
+
 Checkpoint completion records are immutable and hash-linked through
 `last_record_sha256`. Each record identifies the backend, set, run, baseline,
-reviewed inputs, checkpoint, predecessor, mutation kind, status, bounded
-evidence, and timestamps. Unknown checkpoint names or invalid predecessor
-ordering fail closed.
+source and effective inputs, checkpoint, predecessor, mutation kind, status,
+bounded evidence, and timestamps. Unknown checkpoint names or invalid
+predecessor ordering fail closed.
 
 ## Workflow Transaction Protocol
 
@@ -161,6 +185,11 @@ phase may resume it.
 Initialization writes the complete run root, immutable run marker, and initial
 workflow state before atomically publishing `active-run.env` last. A crash
 before pointer publication consumes the run ID but does not claim the set.
+Initial workflow state has effective inputs pending. The first successful
+`start` verifies target access, publishes the effective bundle and binding
+record, then changes the workflow head to ready before reporting success. A
+failure before ready publication leaves workflow phases blocked and never
+appears as effective-input success.
 Restoration writes and verifies immutable evidence before atomically changing
 the pointer gate. Cleanup removes known mutable paths idempotently, preserves
 the immutable run marker, checkpoint records, evidence, artifacts, and logs,
@@ -182,8 +211,9 @@ lock and returns:
 
 - `baseline` when no target-mutating checkpoint has completed, no mutation is
   open, and the selected clean baseline is exact;
-- `exact-bound` when the pointer, marker, ownership, baseline, reviewed inputs,
-  workflow head, and immutable checkpoint chain agree with no open mutation;
+- `exact-bound` when the pointer, marker, ownership, baseline, source and
+  effective inputs, workflow head, and immutable checkpoint chain agree with no
+  open mutation;
 - `active-incomplete` when a target mutation was published but its completion
   record and idle head were not published; or
 - `conflicting` when identities, fingerprints, ownership, hashes, checkpoint
@@ -217,16 +247,16 @@ the set for a new run.
 | Command | Required state | Effect | Preserves |
 | --- | --- | --- | --- |
 | `preflight` | None; read-only host prerequisites | Reports prerequisite state | All simulation state |
-| `init-run` | Set unclaimed, reset gate `normal`, unused run ID; resources absent or stopped at baseline | Creates private runtime inputs and run marker, then claims `active-run.env` | Existing baseline and backend resources |
+| `init-run` | Set unclaimed, reset gate `normal`, unused run ID; resources absent or stopped at baseline | Snapshots source templates, writes the source-bound run marker and pending workflow state, then claims `active-run.env` | Existing baseline and backend resources |
 | `create` | Claimed run; resources absent, or exact stopped existing baseline | Creates resources and baseline when absent; otherwise verifies and returns `state=existing` without mutation | Run ownership, run inputs, and any exact existing baseline |
-| `start` | Claimed run, reset gate `normal`, durable content `baseline` or `exact-bound`; resources stopped or already running | Starts stopped resources without setup mutation, or returns `state=already-running` | Run ID, checkpoints, durable content, resource identity |
+| `start` | Claimed run, reset gate `normal`, durable content `baseline` or `exact-bound`; resources stopped or already running | Starts or verifies resources, refreshes live target access, publishes stable effective inputs once when pending, or returns `state=already-running` | Run ID, checkpoints, durable content, resource identity, ready effective inputs |
 | `stop` | Claimed ownership-valid set with resources running or already stopped | Gracefully stops running services and backend runtime, or returns `state=already-stopped` | Run ID, checkpoints, durable content, resources, evidence |
 | `restore-baseline` | Claimed run, resources stopped, ownership-valid matching baseline, reset gate `normal` | Resets durable content to baseline and sets `restored-pending-clean` | Active run, mutable run state, retained review output, reusable resources |
 | `clean` | `restored-pending-clean`, matching successful restore evidence, claimed run, resources stopped | Removes mutable run state and active-run pointer; returns to baseline stopped and unclaimed | Baseline, reusable resources, retained artifacts, evidence, and logs |
 | `destroy` | Resources absent or stopped and selected ownership validated | Removes owned set state, or returns `state=already-absent` for a fully absent unclaimed set | Retained run roots and review output |
 | `status` | Selected state resolvable, including absent or unclaimed; read-only | Reports set, run, power, durable classification, reset gate, and available access state | All simulation state |
 | `audit-state` | None beyond selected identity inputs; read-only | Reports generated/backend consistency | All simulation state |
-| Workflow phases | Claimed run, resources running, reset gate `normal`, exact preceding checkpoint and state classification | Advances only the owning checkpoint and may mutate its declared state | Set/run binding and prior evidence |
+| Workflow phases | Claimed run, resources running, reset gate `normal`, effective inputs ready, exact preceding checkpoint and state classification | Advances only the owning checkpoint and may mutate its declared state | Set/run/input binding and prior evidence |
 | `run` | State matches one supported fresh, resume, or complete case | Runs the normal workflow from the first required phase and leaves the set running | Never performs cleanup, restoration, destruction, or audit |
 
 Running resources block `create`; callers use `stop` first. `create` also
@@ -245,7 +275,8 @@ metadata and must not reset durable state.
 - an exact completed run is made running when necessary and returns
   non-mutating `already-complete`; and
 - interrupted, partial, conflicting, restored-pending-clean, explicit run-ID
-  mismatch, or changed input fingerprints block.
+  mismatch, pending effective inputs outside `start`, or changed input
+  fingerprints block.
 
 When `HARNESS_RUN_ID` is omitted for a claimed set, `run` resolves the current
 pointer and reports `mode=resume`. It never invokes `stop`,
@@ -326,9 +357,10 @@ run A exact-bound and running
   -> clean
      baseline, stopped, unclaimed; run A review output retained
   -> init-run
-     baseline, stopped, claimed by new run B
+     baseline, stopped, claimed by new run B, effective inputs pending
   -> start
-     baseline prerequisites running for run B
+     baseline prerequisites and target access ready for run B;
+     stable effective inputs published
 ```
 
 `create` is absent from the reuse sequence because the set resources and clean
@@ -339,6 +371,9 @@ baseline survive `clean`. After `destroy`, a new sequence requires
 
 - Missing or mismatched markers, ownership, baseline identity, or fingerprints
   block before mutation.
+- Source templates are never passed to helpers. Stable effective inputs are
+  published once and never rewritten; DHCP and equivalent live transport hosts
+  are refreshed outside their fingerprints.
 - No command repairs stale state, reads legacy markers, or infers ownership from
   partial resources.
 - Read-only inspection does not clear gates or manufacture readiness.

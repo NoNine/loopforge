@@ -7,6 +7,7 @@ prd="$repo_root/docs/product/prd.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
 directory="$repo_root/docs/contracts/directory-model.md"
 evidence="$repo_root/docs/contracts/validation-and-evidence.md"
+endpoint="$repo_root/docs/contracts/endpoint-identity.md"
 shared="$repo_root/simulation/README.md"
 state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
 docker="$repo_root/simulation/docker/README.md"
@@ -59,6 +60,18 @@ require_text "$lifecycle" \
   '`stop` and `start` preserve that pointer and run ID.' \
   'Lifecycle contract must preserve run identity across restart'
 require_text "$lifecycle" \
+  '## Simulation Input Rendering Contract' \
+  'Lifecycle contract must separate simulation rendering from target review'
+require_text "$lifecycle" \
+  'The temporary file is not retained input state, evidence, or a' \
+  'Lifecycle contract must keep ephemeral integration transport outside input authority'
+require_text "$lifecycle" \
+  'The harness owns this invocation adapter; the shared helper' \
+  'Lifecycle contract must keep the simulation adapter outside the shared helper'
+require_text "$lifecycle" \
+  'continues to consume its existing env-file interface without adapter-specific' \
+  'Lifecycle contract must preserve the shared helper env-file interface'
+require_text "$lifecycle" \
   '`HARNESS_SET_ID` selects one simulation' \
   'Lifecycle contract must define shared simulation-set identity'
 require_text "$lifecycle" \
@@ -67,12 +80,27 @@ require_text "$lifecycle" \
 require_text "$directory" \
   '## Simulation Baselines And Run Identity' \
   'Directory contract must define baseline and run identity custody'
+require_text "$directory" \
+  '## Simulation Input Custody' \
+  'Directory contract must define source and effective simulation input custody'
+require_text "$directory" \
+  '`host/state/effective-inputs.env`' \
+  'Directory contract must define the effective-input binding record'
 require_text "$evidence" \
   'Docker and VM harness checkpoint evidence must identify the immutable' \
   'Evidence contract must bind checkpoint evidence to immutable run ID'
 require_text "$evidence" \
   'Docker and VM harness checkpoint evidence must identify the selected `set_id`.' \
   'Evidence contract must bind checkpoints to shared simulation-set identity'
+require_text "$evidence" \
+  'simulation source and effective input fingerprints.' \
+  'Evidence contract must bind both simulation input layers'
+require_text "$endpoint" \
+  'Current DHCP address resolved after `start`; supplied only as simulation invocation transport' \
+  'Endpoint contract must keep VM DHCP as ephemeral helper transport'
+require_text "$endpoint" \
+  'excluded from stable effective inputs' \
+  'Endpoint contract must exclude VM DHCP from effective input authority'
 require_text "$shared" \
   '## Shared Terminology And Backend Mapping' \
   'Shared simulation docs must define recommended lifecycle terms'
@@ -94,6 +122,15 @@ require_text "$state_model" \
 require_text "$state_model" \
   'The run-scoped `workflow-state.env` is authoritative only for progression' \
   'Lifecycle state model must keep workflow state run-scoped'
+require_text "$state_model" \
+  'input_state=pending' \
+  'Lifecycle state model must represent pending effective inputs'
+require_text "$state_model" \
+  'effective_inputs_fingerprint=none' \
+  'Lifecycle state model must defer effective input binding until start'
+require_text "$state_model" \
+  'A repeated `start` verifies' \
+  'Lifecycle state model must forbid stable input rewrites on restart'
 require_text "$state_model" \
   'Unknown, duplicate, missing, malformed, or' \
   'Lifecycle records must use strict fail-closed parsing'
@@ -159,10 +196,11 @@ require_text "$plan" \
   'Roadmap must link the reusable simulation lifecycle step'
 for milestone in \
   '## M1: Shared Identity, Lock, Records, And Classifier' \
-  '## M2: Docker Create, Start, And Stop' \
-  '## M3: Docker Baseline Capture And Restore' \
-  '## M4: VM Start/Stop Migration And Active-Run Binding' \
-  '## M5: Cleanup, Evidence, Composite Workflows, And Acceptance'; do
+  '## M2: Simulation Input Lifecycle And Start-Owned Access' \
+  '## M3: Docker Create, Start, And Stop' \
+  '## M4: Docker Baseline Capture And Restore' \
+  '## M5: VM Start/Stop Migration And Effective-Input Adoption' \
+  '## M6: Cleanup, Evidence, Composite Workflows, And Acceptance'; do
   require_text "$step" "$milestone" \
     "Step 13a is missing milestone: $milestone"
 done
@@ -183,7 +221,7 @@ for file in "$agents" "$prd" "$lifecycle" "$directory" "$evidence" \
     "Generation identity must not be part of the contract: $file"
 done
 
-for file in "$lifecycle" "$directory" "$evidence" "$shared" "$state_model" "$docker" "$vm"; do
+for file in "$lifecycle" "$directory" "$evidence" "$endpoint" "$shared" "$state_model" "$docker" "$vm"; do
   reject_text "$file" 'LOOPFORGE_VM_SET_ID' \
     "Current simulation contracts must not expose the old VM set identity: $file"
   reject_text "$file" 'HARNESS_PROJECT_NAME' \

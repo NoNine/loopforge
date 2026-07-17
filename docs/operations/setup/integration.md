@@ -6,11 +6,11 @@ This manual is the operator guide for `scripts/integration-setup.sh`. Use it
 after the Gerrit, Jenkins controller, and Jenkins agent role setup manuals have
 completed and each role has passing role-local readiness evidence.
 
-This manual owns the shared integration reviewed-input helper workflow. The
-native reference at `docs/operations/native/integration.md` is the procedural
-baseline for direct integration operations. Keep this helper workflow aligned
-with that baseline and preserve equivalent product state and validation
-outcomes.
+This manual owns the shared integration helper workflow for mode-appropriate
+bound inputs. The native reference at
+`docs/operations/native/integration.md` is the procedural baseline for direct
+integration operations. Keep this helper workflow aligned with that baseline
+and preserve equivalent product state and validation outcomes.
 
 The Standard Interfaces contract in `docs/architecture/system-model.md` is authoritative
 for this helper. `scripts/integration-setup.sh` must use SSH as the common
@@ -61,16 +61,20 @@ Before running the shared helper:
   readiness evidence.
 - Jenkins agent role setup is complete and `scripts/jenkins-agent-setup.sh
   validate` has produced agent-host readiness evidence.
-- Reviewed env files exist for Gerrit, Jenkins controller, Jenkins agent, and
-  shared integration values.
-- Env files have no placeholder values and have been reviewed for role/account
+- Reviewed target-deployment env files or published effective simulation env
+  files exist for Gerrit, Jenkins controller, Jenkins agent, and shared
+  integration values.
+- Target-deployment env files have been reviewed, while simulation effective
+  files have been rendered and validated by the harness, for role/account
   separation, endpoints, ref patterns, labels, credential IDs, evidence paths,
   and verification mode labels.
-- The reviewed env files set `LOOPFORGE_OPERATOR_ACCOUNT` and
+- The mode-appropriate env files set `LOOPFORGE_OPERATOR_ACCOUNT` and
   `LOOPFORGE_OPERATOR_GROUP` when the deployment uses an operator account or
   group other than the default example `ci-operator:ci-operator`.
-- The shared integration env defines OS SSH access for the Gerrit target,
-  Jenkins controller target, and Jenkins agent target.
+- Target deployment defines complete OS SSH access in the reviewed integration
+  env. Simulation supplies current backend-assigned target SSH hosts through
+  the private invocation adapter while stable access values remain in the
+  published effective integration env.
 - The Jenkins agent host can run the NFS server for
   `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared`, and the
   Jenkins controller host can mount that agent export at the same path.
@@ -83,7 +87,7 @@ Before running the shared helper:
 
 ## Operator Inputs And Custody
 
-Required operator inputs include:
+Required target-deployment operator inputs include:
 
 - Reviewed Gerrit env file.
 - Reviewed Jenkins controller env file.
@@ -107,6 +111,12 @@ Required operator inputs include:
 - Disposable verification project, branch, job, and run ID values.
 - Target OS SSH inventory for Gerrit, Jenkins controller, and Jenkins agent:
   host, port, user, identity file, and known-hosts file.
+
+For simulation, the harness selects source templates, publishes stable
+effective role and integration env files after `start`, verifies current target
+access, and supplies only ephemeral target SSH hosts through its private helper
+invocation adapter. Operators do not review or maintain DHCP addresses as env
+input.
 
 The Gerrit admin and test accounts must already be provisioned in Gerrit before
 target deployment integration begins. LDAP directory entries alone are not
@@ -147,16 +157,17 @@ OS/control-plane access:
 
 Service endpoints:
 
-- Gerrit HTTP REST comes from the reviewed Gerrit role env and is used for
+- Gerrit HTTP REST comes from the reviewed target-deployment or published
+  effective simulation Gerrit role env and is used for
   service-account token generation, account/key registration, config-review
   workflow, review state checks, and Gerrit Trigger vote posting.
-- Gerrit SSH comes from the reviewed Gerrit role env and is used for
-  Jenkins-to-Gerrit authentication and `stream-events` proof.
-- Jenkins HTTP/API/script access comes from the reviewed Jenkins controller
-  role env and is used for credentials, nodes, trigger server, jobs, builds,
-  and readiness operations.
-- Jenkins controller-to-agent SSH comes from the reviewed Jenkins agent role
-  env and is the runtime build-agent connection, not the operator
+- Gerrit SSH comes from the mode-appropriate bound Gerrit role env and is used
+  for Jenkins-to-Gerrit authentication and `stream-events` proof.
+- Jenkins HTTP/API/script access comes from the mode-appropriate bound Jenkins
+  controller role env and is used for credentials, nodes, trigger server, jobs,
+  builds, and readiness operations.
+- Jenkins controller-to-agent SSH comes from the mode-appropriate bound Jenkins
+  agent role env and is the runtime build-agent connection, not the operator
   control-plane SSH channel.
 
 The implementation should expose neutral primitives equivalent to:
@@ -214,7 +225,8 @@ simulation path.
 
 ## Helper Command Workflow
 
-Set the shared env arguments once and reuse them for every helper command:
+For target deployment, set the shared env arguments once and reuse them for
+every helper command:
 
 ```bash
 common_args=(
@@ -224,6 +236,11 @@ common_args=(
   --integration-env <reviewed-integration.env>
 )
 ```
+
+For simulation, invoke the backend harness integration phase. The harness
+passes the published effective role env files and its private temporary
+integration adapter to this same helper interface; operators do not construct
+or retain that adapter.
 
 Review the complete integration plan and validate its inputs without mutation:
 
@@ -294,11 +311,11 @@ the SSH event-delivery proof.
 
 `collect-evidence` emits integration-scoped records using the common evidence
 contract. Records must identify the verification mode, timestamp, command,
-checkpoint, reviewed input and selected-state binding, both Gerrit review IDs
-and URLs, public key fingerprints, credential IDs where safe, endpoints,
-disposable artifact IDs, observed checks, bounded log references, redaction
-status, and final status. Partial collection must not promote a blocked or
-incomplete checkpoint to pass.
+checkpoint, mode-appropriate input and selected-state binding, both Gerrit
+review IDs and URLs, public key fingerprints, credential IDs where safe,
+endpoints, disposable artifact IDs, observed checks, bounded log references,
+redaction status, and final status. Partial collection must not promote a
+blocked or incomplete checkpoint to pass.
 
 Classify failures at the point where proof breaks:
 

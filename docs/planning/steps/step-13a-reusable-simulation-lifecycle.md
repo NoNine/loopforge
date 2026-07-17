@@ -95,10 +95,11 @@ rather than redefining them.
 | Milestone | Scope | Dependency |
 | --- | --- | --- |
 | M1 | Shared identity, lock, active-run, workflow-record, and classifier primitives | Refined authorities |
-| M2 | Docker create/start/stop state machine | M1 |
-| M3 | Docker baseline capture and restore | M2 |
-| M4 | VM start/stop migration and active-run binding | M1 |
-| M5 | Cleanup, evidence, composite workflows, and acceptance | M2-M4 |
+| M2 | Simulation source/effective input lifecycle and start-owned target access | M1 |
+| M3 | Docker create/start/stop state machine | M2 |
+| M4 | Docker baseline capture and restore | M3 |
+| M5 | VM start/stop migration, active-run binding, and effective-input adoption | M2 |
+| M6 | Cleanup, evidence, composite workflows, and acceptance | M3-M5 |
 
 ## M1: Shared Identity, Lock, Records, And Classifier
 
@@ -157,7 +158,80 @@ Acceptance:
 - Restart preserves both IDs; reset and cleanup require a different run ID.
 - The same set ID resolves to the same backend namespace across runs.
 
-## M2: Docker Create, Start, And Stop
+## M2: Simulation Input Lifecycle And Start-Owned Access
+
+Implementation:
+
+- Replace the simulation meaning of reviewed helper inputs with explicit source
+  templates, stable effective inputs, and ephemeral live target access. Keep
+  target-deployment reviewed-input behavior unchanged.
+- Make `init-run` snapshot selected harness, role, and integration templates
+  under private `host/source-inputs/`, bind `source_inputs_fingerprint` in the
+  immutable run marker, and publish workflow state with effective inputs
+  pending. Helpers must never consume source snapshots directly.
+- Add the strict `host/state/effective-inputs.env` binding and
+  `input_state=pending|ready` workflow transition. Bind the backend, set, run,
+  run marker, source fingerprint, and `effective_inputs_fingerprint` without
+  compatibility readers for the superseded simulation schema.
+- Make the first successful `start` verify selected resource ownership and
+  target access, render the complete stable role and integration env bundle in
+  private staging, atomically publish `host/runtime-inputs/` and its binding,
+  transition workflow state to ready, and only then report success.
+- Make repeated `start` verify byte-identical effective inputs and refresh only
+  current backend transport access. It must not rerender stable values. `stop`
+  preserves both input bindings while making live access unavailable.
+- Treat Docker published target access and VM DHCP/SSH readiness as backend
+  observations owned by `start`. Keep backend-assigned transport hosts outside
+  source and effective fingerprints and do not add a persistent execution
+  context or general backend identity fingerprint.
+- Remove VM per-phase role env rendering. Transfer the exact published role env
+  to bundle-factory and target helper paths for preparation, configuration, and
+  validation.
+- Remove retained VM `host/rendered/integration-inputs/`. For simulation
+  integration only, copy the immutable effective `integration.env` to a private
+  temporary file, overlay only
+  `INTEGRATION_GERRIT_TARGET_SSH_HOST`,
+  `INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST`, and
+  `INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST`, invoke the unchanged shared
+  helper env-file interface, and delete the file after invocation.
+- Require every workflow phase to reject pending, missing, changed, partially
+  published, or cross-run effective inputs before helper or target mutation.
+  `audit-state` remains read-only and reports source/effective binding failures.
+- Update shared and backend summaries so `start: ok` means resources, target
+  access, and stable effective inputs are ready without exposing the internal
+  publication steps as another public command.
+
+Focused tests:
+
+- Source template snapshot, source fingerprint, and no-effective-inputs-before-
+  start tests for both backends.
+- First-start atomic publication, pointer/run binding, ready-last ordering, and
+  interrupted-publication rejection tests.
+- Repeated-start byte-identity tests proving no stable env rewrite.
+- Stop/start tests with changed ephemeral transport hosts but unchanged owned
+  resources and SSH identity.
+- Ownership or SSH identity drift tests that block before effective publication
+  or workflow execution.
+- Role helper tests proving the exact fingerprinted effective env is transferred
+  without a later renderer.
+- Integration adapter tests proving only the three target SSH host fields may
+  differ, the shared helper interface is unchanged, and the temporary file is
+  removed on success and failure.
+- Cross-run, pending-input, source/effective fingerprint mismatch, malformed
+  strict record, and unknown-field rejection tests.
+
+Acceptance:
+
+- `init-run` claims source-bound run state without claiming effective helper
+  readiness.
+- The first successful `start` publishes one stable effective bundle and every
+  later `start` preserves it while refreshing live target access.
+- Role and integration helpers never consume unbound or per-phase-rerendered
+  stable inputs.
+- DHCP and equivalent ephemeral transport changes do not invalidate an exact
+  run when selected ownership and SSH identity still agree.
+
+## M3: Docker Create, Start, And Stop
 
 Implementation:
 
@@ -196,7 +270,7 @@ Acceptance:
   readiness without setup mutation.
 - Ordinary start/stop never calls Compose down or recreates containers.
 
-## M3: Docker Baseline Capture And Restore
+## M4: Docker Baseline Capture And Restore
 
 Implementation:
 
@@ -224,7 +298,7 @@ Acceptance:
 - Restored Docker state is equivalent to the recorded clean baseline and ready
   for a new run ID after `clean` and `init-run`.
 
-## M4: VM Start/Stop Migration And Active-Run Binding
+## M5: VM Start/Stop Migration And Effective-Input Adoption
 
 Implementation:
 
@@ -241,6 +315,9 @@ Implementation:
 - Apply the same existing-create, already-running start, already-stopped stop,
   coherent status, and already-absent destroy outcomes as Docker. Remove
   name-derived deletion when full ownership metadata is unavailable.
+- Adopt the M2 source/effective input records, first-start publication, exact
+  role env transfer, and per-start DHCP/SSH refresh without adding a second VM
+  input model.
 
 Focused tests:
 
@@ -253,7 +330,7 @@ Acceptance:
 - VM `start`/`stop` retain current runtime semantics and pass existing resource
   ownership and baseline gates with active-run binding added.
 
-## M5: Cleanup, Evidence, Composite Workflows, And Acceptance
+## M6: Cleanup, Evidence, Composite Workflows, And Acceptance
 
 Implementation:
 
@@ -324,10 +401,10 @@ Acceptance:
 
 ## Commit And Completion Strategy
 
-Use one logical commit per accepted milestone. Keep shared primitives,
-Docker lifecycle, Docker baseline restore, VM migration, and cross-backend
-acceptance independently reviewable. Do not include execution-ledger state in
-implementation commits.
+Use one logical commit per accepted milestone. Keep shared primitives, input
+lifecycle, Docker lifecycle, Docker baseline restore, VM migration, and
+cross-backend acceptance independently reviewable. Do not include
+execution-ledger state in implementation commits.
 
-Step 13a is complete only after M1-M5 pass and fresh Docker plus approved VM
+Step 13a is complete only after M1-M6 pass and fresh Docker plus approved VM
 runtime evidence proves lifecycle parity and immutable run isolation.

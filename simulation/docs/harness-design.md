@@ -28,13 +28,14 @@ Both harnesses have three conceptual planes.
 | Plane | Shared responsibility | Docker realization | VM realization |
 | --- | --- | --- | --- |
 | Backend infrastructure | Create, start, stop, restore, inspect, and destroy the selected simulation set | Compose images, containers, network, writable layers, bind data, and baseline archives | Libvirt domains, network, volumes, seed media, baked image, and baseline snapshots |
-| Target control plane | Reach target environments through reviewed identities and bounded operations | Target OS SSH into containers, plus explicitly labeled Docker transfer and collection waivers | Target OS SSH into guests, SSH transfer, and delegated privilege for narrow guest OS work |
+| Target control plane | Reach target environments through effective simulation identities and bounded operations | Target OS SSH into containers, plus explicitly labeled Docker transfer and collection waivers | Target OS SSH into guests, SSH transfer, and delegated privilege for narrow guest OS work |
 | Loopforge lifecycle | Prepare and stage artifacts, configure and validate roles, configure and validate integration, prove the workflow, and collect evidence | Role helpers, integration helper, product APIs, and Docker evidence collection | The same helpers and APIs reached through VM target interfaces |
 
 Backend infrastructure may prepare or restore the simulation set in which
 checkpoints run. It must not manufacture role or integration checkpoint
-success. The target control plane transports reviewed inputs and invokes the
-owning helper or product API; it does not own application configuration.
+success. The target control plane transports published effective inputs and
+invokes the owning helper or product API; it does not own application
+configuration.
 
 ## Dependency Direction
 
@@ -81,6 +82,7 @@ Forbidden directions include:
 | Generated paths | Set root, run root, retained review output, and mutable cleanup classes | Concrete Docker or VM subdirectories and ownership mechanisms |
 | Lifecycle | Command names, state meanings, guards, preservation rules, and failure behavior | Compose/container operations or libvirt/domain operations |
 | Persistence | Stable set lock, strict active-run and workflow records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
+| Inputs | Source-template custody, first-start effective publication, immutable helper inputs, and ephemeral access separation | Stable endpoint rendering plus Docker published ports or VM DHCP/SSH readiness |
 | Checkpoints | Ordering, transaction state, hash-linked completion, binding, and observational validation | Backend command orchestration and target inventory |
 | Evidence | Required identities, statuses, redaction, and bounded references | Backend resource metadata and collector mechanics |
 | Terminal output | Compact command summaries and shared set/run fields | Compose project, libvirt prefix, URLs, SSH rows, and other backend fields |
@@ -100,7 +102,7 @@ flowchart LR
   BACKEND[Backend infrastructure]
   BASELINE[Set-owned clean baseline]
   TARGET[Target control plane]
-  INPUTS[Reviewed inputs and staged artifacts]
+  INPUTS[Effective inputs and staged artifacts]
   HELPERS[Role and integration helpers]
   APIS[Services and product APIs]
   EVIDENCE[Bounded evidence]
@@ -132,7 +134,7 @@ need the same semantics:
 - stable set locking and strict fixed-key state-record parsing;
 - active-run pointer, workflow-head, and checkpoint-chain verification;
 - atomic same-directory state publication;
-- runtime input custody;
+- source/effective input custody and strict binding;
 - bounded log setup and compact summaries;
 - evidence record and redaction helpers;
 - manifest and checksum helpers;
@@ -145,6 +147,7 @@ The following remain backend-local:
 - libvirt domains, networks, pools, volumes, snapshots, seed media, and guest
   boot readiness;
 - backend resource namespace derivation and live ownership queries;
+- per-start transport discovery and SSH identity verification;
 - baseline capture and restoration mechanics;
 - backend destruction and host-wide recovery tools.
 
@@ -164,6 +167,9 @@ Reviewers of either harness should confirm that:
 - interrupted target mutation remains `active-incomplete` and never appears
   exact-bound;
 - backend lifecycle operations do not complete Loopforge checkpoints;
+- the first successful `start` publishes stable effective inputs before
+  workflow readiness and repeated `start` never rewrites them;
+- live transport refresh remains outside source/effective fingerprints;
 - role and integration work uses the owning helpers and target-like interfaces;
 - `start` performs no setup or repair;
 - validation is observational;

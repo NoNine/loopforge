@@ -208,6 +208,35 @@ baseline snapshots. A run references that reusable set without owning it.
 output. `destroy` removes the selected backend baseline and reusable resources
 but preserves retained artifacts, evidence, and bounded logs.
 
+## Simulation Input Custody
+
+Simulation env examples are source templates, not final helper inputs. During
+`init-run`, the harness copies the actor-selected templates and supported
+overrides into the private run-scoped `host/source-inputs/` directory. The
+immutable run marker records `source_inputs_fingerprint`; helpers never consume
+these source snapshots directly.
+
+The first successful `start` renders stable backend values into a sibling
+private directory and atomically publishes it as `host/runtime-inputs/`.
+`host/state/effective-inputs.env` binds the backend, set, run, run marker,
+source fingerprint, and `effective_inputs_fingerprint`. Workflow phases require
+that strict record and consume only the published runtime inputs. Repeated
+`start` verifies the existing files and record without rewriting them.
+
+Backend-assigned transport hosts such as VM DHCP addresses are not stored in
+either input directory or included in either fingerprint. The backend resolves
+and validates them after every `start`. For simulation integration only, the
+harness may create a mode-`0600` temporary copy of the published
+`integration.env`, overlay the three current target SSH host fields, pass it to
+the shared integration helper, and delete it after the invocation. The adapter
+must not change role env files, stable integration values, policy, or output
+paths, and it must not be retained as evidence or generated input state.
+
+Both input directories and the effective-input binding record are mutable run
+custody removed by successful `clean`; they are never moved into retained
+review output. Temporary publication and invocation files are private harness
+scratch and do not become canonical state.
+
 ## Artifact Extraction Paths
 
 Artifact extraction paths are target-side staging roots. Role helpers consume
@@ -236,10 +265,12 @@ generated/simulation/docker/<run-id>/
 | `sets/<set-id>/baseline/` | Docker clean baseline | Host-dominated | Checksummed image/Compose identity, bind-data archives, numeric ownership, and target SSH identity used only by `restore-baseline` |
 | `sets/<set-id>/runtime/` | Docker durable bind roots | Target-dominated | LDAP data, product homes, shared storage, integration helper state, and target staging for the selected reusable simulation set |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, run markers, and public manifest contract; rendered env files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
+| `host/source-inputs/` | Private source-template snapshots | Host-dominated | Actor-selected simulation templates and supported overrides copied by `init-run`; fingerprinted by the run marker and never passed to role or integration helpers |
+| `host/state/effective-inputs.env` | Strict effective-input binding | Host-dominated | Atomic first-start publication record binding source and effective fingerprints to the active backend, set, run, and run marker |
 | `host/state/workflow-state.env` | Run-scoped mutable workflow head | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
 | `host/state/checkpoints/` | Run-scoped immutable checkpoint records | Host-dominated | Hash-linked completion/wait records retained with run review output and never accepted for another run |
-| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
-| `host/bundle-factory/rendered/` | Host-side reviewed bundle-factory input copies | Host-dominated | Operator review copy before Docker `cp` input transfer |
+| `host/runtime-inputs/` | Private effective simulation inputs | Host-dominated | Stable helper env files rendered and atomically published by the first successful `start`, written with mode `0600`, and never rewritten by later phases |
+| `host/bundle-factory/rendered/` | Host-side effective bundle-factory input copies | Host-dominated | Effective input copy before Docker `cp` input transfer |
 | `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
 | `host/target-ssh/` | Host-side target SSH material | Host-dominated | Host-generated target SSH identity, public key, and known hosts; Docker simulation copies only the public key into targets through `/home/ci-operator/loopforge-inputs` as control-plane input |
 | `host/validation-secrets/gerrit/` | Host-side Docker simulation validation key material | Host-dominated | Docker simulation-only SSH validation key material; not used for LDAP bind secrets; host directory is `0700` |
@@ -290,9 +321,11 @@ generated/simulation/vm/<run-id>/
 | `sets/<set-id>/target-ssh/` | Simulation-set target SSH identity | Host-dominated | Target OS SSH private/public keypair seeded into reusable VM disks; removed only with the selected simulation set |
 | Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, run markers, and manifest contract; rendered env and inventory files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
+| `host/source-inputs/` | Private source-template snapshots | Host-dominated | Actor-selected simulation templates and supported overrides copied by `init-run`; fingerprinted by the run marker and never passed to role or integration helpers |
+| `host/state/effective-inputs.env` | Strict effective-input binding | Host-dominated | Atomic first-start publication record binding source and effective fingerprints to the active backend, set, run, and run marker |
 | `host/state/workflow-state.env` | Run-scoped mutable workflow head | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
 | `host/state/checkpoints/` | Run-scoped immutable checkpoint records | Host-dominated | Hash-linked completion/wait records retained with run review output and never accepted for another run |
-| `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
+| `host/runtime-inputs/` | Private effective simulation inputs | Host-dominated | Stable helper env files rendered and atomically published by the first successful `start`, written with mode `0600`, and never rewritten by later phases |
 | `host/target-ssh/` | Run-scoped target SSH trust state | Host-dominated | Target OS SSH known-hosts material for VM control-plane access during the selected run |
 | `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence, review-sensitive and redacted |
 | `host/logs/harness/` | Harness bounded log output | Host-dominated | VM harness command logs, review-sensitive and bounded |
