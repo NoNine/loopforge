@@ -248,109 +248,106 @@ the helper-visible payload directories after archive and checksum validation.
 | `/var/lib/loopforge/staging/jenkins/` | Jenkins controller target | Artifact staging flow and Jenkins controller role helper | Operator account and group; default example `ci-operator:ci-operator` | Readable by Jenkins helper after checksum verification | Jenkins WAR, plugin manager, plugins, templates, manifest, checksums | Must not include Jenkins credentials or keys | Jenkins install consumes this path only |
 | `/var/lib/loopforge/staging/jenkins-agent/` | Jenkins agent target | Artifact staging flow and Jenkins agent role helper | Operator account and group; default example `ci-operator:ci-operator` | Readable by agent helper after checksum verification | Agent bootstrap files, templates, manifest, checksums | Must not include authorized keys or private keys | Agent install consumes this path only |
 
-## Docker Simulation Backing
+## Shared Simulation Backing
 
-Docker simulation separates reusable simulation-set state from immutable run
-output:
+Docker and VM simulation use the same top-level generated layout. In these
+paths, `<backend>` is `docker` or `vm`:
+
+```text
+generated/simulation/<backend>/locks/<set-id>.lock
+generated/simulation/<backend>/sets/<set-id>/
+generated/simulation/<backend>/<run-id>/
+```
+
+The shared rows below are normative for both backends. Backend-specific
+sections add only paths whose custody or realization differs.
+
+| Shared generated path | Content dominance | Purpose |
+| --- | --- | --- |
+| `locks/<set-id>.lock` | Host-dominated | Shared read or exclusive mutation serialization; persists outside the deletable set root |
+| `sets/<set-id>/` | Host-dominated | Ownership marker, selected simulation-set identity, and reusable backend resource records |
+| `sets/<set-id>/active-run.env` | Host-dominated | Strict non-secret run claim, resource namespace, marker, baseline, reset gate, and restoration-evidence binding; removed only by successful `clean` or set destruction |
+| `host/rendered/` | Host-dominated | Operator-facing backend-rendered harness config, inventory, run markers, and public manifest contract |
+| `host/source-inputs/` | Host-dominated | Actor-selected simulation templates and supported overrides copied by `init-run`; fingerprinted by the run marker and never passed to helpers |
+| `host/state/effective-inputs.env` | Host-dominated | Atomic first-start publication record binding source and effective fingerprints to the backend, set, run, and run marker |
+| `host/state/workflow-state.env` | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
+| `host/state/checkpoints/` | Host-dominated | Hash-linked completion and wait records retained with run review output and never accepted for another run |
+| `host/runtime-inputs/` | Host-dominated | Stable helper env files atomically published by the first successful `start`, written with mode `0600`, and never rewritten by later phases |
+| `host/evidence/harness/` | Host-dominated | Harness checkpoint evidence, review-sensitive and redacted |
+| `host/logs/harness/` | Host-dominated | Harness command logs, review-sensitive and bounded |
+| `host/evidence/integration/` | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
+| `host/logs/integration/` | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
+| `target/evidence/<role>/` | Target-dominated | Retained role-local evidence corresponding to `/var/lib/loopforge/evidence` on one target environment |
+| `target/logs/<role>/` | Target-dominated | Retained role-local bounded logs corresponding to `/var/log/loopforge` on one target environment |
+
+Generated host directories exist for operator review, debugging, evidence
+collection, and cleanup. Content dominance identifies who contributes durable
+meaningful content; it does not define POSIX ownership of host review copies.
+The local account running the harness owns host-side generated paths and need
+not be named `ci-operator`.
+
+`clean` applies the retained-output and input-custody rules above uniformly to
+both backends. Evidence produced from either simulation backend must be labeled
+as simulation evidence and must not imply `target-deployment` acceptance.
+
+## Docker-Specific Backing
+
+Docker stores reusable state and run output under:
 
 ```text
 generated/simulation/docker/sets/<set-id>/
 generated/simulation/docker/<run-id>/
 ```
 
-| Docker generated path | Canonical or container-visible path | Content dominance | Purpose |
-| --- | --- | --- | --- |
-| `locks/<set-id>.lock` | Stable Docker simulation-set lock | Host-dominated | Shared read or exclusive mutation serialization; persists outside the deletable set root |
-| `sets/<set-id>/active-run.env` | Selected Docker active-run pointer | Host-dominated | Strict non-secret run claim, resource namespace, marker, baseline, reset gate, and restoration-evidence binding; removed only by successful `clean` or set destruction |
-| `sets/<set-id>/baseline/` | Docker clean baseline | Host-dominated | Checksummed image/Compose identity, bind-data archives, numeric ownership, and target SSH identity used only by `restore-baseline` |
-| `sets/<set-id>/runtime/` | Docker durable bind roots | Target-dominated | LDAP data, product homes, shared storage, integration helper state, and target staging for the selected reusable simulation set |
-| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, run markers, and public manifest contract; rendered env files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
-| `host/source-inputs/` | Private source-template snapshots | Host-dominated | Actor-selected simulation templates and supported overrides copied by `init-run`; fingerprinted by the run marker and never passed to role or integration helpers |
-| `host/state/effective-inputs.env` | Strict effective-input binding | Host-dominated | Atomic first-start publication record binding source and effective fingerprints to the active backend, set, run, and run marker |
-| `host/state/workflow-state.env` | Run-scoped mutable workflow head | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
-| `host/state/checkpoints/` | Run-scoped immutable checkpoint records | Host-dominated | Hash-linked completion/wait records retained with run review output and never accepted for another run |
-| `host/runtime-inputs/` | Private effective simulation inputs | Host-dominated | Stable helper env files rendered and atomically published by the first successful `start`, written with mode `0600`, and never rewritten by later phases |
-| `host/bundle-factory/rendered/` | Host-side effective bundle-factory input copies | Host-dominated | Effective input copy before Docker `cp` input transfer |
-| `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
-| `host/target-ssh/` | Host-side target SSH material | Host-dominated | Host-generated target SSH identity, public key, and known hosts; Docker simulation copies only the public key into targets through `/home/ci-operator/loopforge-inputs` as control-plane input |
-| `host/validation-secrets/gerrit/` | Host-side Docker simulation validation key material | Host-dominated | Docker simulation-only SSH validation key material; not used for LDAP bind secrets; host directory is `0700` |
-| `host/evidence/harness/` | Harness evidence output | Host-dominated | Harness checkpoint evidence, review-sensitive and redacted |
-| `host/logs/harness/` | Harness bounded log output | Host-dominated | Harness command logs, review-sensitive and bounded |
-| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
-| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
-| `target/artifacts/exported/` | Operator-facing artifact export | Target-dominated | Exported archive handoff files and checksums |
-| `target/evidence/<role>/` | `/var/lib/loopforge/evidence` in one target container | Target-dominated | Retained role-local Docker simulation evidence, recursively helper-owned while active |
-| `target/logs/<role>/` | `/var/log/loopforge` in one target container | Target-dominated | Retained role-local bounded Docker simulation logs, recursively helper-owned while active |
+| Docker-specific path | Content dominance | Purpose |
+| --- | --- | --- |
+| `sets/<set-id>/baseline/` | Host-dominated | Checksummed image/Compose identity, bind-data archives, numeric ownership, and target SSH identity used only by `restore-baseline` |
+| `sets/<set-id>/runtime/` | Target-dominated | LDAP data, product homes, shared storage, integration helper state, and target staging for the reusable set |
+| `host/bundle-factory/rendered/` | Host-dominated | Effective input copy before Docker `cp` input transfer |
+| `host/bundle-factory/validation-public/` | Host-dominated | Simulation validation public material transferred to the bundle factory |
+| `host/target-ssh/` | Host-dominated | Generated target SSH identity, public key, and known hosts used through the Docker control-plane input waiver |
+| `host/validation-secrets/gerrit/` | Host-dominated | Docker-only SSH validation key material; excludes LDAP bind secrets and uses directory mode `0700` |
+| `target/artifacts/exported/` | Target-dominated | Operator-facing exported archive handoff files and checksums |
 
-Docker simulation host directories exist for operator review, debugging,
-evidence collection, cleanup, and explicit Docker `cp` waivers. They are not
-target payload transfer mechanisms unless a simulation doc explicitly labels
-the mechanism as a simulation-only waiver, such as Docker `cp` during artifact
-staging or operator input transfer. Container-visible role helper paths under
-`/var/lib/loopforge` and `/var/log/loopforge` are created by the helpers with
-the target or bundle-factory operator account, default example
-`ci-operator:ci-operator`. Content dominance describes who contributes the
-durable meaningful content, not POSIX ownership of host review copies.
-Host-side generated paths use the local host account that runs the simulation
-harness; this host account is not required to be named `ci-operator`.
+Docker simulation generated directories are not target payload transfer
+mechanisms unless a simulation document explicitly labels a Docker `cp`
+waiver, such as artifact staging or operator input transfer. Container-visible
+role helper paths are created by the helpers with the target or bundle-factory
+operator account, default example `ci-operator:ci-operator`. Docker `clean`
+also removes backend-specific bundle-factory scratch and target SSH client
+material only after successful baseline restoration.
 
-Docker `clean` leaves the immutable run marker, checkpoint completion records,
-exported artifacts, evidence, and logs under the immutable run root. It removes
-runtime inputs, the mutable workflow head, target SSH client material, and the
-selected set's active-run pointer only after successful baseline restoration.
-It does not delete or rewrite durable set state or retained review output.
+## VM-Specific Backing
 
-## VM Simulation Backing
-
-VM simulation separates reusable simulation-set state from run-scoped output:
+VM simulation stores reusable state and run output under:
 
 ```text
 generated/simulation/vm/sets/<set-id>/
 generated/simulation/vm/<run-id>/
 ```
 
-| VM path | Canonical or VM-visible path | Content dominance | Purpose |
-| --- | --- | --- | --- |
-| `locks/<set-id>.lock` | Stable VM simulation-set lock | Host-dominated | Shared read or exclusive mutation serialization; persists outside the deletable set root |
-| `sets/<set-id>/` | Simulation-set registry root | Host-dominated | Ownership marker, selected simulation-set identity, and reusable VM resource records |
-| `sets/<set-id>/active-run.env` | Selected simulation-set active-run pointer | Host-dominated | Strict non-secret run claim, resource namespace, marker, baseline, reset gate, and restoration-evidence binding; removed only by successful `clean` or set destruction |
-| `sets/<set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
-| `sets/<set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | Set-local base image and mutable qcow2 machine volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
-| `sets/<set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
-| `sets/<set-id>/snapshots/` | Baseline snapshot records | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
-| `sets/<set-id>/target-ssh/` | Simulation-set target SSH identity | Host-dominated | Target OS SSH private/public keypair seeded into reusable VM disks; removed only with the selected simulation set |
-| Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
-| `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, run markers, and manifest contract; rendered env and inventory files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
-| `host/source-inputs/` | Private source-template snapshots | Host-dominated | Actor-selected simulation templates and supported overrides copied by `init-run`; fingerprinted by the run marker and never passed to role or integration helpers |
-| `host/state/effective-inputs.env` | Strict effective-input binding | Host-dominated | Atomic first-start publication record binding source and effective fingerprints to the active backend, set, run, and run marker |
-| `host/state/workflow-state.env` | Run-scoped mutable workflow head | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
-| `host/state/checkpoints/` | Run-scoped immutable checkpoint records | Host-dominated | Hash-linked completion/wait records retained with run review output and never accepted for another run |
-| `host/runtime-inputs/` | Private effective simulation inputs | Host-dominated | Stable helper env files rendered and atomically published by the first successful `start`, written with mode `0600`, and never rewritten by later phases |
-| `host/target-ssh/` | Run-scoped target SSH trust state | Host-dominated | Target OS SSH known-hosts material for VM control-plane access during the selected run |
-| `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence, review-sensitive and redacted |
-| `host/logs/harness/` | Harness bounded log output | Host-dominated | VM harness command logs, review-sensitive and bounded |
-| `host/evidence/integration/` | Integration helper evidence output | Host-dominated | Host-orchestrated integration evidence, review-sensitive and redacted |
-| `host/logs/integration/` | Integration helper bounded log output | Host-dominated | Host-orchestrated integration logs, review-sensitive and bounded |
-| `host/artifacts/exported/` | Operator-facing artifact review copies | Host-dominated | Exported bundle archives and checksums copied back for review; not a target transfer path |
-| `target/evidence/<role>/` | `/var/lib/loopforge/evidence` on one target VM | Target-dominated | Retained role-local VM simulation evidence |
-| `target/logs/<role>/` | `/var/log/loopforge` on one target VM | Target-dominated | Retained role-local bounded VM simulation logs |
+| VM-specific path | Content dominance | Purpose |
+| --- | --- | --- |
+| `sets/<set-id>/libvirt/` | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
+| `sets/<set-id>/libvirt/disks/` | Libvirt-dominated | Libvirt directory-pool target for the set-local base image and mutable qcow2 volumes, managed through libvirt APIs without host ownership repair |
+| `sets/<set-id>/seeds/` | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP bootstrap or LDIF seed material |
+| `sets/<set-id>/snapshots/` | Host-dominated | Clean baseline snapshot names, fingerprints, and capture evidence |
+| `sets/<set-id>/target-ssh/` | Host-dominated | Target OS SSH identity seeded into reusable VM disks and removed only with the selected set |
+| Jenkins agent VM disk content | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM; NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` |
+| `host/target-ssh/` | Host-dominated | Run-scoped known-hosts material for VM control-plane access to the set-owned target identity |
+| `host/artifacts/exported/` | Host-dominated | Exported bundle archives and checksums copied back for review; not a target transfer path |
 
 VM artifact staging uses target OS SSH to copy reviewed bundle archives into
 the guest-local canonical staging path `/var/lib/loopforge/staging/<role>/`.
 The VM generated run tree may keep host-owned artifact review copies, but it
 must not model transfer with a generated `target/artifacts/staging/` sideband.
 
-Simulation-set state persists across runs until `destroy`. Active output
-belongs to one immutable `HARNESS_RUN_ID` and may be cleaned independently.
-`restore-baseline` rolls the stopped selected simulation set back to its
-clean snapshot. `clean` removes only active generated state while preserving
-exported artifacts, evidence, bounded logs, and the simulation set. `destroy` is the
-only command that removes
-simulation-owned VM domains, the set-local base image, machine disks,
-snapshots, seed media, or networks after ownership validation or exact selected
-resource recovery. VM shared Jenkins storage is not VM-host state; it is
-guest-local data on the Jenkins agent VM and is removed only as part of owned
-VM disk destruction.
+VM simulation-set state persists across runs until `destroy`.
+`restore-baseline` rolls the stopped set back to its clean snapshots. Only
+`destroy` removes simulation-owned VM domains, the set-local base image,
+machine disks, snapshots, seed media, or networks after ownership validation
+or exact selected resource recovery. VM shared Jenkins storage is guest-local
+data on the Jenkins agent VM and is removed only with the owned VM disk.
 
 The host operator owns VM control metadata but does not own adopted qcow2
 content. Libvirt volume APIs provide format, capacity, backing-store, hashing,
@@ -360,6 +357,3 @@ disks so the host security driver manages runtime access without a hard-coded
 account. Read-only backing volumes are validated independently of their
 incidental owner. Harness behavior must not depend on ownership restoration
 after shutdown.
-
-Evidence produced from Docker or VM simulation must be labeled as simulation
-evidence and must not imply `target-deployment` acceptance.

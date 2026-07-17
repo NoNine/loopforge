@@ -64,7 +64,7 @@ reject_doc_text docs/contracts/lifecycle-contract.md \
   'Lifecycle contract must not duplicate detailed VM implementation behavior'
 
 require_doc_text docs/contracts/directory-model.md \
-  '## VM Simulation Backing' \
+  '## VM-Specific Backing' \
   'Directory model must own VM simulation backing paths'
 require_doc_text docs/contracts/directory-model.md \
   'generated/simulation/vm/sets/<set-id>/' \

@@ -38,6 +38,29 @@ reject_text() {
   fi
 }
 
+require_occurrences() {
+  local file pattern expected message actual
+  file="${1:?file required}"
+  pattern="${2:?pattern required}"
+  expected="${3:?expected count required}"
+  message="${4:?message required}"
+  actual="$(awk -v needle="$pattern" '
+    {
+      line = $0
+      while ((position = index(line, needle)) > 0) {
+        count++
+        line = substr(line, position + length(needle))
+      }
+    }
+    END { print count + 0 }
+  ' "$file")"
+  [ "$actual" -eq "$expected" ] || {
+    printf '%s (expected=%s actual=%s)\n' \
+      "$message" "$expected" "$actual" >&2
+    exit 1
+  }
+}
+
 require_text "$prd" \
   '`create`, `start`, `stop`, `restore-baseline`, `clean`,' \
   'PRD must define the reusable simulation lifecycle'
@@ -86,6 +109,27 @@ require_text "$directory" \
 require_text "$directory" \
   '`host/state/effective-inputs.env`' \
   'Directory contract must define the effective-input binding record'
+require_text "$directory" \
+  '## Shared Simulation Backing' \
+  'Directory contract must define the shared generated layout once'
+require_text "$directory" \
+  '## Docker-Specific Backing' \
+  'Directory contract must isolate Docker-specific generated paths'
+require_text "$directory" \
+  '## VM-Specific Backing' \
+  'Directory contract must isolate VM-specific generated paths'
+require_occurrences "$directory" \
+  '| `sets/<set-id>/active-run.env` |' 1 \
+  'Directory contract must not duplicate the shared active-run row'
+require_occurrences "$directory" \
+  '| `host/source-inputs/` |' 1 \
+  'Directory contract must not duplicate the shared source-input row'
+require_occurrences "$directory" \
+  '| `host/state/workflow-state.env` |' 1 \
+  'Directory contract must not duplicate the shared workflow-state row'
+require_occurrences "$directory" \
+  '| `host/evidence/integration/` |' 1 \
+  'Directory contract must not duplicate the shared integration-evidence row'
 require_text "$evidence" \
   'Docker and VM harness checkpoint evidence must identify the immutable' \
   'Evidence contract must bind checkpoint evidence to immutable run ID'
