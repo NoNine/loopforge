@@ -154,7 +154,7 @@ Composite commands:
 
 | Command | Purpose |
 | --- | --- |
-| `run [--env FILE]` | Runs the normal VM simulation workflow for the active immutable run ID and selected simulation set, then executes `preflight` through `prove-integration`. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
+| `run [--env FILE]` | Initializes fresh state or resumes the exact active immutable run at its next required phase, leaving the set running. An exact completed run returns `already-complete`; interrupted, conflicting, restored, run-ID-mismatched, or input-changed state blocks. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
 | `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
@@ -163,9 +163,9 @@ Phase and lifecycle commands:
 | --- | --- |
 | `preflight [--env FILE]` | Validates required local tooling, including `flock`, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accepts an unused explicit value, copies selected inputs into private runtime inputs, writes rendered/runtime env files, records VM inventory expectations, and creates the simulation set's active-run pointer. It rejects a set with an active run. |
-| `create [--env FILE]` | Defines or verifies the selected reusable simulation set's libvirt/KVM resources, including networks, storage, domains, seed media, and baseline metadata. It captures the baseline after cloud-init, control-plane readiness, role OS dependency fulfillment, LDAP service readiness, expected command availability, LDAP seed verification, and consumer bind/search proof, but before Loopforge artifact staging or setup. It leaves the simulation set stopped. |
-| `start [--env FILE]` | Starts the selected simulation set, waits for VM boot, SSH reachability, stable host fingerprints, and cloud-init completion. From exact completed state, guest systemd starts configured services without setup mutation. |
-| `status [--env FILE]` | Requires the selected simulation set to exist, inspects VM power state, selected run identity, browser URLs, SSH endpoints, VM simulation login accounts, and baseline prerequisite state. LDAP prerequisite state is `pending`, `ready`, or `stale`; malformed or mismatched proof is never reported as ready. |
+| `create [--env FILE]` | Defines and baselines an absent claimed set, leaving it stopped. For an exact stopped existing set it verifies set metadata and returns non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, unowned, or mismatched state blocks. |
+| `start [--env FILE]` | Starts the selected simulation set and waits for control-plane readiness. From exact-bound state, guest systemd starts configured services without setup mutation. An exact running set returns `state=already-running`; other state blocks. |
+| `status [--env FILE]` | Reports coherent absent, unclaimed, stopped, or running VM state, including set/run identity, durable classification, reset gate, and access data when available. Contradictory state reports `conflicting` and exits nonzero. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Transfers prepared artifact archives from the bundle factory VM to the target VM, verifies archive manifests and checksums on the target side, and stages them under the helper-visible staging path before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `configure-role [--env FILE] [--role ROLE]` | Runs one initial role-local configuration phase, or all VM roles when `--role` is omitted, against target VMs, installs fresh guest service state, establishes the role runtime, and records evidence. |
@@ -175,10 +175,10 @@ Phase and lifecycle commands:
 | `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
 | `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, then proves required guest services recovered before any later validation. It does not rerun configuration or validation phases implicitly. |
 | `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected simulation-set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
-| `stop [--env FILE]` | Gracefully shuts down selected simulation-set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. It requests shutdown before a bounded wait and hard-stops only domains still running after that wait. |
+| `stop [--env FILE]` | Gracefully shuts down selected simulation-set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. An ownership-valid stopped set returns `state=already-stopped` with its durable classification and reset gate. |
 | `restore-baseline [--env FILE]` | Requires the selected simulation set to be stopped, validates ownership and baseline snapshot records, and reverts guest disks to the clean baseline. It does not clean generated run state or delete VMs. |
-| `clean [--env FILE]` | Requires the selected simulation set to be stopped and successfully restored to its matching baseline, then deletes mutable active-run data, including runtime inputs, target SSH material, checkpoints, and the set's active-run pointer. It preserves retained review output and VM baseline resources. |
-| `destroy [--env FILE]` | Permanently removes the selected simulation set after validating ownership metadata when present, or by exact selected resource names during recovery. It undefines domains and removes owned machine disks, the set-local base image, snapshots, seed media, VM networks, and simulation-set metadata. |
+| `clean [--env FILE]` | Requires the set to be stopped and successfully restored, deletes mutable workflow/run state, and removes the active-run pointer last. It preserves the immutable run marker, checkpoint records, retained review output, and VM baseline resources. |
+| `destroy [--env FILE]` | Permanently removes an ownership-validated selected set. A fully absent unclaimed set returns `state=already-absent`; missing or mismatched ownership metadata blocks rather than authorizing name-derived deletion. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`. `--all`
 for `reboot` includes those service VMs and dependency VMs needed for the
@@ -201,7 +201,7 @@ VM simulation has two identities:
 
 | Identity | Purpose |
 | --- | --- |
-| `HARNESS_SET_ID` | Names the reusable simulation set. If omitted, the harness uses `default`. |
+| `HARNESS_SET_ID` | Names the reusable simulation set. It uses the shared 1-24 character lowercase letter/digit/internal-hyphen grammar and defaults to `default`. |
 | `HARNESS_RUN_ID` | Immutable identity for exactly one setup and validation attempt. `init-run` generates it when omitted; an explicit value must be unused. |
 
 The default experience behaves like a single active simulation set. Most local
@@ -214,9 +214,11 @@ VM-mutating command prints and records the selected set. Every active artifact,
 log, marker, and evidence record binds `set_id` and `run_id`. `stop` followed by
 `start` preserves both identities.
 
-The VM harness derives a libvirt resource prefix from `HARNESS_SET_ID`. That
-prefix is backend resource metadata, remains stable across runs of the set,
-and must not include `HARNESS_RUN_ID` or act as another operator identity.
+The VM harness derives the libvirt resource prefix exactly as
+`loopforge-vm-<set-id>`. That injective prefix is backend resource metadata,
+remains stable across runs of the set, and must not include `HARNESS_RUN_ID` or
+act as another operator identity. Length-limited bridge names use the shared
+versioned hash derivation and still require full ownership verification.
 
 ## Input Model
 
@@ -292,10 +294,11 @@ replaced because reusable VM disks may depend on it.
 Each reusable VM disk records and verifies its storage pool, volume, backing
 path, fingerprint, SHA-256, and disk size through libvirt APIs. `create`
 rejects legacy unmanaged sets or mismatched volume metadata without changing
-the selected VM disks. Retain the old env and use ownership-checked `stop`,
-`clean`, and `destroy` for the old set and active run. Then select a fresh
-`HARNESS_SET_ID`, let `init-run` generate a fresh `HARNESS_RUN_ID`, and
-run `create`. Do not delete libvirt resources or generated backing directly.
+the selected VM disks. Select a fresh `HARNESS_SET_ID`, let `init-run` generate
+a fresh `HARNESS_RUN_ID`, and run `create`. The rejected state requires an
+explicit migration or separately approved host-level cleanup; normal VM
+commands do not add legacy ownership readers or delete generated backing
+directly.
 
 ## Simulation Accounts
 
@@ -371,6 +374,7 @@ repo-local roots for reusable simulation-set state and run-scoped output:
 
 ```text
 generated/simulation/vm/sets/<set-id>/
+generated/simulation/vm/locks/<set-id>.lock
 generated/simulation/vm/<run-id>/
 ```
 
@@ -390,6 +394,8 @@ completion; a missing command or failed cloud-init module blocks readiness.
 | Output kind | VM generated pattern |
 | --- | --- |
 | Simulation-set registry and ownership metadata | `generated/simulation/vm/sets/<set-id>/` |
+| Stable simulation-set lock | `generated/simulation/vm/locks/<set-id>.lock` |
+| Workflow head and immutable checkpoint records | `generated/simulation/vm/<run-id>/host/state/` |
 | Libvirt XML, seed metadata, and baseline snapshot records | `generated/simulation/vm/sets/<set-id>/libvirt/` |
 | Target OS SSH identity | `generated/simulation/vm/sets/<set-id>/target-ssh/` |
 | Host-contributed run inputs | `generated/simulation/vm/<run-id>/host/` |
@@ -472,9 +478,10 @@ command.
 - `clean` removes mutable generated state for the selected run only. It
   requires the selected simulation set to be stopped and successfully restored
   to the matching baseline, and preserves exported artifacts, evidence, bounded
-  logs, and the simulation-set target SSH identity. It removes run-scoped SSH
-  known-hosts, mutable checkpoint state, and the set's active-run pointer, then
-  permits `init-run` to generate a new run ID.
+  logs, the immutable run marker, checkpoint completion records, and the
+  simulation-set target SSH identity. It removes run-scoped SSH known-hosts,
+  the mutable workflow head, and the set's active-run pointer last, then permits
+  `init-run` to generate a new run ID.
 - `destroy` permanently deletes the selected simulation set and its owned
   libvirt resources, including the set-local base image and target
   SSH identity.
@@ -483,10 +490,11 @@ command.
 marker, and baseline snapshot records before rollback. It must fail clearly
 rather than roll back an unowned, running, or mismatched simulation set.
 `clean` validates the selected run marker and set before generated-state cleanup.
-`destroy` performs ownership validation when simulation-set metadata is
-present. If generated metadata has already been removed, `destroy` recovers by
-deleting only exact resources derived from the selected set's recorded libvirt
-resource prefix.
+`destroy` requires ownership-valid simulation-set metadata before deleting any
+present libvirt resource. A fully absent unclaimed set is an idempotent
+`already-absent` success. Missing resources contradicted by retained metadata,
+or present resources without their ownership metadata, are conflicting state
+and block.
 
 ## State Consistency And Recovery
 
@@ -499,6 +507,8 @@ libvirt resources agree:
   exist and carry the selected ownership identity.
 - The generated run marker exists under `generated/simulation/vm/<run-id>/`
   and matches the simulation set's `active-run.env` pointer.
+- The strict run-scoped `workflow-state.env` and its hash-linked checkpoint
+  records match the pointer, marker, baseline, and reviewed input fingerprints.
 - Rendered runtime config exists and fingerprints match the run marker.
 - Runtime input copies exist for the harness, Gerrit, Jenkins controller,
   Jenkins agent, and integration env files.
@@ -510,20 +520,10 @@ are inconsistent, lifecycle phases fail clearly instead of recreating state or
 rerunning earlier phases. Recover with explicit `stop`, `restore-baseline`,
 `clean`, or `destroy` commands for the selected simulation set and run.
 
-Legacy simulation sets rejected by normal lifecycle commands remain eligible
-only for ownership-checked `stop` and `destroy`. Clean up an old set with its
-retained env:
-
-```bash
-simulation/vm/simulate.sh --env OLD_ENV stop
-simulation/vm/simulate.sh --env OLD_ENV destroy
-simulation/vm/simulate.sh --env OLD_ENV audit-state
-```
-
-`destroy` recognizes legacy ownership schemas only for cleanup, validates their
-immutable ownership fields, and removes only the selected simulation set.
-Legacy sets cannot be rolled back because they have no M5 baseline snapshot
-registry.
+Legacy or malformed ownership schemas are conflicting state. Normal commands
+do not add old-field readers, name-derived recovery, or compatibility cleanup
+paths; operators must use an explicit migration or separately approved
+host-level cleanup procedure.
 
 Typical flow:
 

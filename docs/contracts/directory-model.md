@@ -166,10 +166,12 @@ path, log, and evidence labels must say `simulation-only`.
 
 ## Retained Simulation Output
 
-Simulation cleanup preserves review output: exported artifact archives,
+Simulation cleanup preserves review output: the immutable run marker,
+hash-linked checkpoint completion records, exported artifact archives,
 evidence, and bounded logs under the immutable run root. Cleanup removes
-mutable runtime inputs, checkpoints, and active-run ownership without clearing,
-overwriting, or moving retained review output into a reusable backend set.
+mutable runtime inputs, the workflow head, and active-run ownership without
+clearing, overwriting, or moving retained review output into a reusable backend
+set.
 Layer-specific lifecycle commands may stop resources, restore baselines, or
 delete selected-run scratch, but they must not silently discard retained
 evidence, logs, or exported artifacts.
@@ -183,9 +185,11 @@ evidence, and helper state record that run ID.
 
 Reusable backend identity is separate. `HARNESS_SET_ID` owns one simulation
 set in either backend. Each reusable set stores a non-secret `active-run.env`
-pointer to at most one run ID. `start` and `stop` preserve it. After successful
-baseline restoration, `clean` removes that
-pointer and mutable run state but preserves the immutable run's review output.
+pointer to at most one run ID. `start` and `stop` preserve it. A stable lock at
+`generated/simulation/<backend>/locks/<set-id>.lock` serializes set mutation
+and remains outside the deletable set root. After successful baseline
+restoration, `clean` removes the pointer last and removes mutable run state but
+preserves the immutable run marker, checkpoint records, and review output.
 
 Docker durable baseline state includes the selected project image and Compose
 digests, clean container definition, checksummed LDAP data, empty product homes
@@ -227,10 +231,13 @@ generated/simulation/docker/<run-id>/
 
 | Docker generated path | Canonical or container-visible path | Content dominance | Purpose |
 | --- | --- | --- | --- |
-| `sets/<set-id>/active-run.env` | Selected Docker active-run pointer | Host-dominated | Non-secret immutable run ID and marker fingerprint; removed only by successful `clean` or set destruction |
+| `locks/<set-id>.lock` | Stable Docker simulation-set lock | Host-dominated | Shared read or exclusive mutation serialization; persists outside the deletable set root |
+| `sets/<set-id>/active-run.env` | Selected Docker active-run pointer | Host-dominated | Strict non-secret run claim, resource namespace, marker, baseline, reset gate, and restoration-evidence binding; removed only by successful `clean` or set destruction |
 | `sets/<set-id>/baseline/` | Docker clean baseline | Host-dominated | Checksummed image/Compose identity, bind-data archives, numeric ownership, and target SSH identity used only by `restore-baseline` |
 | `sets/<set-id>/runtime/` | Docker durable bind roots | Target-dominated | LDAP data, product homes, shared storage, integration helper state, and target staging for the selected reusable simulation set |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, run markers, and public manifest contract; rendered env files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
+| `host/state/workflow-state.env` | Run-scoped mutable workflow head | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
+| `host/state/checkpoints/` | Run-scoped immutable checkpoint records | Host-dominated | Hash-linked completion/wait records retained with run review output and never accepted for another run |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
 | `host/bundle-factory/rendered/` | Host-side reviewed bundle-factory input copies | Host-dominated | Operator review copy before Docker `cp` input transfer |
 | `host/bundle-factory/validation-public/` | Host-to-bundle-factory validation handoff | Host-dominated | Simulation validation public material only |
@@ -256,11 +263,11 @@ durable meaningful content, not POSIX ownership of host review copies.
 Host-side generated paths use the local host account that runs the simulation
 harness; this host account is not required to be named `ci-operator`.
 
-Docker `clean` leaves exported artifacts, evidence, and logs under the
-immutable run root. It removes runtime inputs, checkpoints, target SSH client
-material, the run marker, and the selected set's active-run pointer only after
-successful baseline restoration. It does not delete or rewrite durable set
-state or retained review output.
+Docker `clean` leaves the immutable run marker, checkpoint completion records,
+exported artifacts, evidence, and logs under the immutable run root. It removes
+runtime inputs, the mutable workflow head, target SSH client material, and the
+selected set's active-run pointer only after successful baseline restoration.
+It does not delete or rewrite durable set state or retained review output.
 
 ## VM Simulation Backing
 
@@ -273,8 +280,9 @@ generated/simulation/vm/<run-id>/
 
 | VM path | Canonical or VM-visible path | Content dominance | Purpose |
 | --- | --- | --- | --- |
+| `locks/<set-id>.lock` | Stable VM simulation-set lock | Host-dominated | Shared read or exclusive mutation serialization; persists outside the deletable set root |
 | `sets/<set-id>/` | Simulation-set registry root | Host-dominated | Ownership marker, selected simulation-set identity, and reusable VM resource records |
-| `sets/<set-id>/active-run.env` | Selected simulation-set active-run pointer | Host-dominated | Non-secret immutable run ID and marker fingerprint; removed only by successful `clean` or set destruction |
+| `sets/<set-id>/active-run.env` | Selected simulation-set active-run pointer | Host-dominated | Strict non-secret run claim, resource namespace, marker, baseline, reset gate, and restoration-evidence binding; removed only by successful `clean` or set destruction |
 | `sets/<set-id>/libvirt/` | Libvirt resource metadata | Host-dominated | Operator-owned domain, network, pool, volume, seed media, and baseline snapshot descriptors |
 | `sets/<set-id>/libvirt/disks/` | Libvirt directory-pool target | Libvirt-dominated | Set-local base image and mutable qcow2 machine volumes managed and inspected through libvirt after adoption; the host operator does not repair or depend on their POSIX ownership |
 | `sets/<set-id>/seeds/` | Cloud-init or seed media records | Host-dominated | Simulation-owned VM bootstrap inputs and rendered seed metadata, including LDAP VM bootstrap or LDIF seed material when represented as seed media |
@@ -282,6 +290,8 @@ generated/simulation/vm/<run-id>/
 | `sets/<set-id>/target-ssh/` | Simulation-set target SSH identity | Host-dominated | Target OS SSH private/public keypair seeded into reusable VM disks; removed only with the selected simulation set |
 | Jenkins agent VM disk content | NFS export backing `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared` | Target-dominated | Jenkins-agent-hosted shared storage exported to the controller VM |
 | `host/rendered/` | Operator-facing rendered harness config | Host-dominated | Rendered harness env, VM inventory, run markers, and manifest contract; rendered env and inventory files are review-sensitive, manifest contracts and non-secret markers are public/read-only |
+| `host/state/workflow-state.env` | Run-scoped mutable workflow head | Host-dominated | Strict checkpoint activity and current hash-chain head for the active run; removed by successful `clean` |
+| `host/state/checkpoints/` | Run-scoped immutable checkpoint records | Host-dominated | Hash-linked completion/wait records retained with run review output and never accepted for another run |
 | `host/runtime-inputs/` | Operator-facing rendered input copies | Host-dominated | Private runtime input files, written with mode `0600` |
 | `host/target-ssh/` | Run-scoped target SSH trust state | Host-dominated | Target OS SSH known-hosts material for VM control-plane access during the selected run |
 | `host/evidence/harness/` | Harness evidence output | Host-dominated | VM harness checkpoint evidence, review-sensitive and redacted |

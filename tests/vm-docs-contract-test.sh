@@ -360,8 +360,11 @@ require_doc_text docs/contracts/directory-model.md \
   'Libvirt directory-pool target' \
   'Directory model must identify libvirt-managed VM image paths'
 require_doc_text simulation/vm/README.md \
-  'Legacy simulation sets rejected by normal lifecycle commands remain eligible' \
-  'VM README must document ownership-checked legacy simulation-set cleanup'
+  'Legacy or malformed ownership schemas are conflicting state.' \
+  'VM README must reject legacy ownership fallback'
+require_doc_text simulation/vm/README.md \
+  'name-derived recovery, or compatibility cleanup' \
+  'VM README must reject name-derived legacy cleanup'
 require_doc_text simulation/vm/README.md \
   'size, and VM package matrix' \
   'VM README must document baked base-image invalidation inputs'
@@ -390,13 +393,13 @@ require_doc_text simulation/vm/README.md \
   'modeled success without' \
   'VM README must prohibit modeled VM checkpoint success'
 require_doc_text simulation/vm/README.md \
-  '`create [--env FILE]` | Defines or verifies the selected reusable simulation set' \
+  '`create [--env FILE]` | Defines and baselines an absent claimed set' \
   'VM README must document create behavior'
 require_doc_text simulation/vm/README.md \
   'LDAP service readiness, and LDAP seed verification' \
   'VM README must place LDAP readiness before baseline snapshot capture'
 require_doc_text simulation/vm/README.md \
-  'role OS dependency fulfillment, LDAP service' \
+  'OS dependency fulfillment, LDAP service readiness' \
   'VM README must place role OS dependency fulfillment before baseline snapshot capture'
 require_doc_text simulation/vm/docs/verification.md \
   '`create` baked a simulation-owned dependency-prepared base image' \
@@ -411,7 +414,7 @@ require_doc_text simulation/vm/README.md \
   '`restore-baseline` is destructive to guest disk changes made after the' \
   'VM README must document restore-baseline as snapshot rollback, not VM deletion'
 require_doc_text simulation/vm/README.md \
-  '`clean [--env FILE]` | Requires the selected simulation set to be stopped' \
+  '`clean [--env FILE]` | Requires the set to be stopped and successfully restored' \
   'VM README must document clean as generated-state cleanup only'
 require_doc_text simulation/vm/README.md \
   'Use `destroy` only when the reusable simulation set should be permanently removed.' \

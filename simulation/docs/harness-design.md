@@ -77,10 +77,11 @@ Forbidden directions include:
 
 | Concern | Shared contract | Backend-local realization |
 | --- | --- | --- |
-| Identity | `HARNESS_SET_ID`, `HARNESS_RUN_ID`, `set_id`, `run_id`, and active-run binding | Compose project name or libvirt resource prefix derived from the set ID |
+| Identity | Canonical `HARNESS_SET_ID`, immutable `HARNESS_RUN_ID`, active-run binding, and namespace derivation rules | Compose project `loopforge-docker-<set-id>` or libvirt prefix `loopforge-vm-<set-id>` plus ownership-checked short names |
 | Generated paths | Set root, run root, retained review output, and mutable cleanup classes | Concrete Docker or VM subdirectories and ownership mechanisms |
 | Lifecycle | Command names, state meanings, guards, preservation rules, and failure behavior | Compose/container operations or libvirt/domain operations |
-| Checkpoints | Ordering, binding, completion semantics, and observational validation | Backend command orchestration and target inventory |
+| Persistence | Stable set lock, strict active-run and workflow records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
+| Checkpoints | Ordering, transaction state, hash-linked completion, binding, and observational validation | Backend command orchestration and target inventory |
 | Evidence | Required identities, statuses, redaction, and bounded references | Backend resource metadata and collector mechanics |
 | Terminal output | Compact command summaries and shared set/run fields | Compose project, libvirt prefix, URLs, SSH rows, and other backend fields |
 
@@ -128,6 +129,9 @@ need the same semantics:
 - role parsing and iteration;
 - env loading and required-value checks;
 - set/run identity validation and marker encoding;
+- stable set locking and strict fixed-key state-record parsing;
+- active-run pointer, workflow-head, and checkpoint-chain verification;
+- atomic same-directory state publication;
 - runtime input custody;
 - bounded log setup and compact summaries;
 - evidence record and redaction helpers;
@@ -154,6 +158,11 @@ Reviewers of either harness should confirm that:
 
 - public behavior matches the shared lifecycle state model and backend README;
 - every mutating command validates selected set and run ownership first;
+- set mutation is serialized by the stable set lock;
+- `active-run.env` owns set claim/reset gating while `workflow-state.env` owns
+  only the selected run's checkpoint progression;
+- interrupted target mutation remains `active-incomplete` and never appears
+  exact-bound;
 - backend lifecycle operations do not complete Loopforge checkpoints;
 - role and integration work uses the owning helpers and target-like interfaces;
 - `start` performs no setup or repair;

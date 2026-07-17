@@ -8,6 +8,7 @@ lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
 directory="$repo_root/docs/contracts/directory-model.md"
 evidence="$repo_root/docs/contracts/validation-and-evidence.md"
 shared="$repo_root/simulation/README.md"
+state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
 docker="$repo_root/simulation/docker/README.md"
 vm="$repo_root/simulation/vm/README.md"
 plan="$repo_root/docs/planning/implementation-plan.md"
@@ -79,8 +80,47 @@ require_text "$shared" \
   '| Simulation set | One reusable backend environment selected by `HARNESS_SET_ID`.' \
   'Shared simulation docs must define simulation set'
 require_text "$shared" \
-  '| Resource namespace | Compose project name derived from `HARNESS_SET_ID` | Libvirt resource prefix derived from `HARNESS_SET_ID` |' \
-  'Shared simulation docs must map derived backend namespaces'
+  '| Resource namespace | `loopforge-docker-<set-id>` Compose project | `loopforge-vm-<set-id>` libvirt prefix |' \
+  'Shared simulation docs must define exact backend namespaces'
+require_text "$state_model" \
+  '^[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$' \
+  'Lifecycle state model must define the canonical set-ID grammar'
+require_text "$state_model" \
+  'generated/simulation/<backend>/locks/<set-id>.lock' \
+  'Lifecycle state model must define the stable set lock'
+require_text "$state_model" \
+  'The set-scoped `active-run.env` is the authoritative ownership and reset-gate' \
+  'Lifecycle state model must define active-run pointer ownership'
+require_text "$state_model" \
+  'The run-scoped `workflow-state.env` is authoritative only for progression' \
+  'Lifecycle state model must keep workflow state run-scoped'
+require_text "$state_model" \
+  'Unknown, duplicate, missing, malformed, or' \
+  'Lifecycle records must use strict fail-closed parsing'
+require_text "$state_model" \
+  'before pointer publication consumes the run ID but does not claim the set.' \
+  'Initialization must publish the active pointer last'
+require_text "$state_model" \
+  'the immutable run marker, checkpoint records, evidence, artifacts, and logs,' \
+  'Clean must retain immutable workflow evidence'
+require_text "$state_model" \
+  'A retry may find any known mutable cleanup target' \
+  'Interrupted cleanup must be explicitly retryable'
+require_text "$state_model" \
+  'returns `state=existing` without mutation' \
+  'Create must verify an exact existing set without mutation'
+require_text "$state_model" \
+  'reports `mode=resume`' \
+  'Run must report active-run resume mode'
+require_text "$state_model" \
+  '`state=already-running`' \
+  'Start must define idempotent already-running success'
+require_text "$state_model" \
+  '`state=already-stopped`' \
+  'Stop must define idempotent already-stopped success'
+require_text "$state_model" \
+  '`state=already-absent`' \
+  'Destroy must define idempotent already-absent success'
 
 for file in "$shared" "$docker" "$vm"; do
   require_text "$file" '`up` and `down` are' \
@@ -110,12 +150,15 @@ require_text "$vm" \
 require_text "$vm" \
   'generated/simulation/vm/sets/<set-id>/' \
   'VM docs must separate reusable simulation-set state from run output'
+reject_text "$vm" \
+  'by exact selected resource names during recovery' \
+  'VM destroy must not delete by derived names without ownership metadata'
 
 require_text "$plan" \
   '`docs/planning/steps/step-13a-reusable-simulation-lifecycle.md`' \
   'Roadmap must link the reusable simulation lifecycle step'
 for milestone in \
-  '## M1: Shared Command, Run Identity, And Active-Run Primitives' \
+  '## M1: Shared Identity, Lock, Records, And Classifier' \
   '## M2: Docker Create, Start, And Stop' \
   '## M3: Docker Baseline Capture And Restore' \
   '## M4: VM Start/Stop Migration And Active-Run Binding' \
@@ -140,7 +183,7 @@ for file in "$agents" "$prd" "$lifecycle" "$directory" "$evidence" \
     "Generation identity must not be part of the contract: $file"
 done
 
-for file in "$lifecycle" "$directory" "$evidence" "$shared" "$docker" "$vm"; do
+for file in "$lifecycle" "$directory" "$evidence" "$shared" "$state_model" "$docker" "$vm"; do
   reject_text "$file" 'LOOPFORGE_VM_SET_ID' \
     "Current simulation contracts must not expose the old VM set identity: $file"
   reject_text "$file" 'HARNESS_PROJECT_NAME' \

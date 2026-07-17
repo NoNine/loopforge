@@ -41,6 +41,8 @@ concrete backend mechanism.
 | Active run | The run referenced by the simulation set's non-secret `active-run.env` pointer. |
 | Set root | Backend-local generated storage for reusable resources, durable runtime, baseline metadata, and the active-run pointer. |
 | Run root | Backend-local generated storage for one run's inputs, checkpoints, evidence, logs, and exported artifacts. |
+| Workflow state | The selected run's mutable checkpoint head in `workflow-state.env`; it cannot claim a set without a matching active-run pointer. |
+| Exact bound | Durable state whose ownership, baseline, reviewed inputs, and completed checkpoint chain all agree with no open target mutation. |
 | Durable runtime | State preserved by `stop` and reset only by `restore-baseline`. |
 | Baseline | The set-owned clean pre-setup state used by `restore-baseline`. |
 
@@ -49,7 +51,7 @@ The two backends realize the same concepts differently:
 | Shared concept | Docker realization | VM realization |
 | --- | --- | --- |
 | Simulation set | Compose-managed containers, network, project-built images, bind state, and baseline archives | Libvirt domains, networks, volumes, seed media, baked image, and baseline snapshots |
-| Resource namespace | Compose project name derived from `HARNESS_SET_ID` | Libvirt resource prefix derived from `HARNESS_SET_ID` |
+| Resource namespace | `loopforge-docker-<set-id>` Compose project | `loopforge-vm-<set-id>` libvirt prefix |
 | Baseline | Checksummed image/Compose identity and bind-data archives | Checksummed VM metadata and clean disk snapshots |
 | Durable runtime | Container writable layers and simulation-set bind data | Per-machine VM disks |
 | Runtime definition | Retained Compose-created containers | Retained libvirt domain definitions |
@@ -57,9 +59,12 @@ The two backends realize the same concepts differently:
 
 `HARNESS_SET_ID` and `HARNESS_RUN_ID` are the only shared operator-facing
 simulation identities. `HARNESS_SET_ID` defaults to `default` when omitted in
-either backend. Derived backend namespaces are stable for the life of a
-simulation set, must not include `HARNESS_RUN_ID`, and are recorded as backend
-resource metadata rather than treated as additional operator identities.
+either backend. It must contain 1-24 lowercase ASCII letters, digits, or
+internal hyphens, start and end with a letter or digit, and is never normalized.
+Derived backend namespaces are stable for the life of a simulation set, must
+not include `HARNESS_RUN_ID`, and are recorded as backend resource metadata
+rather than treated as additional operator identities. Length-limited hashed
+names remain bound to full ownership metadata; collisions block.
 
 ## Harness Implementation Direction
 
@@ -174,8 +179,10 @@ simulation-set state separately from immutable run output:
 
 ```text
 generated/simulation/docker/sets/<set-id>/
+generated/simulation/docker/locks/<set-id>.lock
 generated/simulation/docker/<run-id>/
 generated/simulation/vm/sets/<set-id>/
+generated/simulation/vm/locks/<set-id>.lock
 generated/simulation/vm/<run-id>/
 ```
 
@@ -190,6 +197,8 @@ Docker uses these subpath patterns:
 | Output kind | Generated pattern |
 | --- | --- |
 | Active-run pointer and baseline | `generated/simulation/docker/sets/<set-id>/` |
+| Stable simulation-set lock | `generated/simulation/docker/locks/<set-id>.lock` |
+| Workflow head and immutable checkpoint records | `generated/simulation/docker/<run-id>/host/state/` |
 | Durable integration state | `generated/simulation/docker/sets/<set-id>/runtime/helper-state/` |
 | Product runtime homes | `generated/simulation/docker/sets/<set-id>/runtime/product-homes/` |
 | Staged artifacts | `generated/simulation/docker/sets/<set-id>/runtime/artifacts/staging/<role>/` |
@@ -213,18 +222,20 @@ simulation steps.
 
 Simulation cleanup is manual and conservative. Cleanup commands remove
 mutable generated runtime state for the selected run while preserving
-exported artifact archives, evidence, and logs. Lifecycle commands that stop,
-reset, or destroy backend resources are explicit and layer-owned; they must
-not silently discard review evidence.
+the immutable run marker, checkpoint records, exported artifact archives,
+evidence, and logs. Lifecycle commands that stop, reset, or destroy backend
+resources are explicit and layer-owned; they must not silently discard review
+evidence.
 
 Never repair stale or inconsistent simulation state in place. Lifecycle
 commands must fail clearly when selected generated state, container bind
 mounts, simulation-set metadata, snapshots, or libvirt resources do not match
-the selected run and reusable set. Recover with explicit `stop`,
-`restore-baseline`, and `clean` operations, then let `init-run` generate a new
-run ID for the same set. Use `destroy` only for reusable backend resource
-removal. When reusable resource identity is suspect, select a fresh
-`HARNESS_SET_ID` rather than repairing that set.
+the selected run and reusable set. When exact ownership and baseline guards
+still hold, recover with explicit `stop`, `restore-baseline`, and `clean`, then
+let `init-run` generate a new run ID for the same set. Use ownership-validated
+`destroy` only for reusable backend resource removal. When ownership cannot be
+proved, select a fresh `HARNESS_SET_ID` and use an explicit migration or
+separately approved host-level cleanup procedure for the old state.
 
 Docker host-wide cleanup and VM host-wide libvirt cleanup remain separate
 operator recovery paths. They are not selected-run baseline restoration or
@@ -269,12 +280,12 @@ When a layer uses these command names, the shared simulation semantics are:
 
 | Command | Shared meaning |
 | --- | --- |
-| `run` | Normal workflow composite for the selected run. It does not run cleanup, teardown, destruction, or audit commands. |
+| `run` | State-aware normal workflow composite. It initializes fresh state, resumes the exact active run at its next phase, or returns `already-complete`; it leaves the set running and never runs cleanup, restoration, destruction, or audit commands. |
 | `preflight` | Read-only prerequisite check before service mutation. |
 | `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate `HARNESS_RUN_ID` when omitted, create private runtime inputs and the run marker, and claim the selected set's active-run pointer. It rejects an active set or existing run root. |
-| `create` | Establish or verify the selected reusable simulation set and its clean pre-setup baseline. It leaves the set stopped. |
-| `start` | Start the selected simulation set without setup mutation. Start prerequisites from baseline state or already-configured services from exact completed state; other state blocks. |
-| `status` | Read-only inspection of selected live simulation state. |
+| `create` | Create an absent claimed set and clean baseline, or verify an exact stopped existing set with non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, or mismatched state blocks. |
+| `start` | Start the selected simulation set without setup mutation. Start prerequisites from baseline state or already-configured services from exact-bound state; an exact running set returns `state=already-running`, and other state blocks. |
+| `status` | Read-only inspection of coherent absent, unclaimed, stopped, or running state; contradictory state reports `conflicting` and exits nonzero. |
 | `ssh` | Operator-account target OS control-plane SSH, not Gerrit service SSH. |
 | `prepare-artifacts` | Artifact preparation through role helpers in the bundle factory. |
 | `stage-artifacts` | Artifact transfer plus target-side manifest/checksum verification before service mutation. |
@@ -284,10 +295,10 @@ When a layer uses these command names, the shared simulation semantics are:
 | `validate-integration` | Passive cross-role readiness validation. |
 | `prove-integration` | Active end-to-end trigger proof after matching validation passed. |
 | `audit-state` | Explicit read-only generated-state and simulation-set consistency inspection. |
-| `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state and review output. |
+| `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state and review output; an ownership-valid stopped set returns `state=already-stopped`. |
 | `restore-baseline` | Require a stopped simulation set and reset its durable runtime to the selected clean pre-setup baseline without cleaning generated state. |
-| `clean` | After matching baseline restoration, clear the selected set's active-run pointer and mutable run state while preserving retained artifacts, evidence, logs, and baseline resources. |
-| `destroy` | Layer-specific destructive cleanup outside normal checkpoint progression, such as Docker project-built image removal or VM resource deletion. |
+| `clean` | After matching baseline restoration, clear mutable workflow/run state and remove the selected set's active-run pointer last while preserving the immutable run marker, checkpoint records, artifacts, evidence, logs, and baseline resources. |
+| `destroy` | Ownership-validated backend resource deletion; a fully absent unclaimed set returns `state=already-absent`, while missing resources contradicted by metadata block. |
 
 Layers may add simulation-specific lifecycle commands, such as VM `reboot`,
 but unsupported or unavailable proof must fail closed or report blocked rather
@@ -296,6 +307,15 @@ does not claim guest reboot persistence.
 
 `up` and `down` are removed command names. Layers must reject them rather than
 retain aliases that hide the selected resource transition.
+
+Set mutations use the stable nonblocking lock at
+`generated/simulation/<backend>/locks/<set-id>.lock`; contention reports
+`set busy`. The set-scoped `active-run.env` owns claim and reset gating. The
+run-scoped `workflow-state.env` owns only checkpoint activity and progression.
+Strict readers cross-check both records with the immutable run marker,
+baseline, reviewed-input fingerprints, backend ownership, and hash-linked
+checkpoint records. Details and exact transitions are authoritative in
+`simulation/docs/lifecycle-state-model.md`.
 
 ## Terminal Output Convention
 
@@ -358,9 +378,9 @@ state.
 ## State Consistency And Recovery
 
 A selected simulation run is consistent only when its generated run marker,
-immutable run ID, selected set's active-run pointer, rendered runtime config,
-runtime input copies, fingerprints, baseline identity, and simulation-set markers
-agree.
+immutable run ID, selected set's active-run pointer, run-scoped workflow head,
+hash-linked checkpoint records, rendered runtime config, runtime input copies,
+fingerprints, baseline identity, and simulation-set markers agree.
 Runtime input copies must exist for the harness, Gerrit, Jenkins controller,
 Jenkins agent, and integration env files before phases that need them.
 Layer-specific checks add Docker container/bind-baseline identity or VM resource

@@ -60,17 +60,47 @@ without compatibility aliases.
   immutable old run root.
 - Do not allow an older run to satisfy any prerequisite of a newer one.
 
+## Approved Implementation Decisions
+
+Implement the exact schemas, classifiers, and guards from
+`simulation/docs/lifecycle-state-model.md`; this plan records dependency order
+rather than redefining them.
+
+- Validate the canonical 1-24 character `HARNESS_SET_ID` before path or backend
+  mutation. Derive `loopforge-docker-<set-id>` and
+  `loopforge-vm-<set-id>` directly, and use ownership-checked versioned hashes
+  only for backend names with tighter limits.
+- Put the nonblocking set lock at
+  `generated/simulation/<backend>/locks/<set-id>.lock`, outside the deletable
+  set root. Mutations take it exclusively; state inspection takes it shared.
+- Keep `active-run.env` set-scoped and authoritative for claim/reset gating.
+  Keep `workflow-state.env` run-scoped and authoritative only for checkpoint
+  activity and progression. Parse both with strict fixed-key readers, never
+  shell `source`.
+- Publish the complete run root, marker, and initial workflow state before the
+  active pointer. Publish checkpoint `mutating` state before target mutation,
+  then immutable hash-linked completion and the idle workflow head. Publish
+  restoration evidence before the reset gate. Remove the active pointer last
+  during cleanup.
+- Preserve the immutable run marker and checkpoint records through `clean`.
+  Remove only known mutable run paths; an interrupted cleanup remains
+  retryable under the strict active pointer, immutable marker, and restoration
+  evidence even when earlier cleanup targets are already absent.
+- Centralize `baseline`, `exact-bound`, `active-incomplete`, and `conflicting`
+  classification in shared state code. Role and integration implementations
+  provide checkpoint postconditions in Steps 13b and 13c.
+
 ## Milestone Sequence
 
 | Milestone | Scope | Dependency |
 | --- | --- | --- |
-| M1 | Shared command, run identity, and active-run primitives | Refined authorities |
+| M1 | Shared identity, lock, active-run, workflow-record, and classifier primitives | Refined authorities |
 | M2 | Docker create/start/stop state machine | M1 |
 | M3 | Docker baseline capture and restore | M2 |
 | M4 | VM start/stop migration and active-run binding | M1 |
 | M5 | Cleanup, evidence, composite workflows, and acceptance | M2-M4 |
 
-## M1: Shared Command, Run Identity, And Active-Run Primitives
+## M1: Shared Identity, Lock, Records, And Classifier
 
 Implementation:
 
@@ -79,14 +109,27 @@ Implementation:
   `LOOPFORGE_VM_SET_ID` identity with `HARNESS_SET_ID` across bootstrap inputs,
   rendered/runtime config, markers, summaries, and evidence. Do not retain
   aliases or old-field readers.
+- Add the shared set-ID grammar and direct backend namespace derivations. Add a
+  versioned hash helper for length-limited names and require full ownership
+  verification before using a hashed resource.
 - Generate a collision-resistant `HARNESS_RUN_ID` during `init-run` when the
   operator omits it. Permit an explicit ID only when its canonical run root
   does not exist.
 - Add shared immutable run-marker readers and binding checks without backend
   dispatch abstraction or compatibility handling for old markers.
-- Add one non-secret `active-run.env` pointer under the selected simulation
-  set. Make `init-run` fail when that pointer, its referenced run, or
-  other prior state is malformed.
+- Add the stable set lock and acquire it nonblocking in every state-reading or
+  mutating command with the approved shared/exclusive mode. Keep `run` locking
+  at each internal command boundary.
+- Add one strict non-secret `active-run.env` pointer under the selected
+  simulation set and one strict run-scoped `workflow-state.env`. Make
+  `init-run` fail when either record, its referenced run, or other prior state
+  is malformed.
+- Add immutable hash-linked checkpoint records and atomic same-directory
+  publication helpers. Establish `idle`, `observing`, `mutating`, and `waiting`
+  activity without implementing Step 13b/13c checkpoint postconditions yet.
+- Add the shared durable classifier. Treat an open target mutation as
+  `active-incomplete`, record/fingerprint/order disagreement as `conflicting`,
+  and allow restart only from `baseline` or `exact-bound`.
 - Derive and validate the Docker Compose project name and VM libvirt resource
   prefix from `HARNESS_SET_ID`; neither namespace may depend on the run ID.
 - Preserve the active-run pointer across `stop` and `start`; allow another
@@ -100,6 +143,11 @@ Focused tests:
   cross-run binding tests.
 - Shared set-ID parsing, old-identity rejection, stable derived-namespace, and
   cross-set isolation tests.
+- Lock contention, shared-reader, pointer-publication ordering, strict parser,
+  malformed/duplicate field, interrupted initialization, and interrupted
+  cleanup tests.
+- Workflow transaction, hash-chain, open-mutation, unknown-checkpoint,
+  predecessor-order, exact-bound, and conflicting-state classifier tests.
 - Same-run `stop -> start` tests and reset/clean new-run tests.
 - `run` workflow ordering with `start` and no implicit recovery commands.
 
@@ -116,6 +164,10 @@ Implementation:
 - Extend Docker `create` to build pinned project images, create retained
   stopped containers and network, initialize prerequisites as needed, and
   leave the simulation set stopped.
+- Make repeated `create` on the exact stopped selected set verify set-scoped
+  metadata and return `state=existing` without mutation. Block running,
+  unclaimed, restored-pending-clean, partial, drifted, unowned, or mismatched
+  state.
 - Move reusable baseline, active-run, and durable bind state under
   `generated/simulation/docker/sets/<set-id>/`; keep immutable
   attempt output under `generated/simulation/docker/<run-id>/`.
@@ -126,10 +178,15 @@ Implementation:
 - Add runtime-only start/stop primitives that never call install or configure.
 - Make `stop` gracefully stop Gerrit and Jenkins before Compose stop and prove
   the same container IDs and writable layers remain.
+- Make exact repeated `start` and ownership-valid repeated `stop` return
+  `state=already-running` and `state=already-stopped` respectively. Never let
+  idempotent success hide incomplete or conflicting workflow state.
 
 Focused tests:
 
 - Docker create-leaves-stopped and exact-container start tests.
+- Docker existing-create, running-create rejection, already-running start, and
+  already-stopped stop tests.
 - Baseline-state start versus completed-state service start tests.
 - Graceful stop ordering and writable-layer preservation tests.
 
@@ -181,6 +238,9 @@ Implementation:
   runtime inputs, status, evidence, integration markers, reboot evidence, and
   cleanup to its immutable run ID.
 - Reject removed command names and old unbound markers.
+- Apply the same existing-create, already-running start, already-stopped stop,
+  coherent status, and already-absent destroy outcomes as Docker. Remove
+  name-derived deletion when full ownership metadata is unavailable.
 
 Focused tests:
 
@@ -203,11 +263,21 @@ Implementation:
   While that gate is active, block `start`, `init-run`, repeated restoration,
   and every workflow phase; permit only the documented read-only commands,
   `clean`, and `destroy`.
-- Make `clean` preserve retained output under the immutable old run root,
-  remove only mutable active-run state and the set pointer, and preserve
-  reusable baseline resources.
-- Update Docker and VM `run` workflows to call `start` and never call stop,
-  restore, clean, destroy, or audit implicitly.
+- Make `clean` preserve the immutable run marker, checkpoint records, and
+  retained output under the old run root, remove only known mutable active-run
+  state, and remove the set pointer last while preserving baseline resources.
+- Make Docker and VM `run` state-aware. Fresh absent state initializes,
+  creates, and starts; an unclaimed retained baseline initializes and verifies
+  existing `create`; an exact active run resumes at its next required phase;
+  an exact completed run is made running and returns `already-complete`.
+- When run ID is omitted for a claimed set, resolve the active pointer and print
+  `mode=resume`. Block explicit run-ID mismatch, changed input fingerprints,
+  interrupted/partial/conflicting state, and `restored-pending-clean`.
+- Keep `run` free of stop, restore, clean, destroy, or audit calls and leave the
+  selected set running.
+- Make `status` succeed for coherent absent, unclaimed, stopped, and running
+  states and fail nonzero with `conflicting` for contradictory state. Make
+  `destroy` return `already-absent` only for a fully absent unclaimed set.
 - Update help, examples, terminal-output docs, cleanup tools, tests, and
   repository guardrails in the same accepted command migration.
 - Emit baseline, reusable-set, and immutable run evidence without secrets or
@@ -229,6 +299,10 @@ Focused tests:
 - Failed restoration cannot authorize `clean` or release active-run ownership.
 - Successful `clean` transitions the restored set to baseline-stopped and
   unclaimed while retaining immutable review output.
+- Fresh, retained-baseline, exact-resume, stopped-resume, completed,
+  run-ID-mismatch, changed-input, interrupted, and conflicting `run` cases.
+- Cross-backend idempotent `create`, `start`, `stop`, `status`, and `destroy`
+  cases with identical shared meanings.
 
 Acceptance:
 

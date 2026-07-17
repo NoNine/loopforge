@@ -48,9 +48,12 @@ evidence=generated/simulation/vm/step13-m3/host/evidence/harness/
 ## Status Convention
 
 The `status` command is an operator-facing summary, not an audit report. It
-starts with a compact state line such as `status: running` or
-`status: initialized`, then prints a `Run` section with selected run identity
-and layer-appropriate access information.
+supports coherent absent, unclaimed, stopped, and running states and starts
+with a compact state line such as `status: absent`, `status: stopped`, or
+`status: running`. It prints selected set identity, run identity when claimed,
+durable classification, reset gate, and only the access information available
+in that power state. Contradictory state reports `status: conflicting` and
+exits nonzero.
 
 Both backends show the shared set and run IDs. Docker may additionally show
 the derived Compose project name and loopback browser URLs. VM simulation may

@@ -56,6 +56,9 @@ require_text "$harness_design" \
 require_text "$harness_design" \
   '## Shared Helper Boundary' \
   'Shared harness design must define helper promotion rules'
+require_text "$harness_design" \
+  '| Persistence | Stable set lock, strict active-run and workflow records,' \
+  'Shared harness design must assign lifecycle persistence ownership'
 
 require_text "$state_model" \
   '## State Dimensions' \
@@ -81,6 +84,18 @@ require_text "$state_model" \
 require_text "$state_model" \
   '`init-run -> create -> start`.' \
   'Lifecycle state model must distinguish reuse from post-destroy creation'
+require_text "$state_model" \
+  '## Persistence And Concurrency' \
+  'Lifecycle state model must define persistence and locking'
+require_text "$state_model" \
+  '## Workflow Transaction Protocol' \
+  'Lifecycle state model must define checkpoint transaction ordering'
+require_text "$state_model" \
+  '## Exact-Bound Classification' \
+  'Lifecycle state model must assign exact-bound classification'
+require_text "$state_model" \
+  'An interrupted observation may' \
+  'Lifecycle state model must separate observational interruption from durable corruption'
 
 require_text "$lifecycle" \
   '`simulation/docs/lifecycle-state-model.md` owns the exact simulation state' \

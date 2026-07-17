@@ -53,7 +53,7 @@ Composite command:
 
 | Command | Purpose |
 | --- | --- |
-| `run [--env FILE]` | Runs the normal Docker simulation workflow for the selected immutable run, then executes `preflight` through `prove-integration`. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
+| `run [--env FILE]` | Initializes fresh state or resumes the exact active immutable run at its next required phase, leaving the set running. An exact completed run returns `already-complete`; interrupted, conflicting, restored, run-ID-mismatched, or input-changed state blocks. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
 | `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using the rendered Standard Interfaces target inventory. This is for target OS access as the operator account, not Gerrit service SSH. |
 
 Phase and lifecycle commands:
@@ -62,9 +62,9 @@ Phase and lifecycle commands:
 | --- | --- |
 | `preflight [--env FILE]` | Validates required tools, Compose availability, static harness files, baseline labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
 | `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates `HARNESS_RUN_ID` when omitted, rejects an existing run root or active simulation set, copies reviewed inputs into private runtime inputs, resolves browser ports, writes rendered/runtime files, and claims the set's active-run pointer. |
-| `create [--env FILE]` | Builds the selected project images, creates retained stopped containers and the network, transiently starts prerequisites when needed, captures the clean pre-setup bind baseline and target SSH identity, then leaves the simulation set stopped. |
-| `start [--env FILE]` | Starts the exact retained containers. From baseline state it starts environment prerequisites only; from exact completed state it also starts already-configured Gerrit and Jenkins without rewriting configuration. Other state blocks. |
-| `status [--env FILE]` | Requires the selected run's containers to be running, inspects live published browser ports, and prints run identity, browser URLs, and Docker simulation login accounts. |
+| `create [--env FILE]` | Builds and creates an absent claimed set, captures its clean baseline, and leaves it stopped. For an exact stopped existing set it verifies set metadata and returns non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, unowned, or mismatched state blocks. |
+| `start [--env FILE]` | Starts the exact retained containers. From baseline state it starts environment prerequisites only; from exact-bound state it also starts already-configured Gerrit and Jenkins without rewriting configuration. An exact running set returns `state=already-running`; other state blocks. |
+| `status [--env FILE]` | Reports coherent absent, unclaimed, stopped, or running Docker state, including set/run identity, durable classification, reset gate, and live access data when available. Contradictory state reports `conflicting` and exits nonzero. |
 | `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all Docker roles when `--role` is omitted, inside the bundle factory and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
 | `stage-artifacts [--env FILE] [--role ROLE]` | Verifies exported bundle archives, copies the archive pair into the target container with a Docker simulation-only `docker cp` waiver, extracts to `/var/lib/loopforge/staging/gerrit`, `/var/lib/loopforge/staging/jenkins`, or `/var/lib/loopforge/staging/jenkins-agent`, and checks manifests/checksums before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
 | `configure-role [--env FILE] [--role ROLE]` | Runs one role-local configuration phase, or all Docker roles when `--role` is omitted, against the target container, establishes the applicable Gerrit or Jenkins process, and records evidence. Success prints `configure-role[role]: ok`; failures include `log=` and `evidence=`. |
@@ -73,10 +73,10 @@ Phase and lifecycle commands:
 | `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
 | `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
 | `audit-state [--env FILE]` | Performs the explicit Docker container and bind-mount sweep for the selected run. It is read-only and does not rerun other phases. |
-| `stop [--env FILE]` | Gracefully stops configured Gerrit and Jenkins runtimes, then stops the exact containers without removing them. It retains writable layers, bind-mounted runtime data, generated state, logs, artifacts, and evidence. |
+| `stop [--env FILE]` | Gracefully stops configured Gerrit and Jenkins runtimes, then stops the exact containers without removing them. An ownership-valid stopped set returns `state=already-stopped` with its durable classification and reset gate. |
 | `restore-baseline [--env FILE]` | Requires stopped owned containers, verifies the baseline manifest, recreates containers from the pinned images and Compose definition, restores the clean checksummed bind baseline and target SSH identity, and leaves the environment stopped. |
-| `clean [--env FILE]` | Requires the simulation set to be stopped and successfully restored, clears the set's active-run pointer, and deletes mutable run state. It preserves the immutable run's review output, Docker baseline, and reusable resources. |
-| `destroy [--env FILE]` | Removes selected LoopForge-labeled containers, the selected harness network, and images built for the selected Docker simulation project. It does not remove generated state, base images, artifacts, evidence, or logs. |
+| `clean [--env FILE]` | Requires the simulation set to be stopped and successfully restored, deletes mutable workflow/run state, and removes the set's active-run pointer last. It preserves the immutable run marker, checkpoint records, review output, Docker baseline, and reusable resources. |
+| `destroy [--env FILE]` | Removes ownership-validated selected containers, network, project-built images, baseline, set metadata, and active pointer. A fully absent unclaimed set returns `state=already-absent`; contradictory ownership or resource state blocks. |
 
 `ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
@@ -103,16 +103,19 @@ mode `0600`. `init-run` also writes a run marker under
 load the private runtime config and verify that marker before operating.
 
 `HARNESS_SET_ID` is the stable reusable simulation-set identity and defaults
-to `default` when omitted.
+to `default` when omitted. It must contain 1-24 lowercase ASCII letters,
+digits, or internal hyphens and start and end with a letter or digit; the
+harness rejects rather than normalizes other values.
 `HARNESS_RUN_ID` identifies one immutable attempt; `init-run` generates it when
 omitted, while an explicit value must not already exist. The simulation set
 stores one non-secret `active-run.env` pointer. `stop` and `start` preserve it.
-Only `stop`, `restore-baseline`, and `clean` clear it before another generated
+Only successful `clean` or set destruction removes it before another generated
 run ID can claim the same set.
 
-The Docker harness derives its Compose project name from `HARNESS_SET_ID`.
-That name is backend resource metadata, remains stable across runs of the set,
-and must not include `HARNESS_RUN_ID` or act as another operator identity.
+The Docker harness derives the Compose project name exactly as
+`loopforge-docker-<set-id>`. That injective name is backend resource metadata,
+remains stable across runs of the set, and must not include `HARNESS_RUN_ID` or
+act as another operator identity.
 
 `harness.env` is the rendered harness record for inspection. The private
 `harness.runtime.env` retains lifecycle values and points at the runtime input
@@ -124,6 +127,7 @@ Reusable resources and run output use these repo-local roots:
 
 ```text
 generated/simulation/docker/sets/<set-id>/
+generated/simulation/docker/locks/<set-id>.lock
 generated/simulation/docker/<run-id>/
 ```
 
@@ -145,12 +149,12 @@ Jenkins agent containers at `JENKINS_SHARED_STORAGE_PATH`, normally
 `jenkins-share` group, setgid group-writable permissions, and read/write proof
 inside those containers.
 
-Use `simulate.sh status --env FILE` after `start` to inspect the selected
-running simulation. The status command prints the run ID, set ID, derived
-Compose project name, live browser URLs, and seeded Docker simulation login
-accounts. It is read-only
-and fails when the selected run's containers are not running, so it does not
-rely on stale port data from rendered config files.
+Use `simulate.sh status --env FILE` to inspect the selected set in absent,
+unclaimed, stopped, or running state. The status command prints the set ID,
+active run when present, derived Compose project name, durable classification,
+and reset gate. It prints live browser URLs and seeded login accounts only
+when the running state can prove them; it does not substitute stale rendered
+port data.
 
 Use `simulate.sh ssh --role ROLE` after `start` to log into a target OS
 environment as the target-local `ci-operator` through SSH from the host. The
@@ -181,6 +185,8 @@ generated/simulation/docker/<run-id>/
 | Output kind | Docker generated pattern |
 | --- | --- |
 | Active-run pointer and baseline | `generated/simulation/docker/sets/<set-id>/` |
+| Stable set lock | `generated/simulation/docker/locks/<set-id>.lock` |
+| Workflow head and checkpoint records | `generated/simulation/docker/<run-id>/host/state/` |
 | Durable bind state | `generated/simulation/docker/sets/<set-id>/runtime/` |
 | Host-contributed inputs | `generated/simulation/docker/<run-id>/host/` |
 | Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
@@ -252,9 +258,10 @@ private integration keys, application configuration, or proof artifacts.
 `clean` follows the shared retained-output contract from
 `docs/contracts/directory-model.md`. It verifies the selected run marker and operates
 only under the canonical repo-local generated run root. It leaves retained
-review output under that immutable root and removes runtime inputs,
-checkpoint state, target SSH client material, the run marker, and the set
-active-run pointer. Durable product homes, LDAP data, shared storage, stopped
+review output, the immutable run marker, and checkpoint completion records
+under that immutable root and removes runtime inputs, the mutable workflow
+head, target SSH client material, and the set active-run pointer last. Durable
+product homes, LDAP data, shared storage, stopped
 container layers, and baseline state belong to `restore-baseline`, not
 `clean`. If the host user cannot remove
 container-owned generated files, `clean` may use a one-shot cleanup container
@@ -284,6 +291,8 @@ requires these Docker-specific generated paths and bind sources:
 - The selected set root exists under
   `generated/simulation/docker/sets/<set-id>/` and its active-run
   pointer matches the run marker.
+- The strict run-scoped `workflow-state.env` and its hash-linked checkpoint
+  records match the pointer, marker, baseline, and reviewed input fingerprints.
 - Helper env files under `host/runtime-inputs/helper-envs/` exist for phases
   that need them.
 - Expected generated bind source directories exist before container lifecycle
@@ -302,9 +311,13 @@ ownership-checked `destroy` according to the failed state boundary.
 | Situation | Expected behavior |
 | --- | --- |
 | No selected resources and no baseline | `init-run` creates or accepts a unique run ID; `create` establishes the reusable stopped environment and clean baseline. |
+| Exact stopped existing baseline | `create` verifies set-scoped metadata and returns non-mutating `state=existing`. |
+| Running selected resources | `create` blocks and requires `stop`. |
 | Stopped selected containers and matching generated/baseline state | `start` may continue after validating container, bind, active-run, and checkpoint state. |
-| Running selected containers and exact completed state | `stop` gracefully stops services and retains all durable state. |
-| Stopped exact completed state | `start` starts the already-configured services without setup mutation. |
+| Exact selected containers already running | `start` returns non-mutating `state=already-running`. |
+| Ownership-valid selected containers already stopped | `stop` returns non-mutating `state=already-stopped` without claiming workflow health. |
+| Running selected containers and exact-bound state | `stop` gracefully stops services and retains all durable state. |
+| Stopped exact-bound state | `start` starts the already-configured services without setup mutation. |
 | Stopped selected containers with a valid baseline | `restore-baseline` may recreate only those containers and restore only selected bind data. |
 | The selected simulation set has an active run | `init-run` fails; use `stop`, `restore-baseline`, and `clean` before generating another run ID. |
 | Partial or inconsistent state | Normal phases and `start` fail clearly; recovery commands operate only when their ownership prerequisites can be proved. |
@@ -349,8 +362,9 @@ run. Normal lifecycle phases keep the cheap runtime-config check only.
 
 Docker `destroy` removes only selected LoopForge-labeled Docker resources for
 the selected simulation set: containers, the harness network, and
-project-built images. It can recover the derived Compose project name from the
-set identity when rendered runtime state has already been removed. It leaves
+project-built images. It may recover the derived Compose project name from
+ownership-valid set metadata when rendered runtime state has been removed; set
+identity alone never authorizes deletion. It leaves
 upstream/base images such as `HARNESS_UBUNTU_IMAGE` and `HARNESS_LDAP_IMAGE`
 intact, removes the selected baseline state, and leaves retained run output for
 review.
