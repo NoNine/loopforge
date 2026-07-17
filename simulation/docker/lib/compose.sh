@@ -72,19 +72,19 @@ require_mount_source_under_run_root() {
   docker_container_name_exists "$container" || return 0
   source="$(container_mount_source_for_destination "$container" "$destination" || true)"
   [ -n "$source" ] ||
-    die "Inconsistent Docker container state: $container is missing mount destination $destination; run down or clean before resuming"
+    die "Inconsistent Docker container state: $container is missing mount destination $destination; use stop and explicit recovery before resuming"
   [ -e "$source" ] ||
-    die "Stale Docker bind mount for $container:$destination: host source is missing ($source); run down or clean before resuming"
+    die "Stale Docker bind mount for $container:$destination: host source is missing ($source); use stop and explicit recovery before resuming"
   [ -e "$expected" ] ||
     die "Inconsistent Docker generated state: expected bind source is missing: $expected"
   source_real="$(realpath "$source")"
   expected_real="$(realpath "$expected")"
   [ "$source_real" = "$expected_real" ] ||
-    die "Stale Docker bind mount for $container:$destination: source $source is not selected run path $expected; run down or clean before resuming"
+    die "Stale Docker bind mount for $container:$destination: source $source is not selected run path $expected; use stop and explicit recovery before resuming"
   case "$source_real" in
     "$HARNESS_GENERATED_RUN_DIR"|"$HARNESS_GENERATED_RUN_DIR"/*) ;;
     *)
-      die "Stale Docker bind mount for $container:$destination: source is outside selected run root; run down or clean before resuming"
+      die "Stale Docker bind mount for $container:$destination: source is outside selected run root; use stop and explicit recovery before resuming"
       ;;
   esac
 }
@@ -98,15 +98,15 @@ require_mount_source_matches() {
   docker_container_name_exists "$container" || return 0
   source="$(container_mount_source_for_destination "$container" "$destination" || true)"
   [ -n "$source" ] ||
-    die "Inconsistent Docker container state: $container is missing mount destination $destination; run down or clean before resuming"
+    die "Inconsistent Docker container state: $container is missing mount destination $destination; use stop and explicit recovery before resuming"
   [ -e "$source" ] ||
-    die "Stale Docker bind mount for $container:$destination: host source is missing ($source); run down or clean before resuming"
+    die "Stale Docker bind mount for $container:$destination: host source is missing ($source); use stop and explicit recovery before resuming"
   [ -e "$expected" ] ||
     die "Inconsistent Docker generated state: expected bind source is missing: $expected"
   source_real="$(realpath "$source")"
   expected_real="$(realpath "$expected")"
   [ "$source_real" = "$expected_real" ] ||
-    die "Stale Docker bind mount for $container:$destination: source $source is not expected path $expected; run down or clean before resuming"
+    die "Stale Docker bind mount for $container:$destination: source $source is not expected path $expected; use stop and explicit recovery before resuming"
 }
 
 mount_identity() {
@@ -126,10 +126,10 @@ require_mount_identity_visible() {
   host_identity="$(mount_identity "$host_dir")"
   container_identity="$(compose exec -T "$service" stat -Lc '%d:%i' "$destination" 2>/dev/null || true)"
   if [ -z "$container_identity" ]; then
-    die "Stale Docker bind mount for $container:$destination: destination is not visible in the container; run down or clean before resuming"
+    die "Stale Docker bind mount for $container:$destination: destination is not visible in the container; use stop and explicit recovery before resuming"
   fi
   [ "$container_identity" = "$host_identity" ] ||
-    die "Stale Docker bind mount for $container:$destination: host and container mount identity differ; run down or clean before resuming"
+    die "Stale Docker bind mount for $container:$destination: host and container mount identity differ; use stop and explicit recovery before resuming"
 }
 
 validate_container_mount() {
@@ -172,9 +172,9 @@ require_running_service() {
   local service container_id running
   service="${1:?service required}"
   container_id="$(container_id_for_service "$service")"
-  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run start first"
   running="$(docker inspect -f '{{.State.Running}}' "$container_id" 2>/dev/null || true)"
-  [ "$running" = "true" ] || die "Harness service '$service' is not running; run up first"
+  [ "$running" = "true" ] || die "Harness service '$service' is not running; run start first"
 }
 
 running_loopback_port_for_service_port() {
@@ -182,7 +182,7 @@ running_loopback_port_for_service_port() {
   service="${1:?service required}"
   container_port="${2:?container port required}"
   container_id="$(container_id_for_service "$service")"
-  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run start first"
   port="$(docker inspect -f "{{with index .NetworkSettings.Ports \"$container_port\"}}{{range .}}{{if eq .HostIp \"127.0.0.1\"}}{{.HostPort}}{{\"\\n\"}}{{end}}{{end}}{{end}}" "$container_id" 2>/dev/null | sed -n '1p')"
   [ -n "$port" ] || die "Harness service '$service' has no published loopback port for $container_port"
   printf '%s\n' "$port"

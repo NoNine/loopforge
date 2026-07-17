@@ -16,8 +16,8 @@ __vm_snapshots_write_record() {
   cat >"$tmp" <<EOF
 schema=1
 mode=$HARNESS_MODE
-vm_set_id=$LOOPFORGE_VM_SET_ID
-project_name=$HARNESS_PROJECT_NAME
+set_id=$HARNESS_SET_ID
+resource_namespace=$HARNESS_PROJECT_NAME
 machine=$machine
 domain=$(vm_libvirt_domain_name "$machine")
 domain_uuid=$(vm_libvirt_domain_uuid "$machine")
@@ -39,15 +39,15 @@ __vm_snapshots_verify_record() {
   machine="${1:?machine required}"
   record="$(vm_path_vm_snapshot_record "$machine")"
   [ -r "$record" ] || die "Missing VM baseline snapshot record: $record"
-  for key in schema mode vm_set_id project_name machine domain domain_uuid \
+  for key in schema mode set_id resource_namespace machine domain domain_uuid \
     storage_pool_name volume_name disk snapshot_name vm_set_marker_sha256 \
     baseline_prereqs_sha256 capture_run_id captured_at; do
     actual="$(marker_value "$record" "$key" 2>/dev/null || true)"
     case "$key" in
       schema) expected=1 ;;
       mode) expected="$HARNESS_MODE" ;;
-      vm_set_id) expected="$LOOPFORGE_VM_SET_ID" ;;
-      project_name) expected="$HARNESS_PROJECT_NAME" ;;
+      set_id) expected="$HARNESS_SET_ID" ;;
+      resource_namespace) expected="$HARNESS_PROJECT_NAME" ;;
       machine) expected="$machine" ;;
       domain) expected="$(vm_libvirt_domain_name "$machine")" ;;
       domain_uuid) expected="$(vm_libvirt_domain_uuid "$machine")" ;;
@@ -95,7 +95,7 @@ vm_snapshots_capture() {
     esac
     if ! virsh -c "$VM_LIBVIRT_URI" snapshot-create-as "$domain" \
       --name "$VM_BASELINE_SNAPSHOT_NAME" \
-      --description "Loopforge clean baseline for $LOOPFORGE_VM_SET_ID" \
+      --description "Loopforge clean baseline for $HARNESS_SET_ID" \
       --atomic >/dev/null; then
       for domain in $created; do
         virsh -c "$VM_LIBVIRT_URI" snapshot-delete "$domain" \

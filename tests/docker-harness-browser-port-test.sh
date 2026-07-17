@@ -6,13 +6,23 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 
 run_id="port-test-$$"
+set_id="port-test-$$"
 run_root="$repo_root/generated/simulation/docker"
-trap 'rm -rf "$tmp_dir" "$run_root/$run_id" "$run_root/$run_id-explicit" "$run_root/$run_id-invalid" "$run_root/$run_id-busy"' EXIT
+cleanup() {
+  [ -z "${busy_pid:-}" ] || kill "$busy_pid" 2>/dev/null || true
+  rm -rf "$tmp_dir" "$run_root/$run_id" "$run_root/$run_id-explicit" \
+    "$run_root/$run_id-invalid" "$run_root/$run_id-busy" \
+    "$run_root/sets/$set_id" "$run_root/sets/port-exp-$$" \
+    "$run_root/sets/port-invalid-$$" "$run_root/sets/port-busy-$$"
+  rm -f "$run_root/locks/$set_id.lock" "$run_root/locks/port-exp-$$.lock" \
+    "$run_root/locks/port-invalid-$$.lock" "$run_root/locks/port-busy-$$.lock"
+}
+trap cleanup EXIT
 host_dir="$run_root/$run_id/host"
 
 init_run() {
   HARNESS_RUN_ID="$run_id" \
-  HARNESS_PROJECT_NAME="port-test-$$" \
+  HARNESS_SET_ID="$set_id" \
     "$repo_root/simulation/docker/simulate.sh" init-run
 }
 
@@ -33,11 +43,15 @@ esac
   exit 1
 }
 
-grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run-1.out"
+grep -Fq "init-run: ok set-id=$set_id run-id=$run_id" "$tmp_dir/init-run-1.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/init-run-1.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/init-run-1.out"
 
-init_run >"$tmp_dir/init-run-2.out"
+if init_run >"$tmp_dir/init-run-2.out" 2>&1; then
+  printf 'Repeated init-run unexpectedly replaced the active run\n' >&2
+  exit 1
+fi
+grep -Fq 'already has active-run state' "$tmp_dir/init-run-2.out"
 grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$gerrit_port" "$env_file"
 grep -Fq "HARNESS_JENKINS_HTTP_HOST_PORT=$jenkins_port" "$env_file"
 
@@ -65,11 +79,11 @@ PY
 )"
 
 HARNESS_RUN_ID="$run_id-explicit" \
-HARNESS_PROJECT_NAME="port-test-explicit-$$" \
+HARNESS_SET_ID="port-exp-$$" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$explicit_gerrit_port" \
 HARNESS_JENKINS_HTTP_HOST_PORT="$explicit_jenkins_port" \
   "$repo_root/simulation/docker/simulate.sh" init-run >"$tmp_dir/explicit.out"
-grep -Fq "init-run: ok run-id=$run_id-explicit" "$tmp_dir/explicit.out"
+grep -Fq "run-id=$run_id-explicit" "$tmp_dir/explicit.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/explicit.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/explicit.out"
 grep -Fq "HARNESS_GERRIT_HTTP_HOST_PORT=$explicit_gerrit_port" "$run_root/$run_id-explicit/host/rendered/harness.env"
@@ -77,7 +91,7 @@ grep -Fq "HARNESS_JENKINS_HTTP_HOST_PORT=$explicit_jenkins_port" "$run_root/$run
 
 set +e
 HARNESS_RUN_ID="$run_id-invalid" \
-HARNESS_PROJECT_NAME="port-test-invalid-$$" \
+HARNESS_SET_ID="port-invalid-$$" \
 HARNESS_GERRIT_HTTP_HOST_PORT=not-a-port \
   "$repo_root/simulation/docker/simulate.sh" init-run >"$tmp_dir/invalid.out" 2>&1
 invalid_rc=$?
@@ -106,7 +120,6 @@ finally:
     sock.close()
 PY
 busy_pid=$!
-trap 'kill "$busy_pid" 2>/dev/null || true; rm -rf "$tmp_dir" "$run_root/$run_id" "$run_root/$run_id-explicit" "$run_root/$run_id-invalid" "$run_root/$run_id-busy"' EXIT
 
 for _ in 1 2 3 4 5; do
   [ -s "$busy_port_file" ] && break
@@ -120,7 +133,7 @@ busy_port="$(cat "$busy_port_file")"
 
 set +e
 HARNESS_RUN_ID="$run_id-busy" \
-HARNESS_PROJECT_NAME="port-test-busy-$$" \
+HARNESS_SET_ID="port-busy-$$" \
 HARNESS_GERRIT_HTTP_HOST_PORT="$busy_port" \
   "$repo_root/simulation/docker/simulate.sh" init-run >"$tmp_dir/busy.out" 2>&1
 busy_rc=$?

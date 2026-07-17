@@ -4,23 +4,48 @@ vm_state_write_run_marker() {
   write_runtime_marker \
     "$HARNESS_RUN_MARKER" \
     "$HARNESS_MODE" \
+    vm \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$repo_root" \
     "$HARNESS_GENERATED_RUN_DIR" \
-    "$HARNESS_RUNTIME_ENV"
+    "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 vm_state_verify_run_marker() {
   verify_runtime_marker \
     "$HARNESS_RUN_MARKER" \
     "$HARNESS_MODE" \
+    vm \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$repo_root" \
     "$HARNESS_GENERATED_RUN_DIR" \
     "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
     "VM harness run marker"
+}
+
+vm_state_write_initial_lifecycle_records() {
+  local inputs_fingerprint
+  inputs_fingerprint="$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" || return $?
+  write_initial_workflow_state \
+    "$HARNESS_WORKFLOW_STATE_FILE" vm "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
+    "$HARNESS_RUN_MARKER" none "$inputs_fingerprint" || return $?
+  write_active_run_record \
+    "$HARNESS_ACTIVE_RUN_FILE" vm "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" "$HARNESS_RUN_MARKER" none active none
+}
+
+vm_state_verify_active_run_binding() {
+  lifecycle_records_are_bound \
+    "$HARNESS_ACTIVE_RUN_FILE" "$HARNESS_RUN_MARKER" \
+    "$HARNESS_WORKFLOW_STATE_FILE" vm "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" "$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" ||
+    die "VM active-run, run marker, and workflow state do not agree"
 }
 
 vm_state_validate_core() {
@@ -35,6 +60,8 @@ vm_state_validate_core() {
   require_generated_state_file "$state_name" "VM inventory expectations" "$HARNESS_VM_INVENTORY_FILE"
   require_generated_state_file "$state_name" "artifact manifest contract" "$HARNESS_MANIFEST_CONTRACT"
   require_generated_state_file "$state_name" "run marker" "$HARNESS_RUN_MARKER"
+  require_generated_state_file "$state_name" "active-run pointer" "$HARNESS_ACTIVE_RUN_FILE"
+  require_generated_state_file "$state_name" "workflow state" "$HARNESS_WORKFLOW_STATE_FILE"
   require_generated_state_dir "$state_name" "runtime input directory" "$HARNESS_RUNTIME_INPUT_DIR"
   require_generated_state_file "$state_name" "runtime input harness env" "$HARNESS_RUNTIME_INPUT_DIR/harness.env"
   require_generated_state_file "$state_name" "runtime input Gerrit env" "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
@@ -51,14 +78,15 @@ vm_state_validate_core() {
     require_generated_state_dir "$state_name" "$role evidence directory" "$HARNESS_TARGET_DIR/evidence/$role"
     require_generated_state_dir "$state_name" "$role log directory" "$HARNESS_TARGET_DIR/logs/$role"
   done
+  vm_state_verify_active_run_binding
 }
 
 vm_state_read_summary() {
   local vm_set_marker_status
   vm_set_marker_status="absent"
   [ -f "$HARNESS_VM_SET_MARKER" ] && vm_set_marker_status="present"
-  printf 'run-id=%s vm-set=%s run-marker=present vm-set-marker=%s\n' \
-    "$HARNESS_RUN_ID" "$LOOPFORGE_VM_SET_ID" "$vm_set_marker_status"
+  printf 'run-id=%s set-id=%s run-marker=present vm-set-marker=%s\n' \
+    "$HARNESS_RUN_ID" "$HARNESS_SET_ID" "$vm_set_marker_status"
 }
 
 vm_state_audit_readonly() {
@@ -69,11 +97,10 @@ vm_state_audit_readonly() {
 vm_state_clean_mutable_run_state() {
   local path
   for path in \
-    "$HARNESS_RUN_MARKER" \
     "$HARNESS_RENDERED_DIR" \
     "$HARNESS_RUNTIME_INPUT_DIR" \
     "$HARNESS_TARGET_SSH_DIR" \
-    "$HARNESS_HOST_DIR/state"; do
+    "$HARNESS_WORKFLOW_STATE_FILE"; do
     [ -e "$path" ] || continue
     rm -rf -- "$path" || return 1
   done
@@ -85,13 +112,16 @@ vm_state_write_role_checkpoint() {
   checkpoint="${2:?checkpoint required}"
   boot_id="${3:?boot ID required}"
   marker="$(vm_path_role_checkpoint_marker "$role" "$checkpoint")"
-  write_checkpoint_marker \
-    "$marker" \
-    "$HARNESS_MODE" \
-    "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" \
-    "$HARNESS_RUNTIME_ENV"
-  printf 'boot_id=%s\n' "$boot_id" >>"$marker"
+  atomic_write_record "$marker" "$LF_MODE_PUBLIC_FILE" \
+    "schema_version=1" \
+    "mode=$HARNESS_MODE" \
+    "backend=vm" \
+    "set_id=$HARNESS_SET_ID" \
+    "run_id=$HARNESS_RUN_ID" \
+    "resource_namespace=$HARNESS_PROJECT_NAME" \
+    "runtime_env_fingerprint=$(runtime_env_fingerprint "$HARNESS_RUNTIME_ENV")" \
+    "reviewed_inputs_fingerprint=$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" \
+    "boot_id=$boot_id"
 }
 
 vm_state_verify_role_checkpoint() {
@@ -99,13 +129,15 @@ vm_state_verify_role_checkpoint() {
   role="${1:?role required}"
   checkpoint="${2:?checkpoint required}"
   marker="$(vm_path_role_checkpoint_marker "$role" "$checkpoint")"
-  verify_checkpoint_marker \
-    "$marker" \
-    "$HARNESS_MODE" \
-    "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" \
-    "$HARNESS_RUNTIME_ENV" \
-    "$role $checkpoint checkpoint"
+  strict_record_keys "$marker" schema_version mode backend set_id run_id \
+    resource_namespace runtime_env_fingerprint reviewed_inputs_fingerprint \
+    boot_id || die "$role $checkpoint checkpoint has malformed fields"
+  [ "$(strict_record_value "$marker" backend)" = vm ] || die "$role $checkpoint backend mismatch"
+  [ "$(strict_record_value "$marker" set_id)" = "$HARNESS_SET_ID" ] || die "$role $checkpoint set ID mismatch"
+  [ "$(strict_record_value "$marker" run_id)" = "$HARNESS_RUN_ID" ] || die "$role $checkpoint run ID mismatch"
+  [ "$(strict_record_value "$marker" resource_namespace)" = "$HARNESS_PROJECT_NAME" ] || die "$role $checkpoint namespace mismatch"
+  [ "$(strict_record_value "$marker" runtime_env_fingerprint)" = "$(runtime_env_fingerprint "$HARNESS_RUNTIME_ENV")" ] || die "$role $checkpoint runtime fingerprint mismatch"
+  [ "$(strict_record_value "$marker" reviewed_inputs_fingerprint)" = "$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" ] || die "$role $checkpoint input fingerprint mismatch"
 }
 
 vm_state_invalidate_role_validation() {
@@ -120,9 +152,12 @@ vm_state_write_integration_checkpoint() {
   write_checkpoint_marker \
     "$marker" \
     "$HARNESS_MODE" \
+    vm \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
-    "$HARNESS_RUNTIME_ENV"
+    "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 vm_state_verify_integration_checkpoint() {
@@ -132,9 +167,12 @@ vm_state_verify_integration_checkpoint() {
   verify_checkpoint_marker \
     "$marker" \
     "$HARNESS_MODE" \
+    vm \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
     "$checkpoint checkpoint"
 }
 

@@ -47,7 +47,7 @@ require_source_text simulation/lib/permissions.sh 'LF_MODE_PUBLIC_FILE=0644' \
 require_source_text simulation/lib/permissions.sh 'LF_MODE_REVIEW_FILE=0640' \
   'Shared permission library must define review-sensitive files as 0640'
 
-require_source_text simulation/lib/state.sh 'chmod "${LF_MODE_PUBLIC_FILE:-0644}" "$marker"' \
+require_source_text simulation/lib/state.sh 'atomic_write_record "$marker" "${LF_MODE_PUBLIC_FILE:-0644}"' \
   'Run and checkpoint markers must be non-secret public/read-only metadata'
 for config in simulation/docker/lib/config.sh simulation/vm/lib/config.sh; do
   require_source_text "$config" 'tmp="$(mktemp "${HARNESS_RUNTIME_ENV}.XXXXXX")"' \

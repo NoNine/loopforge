@@ -8,7 +8,11 @@ cleanup() {
   rc=$?
   rm -rf "$tmp_dir" \
     "$repo_root/generated/simulation/docker/relative-default-$$" \
-    "$repo_root/generated/simulation/docker/custom-relative"
+    "$repo_root/generated/simulation/docker/custom-relative" \
+    "$repo_root/generated/simulation/docker/sets/relative-default-$$" \
+    "$repo_root/generated/simulation/docker/sets/custom-relative"
+  rm -f "$repo_root/generated/simulation/docker/locks/relative-default-$$.lock" \
+    "$repo_root/generated/simulation/docker/locks/custom-relative.lock"
   exit "$rc"
 }
 trap cleanup EXIT
@@ -20,7 +24,7 @@ custom_host_dir="$repo_root/generated/simulation/docker/custom-relative/host"
 (
   cd /tmp
   HARNESS_RUN_ID="relative-default-$$" \
-  HARNESS_PROJECT_NAME="relative-default-$$" \
+  HARNESS_SET_ID="relative-default-$$" \
     "$script" init-run >"$tmp_dir/default-init-run.out"
 )
 
@@ -34,7 +38,7 @@ done
 cat >"$tmp_dir/custom-relative.env" <<'EOF'
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=custom-relative
-HARNESS_PROJECT_NAME=custom-relative
+HARNESS_SET_ID=custom-relative
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example

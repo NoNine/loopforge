@@ -37,7 +37,7 @@ copy_bundle_factory_artifacts_to_host() {
     return 1
   fi
   container_id="$(container_id_for_service "$service")"
-  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run start first"
   rm -f "$archive" "$checksum"
   mkdir -p "$HARNESS_EXPORTED_ARTIFACT_DIR"
   if ! docker cp "$container_id:$container_archive" "$archive" >>"$log" 2>&1; then
@@ -71,7 +71,7 @@ docker_cp_file_to_service() {
   log="${7:?log required}"
   require_readable_file "Docker cp source file" "$host_file"
   container_id="$(container_id_for_service "$service")"
-  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run start first"
   tmp_path="/tmp/loopforge-docker-cp-$$-$(basename "$container_path")"
   dest_dir="$(dirname "$container_path")"
   if ! docker cp "$host_file" "$container_id:$tmp_path" >>"$log" 2>&1; then
@@ -95,7 +95,7 @@ stage_operator_input_file() {
   log="${7:?log required}"
   require_readable_file "Docker cp operator input source file" "$host_file"
   container_id="$(container_id_for_service "$service")"
-  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run start first"
   tmp_path="/tmp/loopforge-input-cp-$$-$(basename "$container_path")"
   dest_dir="$(dirname "$container_path")"
   if ! docker cp "$host_file" "$container_id:$tmp_path" >>"$log" 2>&1; then
@@ -115,7 +115,7 @@ docker_cp_file_from_service() {
   host_file="${3:?host file required}"
   log="${4:?log required}"
   container_id="$(container_id_for_service "$service")"
-  [ -n "$container_id" ] || die "Harness service '$service' is not created; run up first"
+  [ -n "$container_id" ] || die "Harness service '$service' is not created; run start first"
   mkdir -p "$(dirname "$host_file")"
   if ! docker cp "$container_id:$container_path" "$host_file" >>"$log" 2>&1; then
     return 1

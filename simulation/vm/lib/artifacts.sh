@@ -371,7 +371,7 @@ vm_write_artifact_evidence() {
   "command": $q_checkpoint,
   "status": $q_status,
   "run_id": $(json_quote "$HARNESS_RUN_ID"),
-  "vm_set_id": $(json_quote "$LOOPFORGE_VM_SET_ID"),
+  "set_id": $(json_quote "$HARNESS_SET_ID"),
   "target_vm": $q_target,
   "artifact_manifest_references": $q_manifest,
   "checksum_references": $q_checksum,

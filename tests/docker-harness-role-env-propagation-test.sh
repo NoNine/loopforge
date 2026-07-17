@@ -15,7 +15,8 @@ cleanup() {
     printf '%s\n' "--- docker calls ---" >&2
     sed -n '1,200p' "$calls" >&2
   fi
-  rm -rf "$tmp_dir" "$run_dir"
+  rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id"
+  rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"
   exit "$rc"
 }
 trap cleanup EXIT
@@ -129,7 +130,7 @@ JENKINS_AGENT_LOG_DIR="/custom/logs/jenkins-agent"
 EOF
 cat >>"$tmp_dir/harness.env" <<EOF
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")

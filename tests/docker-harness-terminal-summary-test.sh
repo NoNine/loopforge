@@ -6,8 +6,9 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="summary-$$"
+set_id="summary-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
-trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
+trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$set_id"; rm -f "$repo_root/generated/simulation/docker/locks/$set_id.lock"' EXIT
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
@@ -34,7 +35,7 @@ chmod +x "$fake_bin/docker"
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$set_id
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
@@ -47,7 +48,7 @@ grep -Fq "preflight: ok mode=docker-simulation compose=" "$tmp_dir/preflight.out
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >"$tmp_dir/init-run.out"
-grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
+grep -Fq "init-run: ok set-id=$set_id run-id=$run_id" "$tmp_dir/init-run.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/init-run.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/init-run.out"
 
@@ -56,16 +57,16 @@ PATH="$fake_bin:$PATH" \
 grep -Fq "create: ok images=project-built" "$tmp_dir/create.out"
 
 PATH="$fake_bin:$PATH" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" up >"$tmp_dir/up.out"
-grep -Fq "up: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/up.out"
-! grep -Fq "gerrit_url=" "$tmp_dir/up.out"
-! grep -Fq "jenkins_url=" "$tmp_dir/up.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" start >"$tmp_dir/start.out"
+grep -Fq "start: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/start.out"
+! grep -Fq "gerrit_url=" "$tmp_dir/start.out"
+! grep -Fq "jenkins_url=" "$tmp_dir/start.out"
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" status >"$tmp_dir/status.out"
 grep -Fq "status: running" "$tmp_dir/status.out"
 grep -Fq "Run ID        $run_id" "$tmp_dir/status.out"
-grep -Fq "Project       $run_id" "$tmp_dir/status.out"
+grep -Fq "Project       loopforge-docker-$set_id" "$tmp_dir/status.out"
 grep -Fq "Gerrit URL    http://127.0.0.1:18081/" "$tmp_dir/status.out"
 grep -Fq "Jenkins URL   http://127.0.0.1:18082/login" "$tmp_dir/status.out"
 grep -Fq "Login accounts" "$tmp_dir/status.out"
@@ -79,5 +80,5 @@ fi
 tail -1 "$tmp_dir/status.out" | grep -Fq -- "------------------  --------------  --------------------  ----------------------------------------"
 
 PATH="$fake_bin:$PATH" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" down >"$tmp_dir/down.out"
-grep -Fq "down: stopped harness containers" "$tmp_dir/down.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stop >"$tmp_dir/stop.out"
+grep -Fq "stop: stopped harness containers" "$tmp_dir/stop.out"

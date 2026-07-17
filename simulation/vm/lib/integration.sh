@@ -4,6 +4,26 @@ vm_integration_helper() {
   printf '%s\n' "${HARNESS_TEST_INTEGRATION_HELPER:-$repo_root/scripts/integration-setup.sh}"
 }
 
+vm_integration_rendered_input_dir() {
+  printf '%s/rendered/integration-inputs\n' "$HARNESS_HOST_DIR"
+}
+
+vm_integration_select_rendered_inputs() {
+  local dir file
+  dir="$(vm_integration_rendered_input_dir)"
+  mkdir -p "$dir"
+  for file in gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
+    cp -- "$HARNESS_RUNTIME_INPUT_DIR/$file" "$dir/$file" || return $?
+    chmod "$LF_MODE_PRIVATE_FILE" "$dir/$file" || return $?
+  done
+  HARNESS_GERRIT_ENV_FILE="$dir/gerrit.env"
+  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$dir/jenkins-controller.env"
+  HARNESS_JENKINS_AGENT_ENV_FILE="$dir/jenkins-agent.env"
+  HARNESS_INTEGRATION_ENV_FILE="$dir/integration.env"
+  export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
+  export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
+}
+
 vm_integration_target_prefix() {
   case "${1:?role required}" in
     gerrit) printf 'INTEGRATION_GERRIT_TARGET\n' ;;
@@ -45,6 +65,7 @@ vm_integration_render_target_inventory() {
 }
 
 vm_integration_render_inputs() {
+  vm_integration_select_rendered_inputs || return $?
   vm_integration_render_role_envs || return $?
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
   set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_HOST_DIR/state/integration"
@@ -152,7 +173,7 @@ vm_write_integration_evidence() {
   "command": $(json_quote "$checkpoint"),
   "status": $(json_quote "$status"),
   "run_id": $(json_quote "$HARNESS_RUN_ID"),
-  "vm_set_id": $(json_quote "$LOOPFORGE_VM_SET_ID"),
+  "set_id": $(json_quote "$HARNESS_SET_ID"),
   "gerrit_target": $(json_quote "gerrit.$HARNESS_LDAP_DOMAIN"),
   "jenkins_controller_target": $(json_quote "jenkins-controller.$HARNESS_LDAP_DOMAIN"),
   "jenkins_agent_target": $(json_quote "jenkins-agent.$HARNESS_LDAP_DOMAIN"),

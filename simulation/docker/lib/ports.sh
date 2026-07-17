@@ -9,8 +9,9 @@ validate_tcp_port_value() {
       die "$name must be a numeric TCP port"
       ;;
   esac
-  [ "$value" -ge 1 ] && [ "$value" -le 65535 ] ||
+  if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
     die "$name must be between 1 and 65535"
+  fi
 }
 
 loopback_port_owned_by_harness() {
@@ -118,18 +119,24 @@ resolve_browser_port() {
 }
 
 resolve_browser_ports() {
-  local gerrit_requested jenkins_requested gerrit_ssh_requested jenkins_controller_ssh_requested jenkins_agent_ssh_requested
+  local gerrit_requested jenkins_requested gerrit_ssh_requested
+  local jenkins_controller_ssh_requested jenkins_agent_ssh_requested resolved
   gerrit_requested="${HARNESS_GERRIT_HTTP_HOST_PORT:-}"
   jenkins_requested="${HARNESS_JENKINS_HTTP_HOST_PORT:-}"
   gerrit_ssh_requested="${HARNESS_GERRIT_TARGET_SSH_HOST_PORT:-}"
   jenkins_controller_ssh_requested="${HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT:-}"
   jenkins_agent_ssh_requested="${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT:-}"
 
-  HARNESS_GERRIT_HTTP_HOST_PORT="$(resolve_browser_port HARNESS_GERRIT_HTTP_HOST_PORT "$gerrit_requested" "")"
-  HARNESS_JENKINS_HTTP_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_HTTP_HOST_PORT "$jenkins_requested" "$HARNESS_GERRIT_HTTP_HOST_PORT")"
-  HARNESS_GERRIT_TARGET_SSH_HOST_PORT="$(resolve_browser_port HARNESS_GERRIT_TARGET_SSH_HOST_PORT "$gerrit_ssh_requested" "$HARNESS_JENKINS_HTTP_HOST_PORT")"
-  HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT "$jenkins_controller_ssh_requested" "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT")"
-  HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT="$(resolve_browser_port HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT "$jenkins_agent_ssh_requested" "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT")"
+  resolved="$(resolve_browser_port HARNESS_GERRIT_HTTP_HOST_PORT "$gerrit_requested" "")" || return $?
+  HARNESS_GERRIT_HTTP_HOST_PORT="$resolved"
+  resolved="$(resolve_browser_port HARNESS_JENKINS_HTTP_HOST_PORT "$jenkins_requested" "$HARNESS_GERRIT_HTTP_HOST_PORT")" || return $?
+  HARNESS_JENKINS_HTTP_HOST_PORT="$resolved"
+  resolved="$(resolve_browser_port HARNESS_GERRIT_TARGET_SSH_HOST_PORT "$gerrit_ssh_requested" "$HARNESS_JENKINS_HTTP_HOST_PORT")" || return $?
+  HARNESS_GERRIT_TARGET_SSH_HOST_PORT="$resolved"
+  resolved="$(resolve_browser_port HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT "$jenkins_controller_ssh_requested" "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT")" || return $?
+  HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT="$resolved"
+  resolved="$(resolve_browser_port HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT "$jenkins_agent_ssh_requested" "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT")" || return $?
+  HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT="$resolved"
 
   [ "$HARNESS_GERRIT_HTTP_HOST_PORT" != "$HARNESS_JENKINS_HTTP_HOST_PORT" ] ||
     die "HARNESS_GERRIT_HTTP_HOST_PORT and HARNESS_JENKINS_HTTP_HOST_PORT must be different"

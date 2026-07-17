@@ -10,6 +10,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 . "$repo_root/simulation/lib/quote.sh"
 . "$repo_root/simulation/lib/roles.sh"
 . "$repo_root/simulation/lib/env.sh"
+. "$repo_root/simulation/lib/identity.sh"
 . "$repo_root/simulation/lib/state.sh"
 . "$repo_root/simulation/lib/permissions.sh"
 . "$repo_root/simulation/lib/logs.sh"
@@ -21,8 +22,8 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 HARNESS_MODE=vm-simulation
 HARNESS_RUN_ID=m8-test
-LOOPFORGE_VM_SET_ID=m8-set
-HARNESS_PROJECT_NAME=loopforge-vm-m8-test-m8-set
+HARNESS_SET_ID=m8-set
+HARNESS_PROJECT_NAME=loopforge-vm-m8-set
 HARNESS_GENERATED_RUN_DIR="$tmp_dir/run"
 HARNESS_HOST_DIR="$HARNESS_GENERATED_RUN_DIR/host"
 HARNESS_TARGET_DIR="$HARNESS_GENERATED_RUN_DIR/target"
@@ -37,6 +38,7 @@ HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
 HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
 HARNESS_JENKINS_AGENT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
 HARNESS_INTEGRATION_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+rendered_input_dir="$HARNESS_HOST_DIR/rendered/integration-inputs"
 HARNESS_TARGET_SSH_IDENTITY_FILE="$HARNESS_HOST_DIR/target-ssh/ci-operator"
 HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$HARNESS_HOST_DIR/target-ssh/known_hosts"
 HARNESS_LDAP_DOMAIN=example.test
@@ -51,6 +53,7 @@ mkdir -p "$HARNESS_RUNTIME_INPUT_DIR" "$HARNESS_EVIDENCE_DIR" \
   "$HARNESS_INTEGRATION_LOG_DIR" "$HARNESS_HOST_DIR/rendered" \
   "$HARNESS_HOST_DIR/target-ssh"
 printf 'runtime=m8\n' >"$HARNESS_RUNTIME_ENV"
+printf 'input=harness\n' >"$HARNESS_RUNTIME_INPUT_DIR/harness.env"
 printf 'identity\n' >"$HARNESS_TARGET_SSH_IDENTITY_FILE"
 printf 'known-hosts\n' >"$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
 chmod 0600 "$HARNESS_TARGET_SSH_IDENTITY_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
@@ -133,19 +136,20 @@ HARNESS_TEST_INTEGRATION_HELPER="$helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$calls" \
   vm_cmd_configure_integration >"$tmp_dir/configure.out"
 grep -Fxq 'configure-integration: ok' "$tmp_dir/configure.out"
-grep -Fq -- "--gerrit-env $HARNESS_GERRIT_ENV_FILE" "$calls"
-grep -Fq -- "--integration-env $HARNESS_INTEGRATION_ENV_FILE" "$calls"
+grep -Fq -- "--gerrit-env $rendered_input_dir/gerrit.env" "$calls"
+grep -Fq -- "--integration-env $rendered_input_dir/integration.env" "$calls"
 grep -Fq -- '--yes configure-integration' "$calls"
 [ -f "$(vm_path_integration_checkpoint_marker configure-integration)" ]
 
-grep -Fq 'GERRIT_HOST=gerrit.example.test' "$HARNESS_GERRIT_ENV_FILE"
-grep -Fq 'JENKINS_HOST=jenkins-controller.example.test' "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
-grep -Fq 'JENKINS_AGENT_HOST=jenkins-agent.example.test' "$HARNESS_JENKINS_AGENT_ENV_FILE"
-grep -Fq 'INTEGRATION_GERRIT_TARGET_SSH_HOST=192.0.2.10' "$HARNESS_INTEGRATION_ENV_FILE"
-grep -Fq "INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_IDENTITY_FILE=$HARNESS_TARGET_SSH_IDENTITY_FILE" "$HARNESS_INTEGRATION_ENV_FILE"
-grep -Fq 'INTEGRATION_GERRIT_ACL_MODE=apply-direct' "$HARNESS_INTEGRATION_ENV_FILE"
-grep -Fq 'INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY=1' "$HARNESS_INTEGRATION_ENV_FILE"
-grep -Fq 'JENKINS_SHARED_STORAGE_PATH=/data/jenkins-shared' "$HARNESS_INTEGRATION_ENV_FILE"
+grep -Fq 'GERRIT_HOST=gerrit.example.test' "$rendered_input_dir/gerrit.env"
+grep -Fq 'JENKINS_HOST=jenkins-controller.example.test' "$rendered_input_dir/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_HOST=jenkins-agent.example.test' "$rendered_input_dir/jenkins-agent.env"
+grep -Fq 'INTEGRATION_GERRIT_TARGET_SSH_HOST=192.0.2.10' "$rendered_input_dir/integration.env"
+grep -Fq "INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_IDENTITY_FILE=$HARNESS_TARGET_SSH_IDENTITY_FILE" "$rendered_input_dir/integration.env"
+grep -Fq 'INTEGRATION_GERRIT_ACL_MODE=apply-direct' "$rendered_input_dir/integration.env"
+grep -Fq 'INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY=1' "$rendered_input_dir/integration.env"
+grep -Fq 'JENKINS_SHARED_STORAGE_PATH=/data/jenkins-shared' "$rendered_input_dir/integration.env"
+grep -Fq 'GERRIT_HOST=stale-gerrit' "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
 
 HARNESS_TEST_INTEGRATION_HELPER="$helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$calls" \

@@ -305,8 +305,8 @@ __vm_set_write_marker() {
   tmp="$(mktemp "${HARNESS_VM_SET_MARKER}.XXXXXX")"
   cat >"$tmp" <<EOF
 mode=$HARNESS_MODE
-vm_set_id=$LOOPFORGE_VM_SET_ID
-project_name=$HARNESS_PROJECT_NAME
+set_id=$HARNESS_SET_ID
+resource_namespace=$HARNESS_PROJECT_NAME
 repo_root=$repo_root
 vm_set_dir=$HARNESS_VM_SET_DIR
 libvirt_uri=$VM_SET_MARKER_LIBVIRT_URI
@@ -343,8 +343,8 @@ __vm_set_expected_marker_value() {
   __vm_set_load_marker_values
   case "$key" in
     mode) printf '%s\n' "$HARNESS_MODE" ;;
-    vm_set_id) printf '%s\n' "$LOOPFORGE_VM_SET_ID" ;;
-    project_name) printf '%s\n' "$HARNESS_PROJECT_NAME" ;;
+    set_id) printf '%s\n' "$HARNESS_SET_ID" ;;
+    resource_namespace) printf '%s\n' "$HARNESS_PROJECT_NAME" ;;
     repo_root) printf '%s\n' "$repo_root" ;;
     vm_set_dir) printf '%s\n' "$HARNESS_VM_SET_DIR" ;;
     libvirt_uri) printf '%s\n' "$VM_SET_MARKER_LIBVIRT_URI" ;;
@@ -377,11 +377,11 @@ vm_set_verify_marker() {
   __vm_set_load_marker_values
   schema="$(marker_value "$HARNESS_VM_SET_MARKER" ownership_schema_version 2>/dev/null || true)"
   [ "$schema" = "$VM_SET_MARKER_SCHEMA_VERSION" ] ||
-    die "Incompatible legacy VM set $LOOPFORGE_VM_SET_ID. Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup."
+    die "Incompatible legacy VM set $HARNESS_SET_ID; explicit operator cleanup or migration is required"
   for key in \
     mode \
-    vm_set_id \
-    project_name \
+    set_id \
+    resource_namespace \
     repo_root \
     vm_set_dir \
     libvirt_uri \
@@ -399,25 +399,7 @@ vm_set_verify_marker() {
 }
 
 vm_set_verify_marker_for_teardown() {
-  local key
-  [ -f "$HARNESS_VM_SET_MARKER" ] ||
-    die "Missing VM-set marker: $HARNESS_VM_SET_MARKER"
-  __vm_set_load_marker_values
-  for key in \
-    mode \
-    vm_set_id \
-    project_name \
-    repo_root \
-    vm_set_dir \
-    libvirt_uri \
-    domain_prefix \
-    network_name \
-    storage_pool_name \
-    seed_pool_name \
-    baseline_snapshot_name
-  do
-    __vm_set_verify_marker_key "$key"
-  done
+  vm_set_verify_marker
 }
 
 __vm_set_schema() {
@@ -437,7 +419,7 @@ __vm_set_verify_base_identity() {
     esac
     actual="$(marker_value "$HARNESS_VM_SET_MARKER" "$key" 2>/dev/null || true)"
     [ "$actual" = "$expected" ] ||
-      die "Incompatible VM set $LOOPFORGE_VM_SET_ID base-image identity ($key). Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup."
+      die "Incompatible VM set $HARNESS_SET_ID base-image identity ($key); explicit operator cleanup is required"
   done
 }
 
@@ -446,7 +428,17 @@ vm_set_validate_ownership_readonly() {
   resources_status="$(vm_libvirt_selected_resource_status)"
   if [ -f "$HARNESS_VM_SET_MARKER" ]; then
     vm_set_verify_marker
-    printf 'vm-set=owned vm-resources=%s\n' "$resources_status"
+    printf 'set-id=owned vm-resources=%s\n' "$resources_status"
+    return 0
+  fi
+  if [ -f "$HARNESS_ACTIVE_RUN_FILE" ]; then
+    vm_state_verify_run_marker
+    vm_state_verify_active_run_binding
+    [ "$resources_status" = absent ] ||
+      die "Inconsistent VM-set state: resources exist before owned set metadata"
+    [ -z "$(find "$HARNESS_VM_SET_DIR" -mindepth 1 -maxdepth 1 ! -name active-run.env -print -quit)" ] ||
+      die "Inconsistent VM-set state: unowned content exists before VM-set creation"
+    printf 'set-id=claimed vm-resources=absent\n'
     return 0
   fi
   if [ -d "$HARNESS_VM_SET_DIR" ]; then
@@ -455,7 +447,7 @@ vm_set_validate_ownership_readonly() {
   if [ "$resources_status" = "present" ]; then
     die "Inconsistent VM-set state: selected libvirt resources exist without generated ownership metadata"
   fi
-  printf 'vm-set=absent vm-resources=%s\n' "$resources_status"
+  printf 'set-id=absent vm-resources=%s\n' "$resources_status"
 }
 
 vm_set_verify_run_and_set() {

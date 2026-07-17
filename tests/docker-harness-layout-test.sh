@@ -195,7 +195,7 @@ grep -Fq -- '.runtime-identity-pending' "$repo_root/simulation/docker/lib/config
   exit 1
 }
 grep -Fq -- 'initialize_or_validate_product_homes' "$repo_root/simulation/docker/lib/commands.sh" || {
-  printf 'Docker up must initialize fresh homes and validate ownership on later starts\n' >&2
+  printf 'Docker start must initialize fresh homes and validate ownership on later starts\n' >&2
   exit 1
 }
 grep -Fq -- 'run explicit cleanup and use a fresh run' "$repo_root/simulation/docker/lib/commands.sh" || {
@@ -377,7 +377,7 @@ grep -Fq -- 'role_helpers_root_for_operator ci-operator' "${docker_harness_sourc
   exit 1
 }
 grep -Fq -- 'stage_role_helpers_for_all_services "$log"' "${docker_harness_sources[@]}" || {
-  printf 'Docker up must stage the shared role-helper tree\n' >&2
+  printf 'Docker start must stage the shared role-helper tree\n' >&2
   exit 1
 }
 grep -Fq -- 'find $(shell_quote "$tmp") -type d -exec chmod $LF_MODE_PUBLIC_DIR' "${docker_harness_sources[@]}" || {

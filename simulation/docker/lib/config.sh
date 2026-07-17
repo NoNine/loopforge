@@ -31,11 +31,17 @@ validate_compose_name() {
 
 validate_harness_inputs() {
   validate_compose_name "HARNESS_RUN_ID" "$HARNESS_RUN_ID"
-  validate_compose_name "HARNESS_PROJECT_NAME" "$HARNESS_PROJECT_NAME"
+  validate_harness_set_id "$HARNESS_SET_ID"
+  [ "$HARNESS_PROJECT_NAME" = "$(simulation_resource_namespace docker "$HARNESS_SET_ID")" ] ||
+    die "Docker resource namespace does not match HARNESS_SET_ID"
+}
+
+docker_generated_root() {
+  printf '%s/generated/simulation/docker\n' "$repo_root"
 }
 
 canonical_generated_run_dir() {
-  printf '%s/generated/simulation/docker/%s\n' "$repo_root" "$HARNESS_RUN_ID"
+  printf '%s/%s\n' "$(docker_generated_root)" "$HARNESS_RUN_ID"
 }
 
 apply_canonical_output_paths() {
@@ -54,6 +60,11 @@ apply_canonical_output_paths() {
   HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
   HARNESS_BASELINE_CONTRACT="$HARNESS_HOST_DIR/rendered/artifact-manifest-contract.txt"
   HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env"
+  HARNESS_SET_DIR="$(docker_generated_root)/sets/$HARNESS_SET_ID"
+  HARNESS_SET_LOCK="$(simulation_set_lock_path "$(docker_generated_root)" "$HARNESS_SET_ID")"
+  HARNESS_ACTIVE_RUN_FILE="$HARNESS_SET_DIR/active-run.env"
+  HARNESS_WORKFLOW_STATE_FILE="$HARNESS_HOST_DIR/state/workflow-state.env"
+  HARNESS_CHECKPOINT_RECORD_DIR="$HARNESS_HOST_DIR/state/checkpoints"
   HARNESS_TARGET_SSH_DIR="$HARNESS_HOST_DIR/target-ssh"
   HARNESS_TARGET_SSH_IDENTITY_FILE="$HARNESS_TARGET_SSH_DIR/ci-operator"
   HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$HARNESS_TARGET_SSH_DIR/known_hosts"
@@ -75,6 +86,8 @@ apply_canonical_output_paths() {
   export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
   export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
+  export HARNESS_SET_DIR HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
+  export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
   export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
   export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
   export HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
@@ -211,11 +224,14 @@ write_run_marker() {
   write_runtime_marker \
     "$HARNESS_RUN_MARKER" \
     "$HARNESS_MODE" \
+    docker \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$repo_root" \
     "$HARNESS_GENERATED_RUN_DIR" \
-    "$HARNESS_RUNTIME_ENV"
+    "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 verify_run_marker() {
@@ -225,12 +241,34 @@ verify_run_marker() {
   verify_runtime_marker \
     "$marker" \
     "$HARNESS_MODE" \
+    docker \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$repo_root" \
     "$HARNESS_GENERATED_RUN_DIR" \
     "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
     "Docker harness run marker"
+}
+
+write_initial_lifecycle_records() {
+  local inputs_fingerprint
+  inputs_fingerprint="$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" || return $?
+  write_initial_workflow_state \
+    "$HARNESS_WORKFLOW_STATE_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
+    "$HARNESS_RUN_MARKER" none "$inputs_fingerprint" || return $?
+  write_active_run_record \
+    "$HARNESS_ACTIVE_RUN_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" "$HARNESS_RUN_MARKER" none active none
+}
+
+verify_active_run_binding() {
+  lifecycle_records_are_bound \
+    "$HARNESS_ACTIVE_RUN_FILE" "$HARNESS_RUN_MARKER" \
+    "$HARNESS_WORKFLOW_STATE_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
+    "$HARNESS_PROJECT_NAME" "$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" ||
+    die "Docker active-run, run marker, and workflow state do not agree"
 }
 
 validate_core_generated_state() {
@@ -240,6 +278,8 @@ validate_core_generated_state() {
   require_generated_state_file "$state_name" "rendered harness env" "$HARNESS_RENDERED_ENV"
   require_generated_state_file "$state_name" "runtime harness env" "$HARNESS_RUNTIME_ENV"
   require_generated_state_file "$state_name" "artifact manifest contract" "$HARNESS_BASELINE_CONTRACT"
+  require_generated_state_file "$state_name" "active-run pointer" "$HARNESS_ACTIVE_RUN_FILE"
+  require_generated_state_file "$state_name" "workflow state" "$HARNESS_WORKFLOW_STATE_FILE"
   require_generated_state_dir "$state_name" "runtime input directory" "$HARNESS_RUNTIME_INPUT_DIR"
   require_generated_state_file "$state_name" "runtime input harness env" "$HARNESS_RUNTIME_INPUT_DIR/harness.env"
   require_generated_state_file "$state_name" "runtime input Gerrit env" "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
@@ -269,10 +309,12 @@ validate_core_generated_state() {
   require_generated_state_dir "$state_name" "shared Jenkins storage bind source" "$HARNESS_SHARED_JENKINS_STORAGE_DIR"
   require_generated_state_dir "$state_name" "target SSH state" "$HARNESS_TARGET_SSH_DIR"
   require_generated_state_file "$state_name" "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  verify_active_run_binding
 }
 
 HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
 HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
+HARNESS_SET_ID_OPERATOR_SET="${HARNESS_SET_ID+x}"
 HARNESS_GENERATED_RUN_DIR_OPERATOR_SET="${HARNESS_GENERATED_RUN_DIR+x}"
 HARNESS_HOST_DIR_OPERATOR_SET="${HARNESS_HOST_DIR+x}"
 HARNESS_TARGET_DIR_OPERATOR_SET="${HARNESS_TARGET_DIR+x}"
@@ -304,7 +346,7 @@ HARNESS_JENKINS_CONTROLLER_ENV_FILE_OPERATOR_SET="${HARNESS_JENKINS_CONTROLLER_E
 HARNESS_JENKINS_AGENT_ENV_FILE_OPERATOR_SET="${HARNESS_JENKINS_AGENT_ENV_FILE+x}"
 HARNESS_INTEGRATION_ENV_FILE_OPERATOR_SET="${HARNESS_INTEGRATION_ENV_FILE+x}"
 HARNESS_RUN_ID_OPERATOR_VALUE="${HARNESS_RUN_ID-}"
-HARNESS_PROJECT_NAME_OPERATOR_VALUE="${HARNESS_PROJECT_NAME-}"
+HARNESS_SET_ID_OPERATOR_VALUE="${HARNESS_SET_ID-}"
 HARNESS_GENERATED_RUN_DIR_OPERATOR_VALUE="${HARNESS_GENERATED_RUN_DIR-}"
 HARNESS_HOST_DIR_OPERATOR_VALUE="${HARNESS_HOST_DIR-}"
 HARNESS_TARGET_DIR_OPERATOR_VALUE="${HARNESS_TARGET_DIR-}"
@@ -341,8 +383,9 @@ HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKIN
 HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT_OPERATOR_VALUE="${HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT-}"
 
 HARNESS_MODE="${HARNESS_MODE:-docker-simulation}"
-HARNESS_RUN_ID="${HARNESS_RUN_ID:-manual}"
-HARNESS_PROJECT_NAME="${HARNESS_PROJECT_NAME:-gerrit-jenkins-harness-${HARNESS_RUN_ID}}"
+HARNESS_RUN_ID="${HARNESS_RUN_ID:-}"
+HARNESS_SET_ID="${HARNESS_SET_ID:-default}"
+HARNESS_PROJECT_NAME="$(simulation_resource_namespace docker "$HARNESS_SET_ID")"
 HARNESS_UBUNTU_IMAGE="${HARNESS_UBUNTU_IMAGE:-ubuntu:24.04}"
 HARNESS_UBUNTU_BASELINE_VERSION="${HARNESS_UBUNTU_BASELINE_VERSION:-24.04.4}"
 HARNESS_UBUNTU_BASELINE_RELEASE="${HARNESS_UBUNTU_BASELINE_RELEASE:-24.04}"
@@ -396,7 +439,7 @@ HARNESS_JENKINS_CONTROLLER_LOG_DIR="${HARNESS_JENKINS_CONTROLLER_LOG_DIR:-$HARNE
 HARNESS_JENKINS_AGENT_EVIDENCE_DIR="${HARNESS_JENKINS_AGENT_EVIDENCE_DIR:-$HARNESS_TARGET_DIR/evidence/jenkins-agent}"
 HARNESS_JENKINS_AGENT_LOG_DIR="${HARNESS_JENKINS_AGENT_LOG_DIR:-$HARNESS_TARGET_DIR/logs/jenkins-agent}"
 
-export HARNESS_MODE HARNESS_RUN_ID HARNESS_PROJECT_NAME
+export HARNESS_MODE HARNESS_RUN_ID HARNESS_SET_ID HARNESS_PROJECT_NAME
 export HARNESS_UBUNTU_IMAGE HARNESS_LDAP_IMAGE
 export HARNESS_LDAP_DOMAIN HARNESS_LDAP_BASE_DN
 export HARNESS_LDAP_ADMIN_PASSWORD HARNESS_LDAP_CONFIG_PASSWORD
@@ -435,10 +478,15 @@ normalize_operator_env_paths() {
 }
 
 load_env_file() {
-  local file
+  local file selected_run
   file="${1:?env file required}"
+  selected_run="${HARNESS_BOOTSTRAP_RUN_ID:-}"
   require_readable_file "Harness env file" "$file"
-  [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ] || unset HARNESS_PROJECT_NAME
+  [ -z "$HARNESS_PROJECT_NAME_OPERATOR_SET" ] ||
+    die "HARNESS_PROJECT_NAME is derived from HARNESS_SET_ID and must not be set"
+  unset HARNESS_PROJECT_NAME
+  HARNESS_RUN_ID=""
+  HARNESS_SET_ID=default
   if [ -n "$HARNESS_GENERATED_RUN_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_HOST_DIR_OPERATOR_SET" ] ||
     [ -n "$HARNESS_TARGET_DIR_OPERATOR_SET" ] ||
@@ -483,13 +531,23 @@ load_env_file() {
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
   HARNESS_JENKINS_AGENT_ENV_FILE="$repo_root/examples/jenkins-agent.env.example"
   source_env_file "Harness env file" "$file"
+  [ -z "${HARNESS_PROJECT_NAME+x}" ] ||
+    die "HARNESS_PROJECT_NAME is derived from HARNESS_SET_ID and must not appear in the harness env"
   normalize_operator_env_paths
   if [ -n "$HARNESS_RUN_ID_OPERATOR_SET" ]; then
     HARNESS_RUN_ID="$HARNESS_RUN_ID_OPERATOR_VALUE"
+  elif [ -n "$selected_run" ]; then
+    HARNESS_RUN_ID="$selected_run"
   fi
-  if [ -n "$HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
-    HARNESS_PROJECT_NAME="$HARNESS_PROJECT_NAME_OPERATOR_VALUE"
+  if [ -n "$HARNESS_SET_ID_OPERATOR_SET" ]; then
+    HARNESS_SET_ID="$HARNESS_SET_ID_OPERATOR_VALUE"
   fi
+  HARNESS_SET_ID="${HARNESS_SET_ID:-default}"
+  validate_harness_set_id "$HARNESS_SET_ID"
+  HARNESS_RUN_ID="$(resolve_harness_run_id docker "$(docker_generated_root)" "$HARNESS_SET_ID" "${HARNESS_RUN_ID:-}")"
+  validate_compose_name HARNESS_RUN_ID "$HARNESS_RUN_ID"
+  HARNESS_BOOTSTRAP_RUN_ID="$HARNESS_RUN_ID"
+  HARNESS_PROJECT_NAME="$(simulation_resource_namespace docker "$HARNESS_SET_ID")"
   if [ -n "$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_SET" ]; then
     HARNESS_GERRIT_HTTP_HOST_PORT="$HARNESS_GERRIT_HTTP_HOST_PORT_OPERATOR_VALUE"
   fi
@@ -508,7 +566,8 @@ load_env_file() {
   HARNESS_ENV_FILE="$file"
   reject_custom_output_paths
   apply_canonical_output_paths
-  export HARNESS_ENV_FILE
+  export HARNESS_ENV_FILE HARNESS_RUN_ID HARNESS_SET_ID HARNESS_PROJECT_NAME
+  export HARNESS_BOOTSTRAP_RUN_ID
   export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
   export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
 }
@@ -536,6 +595,9 @@ load_rendered_config_if_present() {
   runtime="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
   [ -f "$runtime" ] || return 1
   source_env_file "Docker harness runtime config" "$runtime"
+  validate_harness_set_id "$HARNESS_SET_ID"
+  [ "$HARNESS_PROJECT_NAME" = "$(simulation_resource_namespace docker "$HARNESS_SET_ID")" ] ||
+    die "Docker runtime resource namespace does not match HARNESS_SET_ID"
   reapply_operator_overrides
   reject_custom_output_paths
   apply_canonical_output_paths
@@ -548,6 +610,8 @@ load_rendered_config_if_present() {
   export HARNESS_LDAP_DATA_DIR HARNESS_LDAP_CONFIG_DIR
   export HARNESS_SHARED_JENKINS_STORAGE_DIR
   export HARNESS_RETAINED_OUTPUT_BACKUP_DIR
+  export HARNESS_SET_ID HARNESS_SET_DIR HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
+  export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
 }
 
 ensure_runtime_config() {
@@ -562,7 +626,7 @@ ensure_runtime_config() {
     return 0
   fi
   if selected_containers_exist; then
-    die "Docker generated state is missing while selected containers exist; run down or clean before resuming"
+    die "Docker generated state is missing while selected containers exist; use stop and explicit recovery before resuming"
   fi
   die "Missing Docker harness runtime config: run init-run first"
 }
@@ -803,6 +867,7 @@ write_rendered_env() {
   cat >"$HARNESS_RENDERED_ENV" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_SET_ID=$(shell_quote "$HARNESS_SET_ID")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
 HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
 HARNESS_UBUNTU_IMAGE=$(shell_quote "$HARNESS_UBUNTU_IMAGE")
@@ -864,9 +929,10 @@ jenkins_controller_env=$(shell_quote "$HARNESS_JENKINS_CONTROLLER_ENV_FILE")
 jenkins_agent_env=$(shell_quote "$HARNESS_JENKINS_AGENT_ENV_FILE")
 integration_env=$(shell_quote "$HARNESS_INTEGRATION_ENV_FILE")
 EOF
-  write_runtime_env
-  write_manifest_contract
-  write_run_marker
+  write_runtime_env || return $?
+  write_manifest_contract || return $?
+  write_run_marker || return $?
+  write_initial_lifecycle_records
 }
 
 write_runtime_env() {
@@ -875,6 +941,7 @@ write_runtime_env() {
   cat >"$tmp" <<EOF
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
+HARNESS_SET_ID=$(shell_quote "$HARNESS_SET_ID")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
 HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
 HARNESS_UBUNTU_IMAGE=$(shell_quote "$HARNESS_UBUNTU_IMAGE")

@@ -14,7 +14,7 @@ __vm_libvirt_bake_domain_name() {
 
 __vm_libvirt_bake_machine_mac() {
   local digest
-  digest="$(printf '%s:%s:%s\n' "$HARNESS_PROJECT_NAME" "$LOOPFORGE_VM_SET_ID" base-image-bake |
+  digest="$(printf '%s:%s:%s\n' "$HARNESS_PROJECT_NAME" "$HARNESS_SET_ID" base-image-bake |
     sha256sum | awk '{print $1}')"
   printf '52:54:00:%s:%s:%s\n' \
     "${digest:0:2}" "${digest:2:2}" "${digest:4:2}"
@@ -25,10 +25,7 @@ vm_libvirt_network_name() {
 }
 
 vm_libvirt_bridge_name() {
-  local digest
-  digest="$(printf '%s:%s\n' "$HARNESS_PROJECT_NAME" "$LOOPFORGE_VM_SET_ID" |
-    sha256sum | awk '{print $1}')"
-  printf 'lf-%s\n' "${digest:0:8}"
+  simulation_short_resource_name vm "$HARNESS_SET_ID" bridge lf- 15
 }
 
 __vm_libvirt_network_gateway() {
@@ -66,7 +63,7 @@ vm_libvirt_seed_pool_name() {
 __vm_libvirt_machine_mac() {
   local machine digest
   machine="${1:?machine required}"
-  digest="$(printf '%s:%s:%s\n' "$HARNESS_PROJECT_NAME" "$LOOPFORGE_VM_SET_ID" "$machine" |
+  digest="$(printf '%s:%s:%s\n' "$HARNESS_PROJECT_NAME" "$HARNESS_SET_ID" "$machine" |
     sha256sum | awk '{print $1}')"
   printf '52:54:00:%s:%s:%s\n' \
     "${digest:0:2}" "${digest:2:2}" "${digest:4:2}"
@@ -176,7 +173,7 @@ vm_libvirt_shutdown_set() {
         printf 'shutdown-skip machine=%s domain=%s state=missing\n' "$machine" "$domain"
         ;;
       *)
-        die "VM domain $machine is in unexpected state for down: $state"
+        die "VM domain $machine is in unexpected state for stop: $state"
         ;;
     esac
   done
@@ -202,7 +199,7 @@ vm_libvirt_shutdown_set() {
           next_pending+=("$machine")
           ;;
         *)
-          die "VM domain $machine is in unexpected state for down: $state"
+          die "VM domain $machine is in unexpected state for stop: $state"
           ;;
       esac
     done
@@ -223,7 +220,7 @@ vm_libvirt_shutdown_set() {
       'shut off'|shut*|missing)
         ;;
       *)
-        die "VM domain $machine is in unexpected state for down: $state"
+        die "VM domain $machine is in unexpected state for stop: $state"
         ;;
     esac
   done
@@ -233,7 +230,7 @@ vm_libvirt_shutdown_set() {
     state="$(vm_libvirt_domain_state "$machine")"
     case "$state" in
       'shut off'|shut*|missing) stopped=$((stopped + 1)) ;;
-      *) die "Failed to stop VM domain during down: $domain state=$state" ;;
+      *) die "Failed to stop VM domain during stop: $domain state=$state" ;;
     esac
   done
   printf 'shutdown=ready stopped=%s forced=%s\n' "$stopped" "$forced"
@@ -248,15 +245,15 @@ vm_libvirt_require_set_shut_off() {
     state="$(vm_libvirt_domain_state "$machine")"
     case "$state" in
       'shut off'|shut*)
-        printf 'domain-down machine=%s domain=%s state=shut-off\n' "$machine" "$domain"
+        printf 'domain-stopped machine=%s domain=%s state=shut-off\n' "$machine" "$domain"
         ;;
       running)
-        printf 'vm-set-running operation=%s machine=%s domain=%s state=running recovery=run-down-first\n' \
+        printf 'vm-set-running operation=%s machine=%s domain=%s state=running recovery=run-stop-first\n' \
           "$operation" "$machine" "$domain" >&2
         rc=1
         ;;
       *)
-        printf 'vm-set-not-down operation=%s machine=%s domain=%s state=%s recovery=run-down-first\n' \
+        printf 'vm-set-not-down operation=%s machine=%s domain=%s state=%s recovery=run-stop-first\n' \
           "$operation" "$machine" "$domain" "$state" >&2
         rc=1
         ;;
@@ -293,7 +290,7 @@ vm_libvirt_status_table() {
   for machine in "${vm_machines[@]}"; do
     state="$(vm_libvirt_domain_state "$machine")"
     ip="$(vm_libvirt_machine_ip "$machine" 2>/dev/null || true)"
-    [ -n "$ip" ] || ip="pending-up"
+    [ -n "$ip" ] || ip="pending-start"
     printf '%s domain=%s state=%s ssh=%s\n' \
       "$machine" "$(vm_libvirt_domain_name "$machine")" "$state" "$ip"
   done

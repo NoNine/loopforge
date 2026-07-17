@@ -9,7 +9,7 @@ services:
         LOOPFORGE_RESOURCE: "docker-simulation"
         LOOPFORGE_SCHEMA_VERSION: "1"
         LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
-        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SET_ID: "${HARNESS_SET_ID}"
         LOOPFORGE_SERVICE: "bundle-factory"
     container_name: "${HARNESS_PROJECT_NAME}-bundle-factory"
     hostname: bundle-factory
@@ -19,7 +19,7 @@ services:
       org.loopforge.resource: "docker-simulation"
       org.loopforge.schema-version: "1"
       org.loopforge.project: "${HARNESS_PROJECT_NAME}"
-      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.set-id: "${HARNESS_SET_ID}"
       org.loopforge.service: "bundle-factory"
     environment:
       HARNESS_ENVIRONMENT: bundle-factory
@@ -42,7 +42,7 @@ services:
         LOOPFORGE_RESOURCE: "docker-simulation"
         LOOPFORGE_SCHEMA_VERSION: "1"
         LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
-        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SET_ID: "${HARNESS_SET_ID}"
         LOOPFORGE_SERVICE: "ldap"
     container_name: "${HARNESS_PROJECT_NAME}-ldap"
     hostname: ldap
@@ -50,7 +50,7 @@ services:
       org.loopforge.resource: "docker-simulation"
       org.loopforge.schema-version: "1"
       org.loopforge.project: "${HARNESS_PROJECT_NAME}"
-      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.set-id: "${HARNESS_SET_ID}"
       org.loopforge.service: "ldap"
     environment:
       LDAP_ORGANISATION: "Gerrit Jenkins Harness"
@@ -77,7 +77,7 @@ services:
         LOOPFORGE_RESOURCE: "docker-simulation"
         LOOPFORGE_SCHEMA_VERSION: "1"
         LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
-        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SET_ID: "${HARNESS_SET_ID}"
         LOOPFORGE_SERVICE: "gerrit-target"
     container_name: "${HARNESS_PROJECT_NAME}-gerrit-target"
     hostname: gerrit-target
@@ -87,7 +87,7 @@ services:
       org.loopforge.resource: "docker-simulation"
       org.loopforge.schema-version: "1"
       org.loopforge.project: "${HARNESS_PROJECT_NAME}"
-      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.set-id: "${HARNESS_SET_ID}"
       org.loopforge.service: "gerrit-target"
     environment:
       HARNESS_ENVIRONMENT: gerrit-target
@@ -116,7 +116,7 @@ services:
         LOOPFORGE_RESOURCE: "docker-simulation"
         LOOPFORGE_SCHEMA_VERSION: "1"
         LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
-        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SET_ID: "${HARNESS_SET_ID}"
         LOOPFORGE_SERVICE: "jenkins-controller-target"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-controller-target"
     hostname: jenkins-controller-target
@@ -126,7 +126,7 @@ services:
       org.loopforge.resource: "docker-simulation"
       org.loopforge.schema-version: "1"
       org.loopforge.project: "${HARNESS_PROJECT_NAME}"
-      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.set-id: "${HARNESS_SET_ID}"
       org.loopforge.service: "jenkins-controller-target"
     environment:
       HARNESS_ENVIRONMENT: jenkins-controller-target
@@ -156,7 +156,7 @@ services:
         LOOPFORGE_RESOURCE: "docker-simulation"
         LOOPFORGE_SCHEMA_VERSION: "1"
         LOOPFORGE_PROJECT: "${HARNESS_PROJECT_NAME}"
-        LOOPFORGE_RUN_ID: "${HARNESS_RUN_ID}"
+        LOOPFORGE_SET_ID: "${HARNESS_SET_ID}"
         LOOPFORGE_SERVICE: "jenkins-agent-target"
     container_name: "${HARNESS_PROJECT_NAME}-jenkins-agent-target"
     hostname: jenkins-agent-target
@@ -166,7 +166,7 @@ services:
       org.loopforge.resource: "docker-simulation"
       org.loopforge.schema-version: "1"
       org.loopforge.project: "${HARNESS_PROJECT_NAME}"
-      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.set-id: "${HARNESS_SET_ID}"
       org.loopforge.service: "jenkins-agent-target"
     environment:
       HARNESS_ENVIRONMENT: jenkins-agent-target
@@ -191,5 +191,5 @@ networks:
       org.loopforge.resource: "docker-simulation"
       org.loopforge.schema-version: "1"
       org.loopforge.project: "${HARNESS_PROJECT_NAME}"
-      org.loopforge.run-id: "${HARNESS_RUN_ID}"
+      org.loopforge.set-id: "${HARNESS_SET_ID}"
       org.loopforge.network: "harness"

@@ -7,6 +7,7 @@ tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
 run_id="state-lifecycle-$$"
+set_id="state-life-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 cleanup() {
   rc=$?
@@ -14,7 +15,8 @@ cleanup() {
     printf '%s\n' '--- docker calls ---' >&2
     sed -n '1,240p' "$calls" >&2
   fi
-  rm -rf "$tmp_dir" "$run_dir"
+  rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$set_id"
+  rm -f "$repo_root/generated/simulation/docker/locks/$set_id.lock"
   exit "$rc"
 }
 trap cleanup EXIT
@@ -155,7 +157,7 @@ chmod +x "$fake_bin/docker"
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$set_id
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
@@ -170,7 +172,7 @@ common_env=(
   RUN_DIR="$run_dir"
 )
 
-printf '%s-bundle-factory\n' "$run_id" >"$tmp_dir/containers"
+printf 'loopforge-docker-%s-bundle-factory\n' "$set_id" >"$tmp_dir/containers"
 set +e
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run \
@@ -187,29 +189,7 @@ rm -f "$tmp_dir/containers"
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
-rm -rf "$run_dir"
-printf '%s-bundle-factory\n' "$run_id" >"$tmp_dir/containers"
-set +e
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" prepare-artifacts --role gerrit \
-  >"$tmp_dir/prepare-stale.out" 2>&1
-rc=$?
-set -e
-[ "$rc" -ne 0 ] || {
-  printf 'prepare-artifacts should fail with stale selected containers\n' >&2
-  exit 1
-}
-grep -Fq 'Docker generated state is missing while selected containers exist' "$tmp_dir/prepare-stale.out"
-
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" down >"$tmp_dir/down-recovery.out"
-grep -Fq 'down: stopped harness containers' "$tmp_dir/down-recovery.out"
-grep -Fq "rm -f $run_id-bundle-factory" "$calls"
-
-rm -f "$tmp_dir/containers" "$calls"
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
-printf '%s-gerrit-target\n' "$run_id" >"$tmp_dir/containers"
+printf 'loopforge-docker-%s-gerrit-target\n' "$set_id" >"$tmp_dir/containers"
 set +e
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stage-artifacts --role gerrit \
@@ -220,62 +200,14 @@ set -e
   printf 'stage-artifacts should fail when target is not running\n' >&2
   exit 1
 }
-grep -Fq "Harness service 'gerrit-target' is not running; run up first" "$tmp_dir/stage-not-running.out"
+grep -Fq "Harness service 'gerrit-target' is not running; run start first" "$tmp_dir/stage-not-running.out"
 if grep -Fq 'compose up -d --build' "$calls"; then
-  printf 'stage-artifacts must not call compose up implicitly\n' >&2
+  printf 'stage-artifacts must not call Compose startup implicitly\n' >&2
   exit 1
 fi
 
-rm -rf "$run_dir"
-printf '%s-gerrit-target\n' "$run_id" >"$tmp_dir/containers"
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" clean >"$tmp_dir/clean-recovery.out"
-grep -Fq 'clean: removed containers cleanup=skipped reason=invalid-or-missing-runtime-config' "$tmp_dir/clean-recovery.out"
-
-rm -f "$tmp_dir/containers" "$calls"
-mkdir -p \
-  "$run_dir/target/helper-state/gerrit" \
-  "$run_dir/target/product-homes/gerrit" \
-  "$run_dir/target/artifacts/staging/gerrit" \
-  "$run_dir/target/artifacts/exported" \
-  "$run_dir/host/evidence/harness" \
-  "$run_dir/target/evidence/gerrit"
-printf 'state\n' >"$run_dir/target/helper-state/gerrit/file"
-printf 'product\n' >"$run_dir/target/product-homes/gerrit/file"
-printf 'stage\n' >"$run_dir/target/artifacts/staging/gerrit/file"
-printf 'artifact\n' >"$run_dir/target/artifacts/exported/file"
-printf 'evidence\n' >"$run_dir/host/evidence/harness/file"
-printf 'role-evidence\n' >"$run_dir/target/evidence/gerrit/file"
-printf '%s-gerrit-target\n' "$run_id" >"$tmp_dir/containers"
-env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" clean >"$tmp_dir/clean-recovery-existing-root.out"
-grep -Eq 'clean: removed containers runtime data backup=clean-[0-9]{8}T[0-9]{6}Z cleanup=container-recovery' "$tmp_dir/clean-recovery-existing-root.out"
-if grep -Eq '/.*/host/retained-output-backups/clean-[0-9]{8}T[0-9]{6}Z' "$tmp_dir/clean-recovery-existing-root.out"; then
-  printf 'recovery clean terminal summary must not print absolute backup path\n' >&2
-  exit 1
-fi
-grep -Fq "rm -f $run_id-gerrit-target" "$calls"
-[ ! -e "$run_dir/target/helper-state" ] || {
-  printf 'recovery clean should remove mutable helper state when run root exists\n' >&2
-  exit 1
-}
-[ ! -e "$run_dir/target/product-homes" ] || {
-  printf 'recovery clean should remove mutable product homes when run root exists\n' >&2
-  exit 1
-}
-[ ! -e "$run_dir/target/artifacts/staging" ] || {
-  printf 'recovery clean should remove mutable staging when run root exists\n' >&2
-  exit 1
-}
-backup_dir="$(find "$run_dir/host/retained-output-backups" -mindepth 1 -maxdepth 1 -type d -name 'clean-*' -print | sort | tail -1)"
-[ -n "$backup_dir" ] || {
-  printf 'recovery clean should create retained output backup\n' >&2
-  exit 1
-}
-grep -Fq 'artifact' "$backup_dir/target/artifacts/exported/file"
-grep -Fq 'evidence' "$backup_dir/host/evidence/harness/file"
-grep -Fq 'role-evidence' "$backup_dir/target/evidence/gerrit/file"
-[ ! -e "$run_dir/target/artifacts/exported/file" ] || {
-  printf 'recovery clean should clear active retained artifacts\n' >&2
-  exit 1
-}
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stop >"$tmp_dir/stop.out"
+grep -Fq 'stop: stopped harness containers' "$tmp_dir/stop.out"
+[ -f "$repo_root/generated/simulation/docker/sets/$set_id/active-run.env" ]
+[ -f "$run_dir/.loopforge-docker-run.env" ]

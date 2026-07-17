@@ -10,6 +10,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 . "$repo_root/simulation/lib/quote.sh"
 . "$repo_root/simulation/lib/roles.sh"
 . "$repo_root/simulation/lib/artifacts.sh"
+. "$repo_root/simulation/lib/identity.sh"
 . "$repo_root/simulation/lib/state.sh"
 . "$repo_root/simulation/lib/permissions.sh"
 . "$repo_root/simulation/lib/logs.sh"
@@ -21,11 +22,12 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 HARNESS_MODE=vm-simulation
 HARNESS_RUN_ID=m7-test
-LOOPFORGE_VM_SET_ID=m7-set
-HARNESS_PROJECT_NAME=loopforge-vm-m7-test-m7-set
+HARNESS_SET_ID=m7-set
+HARNESS_PROJECT_NAME=loopforge-vm-m7-set
 HARNESS_GENERATED_RUN_DIR="$tmp_dir/run"
 HARNESS_HOST_DIR="$HARNESS_GENERATED_RUN_DIR/host"
 HARNESS_TARGET_DIR="$HARNESS_GENERATED_RUN_DIR/target"
+HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
 HARNESS_EVIDENCE_DIR="$HARNESS_HOST_DIR/evidence/harness"
 HARNESS_LOG_DIR="$HARNESS_HOST_DIR/logs/harness"
 HARNESS_ROLE_STATE_DIR="$HARNESS_HOST_DIR/state/roles"
@@ -45,13 +47,16 @@ HARNESS_LDAP_BIND_PASSWORD='m7-test-secret'
 roles=(gerrit jenkins-controller jenkins-agent)
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 calls="$tmp_dir/calls.log"
-mkdir -p "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR" \
+mkdir -p "$HARNESS_RUNTIME_INPUT_DIR" "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR" \
   "$HARNESS_HOST_DIR/rendered" "$HARNESS_TARGET_DIR/evidence" \
   "$HARNESS_TARGET_DIR/logs"
 for role in "${roles[@]}"; do
   mkdir -p "$HARNESS_TARGET_DIR/evidence/$role" "$HARNESS_TARGET_DIR/logs/$role"
 done
 printf 'runtime=m7\n' >"$HARNESS_RUNTIME_ENV"
+for input in harness gerrit jenkins-controller jenkins-agent integration; do
+  printf 'input=%s\n' "$input" >"$HARNESS_RUNTIME_INPUT_DIR/$input.env"
+done
 
 vm_config_load_runtime() { :; }
 vm_set_verify_run_and_set() { :; }

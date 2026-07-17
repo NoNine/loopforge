@@ -70,7 +70,7 @@ vm_libvirt_require_existing_baked_base_image() {
     return 0
   fi
   printf 'ERROR: Existing VM disks require their selected VM-set baked base image. %s\n' \
-    "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+    "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
   return 1
 }
 
@@ -275,8 +275,8 @@ schema=$VM_BAKE_DEBUG_MARKER_SCHEMA_VERSION
 status=$status
 timestamp=$(iso_timestamp_utc)
 run_id=$HARNESS_RUN_ID
-vm_set_id=$LOOPFORGE_VM_SET_ID
-project_name=$HARNESS_PROJECT_NAME
+set_id=$HARNESS_SET_ID
+resource_namespace=$HARNESS_PROJECT_NAME
 domain=$domain
 work_dir=$(__vm_libvirt_bake_work_dir)
 bake_disk=$(__vm_libvirt_bake_disk_path)
@@ -302,7 +302,7 @@ __vm_libvirt_require_no_preserved_bake_debug() {
   [ -e "$marker" ] || return 0
   status="$(marker_value "$marker" status 2>/dev/null || printf 'unknown')"
   printf 'ERROR: Preserved VM base-image bake state exists: %s status=%s. Run ownership-checked destroy for VM set %s before creating fresh state.\n' \
-    "$marker" "$status" "$LOOPFORGE_VM_SET_ID" >&2
+    "$marker" "$status" "$HARNESS_SET_ID" >&2
   return 1
 }
 
@@ -497,7 +497,7 @@ vm_libvirt_ensure_baked_base_image() {
   if [ -e "$image" ] || [ -e "$marker" ]; then
     printf 'ERROR: Existing VM-set base image failed integrity validation: %s. %s\n' \
       "$(dirname "$image")" \
-      "Do not remove it while VM disks may depend on it; preserve affected sets for M5 down/destroy cleanup." >&2
+      "Do not remove it while VM disks may depend on it; preserve affected sets for M5 stop/destroy cleanup." >&2
     exec {lock_fd}>&-
     return 1
   fi

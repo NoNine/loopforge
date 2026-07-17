@@ -6,8 +6,11 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="bootstrap-$$"
+set_id="bootstrap-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
-trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
+set_dir="$repo_root/generated/simulation/docker/sets/$set_id"
+lock_file="$repo_root/generated/simulation/docker/locks/$set_id.lock"
+trap 'rm -rf "$tmp_dir" "$run_dir" "$set_dir"; rm -f "$lock_file"' EXIT
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
@@ -25,7 +28,7 @@ host_dir="$run_dir/host"
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$set_id
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
@@ -41,10 +44,13 @@ PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" init-run >"$tmp_dir/init-run.out"
 
-grep -Fq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
+grep -Fq "init-run: ok set-id=$set_id run-id=$run_id" "$tmp_dir/init-run.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/init-run.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/init-run.out"
 
 runtime_env="$host_dir/rendered/harness.runtime.env"
 grep -Fq "HARNESS_RUN_ID=$run_id" "$runtime_env"
-grep -Fq "HARNESS_PROJECT_NAME=$run_id" "$runtime_env"
+grep -Fq "HARNESS_SET_ID=$set_id" "$runtime_env"
+grep -Fq "HARNESS_PROJECT_NAME=loopforge-docker-$set_id" "$runtime_env"
+[ -f "$set_dir/active-run.env" ]
+[ -f "$host_dir/state/workflow-state.env" ]

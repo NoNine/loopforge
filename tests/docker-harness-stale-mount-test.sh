@@ -7,6 +7,7 @@ tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
 run_id="stale-mount-$$"
+set_id="stale-mount-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 cleanup() {
   rc=$?
@@ -20,7 +21,8 @@ cleanup() {
       sed -n '1,120p' "$tmp_dir/status.out" >&2
     }
   fi
-  rm -rf "$tmp_dir" "$run_dir"
+  rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$set_id"
+  rm -f "$repo_root/generated/simulation/docker/locks/$set_id.lock"
   exit "$rc"
 }
 trap cleanup EXIT
@@ -150,7 +152,7 @@ chmod +x "$fake_bin/docker"
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$set_id
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
@@ -168,7 +170,7 @@ STALE_SOURCE="$tmp_dir/unused" \
 mkdir -p "$tmp_dir/stale-source"
 chmod 0500 "$tmp_dir/stale-source"
 for service in bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target; do
-  printf '%s-%s\n' "$run_id" "$service"
+  printf 'loopforge-docker-%s-%s\n' "$set_id" "$service"
 done >"$tmp_dir/containers"
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
@@ -222,4 +224,4 @@ set -e
   exit 1
 }
 grep -Fq 'Stale Docker bind mount' "$tmp_dir/audit-state.out"
-grep -Fq 'run down or clean before resuming' "$tmp_dir/audit-state.out"
+grep -Fq 'use stop and explicit recovery before resuming' "$tmp_dir/audit-state.out"

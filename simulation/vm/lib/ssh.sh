@@ -177,8 +177,8 @@ vm_ssh_wait_unavailable() {
 vm_ssh_wait_system_ready() {
   local machine output
   machine="${1:?machine required}"
-  vm_ssh_wait_ready "$machine"
-  vm_ssh_wait_cloud_init "$machine"
+  vm_ssh_wait_ready "$machine" || return $?
+  vm_ssh_wait_cloud_init "$machine" || return $?
   output="$(vm_ssh_run_machine "$machine" 'set -eu; sudo -n systemctl is-system-running --wait')" || return $?
   [ "$output" = running ] ||
     die "Target OS did not reach running system state after reboot: $machine ($output)"
@@ -259,18 +259,18 @@ vm_ssh_update_machine_metadata() {
 vm_ssh_prepare_machine() {
   local machine
   machine="${1:?machine required}"
-  vm_libvirt_require_running "$machine"
-  vm_ssh_capture_known_host "$machine"
-  vm_ssh_wait_ready "$machine"
-  vm_ssh_wait_cloud_init "$machine"
-  vm_ssh_verify_known_host "$machine"
+  vm_libvirt_require_running "$machine" || return $?
+  vm_ssh_capture_known_host "$machine" || return $?
+  vm_ssh_wait_ready "$machine" || return $?
+  vm_ssh_wait_cloud_init "$machine" || return $?
+  vm_ssh_verify_known_host "$machine" || return $?
   vm_ssh_update_machine_metadata "$machine"
 }
 
 vm_ssh_prepare_all() {
   local machine
   for machine in "${vm_machines[@]}"; do
-    vm_ssh_prepare_machine "$machine"
+    vm_ssh_prepare_machine "$machine" || return $?
   done
 }
 
@@ -292,11 +292,11 @@ vm_ssh_status_readonly() {
   for role in "${roles[@]}"; do
     machine="$(vm_ssh_role_machine "$role")"
     file="$(vm_ssh_machine_metadata_path "$machine")"
-    host="pending-up"
-    status="pending-up"
+    host="pending-start"
+    status="pending-start"
     if [ -f "$file" ]; then
-      host="$(marker_value "$file" ssh_host 2>/dev/null || printf 'pending-up')"
-      if [ "$host" != "pending-up" ]; then
+      host="$(marker_value "$file" ssh_host 2>/dev/null || printf 'pending-start')"
+      if [ "$host" != "pending-start" ]; then
         status="not-ready"
         if [ -f "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" ] &&
           ssh-keygen -F "$host" -f "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" >/dev/null 2>&1; then

@@ -109,7 +109,7 @@ vm_write_role_evidence() {
   "command": $(json_quote "$checkpoint"),
   "status": $(json_quote "$status"),
   "run_id": $(json_quote "$HARNESS_RUN_ID"),
-  "vm_set_id": $(json_quote "$LOOPFORGE_VM_SET_ID"),
+  "set_id": $(json_quote "$HARNESS_SET_ID"),
   "target_vm": $(json_quote "$machine"),
   "reviewed_input": $(json_quote "$(vm_path_guest_role_env "$role")"),
   "artifact_manifest_references": $(json_quote "$manifest"),

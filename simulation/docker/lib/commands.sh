@@ -76,17 +76,25 @@ workflow_step() {
   "$@"
 }
 
+docker_command_with_lock() {
+  local mode
+  mode="${1:?lock mode required}"
+  shift
+  bootstrap_harness_env
+  simulation_with_set_lock "$mode" "$HARNESS_SET_LOCK" "$HARNESS_SET_ID" "$@"
+}
+
 workflow_downstream_steps() {
-  workflow_step create cmd_create
-  workflow_step up cmd_up
-  workflow_step status cmd_status
-  workflow_step prepare-artifacts cmd_prepare_artifacts ""
-  workflow_step stage-artifacts cmd_stage_artifacts ""
-  workflow_step configure-role cmd_configure_role ""
-  workflow_step validate-role cmd_validate_role ""
-  workflow_step configure-integration cmd_configure_integration
-  workflow_step validate-integration cmd_validate_integration
-  workflow_step prove-integration cmd_prove_integration
+  workflow_step create docker_command_with_lock exclusive cmd_create
+  workflow_step start docker_command_with_lock exclusive cmd_start
+  workflow_step status docker_command_with_lock shared cmd_status
+  workflow_step prepare-artifacts docker_command_with_lock exclusive cmd_prepare_artifacts ""
+  workflow_step stage-artifacts docker_command_with_lock exclusive cmd_stage_artifacts ""
+  workflow_step configure-role docker_command_with_lock exclusive cmd_configure_role ""
+  workflow_step validate-role docker_command_with_lock exclusive cmd_validate_role ""
+  workflow_step configure-integration docker_command_with_lock exclusive cmd_configure_integration
+  workflow_step validate-integration docker_command_with_lock exclusive cmd_validate_integration
+  workflow_step prove-integration docker_command_with_lock exclusive cmd_prove_integration
 }
 
 cmd_run() {
@@ -97,10 +105,10 @@ cmd_run() {
     return
   fi
   if selected_containers_exist; then
-    die "Docker generated state is missing or invalid while selected containers exist; run down or clean before running workflow"
+    die "Docker generated state is missing or invalid while selected containers exist; use explicit recovery before running workflow"
   fi
   printf 'run: mode=fresh run-id=%s\n' "$HARNESS_RUN_ID"
-  workflow_step preflight cmd_preflight
+  workflow_step preflight docker_command_with_lock shared cmd_preflight
   workflow_step init-run cmd_init_run
   workflow_downstream_steps
 }
@@ -108,7 +116,6 @@ cmd_run() {
 cmd_preflight() {
   bootstrap_harness_env
   validate_harness_inputs
-  ensure_preflight_dirs
   require_command docker
   require_command python3
   require_command sha256sum
@@ -123,19 +130,27 @@ cmd_preflight() {
   [ -f "$docker_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
   [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
   [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
-  write_evidence preflight harness pass "simulate.sh preflight" "not-applicable" "Compose provider: $compose_kind; generated output paths are ignored local state" >/dev/null
   print_command_summary preflight "" "ok mode=$HARNESS_MODE compose=$compose_kind"
 }
 
 cmd_init_run() {
   bootstrap_harness_env
+  simulation_with_set_lock exclusive "$HARNESS_SET_LOCK" "$HARNESS_SET_ID" \
+    cmd_init_run_locked || return $?
+}
+
+cmd_init_run_locked() {
   require_baseline_label
+  [ ! -e "$HARNESS_ACTIVE_RUN_FILE" ] ||
+    die "Selected Docker simulation set already has active-run state"
+  [ ! -e "$HARNESS_GENERATED_RUN_DIR" ] ||
+    die "HARNESS_RUN_ID already exists: $HARNESS_RUN_ID"
   if selected_containers_exist; then
-    die "Selected Docker simulation containers already exist; run down or clean before starting a fresh init-run workflow"
+    die "Selected Docker simulation containers already exist; stop and restore the selected set before init-run"
   fi
-  write_rendered_env
+  write_rendered_env || return $?
   write_evidence init-run harness pass "simulate.sh init-run" "not-applicable" "Rendered redacted harness configuration with Version Baseline values" >/dev/null
-  printf 'init-run: ok run-id=%s\n' "$HARNESS_RUN_ID"
+  printf 'init-run: ok set-id=%s run-id=%s\n' "$HARNESS_SET_ID" "$HARNESS_RUN_ID"
 }
 
 cmd_create() {
@@ -206,7 +221,7 @@ initialize_or_validate_product_homes() {
   fi
 }
 
-cmd_up() {
+cmd_start() {
   local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
@@ -222,7 +237,7 @@ cmd_up() {
   [ -f "$docker_dir/ldap/50-harness-seed.ldif" ] || die "Missing LDAP seed LDIF"
   [ -f "$docker_dir/target/Dockerfile" ] || die "Missing harness target Dockerfile"
   [ -f "$docker_dir/scripts/harness-sleep.sh" ] || die "Missing harness container entrypoint"
-  log="$(bounded_log_path up)"
+  log="$(bounded_log_path start)"
   if compose up -d >"$log" 2>&1; then
     rc=0
   else
@@ -230,18 +245,18 @@ cmd_up() {
     if compose_v1_recreate_bug_detected "$log"; then
       {
         printf 'compose_recovery_required=docker-compose-v1-containerconfig\n'
-        printf 'recovery_instruction=run-down-or-clean-before-up\n'
+        printf 'recovery_instruction=run-stop-then-restore-baseline\n'
       } >>"$log"
     fi
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Compose up failed")"
-    print_command_failure up "" failed "$log" "$evidence"
+    evidence="$(write_evidence start harness fail "simulate.sh start" "$log" "Compose startup failed")"
+    print_command_failure start "" failed "$log" "$evidence"
     return "$rc"
   fi
   if ! initialize_or_validate_product_homes "$log"; then
-    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Docker product home runtime identity initialization or validation failed")"
-    print_command_failure up "" failed "$log" "$evidence"
+    evidence="$(write_evidence start harness fail "simulate.sh start" "$log" "Docker product home runtime identity initialization or validation failed")"
+    print_command_failure start "" failed "$log" "$evidence"
     return 1
   fi
   check_ubuntu_service_baseline bundle-factory bundle-factory
@@ -249,23 +264,23 @@ cmd_up() {
   check_ubuntu_service_baseline jenkins-controller-target jenkins-controller
   check_ubuntu_service_baseline jenkins-agent-target jenkins-agent
   if ! stage_role_helpers_for_all_services "$log"; then
-    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Canonical role-helper staging failed")"
-    print_command_failure up "" failed "$log" "$evidence"
+    evidence="$(write_evidence start harness fail "simulate.sh start" "$log" "Canonical role-helper staging failed")"
+    print_command_failure start "" failed "$log" "$evidence"
     return 1
   fi
   if ! stage_target_ssh_authorized_keys "$log"; then
-    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start target SSH public-key staging failed")"
-    print_command_failure up "" failed "$log" "$evidence"
+    evidence="$(write_evidence start harness fail "simulate.sh start" "$log" "Post-start target SSH public-key staging failed")"
+    print_command_failure start "" failed "$log" "$evidence"
     return 1
   fi
   if ! refresh_target_ssh_known_hosts "$log"; then
-    evidence="$(write_evidence up harness fail "simulate.sh up" "$log" "Post-start target SSH known_hosts refresh failed")"
-    print_command_failure up "" failed "$log" "$evidence"
+    evidence="$(write_evidence start harness fail "simulate.sh start" "$log" "Post-start target SSH known_hosts refresh failed")"
+    print_command_failure start "" failed "$log" "$evidence"
     return 1
   fi
   require_running_service ldap
-  evidence="$(write_evidence up harness pass "simulate.sh up" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
-  print_command_summary up "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
+  evidence="$(write_evidence start harness pass "simulate.sh start" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
+  print_command_summary start "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
 }
 
 docker_destroy_container_targets() {
@@ -274,7 +289,7 @@ docker_destroy_container_targets() {
     docker ps -a -q \
       --filter "label=org.loopforge.resource=docker-simulation" \
       --filter "label=org.loopforge.project=$HARNESS_PROJECT_NAME" \
-      --filter "label=org.loopforge.run-id=$HARNESS_RUN_ID" \
+      --filter "label=org.loopforge.set-id=$HARNESS_SET_ID" \
       --filter "label=org.loopforge.service=$service" 2>/dev/null || true
   done | awk 'NF && !seen[$0]++'
 }
@@ -283,7 +298,7 @@ docker_destroy_network_targets() {
   (docker network ls -q \
     --filter "label=org.loopforge.resource=docker-simulation" \
     --filter "label=org.loopforge.project=$HARNESS_PROJECT_NAME" \
-    --filter "label=org.loopforge.run-id=$HARNESS_RUN_ID" \
+    --filter "label=org.loopforge.set-id=$HARNESS_SET_ID" \
     --filter "label=org.loopforge.network=harness" 2>/dev/null || true) |
     awk 'NF && !seen[$0]++'
 }
@@ -294,7 +309,7 @@ docker_destroy_image_targets() {
     docker images -q \
       --filter "label=org.loopforge.resource=docker-simulation" \
       --filter "label=org.loopforge.project=$HARNESS_PROJECT_NAME" \
-      --filter "label=org.loopforge.run-id=$HARNESS_RUN_ID" \
+      --filter "label=org.loopforge.set-id=$HARNESS_SET_ID" \
       --filter "label=org.loopforge.service=$service" 2>/dev/null || true
   done | awk 'NF && !seen[$0]++'
 }
@@ -885,9 +900,12 @@ write_integration_validate_marker() {
   write_checkpoint_marker \
     "$marker" \
     "$HARNESS_MODE" \
+    docker \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
-    "$HARNESS_RUNTIME_ENV"
+    "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 prove_integration_validate_marker() {
@@ -897,9 +915,12 @@ prove_integration_validate_marker() {
   verify_checkpoint_marker \
     "$marker" \
     "$HARNESS_MODE" \
+    docker \
+    "$HARNESS_SET_ID" \
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_RUNTIME_INPUT_DIR" \
     "Validate-integration marker"
 }
 
@@ -996,13 +1017,13 @@ cmd_audit_state() {
   print_command_summary audit-state "" "ok"
 }
 
-cmd_down() {
+cmd_stop() {
   local log rc evidence container
   bootstrap_harness_env
   require_command docker
   if runtime_config_valid; then
     detect_compose
-    log="$(bounded_log_path down)"
+    log="$(bounded_log_path stop)"
     if compose down >"$log" 2>&1; then
       rc=0
     else
@@ -1010,7 +1031,7 @@ cmd_down() {
     fi
   else
     ensure_preflight_dirs
-    log="$(bounded_log_path down)"
+    log="$(bounded_log_path stop)"
     rc=0
     while IFS= read -r container; do
       [ -n "$container" ] || continue
@@ -1026,12 +1047,16 @@ EOF
     printf 'recovery_mode=bootstrap-only reason=invalid-or-missing-runtime-config\n' >>"$log"
   fi
   if [ "$rc" -ne 0 ]; then
-    evidence="$(write_evidence down harness fail "simulate.sh down" "$log" "Compose down failed")"
-    print_command_failure down "" failed "$log" "$evidence"
+    evidence="$(write_evidence stop harness fail "simulate.sh stop" "$log" "Compose stop failed")"
+    print_command_failure stop "" failed "$log" "$evidence"
     return "$rc"
   fi
-  evidence="$(write_evidence down harness pass "simulate.sh down" "$log" "Stopped harness containers without deleting retained evidence")"
-  print_command_summary down "" "stopped harness containers"
+  evidence="$(write_evidence stop harness pass "simulate.sh stop" "$log" "Stopped harness containers without deleting retained evidence")"
+  print_command_summary stop "" "stopped harness containers"
+}
+
+cmd_restore_baseline() {
+  die "Docker restore-baseline is not implemented until Step 13a M3"
 }
 
 cleanup_mutable_paths_host() {

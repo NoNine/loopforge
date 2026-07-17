@@ -9,7 +9,7 @@ fake_bin="$tmp_dir/bin"
 run_id="clean-test-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 calls="$tmp_dir/docker-calls.log"
-trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
+trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id"; rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"' EXIT
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
@@ -66,7 +66,7 @@ chmod +x "$fake_bin/docker"
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$run_id
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example

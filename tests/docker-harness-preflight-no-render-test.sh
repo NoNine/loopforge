@@ -6,8 +6,10 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="preflight-no-render-$$"
+set_id="preflight-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
-trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
+lock_file="$repo_root/generated/simulation/docker/locks/$set_id.lock"
+trap 'rm -rf "$tmp_dir" "$run_dir"; rm -f "$lock_file"' EXIT
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
@@ -24,7 +26,7 @@ state_dir="$run_dir/target/helper-state"
 
 PATH="$fake_bin:$PATH" \
 HARNESS_RUN_ID="$run_id" \
-HARNESS_PROJECT_NAME="$run_id" \
+HARNESS_SET_ID="$set_id" \
   "$repo_root/simulation/docker/simulate.sh" preflight >"$tmp_dir/preflight.out"
 
 [ ! -e "$state_dir/rendered/harness.env" ] || {

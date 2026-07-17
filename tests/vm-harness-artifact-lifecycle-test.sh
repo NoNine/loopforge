@@ -20,7 +20,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 HARNESS_MODE=vm-simulation
 HARNESS_RUN_ID=vm-m6-test
-LOOPFORGE_VM_SET_ID=m6-test
+HARNESS_SET_ID=m6-test
 HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=simulation-only
 HARNESS_LDAP_DOMAIN=example.test
 HARNESS_LDAP_HOST=ldap.example.test

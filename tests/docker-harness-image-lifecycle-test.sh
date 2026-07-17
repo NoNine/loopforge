@@ -6,12 +6,13 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="image-lifecycle-$$"
+set_id="image-life-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 calls="$tmp_dir/docker-calls.log"
 containers="$tmp_dir/containers.tsv"
 networks="$tmp_dir/networks.tsv"
 images="$tmp_dir/images.tsv"
-trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
+trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$set_id"; rm -f "$repo_root/generated/simulation/docker/locks/$set_id.lock"' EXIT
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
@@ -22,7 +23,7 @@ require_selected_filters() {
   case "$*" in
     *"label=org.loopforge.resource=docker-simulation"*\
 *"label=org.loopforge.project=$HARNESS_PROJECT_NAME"*\
-*"label=org.loopforge.run-id=$HARNESS_RUN_ID"*)
+*"label=org.loopforge.set-id=$HARNESS_SET_ID"*)
       return 0
       ;;
   esac
@@ -135,7 +136,7 @@ EOF_IMAGES
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$set_id
 HARNESS_UBUNTU_IMAGE=ubuntu:24.04
 HARNESS_LDAP_IMAGE=osixia/openldap:1.5.0
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example

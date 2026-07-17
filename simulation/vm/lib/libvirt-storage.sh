@@ -178,7 +178,7 @@ vm_libvirt_require_existing_storage_pool() {
     "$(vm_libvirt_storage_pool_name)" \
     "$(vm_path_vm_set_disk_dir)" || {
     printf 'ERROR: Existing VM disks require their original libvirt storage pool. %s\n' \
-      "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   }
 }
@@ -332,7 +332,7 @@ base_image_fingerprint=$VM_BAKED_BASE_IMAGE_FINGERPRINT
 base_image_sha256=$baked_sha256
 seed_iso=$(__vm_libvirt_seed_iso_path "$machine")
 ssh_user=$VM_OPERATOR_USER
-ssh_host=pending-up
+ssh_host=pending-start
 ssh_port=22
 EOF
   chmod 0600 "$file"
@@ -350,12 +350,12 @@ vm_libvirt_verify_existing_disk_identity() {
   expected_sha="$(marker_value "$(vm_libvirt_baked_base_image_marker_path)" baked_sha256)"
   [ -r "$metadata" ] || {
     printf 'ERROR: Existing VM disk metadata is incompatible for %s: %s. %s\n' \
-      "$machine" "$metadata" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "$machine" "$metadata" "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   }
   vm_libvirt_volume_exists "$pool" "$volume" || {
     printf 'ERROR: Existing VM disk is not a libvirt-managed volume for %s. %s\n' \
-      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "$machine" "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   }
   for key in disk disk_size storage_pool_name volume_name disk_ownership \
@@ -373,13 +373,13 @@ vm_libvirt_verify_existing_disk_identity() {
     actual="$(marker_value "$metadata" "$key" 2>/dev/null || true)"
     [ "$actual" = "$expected" ] || {
       printf 'ERROR: Existing VM disk identity mismatch for %s (%s). %s\n' \
-        "$machine" "$key" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+        "$machine" "$key" "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
       return 1
     }
   done
   [ "$(vm_libvirt_volume_path "$pool" "$volume")" = "$disk" ] || {
     printf 'ERROR: Existing VM disk volume path mismatch for %s. %s\n' \
-      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "$machine" "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   }
   [ "$(vm_libvirt_volume_value "$pool" "$volume" format)" = qcow2 ] || return 1
@@ -387,14 +387,14 @@ vm_libvirt_verify_existing_disk_identity() {
   if [ "$actual_backing" != "$expected_image" ] ||
     [ "$(vm_libvirt_volume_value "$pool" "$volume" backing_format)" != qcow2 ]; then
     printf 'ERROR: Existing VM disk backing image mismatch for %s. %s\n' \
-      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "$machine" "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   fi
   recorded_virtual_size="$(marker_value "$metadata" disk_virtual_size_bytes 2>/dev/null || true)"
   actual_virtual_size="$(vm_libvirt_volume_value "$pool" "$volume" capacity_bytes)" || return $?
   if [ -z "$recorded_virtual_size" ] || [ "$actual_virtual_size" != "$recorded_virtual_size" ]; then
     printf 'ERROR: Existing VM disk virtual size mismatch for %s. %s\n' \
-      "$machine" "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "$machine" "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   fi
 }
@@ -435,7 +435,7 @@ __vm_libvirt_create_disk() {
   [ ! -e "$(vm_libvirt_disk_path "$machine")" ] || {
     printf 'ERROR: Existing VM disk is not registered in the selected libvirt storage pool: %s. %s\n' \
       "$(vm_libvirt_disk_path "$machine")" \
-      "Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID; retain this set for M5 down/destroy cleanup." >&2
+      "Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID; retain this set for M5 stop/destroy cleanup." >&2
     return 1
   }
   __vm_libvirt_render_machine_volume_xml "$machine" || return $?

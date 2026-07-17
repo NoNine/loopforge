@@ -12,9 +12,11 @@ generated_root="$repo_root/generated/simulation/vm"
 cleanup() {
   [ "${VM_TEST_KEEP_TMP:-0}" -eq 1 ] ||
     rm -rf "$tmp_dir" "$generated_root/$run_id" \
-      "$generated_root/vm-sets/$vm_set_id" \
+      "$generated_root/sets/$vm_set_id" \
       "$generated_root/$debug_run_id" \
-      "$generated_root/vm-sets/$debug_vm_set_id"
+      "$generated_root/sets/$debug_vm_set_id"
+  rm -f "$generated_root/locks/$vm_set_id.lock" \
+    "$generated_root/locks/$debug_vm_set_id.lock"
 }
 trap cleanup EXIT
 
@@ -28,7 +30,7 @@ printf 'stub cloud image for %s\n' "$run_id" >"$base_image"
 
 sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$run_id/" \
-  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$vm_set_id/" \
+  -e "s/^HARNESS_SET_ID=.*/HARNESS_SET_ID=$vm_set_id/" \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
@@ -76,7 +78,7 @@ case "${1:-}" in
   info)
     image="${@: -1}"
     case "$image" in
-      */vm-sets/*/libvirt/disks/*)
+      */sets/*/libvirt/disks/*)
         printf 'libvirt-managed volume inspected directly: %s\n' "$image" >&2
         exit 49
         ;;
@@ -295,13 +297,13 @@ grep -Fq 'cn=jenkins-admins' "$repo_root/simulation/vm/ldap/50-harness-seed.ldif
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" init-run >"$tmp_dir/init-run.out"
-grep -Fxq "init-run: ok run-id=$run_id" "$tmp_dir/init-run.out"
+grep -Fxq "init-run: ok set-id=$vm_set_id run-id=$run_id" "$tmp_dir/init-run.out"
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" create >"$tmp_dir/create.out"
-grep -Fxq "create: ok vm-set=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" "$tmp_dir/create.out"
+grep -Fxq "create: ok set-id=$vm_set_id baseline-prereqs=ready baseline-snapshot=ready" "$tmp_dir/create.out"
 
-marker="$generated_root/vm-sets/$vm_set_id/.loopforge-vm-baseline-prereqs.env"
+marker="$generated_root/sets/$vm_set_id/.loopforge-vm-baseline-prereqs.env"
 [ -f "$marker" ]
 grep -Fq 'status=ready' "$marker"
 grep -Fq 'schema=2' "$marker"
@@ -309,8 +311,8 @@ grep -Fq 'apt_mirror=http://mirrors.tuna.tsinghua.edu.cn/ubuntu/' "$marker"
 grep -Fq 'ldap_bind_dn=cn=readonly,dc=example,dc=test' "$marker"
 grep -Fq 'base_image_fingerprint=' "$marker"
 grep -Fq 'base_image_sha256=' "$marker"
-network_xml="$generated_root/vm-sets/$vm_set_id/libvirt/network.xml"
-grep -Eq "<bridge name='lf-[0-9a-f]{8}'" "$network_xml"
+network_xml="$generated_root/sets/$vm_set_id/libvirt/network.xml"
+grep -Eq "<bridge name='lf-[0-9a-f]{12}'" "$network_xml"
 ! grep -Fq "<bridge name='loopforge-vm-" "$network_xml"
 grep -Fq "<domain name='example.test' localOnly='yes'/>" "$network_xml"
 grep -Fq "<hostname>ldap.example.test</hostname>" "$network_xml"
@@ -318,8 +320,8 @@ grep -Fq "<hostname>gerrit.example.test</hostname>" "$network_xml"
 ! grep -Fq "<hostname>ldap</hostname>" "$network_xml"
 ! grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' name='ldap' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
 grep -Eq "<host mac='52:54:00:[0-9a-f:]{8}' ip='192\\.168\\.126\\.[0-9]+'" "$network_xml"
-ldap_network_config="$generated_root/vm-sets/$vm_set_id/libvirt/seeds/ldap/network-config"
-gerrit_network_config="$generated_root/vm-sets/$vm_set_id/libvirt/seeds/gerrit/network-config"
+ldap_network_config="$generated_root/sets/$vm_set_id/libvirt/seeds/ldap/network-config"
+gerrit_network_config="$generated_root/sets/$vm_set_id/libvirt/seeds/gerrit/network-config"
 grep -Fq 'nameservers:' "$ldap_network_config"
 grep -Fq '        - 192.168.126.1' "$ldap_network_config"
 grep -Fq '      search:' "$ldap_network_config"
@@ -329,13 +331,13 @@ grep -Fq '        - 192.168.126.1' "$gerrit_network_config"
 grep -Fq '      search:' "$gerrit_network_config"
 grep -Fq '        - example.test' "$gerrit_network_config"
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
-  grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-$machine.state"
+  grep -Fq 'shut off' "$stub_state/domains/loopforge-vm-$vm_set_id-$machine.state"
   grep -Fq 'disk_virtual_size_bytes=21474836480' \
-    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+    "$generated_root/sets/$vm_set_id/libvirt/machines/$machine.env"
   grep -Fq 'disk_ownership=libvirt-managed' \
-    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+    "$generated_root/sets/$vm_set_id/libvirt/machines/$machine.env"
   grep -Fq "volume_name=$machine.qcow2" \
-    "$generated_root/vm-sets/$vm_set_id/libvirt/machines/$machine.env"
+    "$generated_root/sets/$vm_set_id/libvirt/machines/$machine.env"
 done
 
 create_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
@@ -356,16 +358,16 @@ awk '
   /^os-baseline / && !os_baseline { os_baseline=NR }
   END { exit !(cloud_init && os_baseline && cloud_init < os_baseline) }
 ' "$stub_state/calls"
-[ ! -e "$generated_root/vm-sets/$vm_set_id/.loopforge-vm-bake-debug.env" ]
-if find "$generated_root/vm-sets/$vm_set_id/libvirt" -maxdepth 1 \
+[ ! -e "$generated_root/sets/$vm_set_id/.loopforge-vm-bake-debug.env" ]
+if find "$generated_root/sets/$vm_set_id/libvirt" -maxdepth 1 \
   -type d -name 'bake-work-*' -print -quit | grep -q .; then
   printf 'successful debug-enabled bake must remove its work directory\n' >&2
   exit 1
 fi
-[ ! -e "$stub_state/domains/loopforge-vm-$run_id-$vm_set_id-base-image-bake.state" ]
+[ ! -e "$stub_state/domains/loopforge-vm-$vm_set_id-base-image-bake.state" ]
 for machine in bundle-factory ldap gerrit jenkins-controller jenkins-agent; do
   assert_operator_seed_policy \
-    "$generated_root/vm-sets/$vm_set_id/libvirt/seeds/$machine/user-data"
+    "$generated_root/sets/$vm_set_id/libvirt/seeds/$machine/user-data"
 done
 
 ldap_evidence="$(find "$generated_root/$run_id/host/evidence/harness" -name 'create-ldap-*.json' -print | sort | tail -1)"
@@ -387,17 +389,17 @@ assert evidence["redaction"] == "secrets-not-recorded"
 PY
 ! grep -Fq 'readonly-password' "$ldap_evidence"
 
-baked_marker="$generated_root/vm-sets/$vm_set_id/libvirt/base-image.env"
+baked_marker="$generated_root/sets/$vm_set_id/libvirt/base-image.env"
 [ -f "$baked_marker" ]
 grep -Fq 'schema=7' "$baked_marker"
 grep -Fq 'status=ready' "$baked_marker"
 grep -Fq 'image_ownership=libvirt-managed' "$baked_marker"
-grep -Fq "baked_image=$generated_root/vm-sets/$vm_set_id/libvirt/disks/base.qcow2" "$baked_marker"
-grep -Fq "storage_pool_name=loopforge-vm-$run_id-$vm_set_id-images" "$baked_marker"
+grep -Fq "baked_image=$generated_root/sets/$vm_set_id/libvirt/disks/base.qcow2" "$baked_marker"
+grep -Fq "storage_pool_name=loopforge-vm-$vm_set_id-images" "$baked_marker"
 grep -Fq 'volume_name=base.qcow2' "$baked_marker"
 grep -Fq 'disk_size=20G' "$baked_marker"
 grep -Fq 'packages=ca-certificates,curl,fontconfig,git,ldap-utils,nfs-common,nfs-kernel-server,openjdk-21-jre,openjdk-21-jre-headless,openssh-client,openssh-server,rsync,slapd,tar,unzip,wget' "$baked_marker"
-grep -Eq "/vm-sets/$vm_set_id/libvirt/bake-work-[^/]+/base-build\\.qcow2 20G$" "$stub_state/qemu-img-resize"
+grep -Eq "/sets/$vm_set_id/libvirt/bake-work-[^/]+/base-build\\.qcow2 20G$" "$stub_state/qemu-img-resize"
 
 grep -Fq 'os-baseline' "$stub_state/calls"
 grep -Fq 'ldap-service' "$stub_state/calls"
@@ -467,7 +469,7 @@ fi
 grep -Fq 'Stale VM baseline prerequisite marker' "$tmp_dir/audit-stale.out"
 mv "$marker_backup" "$marker"
 
-machine_metadata="$generated_root/vm-sets/$vm_set_id/libvirt/machines/gerrit.env"
+machine_metadata="$generated_root/sets/$vm_set_id/libvirt/machines/gerrit.env"
 machine_metadata_backup="$tmp_dir/gerrit.env"
 cp "$machine_metadata" "$machine_metadata_backup"
 marker_sha_before="$(sha256sum "$marker" | awk '{print $1}')"
@@ -478,7 +480,7 @@ if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   exit 1
 fi
 incompatible_log="$(find "$generated_root/$run_id/host/logs/harness" -name 'create-*.log' -print | sort | tail -1)"
-grep -Fq 'Select a fresh HARNESS_RUN_ID and LOOPFORGE_VM_SET_ID' "$incompatible_log"
+grep -Fq 'Select a fresh HARNESS_RUN_ID and HARNESS_SET_ID' "$incompatible_log"
 [ "$(sha256sum "$marker" | awk '{print $1}')" = "$marker_sha_before" ]
 grep -Fq 'base_image_fingerprint=incompatible' "$machine_metadata"
 mv "$machine_metadata_backup" "$machine_metadata"
@@ -491,8 +493,8 @@ run_fail_closed_case() {
   case_vm_set_id="m4-$mode-$$"
   case_env="$tmp_dir/harness-$mode.env"
   case_generated="$generated_root/$case_run_id"
-  case_marker="$generated_root/vm-sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
-  case_bake_domain="loopforge-vm-$case_run_id-$case_vm_set_id-base-image-bake"
+  case_marker="$generated_root/sets/$case_vm_set_id/.loopforge-vm-baseline-prereqs.env"
+  case_bake_domain="loopforge-vm-$case_vm_set_id-base-image-bake"
   case_base_image="$base_image"
   if [ "$mode" = apt ] || [ "$mode" = image-info ] || [ "$mode" = cloud-init ]; then
     case_base_image="$tmp_dir/noble-server-cloudimg-amd64-$mode.img"
@@ -501,7 +503,7 @@ run_fail_closed_case() {
 
   sed \
     -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$case_run_id/" \
-    -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$case_vm_set_id/" \
+    -e "s/^HARNESS_SET_ID=.*/HARNESS_SET_ID=$case_vm_set_id/" \
     -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$case_base_image|" \
     -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
     -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
@@ -529,13 +531,13 @@ run_fail_closed_case() {
     printf 'package installation must not run after cloud-init failure\n' >&2
     exit 1
   fi
-  if [ -d "$generated_root/vm-sets/$case_vm_set_id/libvirt" ] &&
-    find "$generated_root/vm-sets/$case_vm_set_id/libvirt" -maxdepth 1 \
+  if [ -d "$generated_root/sets/$case_vm_set_id/libvirt" ] &&
+    find "$generated_root/sets/$case_vm_set_id/libvirt" -maxdepth 1 \
       -type d -name 'bake-work-*' -print -quit | grep -q .; then
     printf 'default bake failure cleanup must remove its work directory\n' >&2
     exit 1
   fi
-  rm -rf "$case_generated" "$generated_root/vm-sets/$case_vm_set_id"
+  rm -rf "$case_generated" "$generated_root/sets/$case_vm_set_id"
 }
 
 run_fail_closed_case apt 'forced apt failure'
@@ -551,7 +553,7 @@ debug_base_image="$tmp_dir/noble-server-cloudimg-amd64-bake-debug.img"
 printf 'stub cloud image for %s\n' "$debug_run_id" >"$debug_base_image"
 sed \
   -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$debug_run_id/" \
-  -e "s/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=$debug_vm_set_id/" \
+  -e "s/^HARNESS_SET_ID=.*/HARNESS_SET_ID=$debug_vm_set_id/" \
   -e "s|^VM_BASE_IMAGE_PATH=.*|VM_BASE_IMAGE_PATH=$debug_base_image|" \
   -e 's/^VM_OPERATOR_SSH_TIMEOUT_SECONDS=.*/VM_OPERATOR_SSH_TIMEOUT_SECONDS=5/' \
   -e 's/^VM_OPERATOR_SSH_POLL_SECONDS=.*/VM_OPERATOR_SSH_POLL_SECONDS=1/' \
@@ -569,9 +571,9 @@ if PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" VM_STUB_FAIL_MODE=apt \
 fi
 grep -Fq 'create: failed reason=vm-set-create' "$tmp_dir/create-bake-debug.out"
 
-debug_set_dir="$generated_root/vm-sets/$debug_vm_set_id"
+debug_set_dir="$generated_root/sets/$debug_vm_set_id"
 debug_marker="$debug_set_dir/.loopforge-vm-bake-debug.env"
-debug_domain="loopforge-vm-$debug_run_id-$debug_vm_set_id-base-image-bake"
+debug_domain="loopforge-vm-$debug_vm_set_id-base-image-bake"
 [ -f "$debug_marker" ]
 [ "$(stat -c '%a' "$debug_marker")" = 600 ]
 grep -Fq 'schema=1' "$debug_marker"
@@ -610,7 +612,7 @@ grep -Fq 'running' "$stub_state/domains/$debug_domain.state"
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$debug_env" destroy \
   >"$tmp_dir/destroy-bake-debug.out"
-grep -Fxq "destroy: ok vm-set=$debug_vm_set_id removed" \
+grep -Fxq "destroy: ok set-id=$debug_vm_set_id removed" \
   "$tmp_dir/destroy-bake-debug.out"
 [ ! -e "$debug_set_dir" ]
 [ ! -e "$stub_state/domains/$debug_domain.state" ]

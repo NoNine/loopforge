@@ -119,19 +119,19 @@ docker_ids() {
 }
 
 inspect_container() {
-  docker container inspect -f '{{.Id}}	{{.Name}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.resource"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.run-id"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.config_files"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.working_dir"}}{{end}}' "${1:?container required}"
+  docker container inspect -f '{{.Id}}	{{.Name}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.resource"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.set-id"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.config_files"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.working_dir"}}{{end}}' "${1:?container required}"
 }
 
 inspect_network() {
-  docker network inspect -f '{{.Id}}	{{.Name}}	{{index .Labels "org.loopforge.resource"}}	{{index .Labels "org.loopforge.project"}}	{{index .Labels "org.loopforge.run-id"}}	{{index .Labels "org.loopforge.network"}}	{{index .Labels "com.docker.compose.project"}}	{{index .Labels "com.docker.compose.network"}}	{{index .Labels "com.docker.compose.project.config_files"}}	{{index .Labels "com.docker.compose.project.working_dir"}}' "${1:?network required}"
+  docker network inspect -f '{{.Id}}	{{.Name}}	{{index .Labels "org.loopforge.resource"}}	{{index .Labels "org.loopforge.project"}}	{{index .Labels "org.loopforge.set-id"}}	{{index .Labels "org.loopforge.network"}}	{{index .Labels "com.docker.compose.project"}}	{{index .Labels "com.docker.compose.network"}}	{{index .Labels "com.docker.compose.project.config_files"}}	{{index .Labels "com.docker.compose.project.working_dir"}}' "${1:?network required}"
 }
 
 inspect_image() {
-  docker image inspect -f '{{.Id}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.resource"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.run-id"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.config_files"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.working_dir"}}{{end}}' "${1:?image required}"
+  docker image inspect -f '{{.Id}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.resource"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.set-id"}}{{end}}	{{with (index .Config "Labels")}}{{index . "org.loopforge.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.service"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.config_files"}}{{end}}	{{with (index .Config "Labels")}}{{index . "com.docker.compose.project.working_dir"}}{{end}}' "${1:?image required}"
 }
 
 inventory_containers_by_filter() {
-  local filter ids id record container_id name loopforge_resource loopforge_project loopforge_run_id
+  local filter ids id record container_id name loopforge_resource loopforge_project loopforge_set_id
   local loopforge_service compose_project compose_service config_files working_dir project service
   filter="${1:?filter required}"
   ids="$(docker_ids container "$filter")" || die "Unable to inventory LoopForge Docker containers"
@@ -139,7 +139,7 @@ inventory_containers_by_filter() {
     [ -n "$id" ] || continue
     record="$(inspect_container "$id")" ||
       die "Unable to inspect Docker container: $id"
-    IFS=$'\t' read -r container_id name loopforge_resource loopforge_project loopforge_run_id \
+    IFS=$'\t' read -r container_id name loopforge_resource loopforge_project loopforge_set_id \
       loopforge_service compose_project compose_service config_files working_dir <<<"$record"
     name="${name#/}"
     loopforge_resource="$(label_value "$loopforge_resource")"
@@ -170,7 +170,7 @@ inventory_containers() {
 }
 
 inventory_images_by_filter() {
-  local filter ids id record image_id loopforge_resource loopforge_project loopforge_run_id
+  local filter ids id record image_id loopforge_resource loopforge_project loopforge_set_id
   local loopforge_service compose_project compose_service config_files working_dir project service
   filter="${1:?filter required}"
   ids="$(docker_ids image "$filter")" || die "Unable to inventory LoopForge Docker images"
@@ -178,7 +178,7 @@ inventory_images_by_filter() {
     [ -n "$id" ] || continue
     record="$(inspect_image "$id")" ||
       die "Unable to inspect Docker image: $id"
-    IFS=$'\t' read -r image_id loopforge_resource loopforge_project loopforge_run_id \
+    IFS=$'\t' read -r image_id loopforge_resource loopforge_project loopforge_set_id \
       loopforge_service compose_project compose_service config_files working_dir <<<"$record"
     loopforge_resource="$(label_value "$loopforge_resource")"
     loopforge_project="$(label_value "$loopforge_project")"
@@ -207,7 +207,7 @@ inventory_images_by_label() {
 }
 
 inventory_networks_by_filter() {
-  local filter ids id record network_id name loopforge_resource loopforge_project loopforge_run_id
+  local filter ids id record network_id name loopforge_resource loopforge_project loopforge_set_id
   local loopforge_network compose_project compose_network config_files working_dir project network
   filter="${1:?filter required}"
   ids="$(docker_ids network "$filter")" || die "Unable to inventory LoopForge Docker networks"
@@ -215,7 +215,7 @@ inventory_networks_by_filter() {
     [ -n "$id" ] || continue
     record="$(inspect_network "$id")" ||
       die "Unable to inspect Docker network: $id"
-    IFS=$'\t' read -r network_id name loopforge_resource loopforge_project loopforge_run_id \
+    IFS=$'\t' read -r network_id name loopforge_resource loopforge_project loopforge_set_id \
       loopforge_network compose_project compose_network config_files working_dir <<<"$record"
     loopforge_resource="$(label_value "$loopforge_resource")"
     loopforge_project="$(label_value "$loopforge_project")"

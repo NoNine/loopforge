@@ -7,7 +7,7 @@ repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
 run_id="integration-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
-trap 'rm -rf "$tmp_dir" "$run_dir" 2>/dev/null || true' EXIT
+trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id" 2>/dev/null || true; rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"' EXIT
 
 host_dir="$run_dir/host"
 state_dir="$run_dir/target/helper-state"
@@ -23,7 +23,7 @@ EOF
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$run_id
 HARNESS_GERRIT_ENV_FILE=$(printf '%q' "$tmp_dir/gerrit.env")
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-controller.env")
 HARNESS_JENKINS_AGENT_ENV_FILE=$(printf '%q' "$tmp_dir/jenkins-agent.env")

@@ -3,11 +3,11 @@
 vm_dir="$script_dir"
 vm_env_example="$vm_dir/examples/vm.env.example"
 VM_HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
-VM_LOOPFORGE_VM_SET_ID_OPERATOR_SET="${LOOPFORGE_VM_SET_ID+x}"
+VM_HARNESS_SET_ID_OPERATOR_SET="${HARNESS_SET_ID+x}"
 VM_HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
+VM_LEGACY_SET_ID_OPERATOR_SET="${LOOPFORGE_VM_SET_ID+x}"
 VM_HARNESS_RUN_ID_OPERATOR_VALUE="${HARNESS_RUN_ID-}"
-VM_LOOPFORGE_VM_SET_ID_OPERATOR_VALUE="${LOOPFORGE_VM_SET_ID-}"
-VM_HARNESS_PROJECT_NAME_OPERATOR_VALUE="${HARNESS_PROJECT_NAME-}"
+VM_HARNESS_SET_ID_OPERATOR_VALUE="${HARNESS_SET_ID-}"
 
 vm_output_path_vars=(
   HARNESS_GENERATED_RUN_DIR
@@ -21,6 +21,10 @@ vm_output_path_vars=(
   HARNESS_VM_INVENTORY_FILE
   HARNESS_MANIFEST_CONTRACT
   HARNESS_RUN_MARKER
+  HARNESS_SET_LOCK
+  HARNESS_ACTIVE_RUN_FILE
+  HARNESS_WORKFLOW_STATE_FILE
+  HARNESS_CHECKPOINT_RECORD_DIR
   HARNESS_VM_SET_MARKER
   HARNESS_VM_BASELINE_PREREQS_MARKER
   HARNESS_VM_SNAPSHOT_DIR
@@ -85,8 +89,9 @@ vm_config_normalize_input_paths() {
 }
 
 vm_config_load() {
-  local file
+  local file selected_run
   file="${1:-$vm_env_example}"
+  selected_run="${VM_BOOTSTRAP_RUN_ID:-}"
   file="$(vm_resolve_repo_path "$file")"
   require_readable_file "VM harness env file" "$file"
 
@@ -95,29 +100,42 @@ vm_config_load() {
   fi
   vm_unset_output_paths
   unset VM_OUTPUT_PATHS_CANONICAL_APPLIED
+  [ -z "$VM_HARNESS_PROJECT_NAME_OPERATOR_SET" ] ||
+    die "HARNESS_PROJECT_NAME is derived from HARNESS_SET_ID and must not be set"
+  [ -z "$VM_LEGACY_SET_ID_OPERATOR_SET" ] ||
+    die "LOOPFORGE_VM_SET_ID is not supported; use HARNESS_SET_ID"
+  unset HARNESS_PROJECT_NAME
+  unset LOOPFORGE_VM_SET_ID
+  HARNESS_RUN_ID=""
+  HARNESS_SET_ID=default
   HARNESS_GERRIT_ENV_FILE="$repo_root/examples/gerrit.env.example"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$repo_root/examples/jenkins-controller.env.example"
   HARNESS_JENKINS_AGENT_ENV_FILE="$repo_root/examples/jenkins-agent.env.example"
   HARNESS_INTEGRATION_ENV_FILE="$repo_root/examples/integration.env.example"
   source_env_file "VM harness env file" "$file"
+  [ -z "${HARNESS_PROJECT_NAME+x}" ] ||
+    die "HARNESS_PROJECT_NAME is derived from HARNESS_SET_ID and must not appear in the harness env"
+  [ -z "${LOOPFORGE_VM_SET_ID+x}" ] ||
+    die "LOOPFORGE_VM_SET_ID is not supported; use HARNESS_SET_ID"
 
   vm_reject_output_path_overrides
   if [ -n "$VM_HARNESS_RUN_ID_OPERATOR_SET" ]; then
     HARNESS_RUN_ID="$VM_HARNESS_RUN_ID_OPERATOR_VALUE"
+  elif [ -n "$selected_run" ]; then
+    HARNESS_RUN_ID="$selected_run"
   fi
-  if [ -n "$VM_LOOPFORGE_VM_SET_ID_OPERATOR_SET" ]; then
-    LOOPFORGE_VM_SET_ID="$VM_LOOPFORGE_VM_SET_ID_OPERATOR_VALUE"
-  fi
-  if [ -n "$VM_HARNESS_PROJECT_NAME_OPERATOR_SET" ]; then
-    HARNESS_PROJECT_NAME="$VM_HARNESS_PROJECT_NAME_OPERATOR_VALUE"
+  if [ -n "$VM_HARNESS_SET_ID_OPERATOR_SET" ]; then
+    HARNESS_SET_ID="$VM_HARNESS_SET_ID_OPERATOR_VALUE"
   fi
   HARNESS_ENV_FILE="$file"
   HARNESS_MODE="${HARNESS_MODE:-vm-simulation}"
   [ "$HARNESS_MODE" = "vm-simulation" ] ||
     die "HARNESS_MODE must be vm-simulation for the VM harness"
-  HARNESS_RUN_ID="${HARNESS_RUN_ID:-manual}"
-  LOOPFORGE_VM_SET_ID="${LOOPFORGE_VM_SET_ID:-default}"
-  HARNESS_PROJECT_NAME="${HARNESS_PROJECT_NAME:-loopforge-vm-$HARNESS_RUN_ID-$LOOPFORGE_VM_SET_ID}"
+  HARNESS_SET_ID="${HARNESS_SET_ID:-default}"
+  validate_harness_set_id "$HARNESS_SET_ID"
+  HARNESS_RUN_ID="$(resolve_harness_run_id vm "$(vm_generated_root)" "$HARNESS_SET_ID" "${HARNESS_RUN_ID:-}")"
+  VM_BOOTSTRAP_RUN_ID="$HARNESS_RUN_ID"
+  HARNESS_PROJECT_NAME="$(simulation_resource_namespace vm "$HARNESS_SET_ID")"
   HARNESS_UBUNTU_BASELINE_VERSION="${HARNESS_UBUNTU_BASELINE_VERSION:-24.04.4}"
   HARNESS_UBUNTU_BASELINE_RELEASE="${HARNESS_UBUNTU_BASELINE_RELEASE:-24.04}"
   HARNESS_UBUNTU_BASELINE_CODENAME="${HARNESS_UBUNTU_BASELINE_CODENAME:-noble}"
@@ -148,7 +166,6 @@ vm_config_load() {
   VM_DEBUG_PRESERVE_FAILED_BAKE="${VM_DEBUG_PRESERVE_FAILED_BAKE:-0}"
 
   vm_validate_identifier HARNESS_RUN_ID "$HARNESS_RUN_ID"
-  vm_validate_identifier LOOPFORGE_VM_SET_ID "$LOOPFORGE_VM_SET_ID"
   vm_validate_identifier HARNESS_PROJECT_NAME "$HARNESS_PROJECT_NAME"
   vm_validate_identifier HARNESS_LDAP_DOMAIN "$HARNESS_LDAP_DOMAIN"
   vm_validate_identifier HARNESS_LDAP_HOST "$HARNESS_LDAP_HOST"
@@ -161,7 +178,8 @@ vm_config_load() {
   vm_validate_identifier VM_OPERATOR_USER "$VM_OPERATOR_USER"
   vm_config_normalize_input_paths
   vm_paths_apply_canonical
-  export HARNESS_MODE HARNESS_RUN_ID LOOPFORGE_VM_SET_ID HARNESS_PROJECT_NAME
+  export HARNESS_MODE HARNESS_RUN_ID HARNESS_SET_ID HARNESS_PROJECT_NAME
+  export VM_BOOTSTRAP_RUN_ID
   export HARNESS_UBUNTU_BASELINE_VERSION HARNESS_UBUNTU_BASELINE_RELEASE
   export HARNESS_UBUNTU_BASELINE_CODENAME HARNESS_JAVA_BASELINE
   export HARNESS_GERRIT_BASELINE HARNESS_JENKINS_BASELINE
@@ -183,7 +201,9 @@ vm_config_load_runtime() {
     die "Missing VM harness runtime config: run init-run first"
   source_env_file "VM harness runtime config" "$HARNESS_RUNTIME_ENV"
   vm_validate_identifier HARNESS_RUN_ID "$HARNESS_RUN_ID"
-  vm_validate_identifier LOOPFORGE_VM_SET_ID "$LOOPFORGE_VM_SET_ID"
+  validate_harness_set_id "$HARNESS_SET_ID"
+  [ "$HARNESS_PROJECT_NAME" = "$(simulation_resource_namespace vm "$HARNESS_SET_ID")" ] ||
+    die "VM runtime resource namespace does not match HARNESS_SET_ID"
   vm_paths_apply_canonical
   vm_state_verify_run_marker
   vm_state_validate_core
@@ -259,7 +279,7 @@ vm_config_write_inventory() {
   cat >"$HARNESS_VM_INVENTORY_FILE" <<EOF
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
-LOOPFORGE_VM_SET_ID=$(shell_quote "$LOOPFORGE_VM_SET_ID")
+HARNESS_SET_ID=$(shell_quote "$HARNESS_SET_ID")
 VM_PROVISIONING_MODEL=cloud-image-clone
 VM_OPERATOR_USER=$(shell_quote "$VM_OPERATOR_USER")
 VM_BUNDLE_FACTORY_STATUS=defined-after-create
@@ -267,8 +287,8 @@ VM_LDAP_STATUS=defined-after-create
 VM_GERRIT_STATUS=defined-after-create
 VM_JENKINS_CONTROLLER_STATUS=defined-after-create
 VM_JENKINS_AGENT_STATUS=defined-after-create
-VM_GERRIT_BROWSER_URL=pending-up
-VM_JENKINS_BROWSER_URL=pending-up
+VM_GERRIT_BROWSER_URL=pending-start
+VM_JENKINS_BROWSER_URL=pending-start
 VM_BUNDLE_FACTORY_TARGET_SSH_HOST=pending-create
 VM_LDAP_TARGET_SSH_HOST=pending-create
 VM_GERRIT_TARGET_SSH_HOST=pending-create
@@ -312,7 +332,7 @@ vm_config_write_rendered_env() {
   cat >"$HARNESS_RENDERED_ENV" <<EOF
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
-LOOPFORGE_VM_SET_ID=$(shell_quote "$LOOPFORGE_VM_SET_ID")
+HARNESS_SET_ID=$(shell_quote "$HARNESS_SET_ID")
 HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
 HARNESS_UBUNTU_BASELINE_VERSION=$(shell_quote "$HARNESS_UBUNTU_BASELINE_VERSION")
 HARNESS_UBUNTU_BASELINE_RELEASE=$(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
@@ -364,7 +384,7 @@ vm_config_write_runtime_env() {
 HARNESS_ENV_FILE=$(shell_quote "$HARNESS_ENV_FILE")
 HARNESS_MODE=$(shell_quote "$HARNESS_MODE")
 HARNESS_RUN_ID=$(shell_quote "$HARNESS_RUN_ID")
-LOOPFORGE_VM_SET_ID=$(shell_quote "$LOOPFORGE_VM_SET_ID")
+HARNESS_SET_ID=$(shell_quote "$HARNESS_SET_ID")
 HARNESS_PROJECT_NAME=$(shell_quote "$HARNESS_PROJECT_NAME")
 HARNESS_UBUNTU_BASELINE_VERSION=$(shell_quote "$HARNESS_UBUNTU_BASELINE_VERSION")
 HARNESS_UBUNTU_BASELINE_RELEASE=$(shell_quote "$HARNESS_UBUNTU_BASELINE_RELEASE")
@@ -429,14 +449,18 @@ EOF
   mv -- "$tmp" "$HARNESS_RUNTIME_ENV"
 }
 
-vm_config_init_run() {
-  vm_config_load "$HARNESS_ENV_FILE"
-  vm_config_validate_init_inputs
-  vm_config_ensure_m1_dirs
-  vm_config_copy_runtime_inputs
-  vm_config_write_inventory
-  vm_config_write_manifest_contract
-  vm_config_write_rendered_env
-  vm_config_write_runtime_env
-  vm_state_write_run_marker
+vm_config_init_run_locked() {
+  [ ! -e "$HARNESS_ACTIVE_RUN_FILE" ] ||
+    die "Selected VM simulation set already has active-run state"
+  [ ! -e "$HARNESS_GENERATED_RUN_DIR" ] ||
+    die "HARNESS_RUN_ID already exists: $HARNESS_RUN_ID"
+  vm_config_validate_init_inputs || return $?
+  vm_config_ensure_m1_dirs || return $?
+  vm_config_copy_runtime_inputs || return $?
+  vm_config_write_inventory || return $?
+  vm_config_write_manifest_contract || return $?
+  vm_config_write_rendered_env || return $?
+  vm_config_write_runtime_env || return $?
+  vm_state_write_run_marker || return $?
+  vm_state_write_initial_lifecycle_records
 }

@@ -211,9 +211,9 @@ __vm_baseline_write_marker() {
   cat >"$tmp" <<EOF
 schema=2
 mode=$HARNESS_MODE
-vm_set_id=$LOOPFORGE_VM_SET_ID
+set_id=$HARNESS_SET_ID
 run_id=$HARNESS_RUN_ID
-project_name=$HARNESS_PROJECT_NAME
+resource_namespace=$HARNESS_PROJECT_NAME
 runtime_env_fingerprint=$runtime_fingerprint
 ubuntu_release=$HARNESS_UBUNTU_BASELINE_RELEASE
 ubuntu_codename=$HARNESS_UBUNTU_BASELINE_CODENAME
@@ -247,16 +247,16 @@ __vm_baseline_marker_fields_valid() {
   VM_BAKED_BASE_IMAGE_FINGERPRINT="$(cat "$fingerprint_file")"
   baked_marker="$(vm_libvirt_baked_base_image_marker_path)"
   [ -r "$baked_marker" ] || return 1
-  for key in schema mode vm_set_id run_id project_name runtime_env_fingerprint \
+  for key in schema mode set_id run_id resource_namespace runtime_env_fingerprint \
     ubuntu_release ubuntu_codename apt_mirror base_image base_image_fingerprint \
     base_image_sha256 disk_size packages ldap_host ldap_port ldap_base_dn \
     ldap_user_base ldap_group_base ldap_bind_dn status; do
     case "$key" in
       schema) expected=2 ;;
       mode) expected="$HARNESS_MODE" ;;
-      vm_set_id) expected="$LOOPFORGE_VM_SET_ID" ;;
+      set_id) expected="$HARNESS_SET_ID" ;;
       run_id) expected="$HARNESS_RUN_ID" ;;
-      project_name) expected="$HARNESS_PROJECT_NAME" ;;
+      resource_namespace) expected="$HARNESS_PROJECT_NAME" ;;
       runtime_env_fingerprint) expected="$(runtime_env_fingerprint "$HARNESS_RUNTIME_ENV")" ;;
       ubuntu_release) expected="$HARNESS_UBUNTU_BASELINE_RELEASE" ;;
       ubuntu_codename) expected="$HARNESS_UBUNTU_BASELINE_CODENAME" ;;

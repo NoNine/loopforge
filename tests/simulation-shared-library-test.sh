@@ -6,7 +6,7 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 docker_harness="$repo_root/simulation/docker/simulate.sh"
 lib_dir="$repo_root/simulation/lib"
 
-for module in common quote roles artifacts env state permissions logs evidence; do
+for module in common quote roles artifacts env identity locking state permissions logs evidence; do
   [ -f "$lib_dir/$module.sh" ] || {
     printf 'Missing shared simulation library module: %s.sh\n' "$module" >&2
     exit 1
@@ -47,6 +47,15 @@ for helper in \
   source_env_file \
   set_env_file_value \
   copy_simulation_runtime_env_inputs \
+  validate_harness_set_id \
+  simulation_resource_namespace \
+  simulation_short_resource_name \
+  generate_harness_run_id \
+  resolve_harness_run_id \
+  simulation_set_lock_path \
+  simulation_set_lock_acquire \
+  simulation_set_lock_release \
+  simulation_with_set_lock \
   sha256_file \
   runtime_env_fingerprint \
   marker_value \
@@ -80,6 +89,10 @@ usage() {
 . "$lib_dir/artifacts.sh"
 # shellcheck source=/dev/null
 . "$lib_dir/env.sh"
+# shellcheck source=/dev/null
+. "$lib_dir/identity.sh"
+# shellcheck source=/dev/null
+. "$lib_dir/locking.sh"
 # shellcheck source=/dev/null
 . "$lib_dir/state.sh"
 # shellcheck source=/dev/null
@@ -134,13 +147,23 @@ verify_checksum_file_in_dir "$tmp_dir/checksums.sha256" "$tmp_dir" /dev/null
 
 runtime_env="$tmp_dir/runtime.env"
 marker="$tmp_dir/run.marker"
+runtime_inputs="$tmp_dir/runtime-inputs"
 printf 'HARNESS_MODE=test\n' >"$runtime_env"
-write_runtime_marker "$marker" test-mode run-1 project-1 "$repo_root" "$tmp_dir/run" "$runtime_env"
-verify_runtime_marker "$marker" test-mode run-1 project-1 "$repo_root" "$tmp_dir/run" "$runtime_env" "test run marker"
+mkdir -p "$runtime_inputs"
+for input in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
+  printf '%s=test\n' "$input" >"$runtime_inputs/$input"
+done
+write_runtime_marker "$marker" test-mode docker default run-1 \
+  loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" "$runtime_inputs"
+verify_runtime_marker "$marker" test-mode docker default run-1 \
+  loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" \
+  "$runtime_inputs" "test run marker"
 
 checkpoint_marker="$tmp_dir/checkpoint.marker"
-write_checkpoint_marker "$checkpoint_marker" test-mode run-1 project-1 "$runtime_env"
-verify_checkpoint_marker "$checkpoint_marker" test-mode run-1 project-1 "$runtime_env" "test checkpoint marker"
+write_checkpoint_marker "$checkpoint_marker" test-mode docker default run-1 \
+  loopforge-docker-default "$runtime_env" "$runtime_inputs"
+verify_checkpoint_marker "$checkpoint_marker" test-mode docker default run-1 \
+  loopforge-docker-default "$runtime_env" "$runtime_inputs" "test checkpoint marker"
 
 require_generated_state_file "test generated state" payload "$tmp_dir/payload.txt"
 require_generated_state_dir "test generated state" tmp "$tmp_dir"

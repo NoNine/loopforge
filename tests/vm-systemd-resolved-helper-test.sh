@@ -108,12 +108,12 @@ chmod +x "$stub_bin/sudo"
 env_file="$tmp_dir/vm.env"
 sed \
   -e 's/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=resolved-test/' \
-  -e 's/^LOOPFORGE_VM_SET_ID=.*/LOOPFORGE_VM_SET_ID=resolved-set/' \
+  -e 's/^HARNESS_SET_ID=.*/HARNESS_SET_ID=resolved-set/' \
   "$repo_root/simulation/vm/examples/vm.env.example" >"$env_file"
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \
   "$helper" --env "$env_file" --dry-run >"$tmp_dir/dry-run.out"
-grep -Fq 'selected-network=loopforge-vm-resolved-test-resolved-set-net' "$tmp_dir/dry-run.out"
+grep -Fq 'selected-network=loopforge-vm-resolved-set-net' "$tmp_dir/dry-run.out"
 grep -Fq 'bridge=lf-test123' "$tmp_dir/dry-run.out"
 grep -Fq 'gateway=192.168.126.1' "$tmp_dir/dry-run.out"
 grep -Fq 'libvirt-dns=ready gerrit.example.test=192.168.126.5 jenkins-controller.example.test=192.168.126.6' "$tmp_dir/dry-run.out"
@@ -157,7 +157,7 @@ fi
 
 PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \
   "$helper" >"$tmp_dir/default-env.out"
-grep -Fq 'selected-network=loopforge-vm-manual-default-net' "$tmp_dir/default-env.out"
+grep -Fq 'selected-network=loopforge-vm-default-net' "$tmp_dir/default-env.out"
 grep -Fq 'systemd-resolved: dry-run ok' "$tmp_dir/default-env.out"
 
 if PATH="$stub_bin:$PATH" VM_TEST_STATE="$stub_state" \

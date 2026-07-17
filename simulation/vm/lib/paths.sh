@@ -9,7 +9,7 @@ vm_path_run_dir() {
 }
 
 vm_path_set_dir() {
-  printf '%s/vm-sets/%s\n' "$(vm_generated_root)" "$LOOPFORGE_VM_SET_ID"
+  printf '%s/sets/%s\n' "$(vm_generated_root)" "$HARNESS_SET_ID"
 }
 
 vm_paths_apply_canonical() {
@@ -24,6 +24,10 @@ vm_paths_apply_canonical() {
   HARNESS_VM_INVENTORY_FILE="$HARNESS_RENDERED_DIR/vm-inventory.env"
   HARNESS_MANIFEST_CONTRACT="$HARNESS_RENDERED_DIR/artifact-manifest-contract.txt"
   HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-vm-run.env"
+  HARNESS_SET_LOCK="$(simulation_set_lock_path "$(vm_generated_root)" "$HARNESS_SET_ID")"
+  HARNESS_ACTIVE_RUN_FILE="$HARNESS_VM_SET_DIR/active-run.env"
+  HARNESS_WORKFLOW_STATE_FILE="$HARNESS_HOST_DIR/state/workflow-state.env"
+  HARNESS_CHECKPOINT_RECORD_DIR="$HARNESS_HOST_DIR/state/checkpoints"
   HARNESS_VM_SET_MARKER="$HARNESS_VM_SET_DIR/.loopforge-vm-set.env"
   HARNESS_VM_BASELINE_PREREQS_MARKER="$HARNESS_VM_SET_DIR/.loopforge-vm-baseline-prereqs.env"
   HARNESS_VM_SNAPSHOT_DIR="$HARNESS_VM_SET_DIR/snapshots"
@@ -50,6 +54,8 @@ vm_paths_apply_canonical() {
   export HARNESS_TARGET_DIR HARNESS_RENDERED_DIR HARNESS_RUNTIME_INPUT_DIR
   export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_VM_INVENTORY_FILE
   export HARNESS_MANIFEST_CONTRACT HARNESS_RUN_MARKER HARNESS_VM_SET_MARKER
+  export HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE HARNESS_WORKFLOW_STATE_FILE
+  export HARNESS_CHECKPOINT_RECORD_DIR
   export HARNESS_VM_BASELINE_PREREQS_MARKER HARNESS_VM_SNAPSHOT_DIR
   export HARNESS_VM_SET_TARGET_SSH_DIR
   export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR

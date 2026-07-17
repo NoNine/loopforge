@@ -162,7 +162,7 @@ write_evidence() {
   local q_manifest q_checksum q_message q_log_ref q_redaction q_role_name
   local q_bundle_container q_ldap_container q_target_container
   local q_ubuntu_target q_ubuntu_release q_ubuntu_codename q_java q_gerrit
-  local q_jenkins q_plugin_manager q_source_boundary
+  local q_jenkins q_plugin_manager q_source_boundary q_run q_set q_namespace
   checkpoint="${1:?checkpoint required}"
   role="${2:?role required}"
   status="${3:?status required}"
@@ -187,7 +187,14 @@ write_evidence() {
   q_checkpoint="$(json_quote "$checkpoint")"
   q_command="$(json_quote "$command_name")"
   q_status="$(json_quote "$status")"
-  q_input="$(json_quote "not-applicable")"
+  if [ -d "${HARNESS_RUNTIME_INPUT_DIR:-}" ]; then
+    q_input="$(json_quote "$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")")"
+  else
+    q_input="$(json_quote "not-applicable")"
+  fi
+  q_run="$(json_quote "$HARNESS_RUN_ID")"
+  q_set="$(json_quote "$HARNESS_SET_ID")"
+  q_namespace="$(json_quote "$HARNESS_PROJECT_NAME")"
   q_manifest="$(json_quote "$manifest_ref")"
   q_checksum="$(json_quote "$checksum_ref")"
   q_message="$(json_quote "$message")"
@@ -210,6 +217,9 @@ write_evidence() {
 {
   "verification_mode": $q_mode,
   "timestamp": $q_timestamp,
+  "run_id": $q_run,
+  "set_id": $q_set,
+  "resource_namespace": $q_namespace,
   "role_or_environment": $q_role,
   "checkpoint_name": $q_checkpoint,
   "command_name": $q_command,
@@ -270,7 +280,7 @@ check_ubuntu_service_baseline() {
 
   require_running_service "$service"
   if ! compose exec -T "$service" sh -c '. /etc/os-release && printf "release=%s codename=%s pretty=%s\n" "$VERSION_ID" "$VERSION_CODENAME" "$PRETTY_NAME"' >"$log" 2>&1; then
-    evidence="$(write_evidence baseline "$label" fail "simulate.sh up" "$log" "Could not read container OS release")"
+    evidence="$(write_evidence baseline "$label" fail "simulate.sh start" "$log" "Could not read container OS release")"
     die "Failed to read OS release for $label; evidence=$evidence log=$log"
   fi
 
@@ -280,11 +290,11 @@ check_ubuntu_service_baseline() {
   printf 'image_id=%s\n' "$image_id" >>"$log"
 
   if [ "$os_release" != "$HARNESS_UBUNTU_BASELINE_RELEASE" ] || [ "$os_codename" != "$HARNESS_UBUNTU_BASELINE_CODENAME" ]; then
-    evidence="$(write_evidence baseline "$label" blocked "simulate.sh up" "$log" "Container OS does not match Version Baseline")"
+    evidence="$(write_evidence baseline "$label" blocked "simulate.sh start" "$log" "Container OS does not match Version Baseline")"
     die "Container OS drift for $label; expected $HARNESS_UBUNTU_BASELINE_RELEASE $HARNESS_UBUNTU_BASELINE_CODENAME, evidence=$evidence log=$log"
   fi
 
-  write_evidence baseline "$label" pass "simulate.sh up" "$log" "Container OS release matches Version Baseline; resolved image id recorded" >/dev/null
+  write_evidence baseline "$label" pass "simulate.sh start" "$log" "Container OS release matches Version Baseline; resolved image id recorded" >/dev/null
 }
 
 require_baseline_label() {

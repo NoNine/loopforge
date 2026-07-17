@@ -10,6 +10,8 @@ simulation_lib_dir="$repo_root/simulation/lib"
 . "$simulation_lib_dir/roles.sh"
 . "$simulation_lib_dir/artifacts.sh"
 . "$simulation_lib_dir/env.sh"
+. "$simulation_lib_dir/identity.sh"
+. "$simulation_lib_dir/locking.sh"
 . "$simulation_lib_dir/state.sh"
 . "$simulation_lib_dir/permissions.sh"
 . "$simulation_lib_dir/logs.sh"
@@ -42,7 +44,7 @@ Phases:
   preflight
   init-run
   create
-  up
+  start
   status
   ssh --role <gerrit|jenkins-controller|jenkins-agent>
   prepare-artifacts [--role <gerrit|jenkins-controller|jenkins-agent>]
@@ -54,7 +56,7 @@ Phases:
   prove-integration
   reboot [--role <gerrit|jenkins-controller|jenkins-agent>|--all]
   audit-state
-  down
+  stop
   restore-baseline
   clean
   destroy
@@ -229,57 +231,57 @@ main() {
     preflight)
       shift
       parse_env_only_args "$@"
-      vm_cmd_preflight
+      vm_command_with_lock shared vm_cmd_preflight
       ;;
     init-run)
       shift
       parse_env_only_args "$@"
       vm_cmd_init_run
       ;;
-    create|up|down|clean)
+    create|start|stop|clean)
       shift
       parse_env_only_args "$@"
-      "vm_cmd_$command_name"
+      vm_command_with_lock exclusive "vm_cmd_$command_name"
       ;;
     restore-baseline)
       shift
       parse_env_only_args "$@"
-      vm_cmd_restore_baseline
+      vm_command_with_lock exclusive vm_cmd_restore_baseline
       ;;
     destroy)
       shift
       parse_env_only_args "$@"
-      vm_cmd_destroy
+      vm_command_with_lock exclusive vm_cmd_destroy
       ;;
     status)
       shift
       parse_env_only_args "$@"
-      vm_cmd_status
+      vm_command_with_lock shared vm_cmd_status
       ;;
     ssh)
       shift
       parse_env_and_role_args 1 "$@"
-      vm_cmd_ssh "$PARSED_ROLE"
+      vm_command_with_lock shared vm_cmd_ssh "$PARSED_ROLE"
       ;;
     prepare-artifacts|stage-artifacts|configure-role|validate-role)
       shift
       parse_env_and_role_args 0 "$@"
-      "vm_cmd_${command_name//-/_}" "$PARSED_ROLE"
+      vm_command_with_lock exclusive "vm_cmd_${command_name//-/_}" "$PARSED_ROLE"
       ;;
     configure-integration|validate-integration|prove-integration)
       shift
       parse_env_only_args "$@"
-      "vm_cmd_${command_name//-/_}"
+      vm_command_with_lock exclusive "vm_cmd_${command_name//-/_}"
       ;;
     reboot)
       shift
       parse_reboot_args "$@"
-      vm_cmd_reboot "$PARSED_REBOOT_ROLE" "$PARSED_REBOOT_ALL"
+      vm_command_with_lock exclusive vm_cmd_reboot "$PARSED_REBOOT_ROLE" "$PARSED_REBOOT_ALL"
       ;;
     audit-state)
       shift
       parse_env_only_args "$@"
-      vm_cmd_audit_state
+      vm_command_with_lock shared vm_cmd_audit_state
       ;;
     "")
       usage

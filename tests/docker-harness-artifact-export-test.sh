@@ -9,7 +9,7 @@ calls="$tmp_dir/docker-calls.log"
 container_fs="$tmp_dir/container-fs"
 run_id="artifact-export-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
-trap 'rm -rf "$tmp_dir" "$run_dir"' EXIT
+trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id"; rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"' EXIT
 
 mkdir -p "$fake_bin"
 mkdir -p "$container_fs"
@@ -119,7 +119,7 @@ chmod +x "$fake_bin/docker"
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
 HARNESS_RUN_ID=$run_id
-HARNESS_PROJECT_NAME=$run_id
+HARNESS_SET_ID=$run_id
 HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
 HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
 HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
