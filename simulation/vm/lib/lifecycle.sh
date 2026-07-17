@@ -365,7 +365,7 @@ vm_cmd_start() {
     return 1
   }
   evidence="$(vm_write_harness_evidence start pass "simulate.sh start" "$log" "VM set started and target OS SSH readiness passed")"
-  print_command_summary start "" "ok set-id=$HARNESS_SET_ID ssh=ready"
+  print_command_summary start "" "ok set-id=$HARNESS_SET_ID target-access=ready inputs=ready"
 }
 
 vm_cmd_start_steps() {
@@ -373,6 +373,7 @@ vm_cmd_start_steps() {
   vm_libvirt_start_set || return $?
   vm_ssh_prepare_all || return $?
   vm_ssh_stage_role_helpers_all || return $?
+  vm_config_publish_or_verify_effective_inputs || return $?
   vm_libvirt_status_table || return $?
   vm_ssh_status_readonly
 }
@@ -381,6 +382,7 @@ vm_cmd_ssh() {
   local role machine
   role="${1:?role required}"
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   vm_set_verify_run_and_set
   machine="$(vm_ssh_role_machine "$role")"
   vm_libvirt_require_running "$machine"
@@ -391,6 +393,7 @@ vm_cmd_prepare_artifacts() {
   local role selected log evidence rc
   selected="${1:-}"
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "prepare-artifacts-$role")"
     rc=0
@@ -409,6 +412,7 @@ vm_cmd_stage_artifacts() {
   local role selected log evidence rc
   selected="${1:-}"
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "stage-artifacts-$role")"
     rc=0
@@ -427,6 +431,7 @@ vm_cmd_configure_role() {
   local role selected log evidence rc status
   selected="${1:-}"
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "configure-role-$role")"
     rc=0
@@ -449,6 +454,7 @@ vm_cmd_validate_role() {
   local role selected log evidence rc status
   selected="${1:-}"
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   for role in ${selected:-${roles[*]}}; do
     log="$(vm_path_bounded_log "validate-role-$role")"
     rc=0
@@ -470,6 +476,7 @@ vm_cmd_validate_role() {
 vm_cmd_configure_integration() {
   local log evidence rc status
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   log="$(vm_path_bounded_log configure-integration)"
   rc=0
   vm_cmd_run_logged "$log" vm_integration_configure || rc=$?
@@ -489,6 +496,7 @@ vm_cmd_configure_integration() {
 vm_cmd_validate_integration() {
   local log evidence rc status
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   log="$(vm_path_bounded_log validate-integration)"
   rc=0
   vm_cmd_run_logged "$log" vm_integration_validate || rc=$?
@@ -508,6 +516,7 @@ vm_cmd_validate_integration() {
 vm_cmd_prove_integration() {
   local log evidence rc status
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   log="$(vm_path_bounded_log prove-integration)"
   rc=0
   vm_cmd_run_logged "$log" vm_integration_prove || rc=$?
@@ -531,6 +540,7 @@ vm_cmd_reboot() {
   target="$role"
   [ "$all" -eq 0 ] || target="all"
   vm_config_load_runtime
+  vm_state_require_effective_inputs
   if [ "$all" -eq 1 ]; then
     targets="${vm_machines[*]}"
   else

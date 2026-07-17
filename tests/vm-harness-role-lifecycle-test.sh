@@ -27,6 +27,7 @@ HARNESS_PROJECT_NAME=loopforge-vm-m7-set
 HARNESS_GENERATED_RUN_DIR="$tmp_dir/run"
 HARNESS_HOST_DIR="$HARNESS_GENERATED_RUN_DIR/host"
 HARNESS_TARGET_DIR="$HARNESS_GENERATED_RUN_DIR/target"
+HARNESS_SOURCE_INPUT_DIR="$HARNESS_HOST_DIR/source-inputs"
 HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
 HARNESS_EVIDENCE_DIR="$HARNESS_HOST_DIR/evidence/harness"
 HARNESS_LOG_DIR="$HARNESS_HOST_DIR/logs/harness"
@@ -47,7 +48,7 @@ HARNESS_LDAP_BIND_PASSWORD='m7-test-secret'
 roles=(gerrit jenkins-controller jenkins-agent)
 vm_machines=(bundle-factory ldap gerrit jenkins-controller jenkins-agent)
 calls="$tmp_dir/calls.log"
-mkdir -p "$HARNESS_RUNTIME_INPUT_DIR" "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR" \
+mkdir -p "$HARNESS_SOURCE_INPUT_DIR" "$HARNESS_RUNTIME_INPUT_DIR" "$HARNESS_EVIDENCE_DIR" "$HARNESS_LOG_DIR" \
   "$HARNESS_HOST_DIR/rendered" "$HARNESS_TARGET_DIR/evidence" \
   "$HARNESS_TARGET_DIR/logs"
 for role in "${roles[@]}"; do
@@ -56,9 +57,11 @@ done
 printf 'runtime=m7\n' >"$HARNESS_RUNTIME_ENV"
 for input in harness gerrit jenkins-controller jenkins-agent integration; do
   printf 'input=%s\n' "$input" >"$HARNESS_RUNTIME_INPUT_DIR/$input.env"
+  cp "$HARNESS_RUNTIME_INPUT_DIR/$input.env" "$HARNESS_SOURCE_INPUT_DIR/$input.env"
 done
 
 vm_config_load_runtime() { :; }
+vm_state_require_effective_inputs() { :; }
 vm_set_verify_run_and_set() { :; }
 vm_artifacts_stage_role_env() { printf 'stage-env %s %s\n' "$1" "$2" >>"$calls"; }
 vm_artifacts_verify_staged_role() {

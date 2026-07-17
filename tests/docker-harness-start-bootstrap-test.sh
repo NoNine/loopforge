@@ -54,6 +54,11 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker-compose"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 rendered_dir="$run_dir/host/rendered"
 
@@ -84,7 +89,10 @@ PATH="$fake_bin:$PATH" \
   --env "$tmp_dir/harness.env" start >"$tmp_dir/start.out"
 
 grep -Fq "HARNESS_RUN_ID=$run_id" "$rendered_dir/harness.runtime.env"
-grep -Fq "start: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/start.out"
+grep -Fq "start: ok resources=running target-access=ready inputs=ready" "$tmp_dir/start.out"
+[ -d "$run_dir/host/runtime-inputs" ]
+[ -f "$run_dir/host/state/effective-inputs.env" ]
+grep -Fxq 'input_state=ready' "$run_dir/host/state/workflow-state.env"
 if grep -Fq -- 'start -d --build' "$calls"; then
   printf 'start must not build images; create owns image build\n' >&2
   exit 1

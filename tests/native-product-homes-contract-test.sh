@@ -82,8 +82,8 @@ require_docker_harness_pattern \
   '/var/lib/jenkins-agent' \
   'Docker harness must recognize Jenkins agent native product-home evidence references'
 require_docker_harness_pattern \
-  'set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"' \
-  'Docker init-run must set Gerrit canonical web URL to the browser-visible loopback URL'
+  'set_env_file_value "$gerrit" GERRIT_CANONICAL_WEB_URL "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"' \
+  'Docker start rendering must set Gerrit canonical web URL to the browser-visible loopback URL'
 require_pattern scripts/gerrit-setup.sh \
   '"service_log_reference": $q_service_log' \
   'Gerrit evidence must record runtime service log as metadata'

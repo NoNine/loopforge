@@ -5,6 +5,7 @@ set -euo pipefail
 
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
+fake_bin="$tmp_dir/bin"
 run_id="integration-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id" 2>/dev/null || true; rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"' EXIT
@@ -13,6 +14,25 @@ host_dir="$run_dir/host"
 state_dir="$run_dir/target/helper-state"
 integration_calls="$tmp_dir/integration-calls.log"
 integration_helper="$tmp_dir/integration-setup.sh"
+
+mkdir -p "$fake_bin"
+cat >"$fake_bin/docker" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
+  *" ps -q "*) printf 'container-id\n' ;;
+  *"/etc/os-release"*) printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n' ;;
+  *"inspect -f"*) printf 'true\n' ;;
+  *) exit 0 ;;
+esac
+SH
+chmod +x "$fake_bin/docker"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 for file in gerrit jenkins-controller jenkins-agent integration; do
   printf '%s\n' "SENTINEL=original-$file" >"$tmp_dir/$file.env"
@@ -34,15 +54,34 @@ cat >"$integration_helper" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --integration-env)
+      printf '%s\n' "$2" >"$HARNESS_TEST_ADAPTER_PATH"
+      cp "$2" "$HARNESS_TEST_ADAPTER_COPY"
+      shift 2
+      ;;
+    *) shift ;;
+  esac
+done
 SH
 chmod +x "$integration_helper"
 
-"$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
+PATH="$fake_bin:$PATH" \
+  "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" \
   >"$tmp_dir/init-run.out"
 
+source_dir="$host_dir/source-inputs"
 runtime_dir="$host_dir/runtime-inputs"
 for file in gerrit jenkins-controller jenkins-agent integration; do
   printf '%s\n' "SENTINEL=mutated-$file" >"$tmp_dir/$file.env"
+  grep -Fq "SENTINEL=original-$file" "$source_dir/$file.env"
+done
+PATH="$fake_bin:$PATH" \
+  "$repo_root/simulation/docker/simulate.sh" create --env "$tmp_dir/harness.env" >/dev/null
+PATH="$fake_bin:$PATH" \
+  "$repo_root/simulation/docker/simulate.sh" start --env "$tmp_dir/harness.env" >/dev/null
+for file in gerrit jenkins-controller jenkins-agent integration; do
   grep -Fq "SENTINEL=original-$file" "$runtime_dir/$file.env"
 done
 mkdir -p "$state_dir/jenkins-controller"
@@ -51,7 +90,10 @@ chmod 0555 "$state_dir/jenkins-controller"
 common_env=(
   HARNESS_TEST_INTEGRATION_HELPER="$integration_helper"
   HARNESS_TEST_INTEGRATION_CALLS="$integration_calls"
+  HARNESS_TEST_ADAPTER_PATH="$tmp_dir/adapter.path"
+  HARNESS_TEST_ADAPTER_COPY="$tmp_dir/adapter.env"
   HARNESS_ENV_FILE="$tmp_dir/harness.env"
+  PATH="$fake_bin:$PATH"
 )
 
 env "${common_env[@]}" \
@@ -60,7 +102,12 @@ env "${common_env[@]}" \
 
 grep -Fq -- '--yes configure-integration' "$integration_calls"
 grep -Fq -- "--gerrit-env $runtime_dir/gerrit.env" "$integration_calls"
-grep -Fq -- "--integration-env $runtime_dir/integration.env" "$integration_calls"
+adapter_path="$(cat "$tmp_dir/adapter.path")"
+[ ! -e "$adapter_path" ]
+grep -Fq 'INTEGRATION_GERRIT_TARGET_SSH_HOST=127.0.0.1' "$tmp_dir/adapter.env"
+grep -Fq 'INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST=127.0.0.1' "$tmp_dir/adapter.env"
+grep -Fq 'INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST=127.0.0.1' "$tmp_dir/adapter.env"
+grep -Fq 'SENTINEL=original-integration' "$tmp_dir/adapter.env"
 if grep -Fq -- "$tmp_dir/gerrit.env" "$integration_calls"; then
   printf 'integration wiring used original Gerrit env path after render\n' >&2
   exit 1
@@ -203,8 +250,17 @@ cat >"$failing_configure_helper" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --integration-env)
+      printf '%s\n' "$2" >"$HARNESS_TEST_FAILING_ADAPTER_PATH"
+      shift 2
+      ;;
+    *) shift ;;
+  esac
+done
 case "$*" in
-  *' configure-integration') exit 42 ;;
+  *) exit 42 ;;
 esac
 SH
 chmod +x "$failing_configure_helper"
@@ -213,6 +269,7 @@ set +e
 env "${common_env[@]}" \
   HARNESS_TEST_INTEGRATION_HELPER="$failing_configure_helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$failing_configure_calls" \
+  HARNESS_TEST_FAILING_ADAPTER_PATH="$tmp_dir/failing-adapter.path" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-integration \
   >"$tmp_dir/configure-failure.out" 2>&1
 failing_configure_rc=$?
@@ -223,3 +280,7 @@ set -e
   exit 1
 }
 grep -Fq -- '--yes configure-integration' "$failing_configure_calls"
+[ ! -e "$(cat "$tmp_dir/failing-adapter.path")" ] || {
+  printf 'Failed Docker integration helper left its invocation adapter behind\n' >&2
+  exit 1
+}

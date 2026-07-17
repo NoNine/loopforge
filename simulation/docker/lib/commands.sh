@@ -278,9 +278,14 @@ cmd_start() {
     print_command_failure start "" failed "$log" "$evidence"
     return 1
   fi
+  if ! docker_publish_or_verify_effective_inputs >>"$log" 2>&1; then
+    evidence="$(write_evidence start harness fail "simulate.sh start" "$log" "Stable effective input publication or verification failed")"
+    print_command_failure start "" failed "$log" "$evidence"
+    return 1
+  fi
   require_running_service ldap
   evidence="$(write_evidence start harness pass "simulate.sh start" "$log" "Started bundle factory, LDAP, Gerrit target, Jenkins controller target, and Jenkins agent target")"
-  print_command_summary start "" "started bundle-factory ldap gerrit jenkins-controller jenkins-agent"
+  print_command_summary start "" "ok resources=running target-access=ready inputs=ready"
 }
 
 docker_destroy_container_targets() {
@@ -467,6 +472,7 @@ cmd_prepare_artifacts() {
   local role helper_path service log rc evidence artifact_dir host_env_file role_env_file export_archive
   bootstrap_harness_env
   ensure_runtime_config
+  require_docker_effective_inputs
   role="${1-}"
   if [ -z "$role" ]; then
     run_all_roles prepare-artifacts
@@ -575,6 +581,7 @@ cmd_stage_artifacts() {
   local staging_root archive_name checksum_name container_archive container_checksum extract_script
   bootstrap_harness_env
   ensure_runtime_config
+  require_docker_effective_inputs
   role="${1-}"
   if [ -z "$role" ]; then
     run_all_roles stage-artifacts
@@ -668,6 +675,7 @@ cmd_configure_role() {
   local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
   ensure_runtime_config
+  require_docker_effective_inputs
   role="${1:-}"
   if [ -z "$role" ]; then
     run_all_roles configure-role
@@ -784,6 +792,7 @@ cmd_validate_role() {
   local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
   ensure_runtime_config
+  require_docker_effective_inputs
   role="${1:-}"
   if [ -z "$role" ]; then
     run_all_roles validate-role
@@ -874,12 +883,38 @@ cmd_validate_role() {
 integration_args=()
 
 refresh_integration_args() {
+  local integration_env
+  integration_env="${1:?integration invocation env required}"
   integration_args=(
     --gerrit-env "$HARNESS_GERRIT_ENV_FILE"
     --jenkins-controller-env "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
     --jenkins-agent-env "$HARNESS_JENKINS_AGENT_ENV_FILE"
-    --integration-env "$HARNESS_INTEGRATION_ENV_FILE"
+    --integration-env "$integration_env"
   )
+}
+
+docker_integration_create_invocation_adapter() {
+  local file
+  file="$(mktemp "$HARNESS_HOST_DIR/.integration-invocation.XXXXXX")" || return $?
+  install -m "$LF_MODE_PRIVATE_FILE" "$HARNESS_RUNTIME_INPUT_DIR/integration.env" \
+    "$file" || { rm -f -- "$file"; return 1; }
+  set_env_file_value "$file" INTEGRATION_GERRIT_TARGET_SSH_HOST 127.0.0.1
+  set_env_file_value "$file" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST 127.0.0.1
+  set_env_file_value "$file" INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST 127.0.0.1
+  printf '%s\n' "$file"
+}
+
+run_docker_integration_helper() {
+  local command_name log adapter rc
+  command_name="${1:?integration command required}"
+  log="${2:?bounded log required}"
+  adapter="$(docker_integration_create_invocation_adapter)" || return $?
+  refresh_integration_args "$adapter"
+  rc=0
+  "$integration_helper" "${integration_args[@]}" --yes "$command_name" \
+    >"$log" 2>&1 || rc=$?
+  rm -f -- "$adapter"
+  return "$rc"
 }
 
 write_blocked_integration_evidence() {
@@ -905,6 +940,7 @@ write_integration_validate_marker() {
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_SOURCE_INPUT_DIR" \
     "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
@@ -920,6 +956,7 @@ prove_integration_validate_marker() {
     "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" \
     "$HARNESS_RUNTIME_ENV" \
+    "$HARNESS_SOURCE_INPUT_DIR" \
     "$HARNESS_RUNTIME_INPUT_DIR" \
     "Validate-integration marker"
 }
@@ -928,11 +965,11 @@ cmd_configure_integration() {
   local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
-  refresh_integration_args
+  require_docker_effective_inputs
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   log="$(bounded_log_path configure-integration)"
-  "$integration_helper" "${integration_args[@]}" --yes configure-integration >"$log" 2>&1 || rc=$?
+  run_docker_integration_helper configure-integration "$log" || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then
@@ -954,11 +991,11 @@ cmd_validate_integration() {
   local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
-  refresh_integration_args
+  require_docker_effective_inputs
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   log="$(bounded_log_path validate-integration)"
-  "$integration_helper" "${integration_args[@]}" --yes validate-integration >"$log" 2>&1 || rc=$?
+  run_docker_integration_helper validate-integration "$log" || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then
@@ -983,12 +1020,12 @@ cmd_prove_integration() {
   local log rc evidence
   bootstrap_harness_env
   ensure_runtime_config
-  refresh_integration_args
+  require_docker_effective_inputs
   prove_integration_validate_marker
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
   log="$(bounded_log_path prove-integration)"
-  "$integration_helper" "${integration_args[@]}" --yes prove-integration >"$log" 2>&1 || rc=$?
+  run_docker_integration_helper prove-integration "$log" || rc=$?
   rc="${rc:-0}"
   if [ "$rc" -eq 0 ]; then
     if ! assert_no_forbidden_success_markers "$log"; then

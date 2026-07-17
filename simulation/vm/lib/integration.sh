@@ -4,26 +4,6 @@ vm_integration_helper() {
   printf '%s\n' "${HARNESS_TEST_INTEGRATION_HELPER:-$repo_root/scripts/integration-setup.sh}"
 }
 
-vm_integration_rendered_input_dir() {
-  printf '%s/rendered/integration-inputs\n' "$HARNESS_HOST_DIR"
-}
-
-vm_integration_select_rendered_inputs() {
-  local dir file
-  dir="$(vm_integration_rendered_input_dir)"
-  mkdir -p "$dir"
-  for file in gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-    cp -- "$HARNESS_RUNTIME_INPUT_DIR/$file" "$dir/$file" || return $?
-    chmod "$LF_MODE_PRIVATE_FILE" "$dir/$file" || return $?
-  done
-  HARNESS_GERRIT_ENV_FILE="$dir/gerrit.env"
-  HARNESS_JENKINS_CONTROLLER_ENV_FILE="$dir/jenkins-controller.env"
-  HARNESS_JENKINS_AGENT_ENV_FILE="$dir/jenkins-agent.env"
-  HARNESS_INTEGRATION_ENV_FILE="$dir/integration.env"
-  export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
-  export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
-}
-
 vm_integration_target_prefix() {
   case "${1:?role required}" in
     gerrit) printf 'INTEGRATION_GERRIT_TARGET\n' ;;
@@ -33,50 +13,26 @@ vm_integration_target_prefix() {
   esac
 }
 
-vm_integration_render_role_envs() {
-  set_env_file_value "$HARNESS_GERRIT_ENV_FILE" HARNESS_ENVIRONMENT gerrit
-  set_env_file_value "$HARNESS_GERRIT_ENV_FILE" GERRIT_HOST "gerrit.$HARNESS_LDAP_DOMAIN"
-  set_env_file_value "$HARNESS_GERRIT_ENV_FILE" GERRIT_CANONICAL_WEB_URL "http://gerrit.$HARNESS_LDAP_DOMAIN:8080/"
-  set_env_file_value "$HARNESS_GERRIT_ENV_FILE" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
-
-  set_env_file_value "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" HARNESS_ENVIRONMENT jenkins-controller
-  set_env_file_value "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" JENKINS_HOST "jenkins-controller.$HARNESS_LDAP_DOMAIN"
-  set_env_file_value "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" JENKINS_URL "http://jenkins-controller.$HARNESS_LDAP_DOMAIN:8080/"
-  set_env_file_value "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
-
-  set_env_file_value "$HARNESS_JENKINS_AGENT_ENV_FILE" HARNESS_ENVIRONMENT jenkins-agent
-  set_env_file_value "$HARNESS_JENKINS_AGENT_ENV_FILE" JENKINS_AGENT_HOST "jenkins-agent.$HARNESS_LDAP_DOMAIN"
-}
-
-vm_integration_render_target_inventory() {
-  local role machine host prefix
+vm_integration_create_invocation_adapter() {
+  local file role machine host prefix
+  file="$(mktemp "$HARNESS_HOST_DIR/.integration-invocation.XXXXXX")" || return $?
+  if ! install -m "$LF_MODE_PRIVATE_FILE" \
+    "$HARNESS_RUNTIME_INPUT_DIR/integration.env" "$file"; then
+    rm -f -- "$file"
+    return 1
+  fi
   for role in "${roles[@]}"; do
     machine="$(vm_ssh_role_machine "$role")"
-    vm_libvirt_require_running "$machine" || return $?
-    vm_ssh_verify_known_host "$machine" || return $?
-    host="$(vm_ssh_machine_host "$machine")" || return $?
+    vm_libvirt_require_running "$machine" || { rm -f -- "$file"; return 1; }
+    vm_ssh_verify_known_host "$machine" || { rm -f -- "$file"; return 1; }
+    host="$(vm_ssh_machine_host "$machine")" || { rm -f -- "$file"; return 1; }
     prefix="$(vm_integration_target_prefix "$role")"
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" "${prefix}_SSH_HOST" "$host"
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" "${prefix}_SSH_PORT" 22
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" "${prefix}_SSH_USER" "$VM_OPERATOR_USER"
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" "${prefix}_SSH_IDENTITY_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" "${prefix}_SSH_KNOWN_HOSTS_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+    set_env_file_value "$file" "${prefix}_SSH_HOST" "$host" || {
+      rm -f -- "$file"
+      return 1
+    }
   done
-}
-
-vm_integration_render_inputs() {
-  vm_integration_select_rendered_inputs || return $?
-  vm_integration_render_role_envs || return $?
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_HOST_DIR/state/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_INTEGRATION_LOG_DIR"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_INTEGRATION_EVIDENCE_DIR"
-  if [ "$HARNESS_MODE" = vm-simulation ]; then
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" JENKINS_SHARED_STORAGE_PATH /data/jenkins-shared
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_ACL_MODE apply-direct
-    set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY 1
-  fi
-  vm_integration_render_target_inventory
+  printf '%s\n' "$file"
 }
 
 vm_integration_require_roles_validated() {
@@ -88,21 +44,27 @@ vm_integration_require_roles_validated() {
 }
 
 vm_integration_args() {
+  local integration_env
+  integration_env="${1:?integration invocation env required}"
   printf '%s\n' \
     --gerrit-env "$HARNESS_GERRIT_ENV_FILE" \
     --jenkins-controller-env "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" \
     --jenkins-agent-env "$HARNESS_JENKINS_AGENT_ENV_FILE" \
-    --integration-env "$HARNESS_INTEGRATION_ENV_FILE"
+    --integration-env "$integration_env"
 }
 
 vm_integration_run_helper() {
-  local command_name helper
+  local command_name helper adapter rc
   local -a args
   command_name="${1:?command required}"
   helper="$(vm_integration_helper)"
   [ -x "$helper" ] || die "Missing executable integration helper: $helper"
-  mapfile -t args < <(vm_integration_args)
-  "$helper" "${args[@]}" --yes "$command_name"
+  adapter="$(vm_integration_create_invocation_adapter)" || return $?
+  mapfile -t args < <(vm_integration_args "$adapter")
+  rc=0
+  "$helper" "${args[@]}" --yes "$command_name" || rc=$?
+  rm -f -- "$adapter"
+  return "$rc"
 }
 
 vm_integration_assert_no_placeholder_success() {
@@ -133,7 +95,6 @@ vm_integration_failure_status() {
 
 vm_integration_configure() {
   vm_integration_require_roles_validated || return $?
-  vm_integration_render_inputs || return $?
   vm_state_invalidate_integration_validation
   vm_integration_run_helper configure-integration || return $?
   vm_state_write_integration_checkpoint configure-integration
@@ -142,7 +103,6 @@ vm_integration_configure() {
 vm_integration_validate() {
   vm_integration_require_roles_validated || return $?
   vm_state_verify_integration_checkpoint configure-integration || return $?
-  vm_integration_render_inputs || return $?
   vm_integration_run_helper validate-integration || return $?
   vm_state_write_integration_checkpoint validate-integration
 }
@@ -150,7 +110,6 @@ vm_integration_validate() {
 vm_integration_prove() {
   vm_integration_require_roles_validated || return $?
   vm_state_verify_integration_checkpoint validate-integration || return $?
-  vm_integration_render_inputs || return $?
   vm_integration_run_helper prove-integration
 }
 

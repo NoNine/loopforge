@@ -133,7 +133,7 @@ env "${common_env[@]}" \
   >/dev/null
 
 snapshot="$tmp_dir/env-files.before"
-find "$run_dir/host/runtime-inputs" -type f -name '*.env' -print0 |
+find "$run_dir/host/source-inputs" -type f -name '*.env' -print0 |
   sort -z |
   xargs -0 sha256sum >"$snapshot"
 
@@ -161,12 +161,13 @@ do
 done
 
 after="$tmp_dir/env-files.after"
-find "$run_dir/host/runtime-inputs" -type f -name '*.env' -print0 |
+find "$run_dir/host/source-inputs" -type f -name '*.env' -print0 |
   sort -z |
   xargs -0 sha256sum >"$after"
 
 if ! cmp -s "$snapshot" "$after"; then
-  printf 'Lifecycle command created or modified rendered/runtime env files\n' >&2
+  printf 'Lifecycle command modified source input snapshots\n' >&2
   diff -u "$snapshot" "$after" >&2 || true
   exit 1
 fi
+[ ! -e "$run_dir/host/runtime-inputs" ]

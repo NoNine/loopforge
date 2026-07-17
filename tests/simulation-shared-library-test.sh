@@ -46,7 +46,10 @@ for helper in \
   resolve_base_relative_path \
   source_env_file \
   set_env_file_value \
-  copy_simulation_runtime_env_inputs \
+  remove_env_file_value \
+  copy_simulation_input_bundle \
+  simulation_input_bundles_are_identical \
+  publish_simulation_input_bundle \
   validate_harness_set_id \
   simulation_resource_namespace \
   simulation_short_resource_name \
@@ -57,10 +60,13 @@ for helper in \
   simulation_set_lock_release \
   simulation_with_set_lock \
   sha256_file \
+  sha256_fingerprint_is_valid \
   runtime_env_fingerprint \
   marker_value \
+  simulation_input_bundle_fingerprint \
   write_runtime_marker \
   verify_runtime_marker \
+  write_effective_inputs_record \
   write_checkpoint_marker \
   verify_checkpoint_marker \
   require_generated_state_file \
@@ -147,23 +153,32 @@ verify_checksum_file_in_dir "$tmp_dir/checksums.sha256" "$tmp_dir" /dev/null
 
 runtime_env="$tmp_dir/runtime.env"
 marker="$tmp_dir/run.marker"
-runtime_inputs="$tmp_dir/runtime-inputs"
+source_inputs="$tmp_dir/source-inputs"
+effective_inputs="$tmp_dir/effective-inputs"
 printf 'HARNESS_MODE=test\n' >"$runtime_env"
-mkdir -p "$runtime_inputs"
+mkdir -p "$source_inputs" "$effective_inputs"
 for input in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-  printf '%s=test\n' "$input" >"$runtime_inputs/$input"
+  printf '%s=test\n' "$input" >"$source_inputs/$input"
+  cp "$source_inputs/$input" "$effective_inputs/$input"
 done
 write_runtime_marker "$marker" test-mode docker default run-1 \
-  loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" "$runtime_inputs"
+  loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" "$source_inputs"
 verify_runtime_marker "$marker" test-mode docker default run-1 \
   loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" \
-  "$runtime_inputs" "test run marker"
+  "$source_inputs" "test run marker"
+
+effective_record="$tmp_dir/effective-inputs.env"
+write_effective_inputs_record "$effective_record" docker default run-1 "$marker" \
+  "$(simulation_input_bundle_fingerprint "$source_inputs")" "$effective_inputs"
+effective_inputs_record_is_bound "$effective_record" docker default run-1 \
+  "$marker" "$source_inputs" "$effective_inputs"
 
 checkpoint_marker="$tmp_dir/checkpoint.marker"
 write_checkpoint_marker "$checkpoint_marker" test-mode docker default run-1 \
-  loopforge-docker-default "$runtime_env" "$runtime_inputs"
+  loopforge-docker-default "$runtime_env" "$source_inputs" "$effective_inputs"
 verify_checkpoint_marker "$checkpoint_marker" test-mode docker default run-1 \
-  loopforge-docker-default "$runtime_env" "$runtime_inputs" "test checkpoint marker"
+  loopforge-docker-default "$runtime_env" "$source_inputs" "$effective_inputs" \
+  "test checkpoint marker"
 
 require_generated_state_file "test generated state" payload "$tmp_dir/payload.txt"
 require_generated_state_dir "test generated state" tmp "$tmp_dir"

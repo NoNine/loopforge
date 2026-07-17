@@ -200,7 +200,7 @@ set -e
   printf 'stage-artifacts should fail when target is not running\n' >&2
   exit 1
 }
-grep -Fq "Harness service 'gerrit-target' is not running; run start first" "$tmp_dir/stage-not-running.out"
+grep -Fq 'Simulation effective inputs are pending; run start first' "$tmp_dir/stage-not-running.out"
 if grep -Fq 'compose up -d --build' "$calls"; then
   printf 'stage-artifacts must not call Compose startup implicitly\n' >&2
   exit 1

@@ -264,8 +264,21 @@ grep -Fq 'forced cloud-init failure' "$cloud_init_failure_log"
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" start >"$tmp_dir/start.out"
-grep -Fxq "start: ok set-id=$vm_set_id ssh=ready" "$tmp_dir/start.out"
+grep -Fxq "start: ok set-id=$vm_set_id target-access=ready inputs=ready" "$tmp_dir/start.out"
 grep -Fq 'ssh_host=192.168.126.' "$generated_root/sets/$vm_set_id/libvirt/machines/gerrit.env"
+effective_dir="$generated_root/$run_id/host/runtime-inputs"
+effective_record="$generated_root/$run_id/host/state/effective-inputs.env"
+[ -f "$effective_record" ]
+grep -Fxq 'input_state=ready' \
+  "$generated_root/$run_id/host/state/workflow-state.env"
+for role_env in gerrit.env jenkins-controller.env jenkins-agent.env; do
+  grep -Fq 'HARNESS_MODE=vm-simulation' "$effective_dir/$role_env"
+done
+if grep -Eq '^INTEGRATION_(GERRIT|JENKINS_CONTROLLER|JENKINS_AGENT)_TARGET_SSH_HOST=' \
+  "$effective_dir/integration.env"; then
+  printf 'VM effective integration input must exclude ephemeral DHCP hosts\n' >&2
+  exit 1
+fi
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" status >"$tmp_dir/status.out"
@@ -304,7 +317,7 @@ awk '
 
 PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
   "$repo_root/simulation/vm/simulate.sh" --env "$env_file" start >"$tmp_dir/start-after-stop.out"
-grep -Fxq "start: ok set-id=$vm_set_id ssh=ready" "$tmp_dir/start-after-stop.out"
+grep -Fxq "start: ok set-id=$vm_set_id target-access=ready inputs=ready" "$tmp_dir/start-after-stop.out"
 
 stuck_domain="loopforge-vm-$vm_set_id-gerrit"
 : >"$virsh_calls"
@@ -410,7 +423,7 @@ if [ "${VM_TEST_INCLUDE_M5:-0}" -eq 1 ]; then
     "$tmp_dir/create-after-clean.out"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" start >"$tmp_dir/start-after-clean.out"
-  grep -Fxq "start: ok set-id=$vm_set_id ssh=ready" "$tmp_dir/start-after-clean.out"
+  grep -Fxq "start: ok set-id=$vm_set_id target-access=ready inputs=ready" "$tmp_dir/start-after-clean.out"
   PATH="$stub_bin:$PATH" VM_STUB_STATE="$stub_state" \
     "$repo_root/simulation/vm/simulate.sh" --env "$env_file" stop >"$tmp_dir/stop-after-clean.out"
   grep -Fxq "stop: ok set-id=$vm_set_id" "$tmp_dir/stop-after-clean.out"

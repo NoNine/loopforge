@@ -51,6 +51,15 @@ docker_run="$(sed -n 's/.*run-id=\([^ ]*\).*/\1/p' "$tmp_dir/docker.out")"
 case "$docker_run" in run-*t*z-[a-f0-9]*) ;; *) exit 1 ;; esac
 [ -f "$docker_root/sets/$docker_set/active-run.env" ]
 [ -f "$docker_root/$docker_run/host/state/workflow-state.env" ]
+[ -d "$docker_root/$docker_run/host/source-inputs" ]
+[ ! -e "$docker_root/$docker_run/host/runtime-inputs" ]
+[ ! -e "$docker_root/$docker_run/host/state/effective-inputs.env" ]
+grep -Fxq 'input_state=pending' \
+  "$docker_root/$docker_run/host/state/workflow-state.env"
+grep -Fxq 'effective_inputs_fingerprint=none' \
+  "$docker_root/$docker_run/host/state/workflow-state.env"
+grep -Eq '^source_inputs_fingerprint=[a-f0-9]{64}$' \
+  "$docker_root/$docker_run/.loopforge-docker-run.env"
 grep -Fxq "resource_namespace=loopforge-docker-$docker_set" \
   "$docker_root/sets/$docker_set/active-run.env"
 [ "$(resolve_harness_run_id docker "$docker_root" "$docker_set" "")" = "$docker_run" ]
@@ -61,6 +70,15 @@ vm_run="$(sed -n 's/.*run-id=\([^ ]*\).*/\1/p' "$tmp_dir/vm.out")"
 case "$vm_run" in run-*t*z-[a-f0-9]*) ;; *) exit 1 ;; esac
 [ -f "$vm_root/sets/$vm_set/active-run.env" ]
 [ -f "$vm_root/$vm_run/host/state/workflow-state.env" ]
+[ -d "$vm_root/$vm_run/host/source-inputs" ]
+[ ! -e "$vm_root/$vm_run/host/runtime-inputs" ]
+[ ! -e "$vm_root/$vm_run/host/state/effective-inputs.env" ]
+grep -Fxq 'input_state=pending' \
+  "$vm_root/$vm_run/host/state/workflow-state.env"
+grep -Fxq 'effective_inputs_fingerprint=none' \
+  "$vm_root/$vm_run/host/state/workflow-state.env"
+grep -Eq '^source_inputs_fingerprint=[a-f0-9]{64}$' \
+  "$vm_root/$vm_run/.loopforge-vm-run.env"
 grep -Fxq "resource_namespace=loopforge-vm-$vm_set" \
   "$vm_root/sets/$vm_set/active-run.env"
 [ "$(resolve_harness_run_id vm "$vm_root" "$vm_set" "")" = "$vm_run" ]
@@ -108,5 +126,10 @@ chmod 0700 "$docker_root/sets/$publish_set"
 [ ! -e "$docker_root/sets/$publish_set/active-run.env" ]
 [ -f "$docker_root/publish-fail-run/.loopforge-docker-run.env" ]
 [ -f "$docker_root/publish-fail-run/host/state/workflow-state.env" ]
+[ -d "$docker_root/publish-fail-run/host/source-inputs" ]
+[ ! -e "$docker_root/publish-fail-run/host/runtime-inputs" ]
+[ ! -e "$docker_root/publish-fail-run/host/state/effective-inputs.env" ]
+grep -Fxq 'input_state=pending' \
+  "$docker_root/publish-fail-run/host/state/workflow-state.env"
 
 printf 'Simulation init-run state test passed\n'

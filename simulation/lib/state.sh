@@ -4,6 +4,15 @@ sha256_file() {
   sha256sum "$1" | awk '{print $1}'
 }
 
+sha256_fingerprint_is_valid() {
+  local value
+  value="${1-}"
+  [ "${#value}" -eq 64 ] || return 1
+  case "$value" in
+    *[!0-9a-f]*) return 1 ;;
+  esac
+}
+
 runtime_env_fingerprint() {
   local runtime_env
   runtime_env="${1:-${HARNESS_RUNTIME_ENV:-}}"
@@ -64,11 +73,11 @@ atomic_write_record() {
   fi
 }
 
-reviewed_inputs_fingerprint() {
+simulation_input_bundle_fingerprint() {
   local input_dir file
-  input_dir="${1:?runtime input directory required}"
+  input_dir="${1:?simulation input directory required}"
   for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-    [ -f "$input_dir/$file" ] || die "Missing reviewed runtime input: $input_dir/$file"
+    [ -f "$input_dir/$file" ] || die "Missing simulation input: $input_dir/$file"
   done
   (
     cd "$input_dir" || exit
@@ -80,7 +89,7 @@ reviewed_inputs_fingerprint() {
 
 write_runtime_marker() {
   local marker mode backend set_id run_id namespace repo_root generated_run_dir
-  local runtime_env input_dir runtime_fingerprint inputs_fingerprint
+  local runtime_env source_dir runtime_fingerprint source_fingerprint
   marker="${1:?marker required}"
   mode="${2:?mode required}"
   backend="${3:?backend required}"
@@ -90,9 +99,9 @@ write_runtime_marker() {
   repo_root="${7:?repo root required}"
   generated_run_dir="${8:?generated run dir required}"
   runtime_env="${9:?runtime env required}"
-  input_dir="${10:?runtime input directory required}"
+  source_dir="${10:?source input directory required}"
   runtime_fingerprint="$(runtime_env_fingerprint "$runtime_env")"
-  inputs_fingerprint="$(reviewed_inputs_fingerprint "$input_dir")"
+  source_fingerprint="$(simulation_input_bundle_fingerprint "$source_dir")"
   atomic_write_record "$marker" "${LF_MODE_PUBLIC_FILE:-0644}" \
     "schema_version=1" \
     "mode=$mode" \
@@ -103,12 +112,12 @@ write_runtime_marker() {
     "repo_root=$repo_root" \
     "generated_run_dir=$generated_run_dir" \
     "runtime_env_fingerprint=$runtime_fingerprint" \
-    "reviewed_inputs_fingerprint=$inputs_fingerprint"
+    "source_inputs_fingerprint=$source_fingerprint"
 }
 
 verify_runtime_marker() {
   local marker mode backend set_id run_id namespace repo_root generated_run_dir
-  local runtime_env input_dir label runtime_fingerprint inputs_fingerprint
+  local runtime_env source_dir label runtime_fingerprint source_fingerprint
   marker="${1:?marker required}"
   mode="${2:?mode required}"
   backend="${3:?backend required}"
@@ -118,13 +127,13 @@ verify_runtime_marker() {
   repo_root="${7:?repo root required}"
   generated_run_dir="${8:?generated run dir required}"
   runtime_env="${9:?runtime env required}"
-  input_dir="${10:?runtime input directory required}"
+  source_dir="${10:?source input directory required}"
   label="${11:-Run marker}"
 
   [ -f "$marker" ] || die "Missing $label: $marker"
   strict_record_keys "$marker" schema_version mode backend set_id run_id \
     resource_namespace repo_root generated_run_dir runtime_env_fingerprint \
-    reviewed_inputs_fingerprint || die "$label has malformed or unexpected fields"
+    source_inputs_fingerprint || die "$label has malformed or unexpected fields"
   [ "$(strict_record_value "$marker" schema_version)" = 1 ] ||
     die "$label schema version is unsupported"
   [ "$(strict_record_value "$marker" mode)" = "$mode" ] ||
@@ -144,14 +153,62 @@ verify_runtime_marker() {
   runtime_fingerprint="$(runtime_env_fingerprint "$runtime_env")"
   [ "$(strict_record_value "$marker" runtime_env_fingerprint)" = "$runtime_fingerprint" ] ||
     die "$label runtime env fingerprint does not match selected runtime config"
-  inputs_fingerprint="$(reviewed_inputs_fingerprint "$input_dir")"
-  [ "$(strict_record_value "$marker" reviewed_inputs_fingerprint)" = "$inputs_fingerprint" ] ||
-    die "$label reviewed inputs fingerprint does not match runtime inputs"
+  source_fingerprint="$(simulation_input_bundle_fingerprint "$source_dir")"
+  [ "$(strict_record_value "$marker" source_inputs_fingerprint)" = "$source_fingerprint" ] ||
+    die "$label source input fingerprint does not match source inputs"
+}
+
+write_effective_inputs_record() {
+  local file backend set_id run_id marker source_fingerprint effective_dir
+  file="${1:?effective-input record required}"
+  backend="${2:?backend required}"
+  set_id="${3:?set ID required}"
+  run_id="${4:?run ID required}"
+  marker="${5:?run marker required}"
+  source_fingerprint="${6:?source input fingerprint required}"
+  effective_dir="${7:?effective input directory required}"
+  atomic_write_record "$file" "${LF_MODE_REVIEW_FILE:-0640}" \
+    "schema_version=1" \
+    "backend=$backend" \
+    "set_id=$set_id" \
+    "run_id=$run_id" \
+    "run_marker_sha256=$(sha256_file "$marker")" \
+    "source_inputs_fingerprint=$source_fingerprint" \
+    "effective_inputs_fingerprint=$(simulation_input_bundle_fingerprint "$effective_dir")"
+}
+
+effective_inputs_record_is_strict() {
+  strict_record_keys "${1:?effective-input record required}" schema_version \
+    backend set_id run_id run_marker_sha256 source_inputs_fingerprint \
+    effective_inputs_fingerprint
+}
+
+effective_inputs_record_is_bound() {
+  local file backend set_id run_id marker source_dir effective_dir
+  file="${1:?effective-input record required}"
+  backend="${2:?backend required}"
+  set_id="${3:?set ID required}"
+  run_id="${4:?run ID required}"
+  marker="${5:?run marker required}"
+  source_dir="${6:?source input directory required}"
+  effective_dir="${7:?effective input directory required}"
+  effective_inputs_record_is_strict "$file" || return 1
+  [ "$(strict_record_value "$file" schema_version)" = 1 ] || return 1
+  [ "$(strict_record_value "$file" backend)" = "$backend" ] || return 1
+  [ "$(strict_record_value "$file" set_id)" = "$set_id" ] || return 1
+  [ "$(strict_record_value "$file" run_id)" = "$run_id" ] || return 1
+  [ "$(strict_record_value "$file" run_marker_sha256)" = "$(sha256_file "$marker")" ] || return 1
+  sha256_fingerprint_is_valid "$(strict_record_value "$file" source_inputs_fingerprint)" || return 1
+  sha256_fingerprint_is_valid "$(strict_record_value "$file" effective_inputs_fingerprint)" || return 1
+  [ "$(strict_record_value "$file" source_inputs_fingerprint)" = \
+    "$(simulation_input_bundle_fingerprint "$source_dir")" ] || return 1
+  [ "$(strict_record_value "$file" effective_inputs_fingerprint)" = \
+    "$(simulation_input_bundle_fingerprint "$effective_dir")" ]
 }
 
 write_checkpoint_marker() {
-  local marker mode backend set_id run_id namespace runtime_env input_dir
-  local runtime_fingerprint inputs_fingerprint
+  local marker mode backend set_id run_id namespace runtime_env source_dir
+  local effective_dir runtime_fingerprint source_fingerprint effective_fingerprint
   marker="${1:?marker required}"
   mode="${2:?mode required}"
   backend="${3:?backend required}"
@@ -159,9 +216,11 @@ write_checkpoint_marker() {
   run_id="${5:?run ID required}"
   namespace="${6:?resource namespace required}"
   runtime_env="${7:?runtime env required}"
-  input_dir="${8:?runtime input directory required}"
+  source_dir="${8:?source input directory required}"
+  effective_dir="${9:?effective input directory required}"
   runtime_fingerprint="$(runtime_env_fingerprint "$runtime_env")"
-  inputs_fingerprint="$(reviewed_inputs_fingerprint "$input_dir")"
+  source_fingerprint="$(simulation_input_bundle_fingerprint "$source_dir")"
+  effective_fingerprint="$(simulation_input_bundle_fingerprint "$effective_dir")"
   atomic_write_record "$marker" "${LF_MODE_PUBLIC_FILE:-0644}" \
     "schema_version=1" \
     "mode=$mode" \
@@ -170,12 +229,14 @@ write_checkpoint_marker() {
     "run_id=$run_id" \
     "resource_namespace=$namespace" \
     "runtime_env_fingerprint=$runtime_fingerprint" \
-    "reviewed_inputs_fingerprint=$inputs_fingerprint"
+    "source_inputs_fingerprint=$source_fingerprint" \
+    "effective_inputs_fingerprint=$effective_fingerprint"
 }
 
 verify_checkpoint_marker() {
-  local marker mode backend set_id run_id namespace runtime_env input_dir label
-  local runtime_fingerprint inputs_fingerprint
+  local marker mode backend set_id run_id namespace runtime_env source_dir
+  local effective_dir label runtime_fingerprint source_fingerprint
+  local effective_fingerprint
   marker="${1:?marker required}"
   mode="${2:?mode required}"
   backend="${3:?backend required}"
@@ -183,12 +244,14 @@ verify_checkpoint_marker() {
   run_id="${5:?run ID required}"
   namespace="${6:?resource namespace required}"
   runtime_env="${7:?runtime env required}"
-  input_dir="${8:?runtime input directory required}"
-  label="${9:-Checkpoint marker}"
+  source_dir="${8:?source input directory required}"
+  effective_dir="${9:?effective input directory required}"
+  label="${10:-Checkpoint marker}"
 
   [ -f "$marker" ] || die "Missing $label: $marker"
   strict_record_keys "$marker" schema_version mode backend set_id run_id \
-    resource_namespace runtime_env_fingerprint reviewed_inputs_fingerprint ||
+    resource_namespace runtime_env_fingerprint source_inputs_fingerprint \
+    effective_inputs_fingerprint ||
     die "$label has malformed or unexpected fields"
   [ "$(strict_record_value "$marker" schema_version)" = 1 ] ||
     die "$label schema version is unsupported"
@@ -205,9 +268,12 @@ verify_checkpoint_marker() {
   runtime_fingerprint="$(runtime_env_fingerprint "$runtime_env")"
   [ "$(strict_record_value "$marker" runtime_env_fingerprint)" = "$runtime_fingerprint" ] ||
     die "$label runtime env fingerprint does not match selected runtime config"
-  inputs_fingerprint="$(reviewed_inputs_fingerprint "$input_dir")"
-  [ "$(strict_record_value "$marker" reviewed_inputs_fingerprint)" = "$inputs_fingerprint" ] ||
-    die "$label reviewed inputs fingerprint does not match runtime inputs"
+  source_fingerprint="$(simulation_input_bundle_fingerprint "$source_dir")"
+  [ "$(strict_record_value "$marker" source_inputs_fingerprint)" = "$source_fingerprint" ] ||
+    die "$label source input fingerprint does not match source inputs"
+  effective_fingerprint="$(simulation_input_bundle_fingerprint "$effective_dir")"
+  [ "$(strict_record_value "$marker" effective_inputs_fingerprint)" = "$effective_fingerprint" ] ||
+    die "$label effective input fingerprint does not match effective inputs"
 }
 
 write_active_run_record() {
@@ -240,14 +306,14 @@ active_run_record_is_strict() {
 }
 
 write_initial_workflow_state() {
-  local file backend set_id run_id marker baseline inputs
+  local file backend set_id run_id marker baseline source_fingerprint
   file="${1:?workflow state file required}"
   backend="${2:?backend required}"
   set_id="${3:?set ID required}"
   run_id="${4:?run ID required}"
   marker="${5:?run marker required}"
   baseline="${6:?baseline fingerprint required}"
-  inputs="${7:?reviewed inputs fingerprint required}"
+  source_fingerprint="${7:?source input fingerprint required}"
   atomic_write_record "$file" "${LF_MODE_REVIEW_FILE:-0640}" \
     "schema_version=1" \
     "backend=$backend" \
@@ -255,7 +321,9 @@ write_initial_workflow_state() {
     "run_id=$run_id" \
     "run_marker_sha256=$(sha256_file "$marker")" \
     "baseline_fingerprint=$baseline" \
-    "reviewed_inputs_fingerprint=$inputs" \
+    "source_inputs_fingerprint=$source_fingerprint" \
+    "input_state=pending" \
+    "effective_inputs_fingerprint=none" \
     "activity=idle" \
     "active_checkpoint=none" \
     "last_checkpoint=none" \
@@ -265,12 +333,12 @@ write_initial_workflow_state() {
 workflow_state_is_strict() {
   strict_record_keys "${1:?workflow state file required}" schema_version backend \
     set_id run_id run_marker_sha256 baseline_fingerprint \
-    reviewed_inputs_fingerprint activity active_checkpoint last_checkpoint \
-    last_record_sha256
+    source_inputs_fingerprint input_state effective_inputs_fingerprint activity \
+    active_checkpoint last_checkpoint last_record_sha256
 }
 
 lifecycle_records_are_bound() {
-  local active marker workflow backend set_id run_id namespace inputs
+  local active marker workflow backend set_id run_id namespace source_fingerprint
   local active_state restore activity active_checkpoint
   active="${1:?active-run file required}"
   marker="${2:?run marker required}"
@@ -279,7 +347,7 @@ lifecycle_records_are_bound() {
   set_id="${5:?set ID required}"
   run_id="${6:?run ID required}"
   namespace="${7:?resource namespace required}"
-  inputs="${8:?reviewed inputs fingerprint required}"
+  source_fingerprint="${8:?source input fingerprint required}"
   active_run_record_is_strict "$active" || return 1
   workflow_state_is_strict "$workflow" || return 1
   [ "$(strict_record_value "$active" schema_version)" = 1 ] || return 1
@@ -294,7 +362,18 @@ lifecycle_records_are_bound() {
   [ "$(strict_record_value "$active" run_marker_sha256)" = "$(sha256_file "$marker")" ] || return 1
   [ "$(strict_record_value "$workflow" run_marker_sha256)" = "$(sha256_file "$marker")" ] || return 1
   [ "$(strict_record_value "$active" baseline_fingerprint)" = "$(strict_record_value "$workflow" baseline_fingerprint)" ] || return 1
-  [ "$(strict_record_value "$workflow" reviewed_inputs_fingerprint)" = "$inputs" ] || return 1
+  [ "$(strict_record_value "$marker" source_inputs_fingerprint)" = "$source_fingerprint" ] || return 1
+  [ "$(strict_record_value "$workflow" source_inputs_fingerprint)" = "$source_fingerprint" ] || return 1
+  case "$(strict_record_value "$workflow" input_state)" in
+    pending)
+      [ "$(strict_record_value "$workflow" effective_inputs_fingerprint)" = none ] || return 1
+      ;;
+    ready)
+      sha256_fingerprint_is_valid \
+        "$(strict_record_value "$workflow" effective_inputs_fingerprint)" || return 1
+      ;;
+    *) return 1 ;;
+  esac
   active_state="$(strict_record_value "$active" state)"
   restore="$(strict_record_value "$active" restore_evidence_sha256)"
   case "$active_state:$restore" in active:none|restored-pending-clean:*) ;; *) return 1 ;; esac
@@ -308,12 +387,151 @@ lifecycle_records_are_bound() {
   esac
 }
 
+workflow_state_publish_effective_inputs() {
+  local workflow record
+  workflow="${1:?workflow state file required}"
+  record="${2:?effective-input record required}"
+  workflow_state_is_strict "$workflow" ||
+    die "Workflow state has malformed or unexpected fields"
+  effective_inputs_record_is_strict "$record" ||
+    die "Effective-input record has malformed or unexpected fields"
+  [ "$(strict_record_value "$record" schema_version)" = 1 ] ||
+    die "Effective-input record schema version is unsupported"
+  sha256_fingerprint_is_valid \
+    "$(strict_record_value "$record" effective_inputs_fingerprint)" ||
+    die "Effective-input record fingerprint is malformed"
+  [ "$(strict_record_value "$workflow" input_state)" = pending ] ||
+    die "Workflow effective inputs are not pending"
+  [ "$(strict_record_value "$workflow" effective_inputs_fingerprint)" = none ] ||
+    die "Pending workflow has an effective input fingerprint"
+  [ "$(strict_record_value "$workflow" activity)" = idle ] ||
+    die "Workflow state is not idle"
+  [ "$(strict_record_value "$workflow" active_checkpoint)" = none ] ||
+    die "Workflow state has an unexpected active checkpoint"
+  [ "$(strict_record_value "$workflow" last_checkpoint)" = none ] ||
+    die "Workflow already has checkpoint progress"
+  [ "$(strict_record_value "$record" backend)" = "$(strict_record_value "$workflow" backend)" ] ||
+    die "Effective-input record backend does not match workflow state"
+  [ "$(strict_record_value "$record" set_id)" = "$(strict_record_value "$workflow" set_id)" ] ||
+    die "Effective-input record set ID does not match workflow state"
+  [ "$(strict_record_value "$record" run_id)" = "$(strict_record_value "$workflow" run_id)" ] ||
+    die "Effective-input record run ID does not match workflow state"
+  [ "$(strict_record_value "$record" run_marker_sha256)" = "$(strict_record_value "$workflow" run_marker_sha256)" ] ||
+    die "Effective-input record run marker does not match workflow state"
+  [ "$(strict_record_value "$record" source_inputs_fingerprint)" = "$(strict_record_value "$workflow" source_inputs_fingerprint)" ] ||
+    die "Effective-input record source inputs do not match workflow state"
+  atomic_write_record "$workflow" "${LF_MODE_REVIEW_FILE:-0640}" \
+    "schema_version=$(strict_record_value "$workflow" schema_version)" \
+    "backend=$(strict_record_value "$workflow" backend)" \
+    "set_id=$(strict_record_value "$workflow" set_id)" \
+    "run_id=$(strict_record_value "$workflow" run_id)" \
+    "run_marker_sha256=$(strict_record_value "$workflow" run_marker_sha256)" \
+    "baseline_fingerprint=$(strict_record_value "$workflow" baseline_fingerprint)" \
+    "source_inputs_fingerprint=$(strict_record_value "$workflow" source_inputs_fingerprint)" \
+    "input_state=ready" \
+    "effective_inputs_fingerprint=$(strict_record_value "$record" effective_inputs_fingerprint)" \
+    "activity=idle" \
+    "active_checkpoint=none" \
+    "last_checkpoint=none" \
+    "last_record_sha256=none"
+}
+
+simulation_input_state_is_bound() {
+  local workflow marker backend set_id run_id source_dir record effective_dir
+  local source_fingerprint input_state effective_fingerprint
+  workflow="${1:?workflow state file required}"
+  marker="${2:?run marker required}"
+  backend="${3:?backend required}"
+  set_id="${4:?set ID required}"
+  run_id="${5:?run ID required}"
+  source_dir="${6:?source input directory required}"
+  record="${7:?effective-input record required}"
+  effective_dir="${8:?effective input directory required}"
+  workflow_state_is_strict "$workflow" || return 1
+  source_fingerprint="$(simulation_input_bundle_fingerprint "$source_dir")" || return 1
+  [ "$(strict_record_value "$marker" source_inputs_fingerprint)" = "$source_fingerprint" ] || return 1
+  [ "$(strict_record_value "$workflow" source_inputs_fingerprint)" = "$source_fingerprint" ] || return 1
+  input_state="$(strict_record_value "$workflow" input_state)"
+  effective_fingerprint="$(strict_record_value "$workflow" effective_inputs_fingerprint)"
+  case "$input_state" in
+    pending)
+      [ "$effective_fingerprint" = none ] || return 1
+      [ ! -e "$record" ] && [ ! -e "$effective_dir" ]
+      ;;
+    ready)
+      sha256_fingerprint_is_valid "$effective_fingerprint" || return 1
+      effective_inputs_record_is_bound "$record" "$backend" "$set_id" "$run_id" \
+        "$marker" "$source_dir" "$effective_dir" || return 1
+      [ "$(strict_record_value "$record" effective_inputs_fingerprint)" = "$effective_fingerprint" ]
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+require_effective_inputs_ready() {
+  local workflow marker backend set_id run_id source_dir record effective_dir
+  workflow="${1:?workflow state file required}"
+  marker="${2:?run marker required}"
+  backend="${3:?backend required}"
+  set_id="${4:?set ID required}"
+  run_id="${5:?run ID required}"
+  source_dir="${6:?source input directory required}"
+  record="${7:?effective-input record required}"
+  effective_dir="${8:?effective input directory required}"
+  simulation_input_state_is_bound "$workflow" "$marker" "$backend" "$set_id" \
+    "$run_id" "$source_dir" "$record" "$effective_dir" ||
+    die "Simulation effective input state is missing, changed, or partially published"
+  [ "$(strict_record_value "$workflow" input_state)" = ready ] ||
+    die "Simulation effective inputs are pending; run start first"
+}
+
+publish_or_verify_effective_inputs() {
+  local workflow marker backend set_id run_id source_dir record effective_dir
+  local staged source_fingerprint input_state
+  workflow="${1:?workflow state file required}"
+  marker="${2:?run marker required}"
+  backend="${3:?backend required}"
+  set_id="${4:?set ID required}"
+  run_id="${5:?run ID required}"
+  source_dir="${6:?source input directory required}"
+  record="${7:?effective-input record required}"
+  effective_dir="${8:?effective input directory required}"
+  staged="${9:?staged effective input directory required}"
+  simulation_input_state_is_bound "$workflow" "$marker" "$backend" "$set_id" \
+    "$run_id" "$source_dir" "$record" "$effective_dir" ||
+    die "Simulation effective input state is changed or partially published"
+  input_state="$(strict_record_value "$workflow" input_state)"
+  case "$input_state" in
+    pending)
+      source_fingerprint="$(simulation_input_bundle_fingerprint "$source_dir")"
+      publish_simulation_input_bundle "$staged" "$effective_dir" || return $?
+      [ "${HARNESS_TEST_EFFECTIVE_PUBLICATION_FAIL_AFTER:-}" != directory ] ||
+        die "Injected effective input publication failure after directory"
+      write_effective_inputs_record "$record" "$backend" "$set_id" "$run_id" \
+        "$marker" "$source_fingerprint" "$effective_dir" || return $?
+      [ "${HARNESS_TEST_EFFECTIVE_PUBLICATION_FAIL_AFTER:-}" != record ] ||
+        die "Injected effective input publication failure after record"
+      workflow_state_publish_effective_inputs "$workflow" "$record"
+      ;;
+    ready)
+      simulation_input_bundles_are_identical "$effective_dir" "$staged" ||
+        die "Rendered effective inputs changed after first publication"
+      rm -rf -- "$staged"
+      ;;
+    *) die "Unsupported workflow input state: $input_state" ;;
+  esac
+  require_effective_inputs_ready "$workflow" "$marker" "$backend" "$set_id" \
+    "$run_id" "$source_dir" "$record" "$effective_dir"
+}
+
 workflow_state_publish_activity() {
   local file activity checkpoint
   file="${1:?workflow state file required}"
   activity="${2:?workflow activity required}"
   checkpoint="${3:?checkpoint required}"
   workflow_state_is_strict "$file" || die "Workflow state has malformed or unexpected fields"
+  [ "$(strict_record_value "$file" input_state)" = ready ] ||
+    die "Workflow effective inputs are not ready"
   [ "$(strict_record_value "$file" activity)" = idle ] ||
     die "Workflow state is not idle"
   [ "$(strict_record_value "$file" active_checkpoint)" = none ] ||
@@ -331,7 +549,9 @@ workflow_state_publish_activity() {
     "run_id=$(strict_record_value "$file" run_id)" \
     "run_marker_sha256=$(strict_record_value "$file" run_marker_sha256)" \
     "baseline_fingerprint=$(strict_record_value "$file" baseline_fingerprint)" \
-    "reviewed_inputs_fingerprint=$(strict_record_value "$file" reviewed_inputs_fingerprint)" \
+    "source_inputs_fingerprint=$(strict_record_value "$file" source_inputs_fingerprint)" \
+    "input_state=ready" \
+    "effective_inputs_fingerprint=$(strict_record_value "$file" effective_inputs_fingerprint)" \
     "activity=$activity" \
     "active_checkpoint=$checkpoint" \
     "last_checkpoint=$(strict_record_value "$file" last_checkpoint)" \
@@ -339,7 +559,8 @@ workflow_state_publish_activity() {
 }
 
 write_immutable_checkpoint_record() {
-  local file backend set_id run_id baseline inputs checkpoint predecessor
+  local file backend set_id run_id baseline source_inputs effective_inputs
+  local checkpoint predecessor
   local mutation_kind status evidence started completed evidence_sha
   file="${1:?checkpoint record file required}"
   [ ! -e "$file" ] || die "Checkpoint record already exists: $file"
@@ -347,14 +568,15 @@ write_immutable_checkpoint_record() {
   set_id="${3:?set ID required}"
   run_id="${4:?run ID required}"
   baseline="${5:?baseline fingerprint required}"
-  inputs="${6:?reviewed inputs fingerprint required}"
-  checkpoint="${7:?checkpoint required}"
-  predecessor="${8:?predecessor fingerprint required}"
-  mutation_kind="${9:?mutation kind required}"
-  status="${10:?checkpoint status required}"
-  evidence="${11:?evidence file required}"
-  started="${12:?start timestamp required}"
-  completed="${13:?completion timestamp required}"
+  source_inputs="${6:?source input fingerprint required}"
+  effective_inputs="${7:?effective input fingerprint required}"
+  checkpoint="${8:?checkpoint required}"
+  predecessor="${9:?predecessor fingerprint required}"
+  mutation_kind="${10:?mutation kind required}"
+  status="${11:?checkpoint status required}"
+  evidence="${12:?evidence file required}"
+  started="${13:?start timestamp required}"
+  completed="${14:?completion timestamp required}"
   simulation_checkpoint_name_is_known "$checkpoint" ||
     die "Unknown simulation checkpoint: $checkpoint"
   case "$mutation_kind" in mutating|observational) ;; *) die "Invalid checkpoint mutation kind" ;; esac
@@ -366,7 +588,8 @@ write_immutable_checkpoint_record() {
     "set_id=$set_id" \
     "run_id=$run_id" \
     "baseline_fingerprint=$baseline" \
-    "reviewed_inputs_fingerprint=$inputs" \
+    "source_inputs_fingerprint=$source_inputs" \
+    "effective_inputs_fingerprint=$effective_inputs" \
     "checkpoint=$checkpoint" \
     "predecessor_sha256=$predecessor" \
     "mutation_kind=$mutation_kind" \
@@ -378,8 +601,9 @@ write_immutable_checkpoint_record() {
 
 checkpoint_record_is_strict() {
   strict_record_keys "${1:?checkpoint record required}" schema_version backend \
-    set_id run_id baseline_fingerprint reviewed_inputs_fingerprint checkpoint \
-    predecessor_sha256 mutation_kind status evidence_sha256 started_at completed_at
+    set_id run_id baseline_fingerprint source_inputs_fingerprint \
+    effective_inputs_fingerprint checkpoint predecessor_sha256 mutation_kind \
+    status evidence_sha256 started_at completed_at
 }
 
 simulation_checkpoint_name_is_known() {
@@ -418,7 +642,8 @@ simulation_checkpoint_ordinal() {
 }
 
 checkpoint_chain_is_valid() {
-  local dir checkpoint expected_sha backend set_id run_id baseline inputs
+  local dir checkpoint expected_sha backend set_id run_id baseline source_inputs
+  local effective_inputs
   local file actual_sha predecessor candidate candidate_sha matches count ordinal
   dir="${1:?checkpoint directory required}"
   checkpoint="${2:?last checkpoint required}"
@@ -427,7 +652,8 @@ checkpoint_chain_is_valid() {
   set_id="${5:?set ID required}"
   run_id="${6:?run ID required}"
   baseline="${7:?baseline fingerprint required}"
-  inputs="${8:?reviewed inputs fingerprint required}"
+  source_inputs="${8:?source input fingerprint required}"
+  effective_inputs="${9:?effective input fingerprint required}"
   count=0
   file="$dir/$checkpoint.env"
   while [ "$expected_sha" != none ]; do
@@ -442,7 +668,8 @@ checkpoint_chain_is_valid() {
     [ "$(strict_record_value "$file" set_id)" = "$set_id" ] || return 1
     [ "$(strict_record_value "$file" run_id)" = "$run_id" ] || return 1
     [ "$(strict_record_value "$file" baseline_fingerprint)" = "$baseline" ] || return 1
-    [ "$(strict_record_value "$file" reviewed_inputs_fingerprint)" = "$inputs" ] || return 1
+    [ "$(strict_record_value "$file" source_inputs_fingerprint)" = "$source_inputs" ] || return 1
+    [ "$(strict_record_value "$file" effective_inputs_fingerprint)" = "$effective_inputs" ] || return 1
     [ "$(strict_record_value "$file" checkpoint)" = "$checkpoint" ] || return 1
     ordinal="$(simulation_checkpoint_ordinal "$checkpoint")" || return 1
     predecessor="$(strict_record_value "$file" predecessor_sha256)"
@@ -492,8 +719,10 @@ workflow_state_publish_checkpoint() {
     die "Checkpoint record run ID does not match workflow state"
   [ "$(strict_record_value "$record" baseline_fingerprint)" = "$(strict_record_value "$workflow" baseline_fingerprint)" ] ||
     die "Checkpoint record baseline does not match workflow state"
-  [ "$(strict_record_value "$record" reviewed_inputs_fingerprint)" = "$(strict_record_value "$workflow" reviewed_inputs_fingerprint)" ] ||
-    die "Checkpoint record reviewed inputs do not match workflow state"
+  [ "$(strict_record_value "$record" source_inputs_fingerprint)" = "$(strict_record_value "$workflow" source_inputs_fingerprint)" ] ||
+    die "Checkpoint record source inputs do not match workflow state"
+  [ "$(strict_record_value "$record" effective_inputs_fingerprint)" = "$(strict_record_value "$workflow" effective_inputs_fingerprint)" ] ||
+    die "Checkpoint record effective inputs do not match workflow state"
   [ "$(strict_record_value "$record" predecessor_sha256)" = "$(strict_record_value "$workflow" last_record_sha256)" ] ||
     die "Checkpoint record predecessor does not match workflow head"
   checkpoint_ordinal="$(simulation_checkpoint_ordinal "$checkpoint")" ||
@@ -531,7 +760,9 @@ workflow_state_publish_checkpoint() {
     "run_id=$(strict_record_value "$workflow" run_id)" \
     "run_marker_sha256=$(strict_record_value "$workflow" run_marker_sha256)" \
     "baseline_fingerprint=$(strict_record_value "$workflow" baseline_fingerprint)" \
-    "reviewed_inputs_fingerprint=$(strict_record_value "$workflow" reviewed_inputs_fingerprint)" \
+    "source_inputs_fingerprint=$(strict_record_value "$workflow" source_inputs_fingerprint)" \
+    "input_state=ready" \
+    "effective_inputs_fingerprint=$(strict_record_value "$workflow" effective_inputs_fingerprint)" \
     "activity=$next_activity" \
     "active_checkpoint=$next_active" \
     "last_checkpoint=$checkpoint" \
@@ -540,7 +771,7 @@ workflow_state_publish_checkpoint() {
 
 simulation_classify_claimed_state() {
   local active marker workflow backend set_id run_id namespace backend_state
-  local checkpoint_dir baseline inputs
+  local checkpoint_dir baseline source_inputs effective_inputs input_state
   local active_state activity active_checkpoint last_checkpoint last_record
   local active_ordinal last_ordinal last_file last_status chain_valid
   active="${1:?active-run file required}"
@@ -569,7 +800,8 @@ simulation_classify_claimed_state() {
     [ "$(strict_record_value "$active" resource_namespace)" != "$namespace" ] ||
     [ "$(strict_record_value "$active" run_marker_sha256)" != "$(sha256_file "$marker")" ] ||
     [ "$(strict_record_value "$workflow" run_marker_sha256)" != "$(sha256_file "$marker")" ] ||
-    [ "$(strict_record_value "$active" baseline_fingerprint)" != "$(strict_record_value "$workflow" baseline_fingerprint)" ]; then
+    [ "$(strict_record_value "$active" baseline_fingerprint)" != "$(strict_record_value "$workflow" baseline_fingerprint)" ] ||
+    [ "$(strict_record_value "$marker" source_inputs_fingerprint)" != "$(strict_record_value "$workflow" source_inputs_fingerprint)" ]; then
     printf 'conflicting\n'
     return
   fi
@@ -580,7 +812,14 @@ simulation_classify_claimed_state() {
   last_checkpoint="$(strict_record_value "$workflow" last_checkpoint)"
   last_record="$(strict_record_value "$workflow" last_record_sha256)"
   baseline="$(strict_record_value "$workflow" baseline_fingerprint)"
-  inputs="$(strict_record_value "$workflow" reviewed_inputs_fingerprint)"
+  source_inputs="$(strict_record_value "$workflow" source_inputs_fingerprint)"
+  effective_inputs="$(strict_record_value "$workflow" effective_inputs_fingerprint)"
+  input_state="$(strict_record_value "$workflow" input_state)"
+  case "$input_state" in
+    pending) [ "$effective_inputs" = none ] || { printf 'conflicting\n'; return; } ;;
+    ready) sha256_fingerprint_is_valid "$effective_inputs" || { printf 'conflicting\n'; return; } ;;
+    *) printf 'conflicting\n'; return ;;
+  esac
   case "$active_state:$(strict_record_value "$active" restore_evidence_sha256)" in
     active:none) ;;
     restored-pending-clean:none) printf 'conflicting\n'; return ;;
@@ -609,13 +848,18 @@ simulation_classify_claimed_state() {
   if [ "$last_checkpoint" != none ] && [ "$last_record" != none ] &&
     [ -n "$checkpoint_dir" ] &&
     checkpoint_chain_is_valid "$checkpoint_dir" "$last_checkpoint" "$last_record" \
-      "$backend" "$set_id" "$run_id" "$baseline" "$inputs"; then
+      "$backend" "$set_id" "$run_id" "$baseline" "$source_inputs" \
+      "$effective_inputs"; then
     chain_valid=1
   elif [ "$last_checkpoint" != none ] || [ "$last_record" != none ]; then
     printf 'conflicting\n'
     return
   fi
   if [ "$activity" = mutating ] || [ "$activity" = observing ]; then
+    [ "$input_state" = ready ] || {
+      printf 'conflicting\n'
+      return
+    }
     if [ "$last_checkpoint" = none ]; then
       [ "$active_ordinal" -eq 1 ] || {
         printf 'conflicting\n'
@@ -642,9 +886,17 @@ simulation_classify_claimed_state() {
       printf 'conflicting\n'
       return
     }
-    case "$backend_state" in absent) printf 'none\n' ;; baseline) printf 'baseline\n' ;; *) printf 'conflicting\n' ;; esac
+    case "$backend_state" in
+      absent) printf 'none\n' ;;
+      baseline|exact) printf 'baseline\n' ;;
+      *) printf 'conflicting\n' ;;
+    esac
     return
   fi
+  [ "$input_state" = ready ] || {
+    printf 'conflicting\n'
+    return
+  }
   last_file="$checkpoint_dir/$last_checkpoint.env"
   last_status="$(strict_record_value "$last_file" status)"
   case "$activity:$last_status" in

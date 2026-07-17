@@ -344,7 +344,7 @@ execution so failures expose the exact boundary that is not ready.
 
 | Milestone | Commands | Main modules | Acceptance shape |
 | --- | --- | --- | --- |
-| M1 Harness skeleton and read-only run state | `preflight`, `init-run`, partial `status`, partial `audit-state` | `simulate.sh`, `config.sh`, `paths.sh`, `state.sh`, shared `simulation/lib/*` | CLI dispatch works, env inputs are copied to private runtime inputs, the run marker exists, compact summaries print, and no VM or libvirt mutation occurs. |
+| M1 Harness skeleton and read-only run state | `preflight`, `init-run`, partial `status`, partial `audit-state` | `simulate.sh`, `config.sh`, `paths.sh`, `state.sh`, shared `simulation/lib/*` | CLI dispatch works, env templates are snapshotted as private source inputs with effective inputs pending, the run marker exists, compact summaries print, and no VM or libvirt mutation occurs. |
 | M2 VM-set ownership and libvirt preflight | `preflight`, `audit-state` | `state.sh`, `libvirt.sh`, `lifecycle.sh` | Local tooling and libvirt access are checked read-only, the VM-set metadata contract is defined, inconsistent selected resources fail clearly, and no repair occurs. |
 | M3 Create/start/stop with SSH-ready base VMs | `create`, `start`, `stop`, `status`, `ssh` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, `config.sh` | The VM set can be created, started, reached over target OS SSH as `ci-operator`, inspected, and stopped; missing domains, host keys, leases, or SSH readiness fail closed. |
 | M4 Baseline prerequisites: role OS dependencies and LDAP proof | `create`, `start`, `status`, `audit-state` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, folded LDAP logic | VM provisioning proves role OS dependency installation, command availability, real LDAP service readiness, seed entries, local bind/search, and Gerrit/Jenkins controller LDAP reachability before baseline readiness is written. |
@@ -354,7 +354,7 @@ execution so failures expose the exact boundary that is not ready.
 | M8 Integration validate/prove and composite run | `configure-integration`, `validate-integration`, `prove-integration`, `run` | `integration.sh`, `lifecycle.sh`, `ssh.sh` | Shared integration setup runs through `scripts/integration-setup.sh`; validation/proof require real cross-role SSH, Jenkins node readiness, trigger/build behavior, and Gerrit `Verified` proof. |
 
 M1 is the first implementation unit. It creates the VM CLI skeleton, initial
-folded modules, read-only command dispatch, runtime input custody, generated
+folded modules, read-only command dispatch, source input custody, generated
 run paths, and run marker handling. It must not create, modify, or delete
 libvirt resources.
 

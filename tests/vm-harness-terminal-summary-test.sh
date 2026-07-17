@@ -162,11 +162,9 @@ if PATH="$stub_bin:$PATH" "$repo_root/simulation/vm/simulate.sh" \
   printf 'reboot must fail when the VM set marker is missing\n' >&2
   exit 1
 fi
-grep -Fxq 'reboot[gerrit]: failed' "$tmp_dir/reboot-fail.out"
-grep -Eq '^log=.*/reboot-gerrit-[0-9]{8}T[0-9]{6}Z\.log$' "$tmp_dir/reboot-fail.out"
-grep -Eq '^evidence=.*/reboot-harness-[0-9]{8}T[0-9]{6}Z\.json$' "$tmp_dir/reboot-fail.out"
-reboot_fail_log="$(sed -n 's/^log=//p' "$tmp_dir/reboot-fail.out")"
-grep -Fq 'ERROR: Missing VM-set marker:' "$reboot_fail_log"
+grep -Fq 'Simulation effective inputs are pending; run start first' "$tmp_dir/reboot-fail.out"
+! grep -Fq 'log=' "$tmp_dir/reboot-fail.out"
+! grep -Fq 'evidence=' "$tmp_dir/reboot-fail.out"
 
 "$repo_root/simulation/vm/simulate.sh" --env "$create_die_env_file" init-run \
   >"$tmp_dir/init-run-create-die.out"

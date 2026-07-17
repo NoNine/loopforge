@@ -68,7 +68,7 @@ case "$*" in
         shift
         case "$*" in
           *"/etc/os-release"*)
-            printf '24.04 noble\n'
+            printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n'
             ;;
           "test -x "*)
             exit 0
@@ -98,6 +98,11 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
@@ -174,24 +179,23 @@ cat >"$tmp_dir/jenkins-agent.env" <<'EOF'
 JENKINS_AGENT_SENTINEL=mutated-after-render
 EOF
 
-for file in \
-  "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env" \
-  "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env" \
-  "$runtime_dir/helper-envs/bundle-factory/jenkins-agent.env" \
-  "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
-  "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \
-  "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-do
-  [ -f "$file" ] || {
-    printf 'Expected init-run to create helper env file: %s\n' "$file" >&2
+[ ! -e "$runtime_dir" ] || {
+  printf 'init-run must not publish effective inputs\n' >&2
+  exit 1
+}
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$calls" \
+  "$repo_root/simulation/docker/simulate.sh" create --env "$tmp_dir/harness.env" >/dev/null
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$calls" \
+  "$repo_root/simulation/docker/simulate.sh" start --env "$tmp_dir/harness.env" >/dev/null
+
+for file in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
+  [ -f "$runtime_dir/$file" ] || {
+    printf 'Expected start to publish effective input: %s\n' "$file" >&2
     exit 1
   }
-  mode="$(stat -c '%a' "$file")"
-  [ "$mode" = "600" ] || {
-    printf 'Expected helper env file mode 600 for %s, got %s\n' "$file" "$mode" >&2
-    exit 1
-  }
+  [ "$(stat -c '%a' "$runtime_dir/$file")" = 600 ]
 done
+[ ! -e "$runtime_dir/helper-envs" ]
 
 grep -Fq -- '/home/ci-operator/loopforge-inputs/gerrit.env' "${docker_harness_sources[@]}"
 grep -Fq -- '/home/ci-operator/loopforge-inputs/jenkins-controller.env' "${docker_harness_sources[@]}"
@@ -210,8 +214,7 @@ fi
 grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/gerrit.env"
 grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/jenkins-controller.env"
 grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$runtime_dir/jenkins-agent.env"
-grep -Fq 'GERRIT_DOWNLOAD_ARTIFACTS=1' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
-grep -Fq 'GERRIT_ARTIFACT_OUTPUT_DIR="/custom/preparing/gerrit-artifacts-bundle/gerrit"' "$runtime_dir/helper-envs/bundle-factory/gerrit-bundle-factory.env"
+grep -Fq 'GERRIT_ARTIFACT_OUTPUT_DIR="/custom/preparing/gerrit-artifacts-bundle/gerrit"' "$runtime_dir/gerrit.env"
 if grep -R -Fq 'GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR' \
   "$repo_root/examples" \
   "$repo_root/scripts" \
@@ -220,44 +223,24 @@ then
   printf 'GERRIT_LOCAL_ARTIFACT_OUTPUT_DIR must not remain in examples, scripts, or Docker rendering\n' >&2
   exit 1
 fi
-grep -Fq 'JENKINS_DOWNLOAD_ARTIFACTS=1' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
-grep -Fq 'JENKINS_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-artifacts-bundle/jenkins"' "$runtime_dir/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env"
-grep -Fq 'JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"' "$runtime_dir/helper-envs/bundle-factory/jenkins-agent.env"
-grep -Fq 'GERRIT_SENTINEL=original' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'JENKINS_CONTROLLER_SENTINEL=original' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_AGENT_SENTINEL=original' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'GERRIT_SITE_PATH="/custom/gerrit-site"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'GERRIT_STAGED_ARTIFACT_DIR="/custom/staging/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'GERRIT_EVIDENCE_DIR="/custom/evidence/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'GERRIT_LOG_DIR="/custom/logs/gerrit"' "$runtime_dir/helper-envs/gerrit-target/gerrit.env"
-grep -Fq 'JENKINS_HOME="/custom/jenkins-home"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_STAGED_ARTIFACT_DIR="/custom/staging/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_EVIDENCE_DIR="/custom/evidence/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_LOG_DIR="/custom/logs/jenkins"' "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env"
-grep -Fq 'JENKINS_AGENT_REMOTE_FS="/custom/jenkins-agent-home"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_STATE_DIR="/custom/jenkins-agent-state"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_STAGED_ARTIFACT_DIR="/custom/staging/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/custom/evidence/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-grep -Fq 'JENKINS_AGENT_LOG_DIR="/custom/logs/jenkins-agent"' "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
+grep -Fq 'JENKINS_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-artifacts-bundle/jenkins"' "$runtime_dir/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_ARTIFACT_OUTPUT_DIR="/custom/preparing/jenkins-agent-artifacts-bundle/jenkins-agent"' "$runtime_dir/jenkins-agent.env"
+grep -Fq 'GERRIT_SITE_PATH="/custom/gerrit-site"' "$runtime_dir/gerrit.env"
+grep -Fq 'GERRIT_STAGED_ARTIFACT_DIR="/custom/staging/gerrit"' "$runtime_dir/gerrit.env"
+grep -Fq 'GERRIT_EVIDENCE_DIR="/custom/evidence/gerrit"' "$runtime_dir/gerrit.env"
+grep -Fq 'GERRIT_LOG_DIR="/custom/logs/gerrit"' "$runtime_dir/gerrit.env"
+grep -Fq 'JENKINS_HOME="/custom/jenkins-home"' "$runtime_dir/jenkins-controller.env"
+grep -Fq 'JENKINS_STAGED_ARTIFACT_DIR="/custom/staging/jenkins"' "$runtime_dir/jenkins-controller.env"
+grep -Fq 'JENKINS_EVIDENCE_DIR="/custom/evidence/jenkins"' "$runtime_dir/jenkins-controller.env"
+grep -Fq 'JENKINS_LOG_DIR="/custom/logs/jenkins"' "$runtime_dir/jenkins-controller.env"
+grep -Fq 'JENKINS_AGENT_REMOTE_FS="/custom/jenkins-agent-home"' "$runtime_dir/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_STATE_DIR="/custom/jenkins-agent-state"' "$runtime_dir/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_STAGED_ARTIFACT_DIR="/custom/staging/jenkins-agent"' "$runtime_dir/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_EVIDENCE_DIR="/custom/evidence/jenkins-agent"' "$runtime_dir/jenkins-agent.env"
+grep -Fq 'JENKINS_AGENT_LOG_DIR="/custom/logs/jenkins-agent"' "$runtime_dir/jenkins-agent.env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$runtime_dir/harness.env"
 if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$runtime_dir"; then
   printf 'Runtime input/helper env files must not replace the simulation LDAP bind password with a redaction marker\n' >&2
-  exit 1
-fi
-if grep -Fq '/harness/evidence' \
-  "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
-  "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \
-  "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-then
-  printf 'Target rendered envs must not expose /harness/evidence\n' >&2
-  exit 1
-fi
-if grep -Fq '/harness/logs' \
-  "$runtime_dir/helper-envs/gerrit-target/gerrit.env" \
-  "$runtime_dir/helper-envs/jenkins-controller-target/jenkins-controller.env" \
-  "$runtime_dir/helper-envs/jenkins-agent-target/jenkins-agent.env"
-then
-  printf 'Target rendered envs must not expose /harness/logs\n' >&2
   exit 1
 fi
 if grep -R -Fq 'mutated-after-render' \

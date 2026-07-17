@@ -69,7 +69,7 @@ case "$*" in
         shift
         case "$*" in
           *"/etc/os-release"*)
-            printf '24.04 noble\n'
+            printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n'
             ;;
           "test -x "*)
             exit 0
@@ -106,6 +106,11 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
@@ -139,6 +144,10 @@ env \
   PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
+env \
+  PATH="$fake_bin:$PATH" \
+  DOCKER_CALLS_LOG="$calls" \
+  "$repo_root/simulation/docker/simulate.sh" start --env "$tmp_dir/harness.env" >/dev/null
 
 set +e
 env \

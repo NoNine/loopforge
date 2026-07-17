@@ -12,46 +12,6 @@ vm_artifacts_role_input_file() {
   esac
 }
 
-vm_artifacts_role_mode_key() {
-  case "${1:?role required}" in
-    gerrit) printf 'GERRIT_VERIFICATION_MODE\n' ;;
-    jenkins-controller) printf 'JENKINS_VERIFICATION_MODE\n' ;;
-    jenkins-agent) printf 'JENKINS_AGENT_VERIFICATION_MODE\n' ;;
-  esac
-}
-
-vm_artifacts_render_role_env() {
-  local role source key file
-  role="${1:?role required}"
-  source="$(vm_artifacts_role_input_file "$role")"
-  key="$(vm_artifacts_role_mode_key "$role")"
-  require_readable_file "Private runtime role input for $role" "$source"
-  file="$(mktemp "$HARNESS_HOST_DIR/.${role}-vm-env.XXXXXX")"
-  cp -- "$source" "$file"
-  set_env_file_value "$file" "$key" vm-simulation
-  set_env_file_value "$file" HARNESS_MODE vm-simulation
-  case "$role" in
-    gerrit)
-      set_env_file_value "$file" HARNESS_ENVIRONMENT gerrit
-      set_env_file_value "$file" GERRIT_HOST "gerrit.$HARNESS_LDAP_DOMAIN"
-      set_env_file_value "$file" GERRIT_CANONICAL_WEB_URL "http://gerrit.$HARNESS_LDAP_DOMAIN:8080/"
-      set_env_file_value "$file" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
-      ;;
-    jenkins-controller)
-      set_env_file_value "$file" HARNESS_ENVIRONMENT jenkins-controller
-      set_env_file_value "$file" JENKINS_HOST "jenkins-controller.$HARNESS_LDAP_DOMAIN"
-      set_env_file_value "$file" JENKINS_URL "http://jenkins-controller.$HARNESS_LDAP_DOMAIN:8080/"
-      set_env_file_value "$file" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
-      ;;
-    jenkins-agent)
-      set_env_file_value "$file" HARNESS_ENVIRONMENT jenkins-agent
-      set_env_file_value "$file" JENKINS_AGENT_HOST "jenkins-agent.$HARNESS_LDAP_DOMAIN"
-      ;;
-  esac
-  chmod 0600 "$file"
-  printf '%s\n' "$file"
-}
-
 vm_artifacts_guest_preparing_dir() {
   printf '/var/lib/loopforge/preparing/%s\n' "$(bundle_name_for_role "${1:?role required}")"
 }
@@ -87,22 +47,17 @@ vm_artifacts_verify_source_boundary() {
 }
 
 vm_artifacts_stage_role_env() {
-  local machine role root remote_env rendered
+  local machine role root remote_env effective
   machine="${1:?machine required}"
   role="${2:?role required}"
   root="$(vm_path_guest_input_root)"
   remote_env="$(vm_path_guest_role_env "$role")"
-  rendered="$(vm_artifacts_render_role_env "$role")"
+  effective="$(vm_artifacts_role_input_file "$role")"
+  require_readable_file "Published effective role input for $role" "$effective"
   vm_ssh_run_machine "$machine" \
-    "set -eu; install -d -m 0700 $(shell_quote "$root")" || {
-      rm -f -- "$rendered"
-      return 1
-    }
-  vm_ssh_copy_file_to_machine_atomic "$machine" "$rendered" "$remote_env" 0600 || {
-    rm -f -- "$rendered"
-    return 1
-  }
-  rm -f -- "$rendered"
+    "set -eu; install -d -m 0700 $(shell_quote "$root")" || return $?
+  vm_ssh_copy_file_to_machine_atomic "$machine" "$effective" "$remote_env" 0600 ||
+    return $?
   vm_ssh_run_machine "$machine" \
     "set -eu; test \"\$(stat -c %U:%G $(shell_quote "$remote_env"))\" = $(shell_quote "$VM_OPERATOR_USER:$VM_OPERATOR_USER"); test \"\$(stat -c %a $(shell_quote "$remote_env"))\" = 600; printf 'role-input=ready role=%s path=%s\\n' $(shell_quote "$role") $(shell_quote "$remote_env")"
 }

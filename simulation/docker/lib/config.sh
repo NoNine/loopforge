@@ -57,7 +57,9 @@ apply_canonical_output_paths() {
   HARNESS_RETAINED_OUTPUT_BACKUP_DIR="$HARNESS_HOST_DIR/retained-output-backups"
   HARNESS_RENDERED_ENV="$HARNESS_HOST_DIR/rendered/harness.env"
   HARNESS_RUNTIME_ENV="$HARNESS_HOST_DIR/rendered/harness.runtime.env"
+  HARNESS_SOURCE_INPUT_DIR="$HARNESS_HOST_DIR/source-inputs"
   HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
+  HARNESS_EFFECTIVE_INPUT_RECORD="$HARNESS_HOST_DIR/state/effective-inputs.env"
   HARNESS_BASELINE_CONTRACT="$HARNESS_HOST_DIR/rendered/artifact-manifest-contract.txt"
   HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env"
   HARNESS_SET_DIR="$(docker_generated_root)/sets/$HARNESS_SET_ID"
@@ -84,7 +86,8 @@ apply_canonical_output_paths() {
   export HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
   export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR
   export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
-  export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR
+  export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_SOURCE_INPUT_DIR
+  export HARNESS_RUNTIME_INPUT_DIR HARNESS_EFFECTIVE_INPUT_RECORD
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
   export HARNESS_SET_DIR HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
   export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
@@ -153,6 +156,9 @@ reject_custom_output_paths() {
     HARNESS_LOG_DIR \
     HARNESS_RETAINED_OUTPUT_BACKUP_DIR \
     HARNESS_RENDERED_ENV \
+    HARNESS_SOURCE_INPUT_DIR \
+    HARNESS_RUNTIME_INPUT_DIR \
+    HARNESS_EFFECTIVE_INPUT_RECORD \
     HARNESS_BASELINE_CONTRACT \
     HARNESS_TARGET_SSH_DIR \
     HARNESS_GERRIT_VALIDATION_SECRET_DIR \
@@ -182,6 +188,9 @@ reject_custom_output_paths() {
       HARNESS_LOG_DIR) expected="$(canonical_generated_run_dir)/host/logs/harness" ;;
       HARNESS_RETAINED_OUTPUT_BACKUP_DIR) expected="$(canonical_generated_run_dir)/host/retained-output-backups" ;;
       HARNESS_RENDERED_ENV) expected="$(canonical_generated_run_dir)/host/rendered/harness.env" ;;
+      HARNESS_SOURCE_INPUT_DIR) expected="$(canonical_generated_run_dir)/host/source-inputs" ;;
+      HARNESS_RUNTIME_INPUT_DIR) expected="$(canonical_generated_run_dir)/host/runtime-inputs" ;;
+      HARNESS_EFFECTIVE_INPUT_RECORD) expected="$(canonical_generated_run_dir)/host/state/effective-inputs.env" ;;
       HARNESS_BASELINE_CONTRACT) expected="$(canonical_generated_run_dir)/host/rendered/artifact-manifest-contract.txt" ;;
       HARNESS_TARGET_SSH_DIR) expected="$(canonical_generated_run_dir)/host/target-ssh" ;;
       HARNESS_GERRIT_VALIDATION_SECRET_DIR) expected="$(canonical_generated_run_dir)/host/validation-secrets/gerrit" ;;
@@ -231,7 +240,7 @@ write_run_marker() {
     "$repo_root" \
     "$HARNESS_GENERATED_RUN_DIR" \
     "$HARNESS_RUNTIME_ENV" \
-    "$HARNESS_RUNTIME_INPUT_DIR"
+    "$HARNESS_SOURCE_INPUT_DIR"
 }
 
 verify_run_marker() {
@@ -248,16 +257,16 @@ verify_run_marker() {
     "$repo_root" \
     "$HARNESS_GENERATED_RUN_DIR" \
     "$HARNESS_RUNTIME_ENV" \
-    "$HARNESS_RUNTIME_INPUT_DIR" \
+    "$HARNESS_SOURCE_INPUT_DIR" \
     "Docker harness run marker"
 }
 
 write_initial_lifecycle_records() {
-  local inputs_fingerprint
-  inputs_fingerprint="$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" || return $?
+  local source_fingerprint
+  source_fingerprint="$(simulation_input_bundle_fingerprint "$HARNESS_SOURCE_INPUT_DIR")" || return $?
   write_initial_workflow_state \
     "$HARNESS_WORKFLOW_STATE_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
-    "$HARNESS_RUN_MARKER" none "$inputs_fingerprint" || return $?
+    "$HARNESS_RUN_MARKER" none "$source_fingerprint" || return $?
   write_active_run_record \
     "$HARNESS_ACTIVE_RUN_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
     "$HARNESS_PROJECT_NAME" "$HARNESS_RUN_MARKER" none active none
@@ -267,8 +276,18 @@ verify_active_run_binding() {
   lifecycle_records_are_bound \
     "$HARNESS_ACTIVE_RUN_FILE" "$HARNESS_RUN_MARKER" \
     "$HARNESS_WORKFLOW_STATE_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" "$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")" ||
+    "$HARNESS_PROJECT_NAME" "$(simulation_input_bundle_fingerprint "$HARNESS_SOURCE_INPUT_DIR")" ||
     die "Docker active-run, run marker, and workflow state do not agree"
+  simulation_input_state_is_bound "$HARNESS_WORKFLOW_STATE_FILE" "$HARNESS_RUN_MARKER" \
+    docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" "$HARNESS_SOURCE_INPUT_DIR" \
+    "$HARNESS_EFFECTIVE_INPUT_RECORD" "$HARNESS_RUNTIME_INPUT_DIR" ||
+    die "Docker source/effective input state does not agree"
+}
+
+require_docker_effective_inputs() {
+  require_effective_inputs_ready "$HARNESS_WORKFLOW_STATE_FILE" "$HARNESS_RUN_MARKER" \
+    docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" "$HARNESS_SOURCE_INPUT_DIR" \
+    "$HARNESS_EFFECTIVE_INPUT_RECORD" "$HARNESS_RUNTIME_INPUT_DIR"
 }
 
 validate_core_generated_state() {
@@ -280,19 +299,12 @@ validate_core_generated_state() {
   require_generated_state_file "$state_name" "artifact manifest contract" "$HARNESS_BASELINE_CONTRACT"
   require_generated_state_file "$state_name" "active-run pointer" "$HARNESS_ACTIVE_RUN_FILE"
   require_generated_state_file "$state_name" "workflow state" "$HARNESS_WORKFLOW_STATE_FILE"
-  require_generated_state_dir "$state_name" "runtime input directory" "$HARNESS_RUNTIME_INPUT_DIR"
-  require_generated_state_file "$state_name" "runtime input harness env" "$HARNESS_RUNTIME_INPUT_DIR/harness.env"
-  require_generated_state_file "$state_name" "runtime input Gerrit env" "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
-  require_generated_state_file "$state_name" "runtime input Jenkins controller env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
-  require_generated_state_file "$state_name" "runtime input Jenkins agent env" "$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
-  require_generated_state_file "$state_name" "runtime input integration env" "$HARNESS_RUNTIME_INPUT_DIR/integration.env"
-  require_generated_state_file "$state_name" "bundle factory Gerrit helper env" "$(host_gerrit_bundle_factory_env_file)"
-  require_generated_state_file "$state_name" "bundle factory Jenkins controller helper env" "$(host_jenkins_controller_bundle_factory_env_file)"
-  require_generated_state_file "$state_name" "bundle factory Jenkins agent helper env" "$(host_container_env_file_for_role jenkins-agent bundle-factory)"
-  for role in "${roles[@]}"; do
-    service="$(service_for_role "$role")"
-    require_generated_state_file "$state_name" "$role target helper env" "$(host_container_env_file_for_role "$role" "$service")"
-  done
+  require_generated_state_dir "$state_name" "source input directory" "$HARNESS_SOURCE_INPUT_DIR"
+  require_generated_state_file "$state_name" "source harness env" "$HARNESS_SOURCE_INPUT_DIR/harness.env"
+  require_generated_state_file "$state_name" "source Gerrit env" "$HARNESS_SOURCE_INPUT_DIR/gerrit.env"
+  require_generated_state_file "$state_name" "source Jenkins controller env" "$HARNESS_SOURCE_INPUT_DIR/jenkins-controller.env"
+  require_generated_state_file "$state_name" "source Jenkins agent env" "$HARNESS_SOURCE_INPUT_DIR/jenkins-agent.env"
+  require_generated_state_file "$state_name" "source integration env" "$HARNESS_SOURCE_INPUT_DIR/integration.env"
   require_generated_state_dir "$state_name" "host contribution directory" "$HARNESS_HOST_DIR"
   require_generated_state_dir "$state_name" "target contribution directory" "$HARNESS_TARGET_DIR"
   require_generated_state_dir "$state_name" "product home directory" "$HARNESS_PRODUCT_HOME_DIR"
@@ -310,6 +322,13 @@ validate_core_generated_state() {
   require_generated_state_dir "$state_name" "target SSH state" "$HARNESS_TARGET_SSH_DIR"
   require_generated_state_file "$state_name" "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
   verify_active_run_binding
+  if [ "$(strict_record_value "$HARNESS_WORKFLOW_STATE_FILE" input_state)" = ready ]; then
+    require_generated_state_file "$state_name" "effective-input binding" "$HARNESS_EFFECTIVE_INPUT_RECORD"
+    require_generated_state_dir "$state_name" "effective input directory" "$HARNESS_RUNTIME_INPUT_DIR"
+    for role in harness gerrit jenkins-controller jenkins-agent integration; do
+      require_generated_state_file "$state_name" "effective $role env" "$HARNESS_RUNTIME_INPUT_DIR/$role.env"
+    done
+  fi
 }
 
 HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
@@ -421,7 +440,9 @@ HARNESS_JENKINS_SHARED_STORAGE_PATH="${HARNESS_JENKINS_SHARED_STORAGE_PATH:-}"
 HARNESS_ENV_FILE="${HARNESS_ENV_FILE:-$HARNESS_ENV_FILE_OPERATOR_VALUE}"
 HARNESS_RENDERED_ENV="${HARNESS_RENDERED_ENV:-$HARNESS_HOST_DIR/rendered/harness.env}"
 HARNESS_RUNTIME_ENV="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
+HARNESS_SOURCE_INPUT_DIR="${HARNESS_SOURCE_INPUT_DIR:-$HARNESS_HOST_DIR/source-inputs}"
 HARNESS_RUNTIME_INPUT_DIR="${HARNESS_RUNTIME_INPUT_DIR:-$HARNESS_HOST_DIR/runtime-inputs}"
+HARNESS_EFFECTIVE_INPUT_RECORD="${HARNESS_EFFECTIVE_INPUT_RECORD:-$HARNESS_HOST_DIR/state/effective-inputs.env}"
 HARNESS_BASELINE_CONTRACT="${HARNESS_BASELINE_CONTRACT:-$HARNESS_HOST_DIR/rendered/artifact-manifest-contract.txt}"
 HARNESS_TARGET_SSH_DIR="${HARNESS_TARGET_SSH_DIR:-$HARNESS_HOST_DIR/target-ssh}"
 HARNESS_TARGET_SSH_IDENTITY_FILE="${HARNESS_TARGET_SSH_IDENTITY_FILE:-$HARNESS_TARGET_SSH_DIR/ci-operator}"
@@ -452,6 +473,8 @@ export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
 export HARNESS_JENKINS_SHARED_STORAGE_PATH HARNESS_ENV_FILE
 export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
 export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
+export HARNESS_SOURCE_INPUT_DIR HARNESS_RUNTIME_INPUT_DIR
+export HARNESS_EFFECTIVE_INPUT_RECORD
 export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
 export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
 export HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
@@ -518,7 +541,9 @@ load_env_file() {
   unset HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
   unset HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR
   unset HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
-  unset HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
+  unset HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_SOURCE_INPUT_DIR
+  unset HARNESS_RUNTIME_INPUT_DIR HARNESS_EFFECTIVE_INPUT_RECORD
+  unset HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
   unset HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
   unset HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
   unset HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR HARNESS_LDAP_DATA_DIR
@@ -603,7 +628,8 @@ load_rendered_config_if_present() {
   apply_canonical_output_paths
   export HARNESS_HOST_DIR HARNESS_TARGET_DIR HARNESS_STATE_DIR
   export HARNESS_PRODUCT_HOME_DIR HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV
-  export HARNESS_RUNTIME_INPUT_DIR HARNESS_BASELINE_CONTRACT
+  export HARNESS_SOURCE_INPUT_DIR HARNESS_RUNTIME_INPUT_DIR
+  export HARNESS_EFFECTIVE_INPUT_RECORD HARNESS_BASELINE_CONTRACT
   export HARNESS_TARGET_SSH_DIR HARNESS_GERRIT_VALIDATION_SECRET_DIR
   export HARNESS_BUNDLE_FACTORY_RENDERED_DIR
   export HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR
@@ -657,7 +683,9 @@ bootstrap_harness_env() {
 }
 
 load_harness_integration_env() {
-  source_env_file "Integration env file for Docker harness shared storage" "$HARNESS_INTEGRATION_ENV_FILE"
+  local file
+  file="${1:-$HARNESS_INTEGRATION_ENV_FILE}"
+  source_env_file "Integration env file for Docker harness shared storage" "$file"
   HARNESS_JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
   validate_shared_storage_path "HARNESS_JENKINS_SHARED_STORAGE_PATH" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
   export HARNESS_JENKINS_SHARED_STORAGE_PATH
@@ -680,47 +708,25 @@ ensure_target_ssh_keypair() {
   fi
 }
 
-copy_runtime_env_inputs() {
-  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
-  rm -rf "$HARNESS_RUNTIME_INPUT_DIR"
-  copy_simulation_runtime_env_inputs \
-    "$HARNESS_RUNTIME_INPUT_DIR" \
+snapshot_source_env_inputs() {
+  [ ! -e "$HARNESS_SOURCE_INPUT_DIR" ] ||
+    die "Source input directory already exists: $HARNESS_SOURCE_INPUT_DIR"
+  copy_simulation_input_bundle \
+    "$HARNESS_SOURCE_INPUT_DIR" \
     "$HARNESS_ENV_FILE" \
     "$HARNESS_GERRIT_ENV_FILE" \
     "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" \
     "$HARNESS_JENKINS_AGENT_ENV_FILE" \
     "$HARNESS_INTEGRATION_ENV_FILE"
-  HARNESS_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/harness.env"
+}
+
+select_run_input_paths() {
+  HARNESS_ENV_FILE="$HARNESS_SOURCE_INPUT_DIR/harness.env"
   HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
   HARNESS_JENKINS_AGENT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
   HARNESS_INTEGRATION_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/integration.env"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_GERRIT_ENV_FILE "$HARNESS_GERRIT_ENV_FILE"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_JENKINS_AGENT_ENV_FILE"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_INTEGRATION_ENV_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_STATE_DIR/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_HOST_DIR/logs/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_HOST_DIR/evidence/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_HOST "127.0.0.1"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_PORT "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_USER "ci-operator"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST "127.0.0.1"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_PORT "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_USER "ci-operator"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST "127.0.0.1"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_PORT "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_USER "ci-operator"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_JENKINS_AGENT_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_GERRIT_ACL_MODE "apply-direct"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY "1"
-  export HARNESS_ENV_FILE HARNESS_RUNTIME_INPUT_DIR
+  export HARNESS_ENV_FILE HARNESS_SOURCE_INPUT_DIR HARNESS_RUNTIME_INPUT_DIR
   export HARNESS_GERRIT_ENV_FILE HARNESS_JENKINS_CONTROLLER_ENV_FILE
   export HARNESS_JENKINS_AGENT_ENV_FILE HARNESS_INTEGRATION_ENV_FILE
 }
@@ -813,16 +819,16 @@ ensure_dirs() {
 }
 
 prepare_init_run() {
-  validate_harness_inputs
-  validate_init_run_inputs
-  resolve_browser_ports
-  ensure_target_ssh_keypair
-  copy_runtime_env_inputs
-  load_harness_integration_env
-  ensure_dirs
+  validate_harness_inputs || return $?
+  validate_init_run_inputs || return $?
+  resolve_browser_ports || return $?
+  ensure_target_ssh_keypair || return $?
+  snapshot_source_env_inputs || return $?
+  load_harness_integration_env "$HARNESS_SOURCE_INPUT_DIR/integration.env" || return $?
+  select_run_input_paths
+  ensure_dirs || return $?
   : >"$HARNESS_PRODUCT_HOME_DIR/.runtime-identity-pending"
   chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_PRODUCT_HOME_DIR/.runtime-identity-pending"
-  write_rendered_helper_envs
 }
 
 role_evidence_dir() {
@@ -889,6 +895,9 @@ HARNESS_PUBLIC_INTERNET_FALLBACK_LABEL=$(shell_quote "$HARNESS_PUBLIC_INTERNET_F
 HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
 HARNESS_TARGET_DIR=$(shell_quote "$HARNESS_TARGET_DIR")
+HARNESS_SOURCE_INPUT_DIR=$(shell_quote "$HARNESS_SOURCE_INPUT_DIR")
+HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_EFFECTIVE_INPUT_RECORD=$(shell_quote "$HARNESS_EFFECTIVE_INPUT_RECORD")
 HARNESS_STATE_DIR=$(shell_quote "$HARNESS_STATE_DIR")
 HARNESS_PRODUCT_HOME_DIR=$(shell_quote "$HARNESS_PRODUCT_HOME_DIR")
 HARNESS_STAGING_DIR=$(shell_quote "$HARNESS_STAGING_DIR")
@@ -999,7 +1008,9 @@ HARNESS_GERRIT_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_GERRIT_HTTP_
 HARNESS_JENKINS_BROWSER_URL=$(shell_quote "http://127.0.0.1:$HARNESS_JENKINS_HTTP_HOST_PORT/login")
 HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
 HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
+HARNESS_SOURCE_INPUT_DIR=$(shell_quote "$HARNESS_SOURCE_INPUT_DIR")
 HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_EFFECTIVE_INPUT_RECORD=$(shell_quote "$HARNESS_EFFECTIVE_INPUT_RECORD")
 HARNESS_BASELINE_CONTRACT=$(shell_quote "$HARNESS_BASELINE_CONTRACT")
 HARNESS_RUN_MARKER=$(shell_quote "$HARNESS_RUN_MARKER")
 public_internet_fallback=simulation-only

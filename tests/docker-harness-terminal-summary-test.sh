@@ -31,6 +31,11 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
@@ -58,7 +63,7 @@ grep -Fq "create: ok images=project-built" "$tmp_dir/create.out"
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" start >"$tmp_dir/start.out"
-grep -Fq "start: started bundle-factory ldap gerrit jenkins-controller jenkins-agent" "$tmp_dir/start.out"
+grep -Fq "start: ok resources=running target-access=ready inputs=ready" "$tmp_dir/start.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/start.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/start.out"
 

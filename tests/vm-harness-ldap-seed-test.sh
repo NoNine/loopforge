@@ -449,7 +449,7 @@ grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$runtime_env"
 grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$rendered_env"
 grep -Fq 'VM_DEBUG_PRESERVE_FAILED_BAKE=1' "$runtime_env"
 grep -Fq 'VM_DEBUG_PRESERVE_FAILED_BAKE=1' "$rendered_env"
-grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id/host/runtime-inputs/harness.env"
+grep -Fq 'HARNESS_LDAP_BIND_PASSWORD=readonly-password' "$generated_root/$run_id/host/source-inputs/harness.env"
 if grep -R --include='*.env' -Fq 'HARNESS_LDAP_BIND_PASSWORD=simulation-owned-redacted' "$generated_root/$run_id"; then
   printf 'VM runtime files must not replace the simulation LDAP bind password with a redaction marker\n' >&2
   exit 1

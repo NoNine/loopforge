@@ -4,7 +4,15 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
+cleanup() {
+  local rc=$?
+  if [ "$rc" -ne 0 ] && [ -d "$tmp_dir/run/host/logs" ]; then
+    find "$tmp_dir/run/host/logs" -type f -name '*.log' -exec tail -20 {} \; >&2
+  fi
+  rm -rf "$tmp_dir"
+  exit "$rc"
+}
+trap cleanup EXIT
 
 . "$repo_root/simulation/lib/common.sh"
 . "$repo_root/simulation/lib/quote.sh"
@@ -46,13 +54,21 @@ mkdir -p "$HARNESS_HOST_DIR/runtime-inputs" "$HARNESS_EVIDENCE_DIR" \
   "$HARNESS_LOG_DIR" "$HARNESS_EXPORTED_ARTIFACT_DIR" "$guests"
 
 cat >"$HARNESS_GERRIT_ENV_FILE" <<'EOF'
-GERRIT_VERIFICATION_MODE="docker-simulation"
+GERRIT_VERIFICATION_MODE="vm-simulation"
+HARNESS_MODE=vm-simulation
+GERRIT_HOST=gerrit.example.test
+LDAP_URL=ldap://ldap.example.test:389
 EOF
 cat >"$HARNESS_JENKINS_CONTROLLER_ENV_FILE" <<'EOF'
-JENKINS_VERIFICATION_MODE="docker-simulation"
+JENKINS_VERIFICATION_MODE="vm-simulation"
+HARNESS_MODE=vm-simulation
+JENKINS_HOST=jenkins-controller.example.test
+LDAP_URL=ldap://ldap.example.test:389
 EOF
 cat >"$HARNESS_JENKINS_AGENT_ENV_FILE" <<'EOF'
-JENKINS_AGENT_VERIFICATION_MODE="docker-simulation"
+JENKINS_AGENT_VERIFICATION_MODE="vm-simulation"
+HARNESS_MODE=vm-simulation
+JENKINS_AGENT_HOST=jenkins-agent.example.test
 EOF
 chmod 0600 "$HARNESS_HOST_DIR"/runtime-inputs/*.env
 
@@ -78,6 +94,7 @@ translate_guest_script() {
 }
 
 vm_config_load_runtime() { :; }
+vm_state_require_effective_inputs() { :; }
 vm_set_verify_run_and_set() { :; }
 vm_libvirt_require_running() {
   [ ! -f "$tmp_dir/stopped-${1:?machine required}" ] || return 1

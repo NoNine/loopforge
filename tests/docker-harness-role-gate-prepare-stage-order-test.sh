@@ -82,6 +82,9 @@ case "$*" in
           *"sha256sum -c checksums.sha256"*)
             exit 0
             ;;
+          *"printf \"release=%s"*)
+            printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n'
+            ;;
           *"/etc/os-release"*)
             printf '24.04 noble\n'
             ;;
@@ -151,6 +154,11 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 cp "$repo_root/simulation/docker/examples/docker.env.example" "$tmp_dir/harness.env"
 cp "$repo_root/examples/gerrit.env.example" "$tmp_dir/gerrit.env"
@@ -190,6 +198,8 @@ common_env=(
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
 touch "$tmp_dir/containers-ready"
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" start --env "$tmp_dir/harness.env" >/dev/null
 
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" configure-role --role gerrit >/dev/null
@@ -250,9 +260,9 @@ if grep -Fq "$run_dir/target/product-homes" "$gerrit_host_evidence" "$controller
   exit 1
 fi
 
-gerrit_env_copy_line="$(grep -n 'helper-envs/gerrit-target/gerrit.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
-controller_env_copy_line="$(grep -n 'helper-envs/jenkins-controller-target/jenkins-controller.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
-agent_env_copy_line="$(grep -n 'helper-envs/jenkins-agent-target/jenkins-agent.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
+gerrit_env_copy_line="$(grep -n 'runtime-inputs/gerrit.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
+controller_env_copy_line="$(grep -n 'runtime-inputs/jenkins-controller.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
+agent_env_copy_line="$(grep -n 'runtime-inputs/jenkins-agent.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
 gerrit_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/gerrit-setup.sh --env /home/ci-operator/loopforge-inputs/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 controller_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/jenkins-controller-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 agent_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/jenkins-agent-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"

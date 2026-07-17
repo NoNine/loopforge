@@ -15,7 +15,9 @@ vm_output_path_vars=(
   HARNESS_HOST_DIR
   HARNESS_TARGET_DIR
   HARNESS_RENDERED_DIR
+  HARNESS_SOURCE_INPUT_DIR
   HARNESS_RUNTIME_INPUT_DIR
+  HARNESS_EFFECTIVE_INPUT_RECORD
   HARNESS_RENDERED_ENV
   HARNESS_RUNTIME_ENV
   HARNESS_VM_INVENTORY_FILE
@@ -231,7 +233,6 @@ vm_config_validate_init_inputs() {
 vm_config_ensure_m1_dirs() {
   mkdir -p \
     "$HARNESS_RENDERED_DIR" \
-    "$HARNESS_RUNTIME_INPUT_DIR" \
     "$HARNESS_EVIDENCE_DIR" \
     "$HARNESS_LOG_DIR" \
     "$HARNESS_INTEGRATION_EVIDENCE_DIR" \
@@ -248,31 +249,93 @@ vm_config_ensure_m1_dirs() {
   chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_TARGET_SSH_DIR"
 }
 
-vm_config_copy_runtime_inputs() {
-  rm -rf "$HARNESS_RUNTIME_INPUT_DIR"
-  copy_simulation_runtime_env_inputs \
-    "$HARNESS_RUNTIME_INPUT_DIR" \
+vm_config_snapshot_source_inputs() {
+  [ ! -e "$HARNESS_SOURCE_INPUT_DIR" ] ||
+    die "Source input directory already exists: $HARNESS_SOURCE_INPUT_DIR"
+  copy_simulation_input_bundle \
+    "$HARNESS_SOURCE_INPUT_DIR" \
     "$HARNESS_ENV_FILE" \
     "$HARNESS_GERRIT_ENV_FILE" \
     "$HARNESS_JENKINS_CONTROLLER_ENV_FILE" \
     "$HARNESS_JENKINS_AGENT_ENV_FILE" \
     "$HARNESS_INTEGRATION_ENV_FILE"
-  HARNESS_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/harness.env"
+}
+
+vm_config_select_run_input_paths() {
+  HARNESS_ENV_FILE="$HARNESS_SOURCE_INPUT_DIR/harness.env"
   HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
   HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
   HARNESS_JENKINS_AGENT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
   HARNESS_INTEGRATION_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/integration.env"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_GERRIT_ENV_FILE "$HARNESS_GERRIT_ENV_FILE"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_JENKINS_AGENT_ENV_FILE"
-  set_env_file_value "$HARNESS_ENV_FILE" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_INTEGRATION_ENV_FILE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_MODE "$HARNESS_MODE"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_STATE_DIR "$HARNESS_HOST_DIR/state/integration"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_LOG_DIR "$HARNESS_INTEGRATION_LOG_DIR"
-  set_env_file_value "$HARNESS_INTEGRATION_ENV_FILE" INTEGRATION_EVIDENCE_DIR "$HARNESS_INTEGRATION_EVIDENCE_DIR"
-  export HARNESS_ENV_FILE HARNESS_GERRIT_ENV_FILE
+  export HARNESS_ENV_FILE HARNESS_SOURCE_INPUT_DIR HARNESS_RUNTIME_INPUT_DIR
+  export HARNESS_GERRIT_ENV_FILE
   export HARNESS_JENKINS_CONTROLLER_ENV_FILE HARNESS_JENKINS_AGENT_ENV_FILE
   export HARNESS_INTEGRATION_ENV_FILE
+}
+
+vm_config_render_effective_inputs() {
+  local staged harness gerrit controller agent integration
+  staged="${1:?effective input staging directory required}"
+  copy_simulation_input_bundle "$staged" \
+    "$HARNESS_SOURCE_INPUT_DIR/harness.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/gerrit.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/jenkins-controller.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/jenkins-agent.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/integration.env"
+  harness="$staged/harness.env"
+  gerrit="$staged/gerrit.env"
+  controller="$staged/jenkins-controller.env"
+  agent="$staged/jenkins-agent.env"
+  integration="$staged/integration.env"
+  set_env_file_value "$harness" HARNESS_GERRIT_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+  set_env_file_value "$harness" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
+  set_env_file_value "$harness" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
+  set_env_file_value "$harness" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+  set_env_file_value "$gerrit" HARNESS_ENVIRONMENT gerrit
+  set_env_file_value "$gerrit" HARNESS_MODE vm-simulation
+  set_env_file_value "$gerrit" GERRIT_HOST "gerrit.$HARNESS_LDAP_DOMAIN"
+  set_env_file_value "$gerrit" GERRIT_CANONICAL_WEB_URL "http://gerrit.$HARNESS_LDAP_DOMAIN:8080/"
+  set_env_file_value "$gerrit" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
+  set_env_file_value "$gerrit" GERRIT_VERIFICATION_MODE vm-simulation
+  set_env_file_value "$controller" HARNESS_ENVIRONMENT jenkins-controller
+  set_env_file_value "$controller" HARNESS_MODE vm-simulation
+  set_env_file_value "$controller" JENKINS_HOST "jenkins-controller.$HARNESS_LDAP_DOMAIN"
+  set_env_file_value "$controller" JENKINS_URL "http://jenkins-controller.$HARNESS_LDAP_DOMAIN:8080/"
+  set_env_file_value "$controller" LDAP_URL "ldap://$HARNESS_LDAP_HOST:$HARNESS_LDAP_PORT"
+  set_env_file_value "$controller" JENKINS_VERIFICATION_MODE vm-simulation
+  set_env_file_value "$agent" HARNESS_ENVIRONMENT jenkins-agent
+  set_env_file_value "$agent" HARNESS_MODE vm-simulation
+  set_env_file_value "$agent" JENKINS_AGENT_HOST "jenkins-agent.$HARNESS_LDAP_DOMAIN"
+  set_env_file_value "$agent" JENKINS_AGENT_VERIFICATION_MODE vm-simulation
+  remove_env_file_value "$integration" INTEGRATION_GERRIT_TARGET_SSH_HOST
+  remove_env_file_value "$integration" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST
+  remove_env_file_value "$integration" INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST
+  set_env_file_value "$integration" INTEGRATION_MODE "$HARNESS_MODE"
+  set_env_file_value "$integration" INTEGRATION_STATE_DIR "$HARNESS_HOST_DIR/state/integration"
+  set_env_file_value "$integration" INTEGRATION_LOG_DIR "$HARNESS_INTEGRATION_LOG_DIR"
+  set_env_file_value "$integration" INTEGRATION_EVIDENCE_DIR "$HARNESS_INTEGRATION_EVIDENCE_DIR"
+  set_env_file_value "$integration" JENKINS_SHARED_STORAGE_PATH /data/jenkins-shared
+  set_env_file_value "$integration" INTEGRATION_GERRIT_ACL_MODE apply-direct
+  set_env_file_value "$integration" INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY 1
+  for prefix in INTEGRATION_GERRIT_TARGET INTEGRATION_JENKINS_CONTROLLER_TARGET INTEGRATION_JENKINS_AGENT_TARGET; do
+    set_env_file_value "$integration" "${prefix}_SSH_PORT" 22
+    set_env_file_value "$integration" "${prefix}_SSH_USER" "$VM_OPERATOR_USER"
+    set_env_file_value "$integration" "${prefix}_SSH_IDENTITY_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+    set_env_file_value "$integration" "${prefix}_SSH_KNOWN_HOSTS_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  done
+}
+
+vm_config_publish_or_verify_effective_inputs() {
+  local staged
+  staged="$(simulation_input_staging_dir "$HARNESS_RUNTIME_INPUT_DIR")" || return $?
+  if ! vm_config_render_effective_inputs "$staged"; then
+    rm -rf -- "$staged"
+    return 1
+  fi
+  publish_or_verify_effective_inputs \
+    "$HARNESS_WORKFLOW_STATE_FILE" "$HARNESS_RUN_MARKER" vm \
+    "$HARNESS_SET_ID" "$HARNESS_RUN_ID" "$HARNESS_SOURCE_INPUT_DIR" \
+    "$HARNESS_EFFECTIVE_INPUT_RECORD" "$HARNESS_RUNTIME_INPUT_DIR" "$staged"
 }
 
 vm_config_write_inventory() {
@@ -367,7 +430,9 @@ HARNESS_GENERATED_RUN_DIR=$(shell_quote "$HARNESS_GENERATED_RUN_DIR")
 HARNESS_VM_SET_DIR=$(shell_quote "$HARNESS_VM_SET_DIR")
 HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
 HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
+HARNESS_SOURCE_INPUT_DIR=$(shell_quote "$HARNESS_SOURCE_INPUT_DIR")
 HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_EFFECTIVE_INPUT_RECORD=$(shell_quote "$HARNESS_EFFECTIVE_INPUT_RECORD")
 HARNESS_VM_INVENTORY_FILE=$(shell_quote "$HARNESS_VM_INVENTORY_FILE")
 HARNESS_VM_BASELINE_PREREQS_MARKER=$(shell_quote "$HARNESS_VM_BASELINE_PREREQS_MARKER")
 HARNESS_VM_SNAPSHOT_DIR=$(shell_quote "$HARNESS_VM_SNAPSHOT_DIR")
@@ -425,7 +490,9 @@ HARNESS_HOST_DIR=$(shell_quote "$HARNESS_HOST_DIR")
 HARNESS_TARGET_DIR=$(shell_quote "$HARNESS_TARGET_DIR")
 HARNESS_RENDERED_ENV=$(shell_quote "$HARNESS_RENDERED_ENV")
 HARNESS_RUNTIME_ENV=$(shell_quote "$HARNESS_RUNTIME_ENV")
+HARNESS_SOURCE_INPUT_DIR=$(shell_quote "$HARNESS_SOURCE_INPUT_DIR")
 HARNESS_RUNTIME_INPUT_DIR=$(shell_quote "$HARNESS_RUNTIME_INPUT_DIR")
+HARNESS_EFFECTIVE_INPUT_RECORD=$(shell_quote "$HARNESS_EFFECTIVE_INPUT_RECORD")
 HARNESS_VM_INVENTORY_FILE=$(shell_quote "$HARNESS_VM_INVENTORY_FILE")
 HARNESS_MANIFEST_CONTRACT=$(shell_quote "$HARNESS_MANIFEST_CONTRACT")
 HARNESS_RUN_MARKER=$(shell_quote "$HARNESS_RUN_MARKER")
@@ -456,7 +523,8 @@ vm_config_init_run_locked() {
     die "HARNESS_RUN_ID already exists: $HARNESS_RUN_ID"
   vm_config_validate_init_inputs || return $?
   vm_config_ensure_m1_dirs || return $?
-  vm_config_copy_runtime_inputs || return $?
+  vm_config_snapshot_source_inputs || return $?
+  vm_config_select_run_input_paths
   vm_config_write_inventory || return $?
   vm_config_write_manifest_contract || return $?
   vm_config_write_rendered_env || return $?

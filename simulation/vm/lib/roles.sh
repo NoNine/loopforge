@@ -111,7 +111,7 @@ vm_write_role_evidence() {
   "run_id": $(json_quote "$HARNESS_RUN_ID"),
   "set_id": $(json_quote "$HARNESS_SET_ID"),
   "target_vm": $(json_quote "$machine"),
-  "reviewed_input": $(json_quote "$(vm_path_guest_role_env "$role")"),
+  "effective_input": $(json_quote "$(vm_path_guest_role_env "$role")"),
   "artifact_manifest_references": $(json_quote "$manifest"),
   "checksum_references": $(json_quote "$checksum"),
   "checksum_verification": $(json_quote "$([ "$status" = pass ] && printf pass || printf not-proven)"),

@@ -58,15 +58,19 @@ host_container_env_file_for_role() {
   local role service
   role="${1:?role required}"
   service="${2:?service required}"
-  printf '%s/helper-envs/%s/%s.env\n' "$HARNESS_RUNTIME_INPUT_DIR" "$service" "$role"
+  case "$service" in
+    bundle-factory|gerrit-target|jenkins-controller-target|jenkins-agent-target) ;;
+    *) die "Unknown harness service for role env: $service" ;;
+  esac
+  source_env_file_for_role "$role"
 }
 
 host_gerrit_bundle_factory_env_file() {
-  printf '%s/helper-envs/bundle-factory/gerrit-bundle-factory.env\n' "$HARNESS_RUNTIME_INPUT_DIR"
+  printf '%s\n' "$HARNESS_GERRIT_ENV_FILE"
 }
 
 host_jenkins_controller_bundle_factory_env_file() {
-  printf '%s/helper-envs/bundle-factory/jenkins-controller-bundle-factory.env\n' "$HARNESS_RUNTIME_INPUT_DIR"
+  printf '%s\n' "$HARNESS_JENKINS_CONTROLLER_ENV_FILE"
 }
 
 host_state_dir_for_service() {
@@ -92,57 +96,62 @@ source_env_file_for_role() {
   esac
 }
 
-render_container_role_env() {
-  local role service src host_env_file container_env_file canonical_web_url
-  role="${1:?role required}"
-  service="${2:?service required}"
-  src="$(source_env_file_for_role "$role")"
-  require_readable_file "Harness $role env file" "$src"
-  container_env_file="$(container_env_file_for_role "$role" "$service")"
-  host_env_file="$(host_container_env_file_for_role "$role" "$service")"
-  mkdir -p "$(dirname "$host_env_file")"
-  cp -- "$src" "$host_env_file"
-  if [ "$role" = "gerrit" ]; then
-    canonical_web_url="http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"
-    set_env_file_value "$host_env_file" GERRIT_CANONICAL_WEB_URL "$canonical_web_url"
+render_docker_effective_inputs() {
+  local staged harness gerrit controller agent integration
+  staged="${1:?effective input staging directory required}"
+  copy_simulation_input_bundle "$staged" \
+    "$HARNESS_SOURCE_INPUT_DIR/harness.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/gerrit.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/jenkins-controller.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/jenkins-agent.env" \
+    "$HARNESS_SOURCE_INPUT_DIR/integration.env"
+  harness="$staged/harness.env"
+  gerrit="$staged/gerrit.env"
+  controller="$staged/jenkins-controller.env"
+  agent="$staged/jenkins-agent.env"
+  integration="$staged/integration.env"
+  remove_env_file_value "$integration" INTEGRATION_GERRIT_TARGET_SSH_HOST
+  remove_env_file_value "$integration" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST
+  remove_env_file_value "$integration" INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST
+  set_env_file_value "$harness" HARNESS_GERRIT_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+  set_env_file_value "$harness" HARNESS_JENKINS_CONTROLLER_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
+  set_env_file_value "$harness" HARNESS_JENKINS_AGENT_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
+  set_env_file_value "$harness" HARNESS_INTEGRATION_ENV_FILE "$HARNESS_RUNTIME_INPUT_DIR/integration.env"
+  set_env_file_value "$gerrit" GERRIT_CANONICAL_WEB_URL "http://127.0.0.1:$HARNESS_GERRIT_HTTP_HOST_PORT/"
+  set_env_file_value "$gerrit" GERRIT_VERIFICATION_MODE docker-simulation
+  set_env_file_value "$controller" JENKINS_VERIFICATION_MODE docker-simulation
+  set_env_file_value "$agent" JENKINS_AGENT_VERIFICATION_MODE docker-simulation
+  set_env_file_value "$integration" INTEGRATION_MODE "$HARNESS_MODE"
+  set_env_file_value "$integration" INTEGRATION_STATE_DIR "$HARNESS_STATE_DIR/integration"
+  set_env_file_value "$integration" INTEGRATION_LOG_DIR "$HARNESS_HOST_DIR/logs/integration"
+  set_env_file_value "$integration" INTEGRATION_EVIDENCE_DIR "$HARNESS_HOST_DIR/evidence/integration"
+  set_env_file_value "$integration" INTEGRATION_GERRIT_TARGET_SSH_PORT "$HARNESS_GERRIT_TARGET_SSH_HOST_PORT"
+  set_env_file_value "$integration" INTEGRATION_GERRIT_TARGET_SSH_USER ci-operator
+  set_env_file_value "$integration" INTEGRATION_GERRIT_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  set_env_file_value "$integration" INTEGRATION_GERRIT_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  set_env_file_value "$integration" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_PORT "$HARNESS_JENKINS_CONTROLLER_TARGET_SSH_HOST_PORT"
+  set_env_file_value "$integration" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_USER ci-operator
+  set_env_file_value "$integration" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  set_env_file_value "$integration" INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  set_env_file_value "$integration" INTEGRATION_JENKINS_AGENT_TARGET_SSH_PORT "$HARNESS_JENKINS_AGENT_TARGET_SSH_HOST_PORT"
+  set_env_file_value "$integration" INTEGRATION_JENKINS_AGENT_TARGET_SSH_USER ci-operator
+  set_env_file_value "$integration" INTEGRATION_JENKINS_AGENT_TARGET_SSH_IDENTITY_FILE "$HARNESS_TARGET_SSH_IDENTITY_FILE"
+  set_env_file_value "$integration" INTEGRATION_JENKINS_AGENT_TARGET_SSH_KNOWN_HOSTS_FILE "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
+  set_env_file_value "$integration" INTEGRATION_GERRIT_ACL_MODE apply-direct
+  set_env_file_value "$integration" INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY 1
+}
+
+docker_publish_or_verify_effective_inputs() {
+  local staged
+  staged="$(simulation_input_staging_dir "$HARNESS_RUNTIME_INPUT_DIR")" || return $?
+  if ! render_docker_effective_inputs "$staged"; then
+    rm -rf -- "$staged"
+    return 1
   fi
-  chmod "$LF_MODE_PRIVATE_FILE" "$host_env_file"
-  printf '%s\n' "$container_env_file"
-}
-
-render_gerrit_bundle_factory_env() {
-  local env_file host_env_file src
-  env_file="$(gerrit_bundle_factory_env_file)"
-  host_env_file="$(host_gerrit_bundle_factory_env_file)"
-  src="$(source_env_file_for_role gerrit)"
-  require_readable_file "Harness gerrit env file" "$src"
-  mkdir -p "$(dirname "$host_env_file")"
-  cp -- "$src" "$host_env_file"
-  set_env_file_value "$host_env_file" GERRIT_DOWNLOAD_ARTIFACTS "1"
-  chmod "$LF_MODE_PRIVATE_FILE" "$host_env_file"
-  printf '%s\n' "$env_file"
-}
-
-render_jenkins_controller_bundle_factory_env() {
-  local env_file host_env_file src
-  env_file="$(jenkins_controller_bundle_factory_env_file)"
-  host_env_file="$(host_jenkins_controller_bundle_factory_env_file)"
-  src="$(source_env_file_for_role jenkins-controller)"
-  require_readable_file "Harness jenkins-controller env file" "$src"
-  mkdir -p "$(dirname "$host_env_file")"
-  cp -- "$src" "$host_env_file"
-  set_env_file_value "$host_env_file" JENKINS_DOWNLOAD_ARTIFACTS "1"
-  chmod "$LF_MODE_PRIVATE_FILE" "$host_env_file"
-  printf '%s\n' "$env_file"
-}
-
-write_rendered_helper_envs() {
-  render_gerrit_bundle_factory_env >/dev/null
-  render_jenkins_controller_bundle_factory_env >/dev/null
-  render_container_role_env jenkins-agent bundle-factory >/dev/null
-  render_container_role_env gerrit gerrit-target >/dev/null
-  render_container_role_env jenkins-controller jenkins-controller-target >/dev/null
-  render_container_role_env jenkins-agent jenkins-agent-target >/dev/null
+  publish_or_verify_effective_inputs \
+    "$HARNESS_WORKFLOW_STATE_FILE" "$HARNESS_RUN_MARKER" docker \
+    "$HARNESS_SET_ID" "$HARNESS_RUN_ID" "$HARNESS_SOURCE_INPUT_DIR" \
+    "$HARNESS_EFFECTIVE_INPUT_RECORD" "$HARNESS_RUNTIME_INPUT_DIR" "$staged"
 }
 
 require_container_role_env() {

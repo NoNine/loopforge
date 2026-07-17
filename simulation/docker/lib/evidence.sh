@@ -158,7 +158,8 @@ expect_manifest_value jenkins_plugin_manager_version "$plugin_manager_version"
 write_evidence() {
   local checkpoint role status command_name log_ref message file
   local manifest_ref checksum_ref target_container
-  local q_mode q_timestamp q_role q_checkpoint q_command q_status q_input
+  local q_mode q_timestamp q_role q_checkpoint q_command q_status
+  local q_source_input q_effective_input
   local q_manifest q_checksum q_message q_log_ref q_redaction q_role_name
   local q_bundle_container q_ldap_container q_target_container
   local q_ubuntu_target q_ubuntu_release q_ubuntu_codename q_java q_gerrit
@@ -187,10 +188,15 @@ write_evidence() {
   q_checkpoint="$(json_quote "$checkpoint")"
   q_command="$(json_quote "$command_name")"
   q_status="$(json_quote "$status")"
-  if [ -d "${HARNESS_RUNTIME_INPUT_DIR:-}" ]; then
-    q_input="$(json_quote "$(reviewed_inputs_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")")"
+  if [ -d "${HARNESS_SOURCE_INPUT_DIR:-}" ]; then
+    q_source_input="$(json_quote "$(simulation_input_bundle_fingerprint "$HARNESS_SOURCE_INPUT_DIR")")"
   else
-    q_input="$(json_quote "not-applicable")"
+    q_source_input="$(json_quote "not-applicable")"
+  fi
+  if [ -d "${HARNESS_RUNTIME_INPUT_DIR:-}" ]; then
+    q_effective_input="$(json_quote "$(simulation_input_bundle_fingerprint "$HARNESS_RUNTIME_INPUT_DIR")")"
+  else
+    q_effective_input="$(json_quote "not-applicable")"
   fi
   q_run="$(json_quote "$HARNESS_RUN_ID")"
   q_set="$(json_quote "$HARNESS_SET_ID")"
@@ -224,7 +230,8 @@ write_evidence() {
   "checkpoint_name": $q_checkpoint,
   "command_name": $q_command,
   "status": $q_status,
-  "reviewed_input_fingerprint": $q_input,
+  "source_inputs_fingerprint": $q_source_input,
+  "effective_inputs_fingerprint": $q_effective_input,
   "artifact_manifest_references": $q_manifest,
   "checksum_references": $q_checksum,
   "observed_checks": $q_message,

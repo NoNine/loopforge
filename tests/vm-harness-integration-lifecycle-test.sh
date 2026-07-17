@@ -27,6 +27,7 @@ HARNESS_PROJECT_NAME=loopforge-vm-m8-set
 HARNESS_GENERATED_RUN_DIR="$tmp_dir/run"
 HARNESS_HOST_DIR="$HARNESS_GENERATED_RUN_DIR/host"
 HARNESS_TARGET_DIR="$HARNESS_GENERATED_RUN_DIR/target"
+HARNESS_SOURCE_INPUT_DIR="$HARNESS_HOST_DIR/source-inputs"
 HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
 HARNESS_EVIDENCE_DIR="$HARNESS_HOST_DIR/evidence/harness"
 HARNESS_LOG_DIR="$HARNESS_HOST_DIR/logs/harness"
@@ -38,7 +39,6 @@ HARNESS_GERRIT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
 HARNESS_JENKINS_CONTROLLER_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-controller.env"
 HARNESS_JENKINS_AGENT_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/jenkins-agent.env"
 HARNESS_INTEGRATION_ENV_FILE="$HARNESS_RUNTIME_INPUT_DIR/integration.env"
-rendered_input_dir="$HARNESS_HOST_DIR/rendered/integration-inputs"
 HARNESS_TARGET_SSH_IDENTITY_FILE="$HARNESS_HOST_DIR/target-ssh/ci-operator"
 HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$HARNESS_HOST_DIR/target-ssh/known_hosts"
 HARNESS_LDAP_DOMAIN=example.test
@@ -48,7 +48,7 @@ VM_OPERATOR_USER=ci-operator
 roles=(gerrit jenkins-controller jenkins-agent)
 calls="$tmp_dir/integration-calls.log"
 
-mkdir -p "$HARNESS_RUNTIME_INPUT_DIR" "$HARNESS_EVIDENCE_DIR" \
+mkdir -p "$HARNESS_SOURCE_INPUT_DIR" "$HARNESS_RUNTIME_INPUT_DIR" "$HARNESS_EVIDENCE_DIR" \
   "$HARNESS_LOG_DIR" "$HARNESS_INTEGRATION_EVIDENCE_DIR" \
   "$HARNESS_INTEGRATION_LOG_DIR" "$HARNESS_HOST_DIR/rendered" \
   "$HARNESS_HOST_DIR/target-ssh"
@@ -84,22 +84,33 @@ JENKINS_SHARED_GROUP_GID=61040
 JENKINS_SHARED_STORAGE_PATH=/data/jenkins-shared
 EOF
 chmod 0600 "$HARNESS_RUNTIME_INPUT_DIR"/*.env
+cp "$HARNESS_RUNTIME_INPUT_DIR"/*.env "$HARNESS_SOURCE_INPUT_DIR/"
+chmod 0600 "$HARNESS_SOURCE_INPUT_DIR"/*.env
 
 helper="$tmp_dir/integration-setup.sh"
 cat >"$helper" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$HARNESS_TEST_INTEGRATION_CALLS"
+integration_env=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --integration-env) integration_env="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$integration_env" ]
+printf '%s\n' "$integration_env" >"$HARNESS_TEST_ADAPTER_PATH"
+cp "$integration_env" "$HARNESS_TEST_ADAPTER_COPY"
+[ "${HARNESS_TEST_INTEGRATION_FAIL:-0}" != 1 ] || exit 23
 case "$*" in
-  *' configure-integration'|*' validate-integration'|*' prove-integration')
-    printf 'status=pass command=%s\n' "${*: -1}"
-    ;;
-  *) exit 17 ;;
+  *) printf 'status=pass\n' ;;
 esac
 SH
 chmod +x "$helper"
 
 vm_config_load_runtime() { :; }
+vm_state_require_effective_inputs() { :; }
 vm_set_verify_run_and_set() { :; }
 vm_libvirt_require_running() { :; }
 vm_ssh_verify_known_host() { :; }
@@ -134,25 +145,30 @@ fi
 
 HARNESS_TEST_INTEGRATION_HELPER="$helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$calls" \
+  HARNESS_TEST_ADAPTER_PATH="$tmp_dir/adapter.path" \
+  HARNESS_TEST_ADAPTER_COPY="$tmp_dir/adapter.env" \
   vm_cmd_configure_integration >"$tmp_dir/configure.out"
 grep -Fxq 'configure-integration: ok' "$tmp_dir/configure.out"
-grep -Fq -- "--gerrit-env $rendered_input_dir/gerrit.env" "$calls"
-grep -Fq -- "--integration-env $rendered_input_dir/integration.env" "$calls"
+grep -Fq -- "--gerrit-env $HARNESS_GERRIT_ENV_FILE" "$calls"
+grep -Fq -- "--jenkins-controller-env $HARNESS_JENKINS_CONTROLLER_ENV_FILE" "$calls"
+grep -Fq -- "--jenkins-agent-env $HARNESS_JENKINS_AGENT_ENV_FILE" "$calls"
 grep -Fq -- '--yes configure-integration' "$calls"
 [ -f "$(vm_path_integration_checkpoint_marker configure-integration)" ]
 
-grep -Fq 'GERRIT_HOST=gerrit.example.test' "$rendered_input_dir/gerrit.env"
-grep -Fq 'JENKINS_HOST=jenkins-controller.example.test' "$rendered_input_dir/jenkins-controller.env"
-grep -Fq 'JENKINS_AGENT_HOST=jenkins-agent.example.test' "$rendered_input_dir/jenkins-agent.env"
-grep -Fq 'INTEGRATION_GERRIT_TARGET_SSH_HOST=192.0.2.10' "$rendered_input_dir/integration.env"
-grep -Fq "INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_IDENTITY_FILE=$HARNESS_TARGET_SSH_IDENTITY_FILE" "$rendered_input_dir/integration.env"
-grep -Fq 'INTEGRATION_GERRIT_ACL_MODE=apply-direct' "$rendered_input_dir/integration.env"
-grep -Fq 'INTEGRATION_ALLOW_SIMULATION_DIRECT_ACL_APPLY=1' "$rendered_input_dir/integration.env"
-grep -Fq 'JENKINS_SHARED_STORAGE_PATH=/data/jenkins-shared' "$rendered_input_dir/integration.env"
+adapter_path="$(cat "$tmp_dir/adapter.path")"
+[ ! -e "$adapter_path" ]
+grep -Fq 'INTEGRATION_GERRIT_TARGET_SSH_HOST=192.0.2.10' "$tmp_dir/adapter.env"
+grep -Fq 'INTEGRATION_JENKINS_CONTROLLER_TARGET_SSH_HOST=192.0.2.11' "$tmp_dir/adapter.env"
+grep -Fq 'INTEGRATION_JENKINS_AGENT_TARGET_SSH_HOST=192.0.2.12' "$tmp_dir/adapter.env"
+grep -Fq 'JENKINS_SHARED_STORAGE_PATH=/data/jenkins-shared' "$tmp_dir/adapter.env"
+grep -Fq 'SENTINEL=runtime-integration' "$tmp_dir/adapter.env"
 grep -Fq 'GERRIT_HOST=stale-gerrit' "$HARNESS_RUNTIME_INPUT_DIR/gerrit.env"
+[ ! -e "$HARNESS_HOST_DIR/rendered/integration-inputs" ]
 
 HARNESS_TEST_INTEGRATION_HELPER="$helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$calls" \
+  HARNESS_TEST_ADAPTER_PATH="$tmp_dir/adapter.path" \
+  HARNESS_TEST_ADAPTER_COPY="$tmp_dir/adapter.env" \
   vm_cmd_validate_integration >"$tmp_dir/validate.out"
 grep -Fxq 'validate-integration: ok' "$tmp_dir/validate.out"
 grep -Fq -- '--yes validate-integration' "$calls"
@@ -160,6 +176,8 @@ grep -Fq -- '--yes validate-integration' "$calls"
 
 HARNESS_TEST_INTEGRATION_HELPER="$helper" \
   HARNESS_TEST_INTEGRATION_CALLS="$calls" \
+  HARNESS_TEST_ADAPTER_PATH="$tmp_dir/adapter.path" \
+  HARNESS_TEST_ADAPTER_COPY="$tmp_dir/adapter.env" \
   vm_cmd_prove_integration >"$tmp_dir/prove.out"
 grep -Fxq 'prove-integration: ok' "$tmp_dir/prove.out"
 grep -Fq -- '--yes prove-integration' "$calls"
@@ -167,6 +185,20 @@ grep -Fq -- '--yes prove-integration' "$calls"
 find "$HARNESS_EVIDENCE_DIR" -name 'configure-integration-integration-*.json' | grep -q .
 find "$HARNESS_EVIDENCE_DIR" -name 'validate-integration-integration-*.json' | grep -q .
 find "$HARNESS_EVIDENCE_DIR" -name 'prove-integration-integration-*.json' | grep -q .
+
+if HARNESS_TEST_INTEGRATION_HELPER="$helper" \
+  HARNESS_TEST_INTEGRATION_CALLS="$calls" \
+  HARNESS_TEST_ADAPTER_PATH="$tmp_dir/failing-adapter.path" \
+  HARNESS_TEST_ADAPTER_COPY="$tmp_dir/failing-adapter.env" \
+  HARNESS_TEST_INTEGRATION_FAIL=1 \
+  vm_cmd_configure_integration >"$tmp_dir/configure-helper-fail.out" 2>&1; then
+  printf 'configure-integration must fail when the helper fails\n' >&2
+  exit 1
+fi
+[ ! -e "$(cat "$tmp_dir/failing-adapter.path")" ] || {
+  printf 'Failed integration helper left its private invocation adapter behind\n' >&2
+  exit 1
+}
 
 vm_set_verify_run_and_set() { die "forced integration phase failure"; }
 if HARNESS_TEST_INTEGRATION_HELPER="$helper" \

@@ -9,6 +9,7 @@ lib_dir="$repo_root/simulation/lib"
 . "$lib_dir/permissions.sh"
 . "$lib_dir/identity.sh"
 . "$lib_dir/locking.sh"
+. "$lib_dir/env.sh"
 . "$lib_dir/state.sh"
 
 tmp_dir="$(mktemp -d)"
@@ -63,26 +64,110 @@ fi
 simulation_set_lock_release
 
 runtime_env="$tmp_dir/runtime.env"
-input_dir="$tmp_dir/inputs"
+source_dir="$tmp_dir/source-inputs"
+effective_dir="$tmp_dir/runtime-inputs"
+effective_record="$tmp_dir/run/state/effective-inputs.env"
 marker="$tmp_dir/run.env"
 active="$tmp_dir/set/active-run.env"
 workflow="$tmp_dir/run/state/workflow-state.env"
 checkpoint_dir="$tmp_dir/run/state/checkpoints"
 printf 'HARNESS_MODE=docker-simulation\n' >"$runtime_env"
-mkdir -p "$input_dir" "$checkpoint_dir"
+mkdir -p "$source_dir" "$checkpoint_dir"
 for input in harness.env gerrit.env jenkins-controller.env jenkins-agent.env integration.env; do
-  printf 'input=%s\n' "$input" >"$input_dir/$input"
+  printf 'input=%s\n' "$input" >"$source_dir/$input"
 done
-inputs="$(reviewed_inputs_fingerprint "$input_dir")"
+source_inputs="$(simulation_input_bundle_fingerprint "$source_dir")"
 write_runtime_marker "$marker" docker-simulation docker default run-a \
-  loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" "$input_dir"
-write_initial_workflow_state "$workflow" docker default run-a "$marker" none "$inputs"
+  loopforge-docker-default "$repo_root" "$tmp_dir/run" "$runtime_env" "$source_dir"
+write_initial_workflow_state "$workflow" docker default run-a "$marker" none "$source_inputs"
+cp "$workflow" "$tmp_dir/pending-workflow.env"
 write_active_run_record "$active" docker default run-a loopforge-docker-default \
   "$marker" none active none
 lifecycle_records_are_bound "$active" "$marker" "$workflow" docker default \
-  run-a loopforge-docker-default "$inputs"
+  run-a loopforge-docker-default "$source_inputs"
+[ "$(strict_record_value "$workflow" input_state)" = pending ]
+[ "$(strict_record_value "$workflow" effective_inputs_fingerprint)" = none ]
+simulation_input_state_is_bound "$workflow" "$marker" docker default run-a \
+  "$source_dir" "$effective_record" "$effective_dir"
+if (workflow_state_publish_activity "$workflow" mutating prepare-artifacts-gerrit) \
+  >/dev/null 2>&1; then
+  fail "Pending effective inputs allowed workflow activity"
+fi
 [ "$(simulation_classify_claimed_state "$active" "$marker" "$workflow" \
   docker default run-a loopforge-docker-default absent "$checkpoint_dir")" = none ]
+
+staged="$tmp_dir/staged-effective-inputs"
+cp -R "$source_dir" "$staged"
+publish_or_verify_effective_inputs "$workflow" "$marker" docker default run-a \
+  "$source_dir" "$effective_record" "$effective_dir" "$staged"
+effective_inputs="$(simulation_input_bundle_fingerprint "$effective_dir")"
+[ "$(strict_record_value "$workflow" input_state)" = ready ]
+[ "$(strict_record_value "$workflow" effective_inputs_fingerprint)" = "$effective_inputs" ]
+require_effective_inputs_ready "$workflow" "$marker" docker default run-a \
+  "$source_dir" "$effective_record" "$effective_dir"
+[ "$(simulation_classify_claimed_state "$active" "$marker" "$workflow" \
+  docker default run-a loopforge-docker-default exact "$checkpoint_dir")" = baseline ]
+
+staged="$tmp_dir/staged-effective-inputs-repeat"
+cp -R "$source_dir" "$staged"
+publish_or_verify_effective_inputs "$workflow" "$marker" docker default run-a \
+  "$source_dir" "$effective_record" "$effective_dir" "$staged"
+[ ! -e "$staged" ]
+
+staged="$tmp_dir/staged-effective-inputs-changed"
+cp -R "$source_dir" "$staged"
+printf 'changed=true\n' >>"$staged/integration.env"
+if (publish_or_verify_effective_inputs "$workflow" "$marker" docker default run-a \
+  "$source_dir" "$effective_record" "$effective_dir" "$staged") \
+  >/dev/null 2>&1; then
+  fail "Changed effective inputs were accepted after publication"
+fi
+
+partial_workflow="$tmp_dir/partial-directory-workflow.env"
+partial_record="$tmp_dir/partial-directory-record.env"
+partial_effective="$tmp_dir/partial-directory-effective"
+partial_staged="$tmp_dir/partial-directory-staged"
+cp "$tmp_dir/pending-workflow.env" "$partial_workflow"
+cp -R "$source_dir" "$partial_staged"
+if (HARNESS_TEST_EFFECTIVE_PUBLICATION_FAIL_AFTER=directory \
+  publish_or_verify_effective_inputs "$partial_workflow" "$marker" docker default run-a \
+    "$source_dir" "$partial_record" "$partial_effective" "$partial_staged") \
+  >/dev/null 2>&1; then
+  fail "Injected interruption after effective directory publication succeeded"
+fi
+[ -d "$partial_effective" ]
+[ ! -e "$partial_record" ]
+grep -Fxq 'input_state=pending' "$partial_workflow"
+partial_retry="$tmp_dir/partial-directory-retry"
+cp -R "$source_dir" "$partial_retry"
+if (publish_or_verify_effective_inputs "$partial_workflow" "$marker" docker default run-a \
+  "$source_dir" "$partial_record" "$partial_effective" "$partial_retry") \
+  >/dev/null 2>&1; then
+  fail "Retry silently repaired partial effective directory publication"
+fi
+
+partial_workflow="$tmp_dir/partial-record-workflow.env"
+partial_record="$tmp_dir/partial-record.env"
+partial_effective="$tmp_dir/partial-record-effective"
+partial_staged="$tmp_dir/partial-record-staged"
+cp "$tmp_dir/pending-workflow.env" "$partial_workflow"
+cp -R "$source_dir" "$partial_staged"
+if (HARNESS_TEST_EFFECTIVE_PUBLICATION_FAIL_AFTER=record \
+  publish_or_verify_effective_inputs "$partial_workflow" "$marker" docker default run-a \
+    "$source_dir" "$partial_record" "$partial_effective" "$partial_staged") \
+  >/dev/null 2>&1; then
+  fail "Injected interruption after effective record publication succeeded"
+fi
+[ -d "$partial_effective" ]
+[ -f "$partial_record" ]
+grep -Fxq 'input_state=pending' "$partial_workflow"
+partial_retry="$tmp_dir/partial-record-retry"
+cp -R "$source_dir" "$partial_retry"
+if (publish_or_verify_effective_inputs "$partial_workflow" "$marker" docker default run-a \
+  "$source_dir" "$partial_record" "$partial_effective" "$partial_retry") \
+  >/dev/null 2>&1; then
+  fail "Retry silently repaired partial effective record publication"
+fi
 
 workflow_state_publish_activity "$workflow" mutating prepare-artifacts-gerrit
 [ "$(simulation_classify_claimed_state "$active" "$marker" "$workflow" \
@@ -91,8 +176,9 @@ workflow_state_publish_activity "$workflow" mutating prepare-artifacts-gerrit
 evidence="$tmp_dir/evidence.json"
 printf '{}\n' >"$evidence"
 record="$checkpoint_dir/prepare-artifacts-gerrit.env"
-write_immutable_checkpoint_record "$record" docker default run-a none "$inputs" \
-  prepare-artifacts-gerrit none mutating complete "$evidence" \
+write_immutable_checkpoint_record "$record" docker default run-a none \
+  "$source_inputs" "$effective_inputs" prepare-artifacts-gerrit none mutating \
+  complete "$evidence" \
   2026-07-17T00:00:00Z 2026-07-17T00:00:01Z
 workflow_state_publish_checkpoint "$workflow" "$record" complete
 [ "$(simulation_classify_claimed_state "$active" "$marker" "$workflow" \
@@ -102,8 +188,9 @@ cross_workflow="$tmp_dir/cross-workflow.env"
 cross_record="$tmp_dir/cross-record.env"
 cp "$workflow" "$cross_workflow"
 workflow_state_publish_activity "$cross_workflow" mutating prepare-artifacts-jenkins-controller
-write_immutable_checkpoint_record "$cross_record" docker default run-b none "$inputs" \
-  prepare-artifacts-jenkins-controller "$(sha256_file "$record")" mutating complete \
+write_immutable_checkpoint_record "$cross_record" docker default run-b none \
+  "$source_inputs" "$effective_inputs" prepare-artifacts-jenkins-controller \
+  "$(sha256_file "$record")" mutating complete \
   "$evidence" 2026-07-17T00:00:02Z 2026-07-17T00:00:03Z
 if (workflow_state_publish_checkpoint "$cross_workflow" "$cross_record" complete) \
   >/dev/null 2>&1; then
@@ -114,8 +201,9 @@ order_workflow="$tmp_dir/order-workflow.env"
 order_record="$tmp_dir/order-record.env"
 cp "$workflow" "$order_workflow"
 workflow_state_publish_activity "$order_workflow" mutating stage-artifacts-gerrit
-write_immutable_checkpoint_record "$order_record" docker default run-a none "$inputs" \
-  stage-artifacts-gerrit "$(sha256_file "$record")" mutating complete "$evidence" \
+write_immutable_checkpoint_record "$order_record" docker default run-a none \
+  "$source_inputs" "$effective_inputs" stage-artifacts-gerrit \
+  "$(sha256_file "$record")" mutating complete "$evidence" \
   2026-07-17T00:00:04Z 2026-07-17T00:00:05Z
 if (workflow_state_publish_checkpoint "$order_workflow" "$order_record" complete) \
   >/dev/null 2>&1; then
@@ -155,5 +243,16 @@ fi
 sed 's/^run_id=run-a$/run_id=run-b/' "$workflow" >"$tmp_dir/mismatch.env"
 [ "$(simulation_classify_claimed_state "$active" "$marker" "$tmp_dir/mismatch.env" \
   docker default run-a loopforge-docker-default exact "$checkpoint_dir")" = conflicting ]
+
+sed 's/^effective_inputs_fingerprint=.*/effective_inputs_fingerprint=none/' \
+  "$workflow" >"$tmp_dir/ready-none.env"
+[ "$(simulation_classify_claimed_state "$active" "$marker" "$tmp_dir/ready-none.env" \
+  docker default run-a loopforge-docker-default exact "$checkpoint_dir")" = conflicting ]
+
+printf 'changed=true\n' >>"$effective_dir/integration.env"
+if (require_effective_inputs_ready "$workflow" "$marker" docker default run-a \
+  "$source_dir" "$effective_record" "$effective_dir") >/dev/null 2>&1; then
+  fail "Changed published effective inputs remained ready"
+fi
 
 printf 'Simulation lifecycle state library test passed\n'

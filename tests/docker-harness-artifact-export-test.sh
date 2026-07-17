@@ -68,6 +68,9 @@ case "$*" in
         service="${1:-}"
         shift
         case "$*" in
+          *"/etc/os-release"*)
+            printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n'
+            ;;
           "test -x "*)
             exit 0
             ;;
@@ -115,6 +118,11 @@ EOF
 esac
 SH
 chmod +x "$fake_bin/docker"
+cat >"$fake_bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
+SH
+chmod +x "$fake_bin/ssh-keyscan"
 
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
@@ -131,6 +139,12 @@ DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
 FAKE_CONTAINERS_EXIST=0 \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
+
+PATH="$fake_bin:$PATH" \
+DOCKER_CALLS_LOG="$calls" \
+FAKE_CONTAINER_FS="$container_fs" \
+FAKE_CONTAINERS_EXIST=1 \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" start >/dev/null
 
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
@@ -188,10 +202,11 @@ if grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bu
   printf 'prepare-artifacts must not export Gerrit review sibling\n' >&2
   exit 1
 fi
-[ -d "$run_dir/host/runtime-inputs/helper-envs/bundle-factory" ] || {
-  printf 'bundle-factory operator input envs must be retained under host runtime inputs\n' >&2
+[ -f "$run_dir/host/runtime-inputs/gerrit.env" ] || {
+  printf 'effective Gerrit input must be retained under host runtime inputs\n' >&2
   exit 1
 }
+[ ! -e "$run_dir/host/runtime-inputs/helper-envs" ]
 [ ! -e "$run_dir/target/product-homes/bundle-factory" ] || {
   printf 'bundle-factory runtime state must not be created under target/product-homes\n' >&2
   exit 1

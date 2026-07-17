@@ -294,8 +294,9 @@ requires these Docker-specific generated paths and bind sources:
 - The strict run-scoped `workflow-state.env`, effective-input record, and
   hash-linked checkpoint records match the pointer, marker, baseline, and
   source/effective input fingerprints.
-- Helper env files under `host/runtime-inputs/helper-envs/` exist for phases
-  that need them.
+- When workflow input state is `ready`, the flat effective helper env bundle
+  under `host/runtime-inputs/` and its strict effective-input record exist and
+  match their published fingerprints.
 - Expected generated bind source directories exist before container lifecycle
   phases use them.
 
