@@ -21,6 +21,8 @@ Step 15 depend on this step.
 - `simulation/docs/harness-design.md` and
   `simulation/docs/lifecycle-state-model.md` for shared architecture and exact
   state guards.
+- `simulation/docker/docs/implementation-design.md` for Docker-local module
+  boundaries and dependency direction.
 - `simulation/vm/docs/implementation-design.md` and
   `simulation/vm/docs/sequences.md` for VM implementation boundaries.
 

@@ -51,8 +51,8 @@ if rg -n 'JENKINS_ADMIN_GROUP' \
   printf 'Controller role interface must not retain the obsolete admin-group input\n' >&2
   exit 1
 fi
-grep -Fq 'validate_jenkins_controller_authorization "$service" "$log"' \
-  "$repo_root/simulation/docker/lib/commands.sh"
+grep -Fq '__docker_roles_validate_jenkins_controller_authorization "$service" "$log"' \
+  "$repo_root/simulation/docker/lib/roles.sh"
 grep -Fq 'Jenkins.ADMINISTER' \
   "$repo_root/simulation/docker/scripts/verify-jenkins-authorization.groovy"
 grep -Fq "Item.BUILD, 'authenticated'" \

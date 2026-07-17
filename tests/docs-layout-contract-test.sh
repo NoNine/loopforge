@@ -59,6 +59,7 @@ for path in \
   simulation/docs/lifecycle-state-model.md \
   simulation/docs/terminal-output.md \
   simulation/docker/README.md \
+  simulation/docker/docs/implementation-design.md \
   simulation/vm/README.md \
   simulation/vm/docs/implementation-design.md \
   simulation/vm/docs/sequences.md \

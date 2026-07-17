@@ -4,7 +4,44 @@
 set -euo pipefail
 
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+docker_root="$repo_root/simulation/docker"
 docker_harness_sources=("$repo_root/simulation/docker/simulate.sh" "$repo_root/simulation/docker/lib/"*.sh)
+
+for module in paths config state compose ports inputs artifacts evidence ssh docker-set baseline roles integration lifecycle; do
+  grep -Fq -- "/$module.sh" "$docker_root/simulate.sh" || {
+    printf 'Docker public CLI must load the %s module\n' "$module" >&2
+    exit 1
+  }
+done
+
+[ ! -e "$docker_root/lib/commands.sh" ] || {
+  printf 'Docker command monolith must not remain after capability extraction\n' >&2
+  exit 1
+}
+[ ! -e "$docker_root/lib/role-env.sh" ] || {
+  printf 'Docker mixed role-env module must not remain after input/access extraction\n' >&2
+  exit 1
+}
+
+if grep -Eq 'docker_cmd_' "$docker_root"/lib/{paths,config,state,compose,ports,inputs,artifacts,evidence,ssh,docker-set,baseline,roles,integration}.sh; then
+  printf 'Docker capability and foundation modules must not call command orchestration\n' >&2
+  exit 1
+fi
+if grep -Eq '^[[:space:]]*compose[[:space:]]|^[[:space:]]*docker[[:space:]]+(ps|inspect|network|images|run|rm|cp)' \
+  "$docker_root/lib/state.sh"; then
+  printf 'Docker run-state foundation must not query Docker or Compose\n' >&2
+  exit 1
+fi
+if grep -Eq 'selected_containers_exist|existing_selected_container_names|^[[:space:]]*compose[[:space:]]|^[[:space:]]*docker[[:space:]]' \
+  "$docker_root/lib/config.sh"; then
+  printf 'Docker configuration foundation must not query live Docker resources\n' >&2
+  exit 1
+fi
+if grep -Eq 'docker_(artifacts|roles|integration|ssh|set|baseline|cmd)_' \
+  "$docker_root/lib/compose.sh" "$docker_root/lib/ports.sh"; then
+  printf 'Docker infrastructure primitives must not call higher-layer capabilities\n' >&2
+  exit 1
+fi
 
 for path in \
   simulation/docker/compose.yaml \
@@ -194,11 +231,11 @@ grep -Fq -- '.runtime-identity-pending' "$repo_root/simulation/docker/lib/config
   printf 'Fresh Docker runs must mark product homes for one-time identity initialization\n' >&2
   exit 1
 }
-grep -Fq -- 'initialize_or_validate_product_homes' "$repo_root/simulation/docker/lib/commands.sh" || {
+grep -Fq -- '__docker_set_initialize_or_validate_product_homes' "$repo_root/simulation/docker/lib/docker-set.sh" || {
   printf 'Docker start must initialize fresh homes and validate ownership on later starts\n' >&2
   exit 1
 }
-grep -Fq -- 'run explicit cleanup and use a fresh run' "$repo_root/simulation/docker/lib/commands.sh" || {
+grep -Fq -- 'run explicit cleanup and use a fresh run' "$repo_root/simulation/docker/lib/docker-set.sh" || {
   printf 'Docker product-home ownership drift must require explicit cleanup\n' >&2
   exit 1
 }

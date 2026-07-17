@@ -17,13 +17,20 @@ simulation_lib_dir="$repo_root/simulation/lib"
 . "$simulation_lib_dir/logs.sh"
 . "$simulation_lib_dir/evidence.sh"
 docker_lib_dir="$script_dir/lib"
+. "$docker_lib_dir/paths.sh"
 . "$docker_lib_dir/config.sh"
+. "$docker_lib_dir/state.sh"
 . "$docker_lib_dir/compose.sh"
 . "$docker_lib_dir/ports.sh"
-. "$docker_lib_dir/role-env.sh"
+. "$docker_lib_dir/inputs.sh"
 . "$docker_lib_dir/artifacts.sh"
 . "$docker_lib_dir/evidence.sh"
-. "$docker_lib_dir/commands.sh"
+. "$docker_lib_dir/ssh.sh"
+. "$docker_lib_dir/docker-set.sh"
+. "$docker_lib_dir/baseline.sh"
+. "$docker_lib_dir/roles.sh"
+. "$docker_lib_dir/integration.sh"
+. "$docker_lib_dir/lifecycle.sh"
 
 usage() {
   cat <<'USAGE'
@@ -164,97 +171,97 @@ main() {
     run)
       shift
       parse_env_only_args "$@"
-      cmd_run
+      docker_cmd_run
       ;;
     preflight)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock shared cmd_preflight
+      docker_cmd_with_lock shared docker_cmd_preflight
       ;;
     init-run)
       shift
       parse_env_only_args "$@"
-      cmd_init_run
+      docker_cmd_init_run
       ;;
     create)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_create
+      docker_cmd_with_lock exclusive docker_cmd_create
       ;;
     start)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_start
+      docker_cmd_with_lock exclusive docker_cmd_start
       ;;
     status)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock shared cmd_status
+      docker_cmd_with_lock shared docker_cmd_status
       ;;
     ssh)
       shift
       parse_env_and_role_args 1 "$@"
-      docker_command_with_lock shared cmd_ssh "$PARSED_ROLE"
+      docker_cmd_with_lock shared docker_cmd_ssh "$PARSED_ROLE"
       ;;
     prepare-artifacts)
       shift
       parse_env_and_role_args 0 "$@"
-      docker_command_with_lock exclusive cmd_prepare_artifacts "$PARSED_ROLE"
+      docker_cmd_with_lock exclusive docker_cmd_prepare_artifacts "$PARSED_ROLE"
       ;;
     stage-artifacts)
       shift
       parse_env_and_role_args 0 "$@"
-      docker_command_with_lock exclusive cmd_stage_artifacts "$PARSED_ROLE"
+      docker_cmd_with_lock exclusive docker_cmd_stage_artifacts "$PARSED_ROLE"
       ;;
     configure-role)
       shift
       parse_env_and_role_args 0 "$@"
-      docker_command_with_lock exclusive cmd_configure_role "$PARSED_ROLE"
+      docker_cmd_with_lock exclusive docker_cmd_configure_role "$PARSED_ROLE"
       ;;
     validate-role)
       shift
       parse_env_and_role_args 0 "$@"
-      docker_command_with_lock exclusive cmd_validate_role "$PARSED_ROLE"
+      docker_cmd_with_lock exclusive docker_cmd_validate_role "$PARSED_ROLE"
       ;;
     configure-integration)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_configure_integration
+      docker_cmd_with_lock exclusive docker_cmd_configure_integration
       ;;
     validate-integration)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_validate_integration
+      docker_cmd_with_lock exclusive docker_cmd_validate_integration
       ;;
     prove-integration)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_prove_integration
+      docker_cmd_with_lock exclusive docker_cmd_prove_integration
       ;;
     audit-state)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock shared cmd_audit_state
+      docker_cmd_with_lock shared docker_cmd_audit_state
       ;;
     stop)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_stop
+      docker_cmd_with_lock exclusive docker_cmd_stop
       ;;
     restore-baseline)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_restore_baseline
+      docker_cmd_with_lock exclusive docker_cmd_restore_baseline
       ;;
     clean)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_clean
+      docker_cmd_with_lock exclusive docker_cmd_clean
       ;;
     destroy)
       shift
       parse_env_only_args "$@"
-      docker_command_with_lock exclusive cmd_destroy
+      docker_cmd_with_lock exclusive docker_cmd_destroy
       ;;
     "")
       usage

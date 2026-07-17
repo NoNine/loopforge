@@ -24,6 +24,8 @@ Shared harness architecture and exact state guards are defined in
 `simulation/docs/harness-design.md` and
 `simulation/docs/lifecycle-state-model.md`. Docker generated-state and
 stale-container behavior is defined in this document.
+Docker-local module boundaries and dependency direction are defined in
+`simulation/docker/docs/implementation-design.md`.
 
 The shared Docker target image is a simulation superset. It combines
 role-runtime packages, helper-script packages, and Docker harness packages; it

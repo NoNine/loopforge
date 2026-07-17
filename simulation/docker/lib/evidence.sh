@@ -5,7 +5,7 @@ target_container_for_evidence() {
   role="${1:?role required}"
   case "$role" in
     gerrit|jenkins-controller|jenkins-agent)
-      printf '%s-%s\n' "$HARNESS_PROJECT_NAME" "$(service_for_role "$role")"
+      printf '%s-%s\n' "$HARNESS_PROJECT_NAME" "$(docker_compose_service_for_role "$role")"
       ;;
     *)
       printf '%s\n' "not-applicable"
@@ -261,7 +261,7 @@ EOF
 check_target_os_release() {
   local role service log os_release os_codename evidence
   role="${1:?role required}"
-  service="$(service_for_role "$role")"
+  service="$(docker_compose_service_for_role "$role")"
   log="$(bounded_log_path "os-release-$role")"
 
   if ! compose exec -T "$service" sh -c '. /etc/os-release && printf "%s %s\n" "$VERSION_ID" "$VERSION_CODENAME"' >"$log" 2>&1; then
@@ -354,7 +354,7 @@ normalize_role_evidence_logs() {
   role="${2:?role required}"
   pattern="${3:?pattern required}"
   state_dir="${4:?state dir required}"
-  service="$(service_for_role "$role")"
+  service="$(docker_compose_service_for_role "$role")"
   latest="$(compose exec -T -u ci-operator "$service" sh -c \
     "find /var/lib/loopforge/evidence -maxdepth 1 -type f -name $(shell_quote "$pattern") -print | sort | tail -1" 2>>"$log" || true)"
   [ -n "$latest" ] || {

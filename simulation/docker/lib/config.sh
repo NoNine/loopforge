@@ -5,6 +5,7 @@ compose_file="$docker_dir/compose.yaml"
 docker_env_example="$docker_dir/examples/docker.env.example"
 integration_helper="${HARNESS_TEST_INTEGRATION_HELPER:-$repo_root/scripts/integration-setup.sh}"
 services=(bundle-factory ldap gerrit-target jenkins-controller-target jenkins-agent-target)
+
 validate_compose_name() {
   local name value
   name="${1:?name required}"
@@ -35,302 +36,6 @@ validate_harness_inputs() {
   [ "$HARNESS_PROJECT_NAME" = "$(simulation_resource_namespace docker "$HARNESS_SET_ID")" ] ||
     die "Docker resource namespace does not match HARNESS_SET_ID"
 }
-
-docker_generated_root() {
-  printf '%s/generated/simulation/docker\n' "$repo_root"
-}
-
-canonical_generated_run_dir() {
-  printf '%s/%s\n' "$(docker_generated_root)" "$HARNESS_RUN_ID"
-}
-
-apply_canonical_output_paths() {
-  HARNESS_GENERATED_RUN_DIR="$(canonical_generated_run_dir)"
-  HARNESS_HOST_DIR="$HARNESS_GENERATED_RUN_DIR/host"
-  HARNESS_TARGET_DIR="$HARNESS_GENERATED_RUN_DIR/target"
-  HARNESS_STATE_DIR="$HARNESS_TARGET_DIR/helper-state"
-  HARNESS_PRODUCT_HOME_DIR="$HARNESS_TARGET_DIR/product-homes"
-  HARNESS_STAGING_DIR="$HARNESS_TARGET_DIR/artifacts/staging"
-  HARNESS_EXPORTED_ARTIFACT_DIR="$HARNESS_TARGET_DIR/artifacts/exported"
-  HARNESS_EVIDENCE_DIR="$HARNESS_HOST_DIR/evidence/harness"
-  HARNESS_LOG_DIR="$HARNESS_HOST_DIR/logs/harness"
-  HARNESS_RETAINED_OUTPUT_BACKUP_DIR="$HARNESS_HOST_DIR/retained-output-backups"
-  HARNESS_RENDERED_ENV="$HARNESS_HOST_DIR/rendered/harness.env"
-  HARNESS_RUNTIME_ENV="$HARNESS_HOST_DIR/rendered/harness.runtime.env"
-  HARNESS_SOURCE_INPUT_DIR="$HARNESS_HOST_DIR/source-inputs"
-  HARNESS_RUNTIME_INPUT_DIR="$HARNESS_HOST_DIR/runtime-inputs"
-  HARNESS_EFFECTIVE_INPUT_RECORD="$HARNESS_HOST_DIR/state/effective-inputs.env"
-  HARNESS_BASELINE_CONTRACT="$HARNESS_HOST_DIR/rendered/artifact-manifest-contract.txt"
-  HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env"
-  HARNESS_SET_DIR="$(docker_generated_root)/sets/$HARNESS_SET_ID"
-  HARNESS_SET_LOCK="$(simulation_set_lock_path "$(docker_generated_root)" "$HARNESS_SET_ID")"
-  HARNESS_ACTIVE_RUN_FILE="$HARNESS_SET_DIR/active-run.env"
-  HARNESS_WORKFLOW_STATE_FILE="$HARNESS_HOST_DIR/state/workflow-state.env"
-  HARNESS_CHECKPOINT_RECORD_DIR="$HARNESS_HOST_DIR/state/checkpoints"
-  HARNESS_TARGET_SSH_DIR="$HARNESS_HOST_DIR/target-ssh"
-  HARNESS_TARGET_SSH_IDENTITY_FILE="$HARNESS_TARGET_SSH_DIR/ci-operator"
-  HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE="$HARNESS_TARGET_SSH_DIR/known_hosts"
-  HARNESS_GERRIT_VALIDATION_SECRET_DIR="$HARNESS_HOST_DIR/validation-secrets/gerrit"
-  HARNESS_BUNDLE_FACTORY_RENDERED_DIR="$HARNESS_HOST_DIR/bundle-factory/rendered"
-  HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR="$HARNESS_HOST_DIR/bundle-factory/validation-public"
-  HARNESS_LDAP_DATA_DIR="$HARNESS_TARGET_DIR/ldap/data"
-  HARNESS_LDAP_CONFIG_DIR="$HARNESS_TARGET_DIR/ldap/config"
-  HARNESS_SHARED_JENKINS_STORAGE_DIR="$HARNESS_TARGET_DIR/shared-jenkins-storage"
-  HARNESS_GERRIT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/gerrit"
-  HARNESS_GERRIT_LOG_DIR="$HARNESS_TARGET_DIR/logs/gerrit"
-  HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-controller"
-  HARNESS_JENKINS_CONTROLLER_LOG_DIR="$HARNESS_TARGET_DIR/logs/jenkins-controller"
-  HARNESS_JENKINS_AGENT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-agent"
-  HARNESS_JENKINS_AGENT_LOG_DIR="$HARNESS_TARGET_DIR/logs/jenkins-agent"
-  export HARNESS_GENERATED_RUN_DIR HARNESS_HOST_DIR HARNESS_TARGET_DIR
-  export HARNESS_STATE_DIR HARNESS_PRODUCT_HOME_DIR
-  export HARNESS_STAGING_DIR HARNESS_EXPORTED_ARTIFACT_DIR
-  export HARNESS_EVIDENCE_DIR HARNESS_LOG_DIR HARNESS_RETAINED_OUTPUT_BACKUP_DIR
-  export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_SOURCE_INPUT_DIR
-  export HARNESS_RUNTIME_INPUT_DIR HARNESS_EFFECTIVE_INPUT_RECORD
-  export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
-  export HARNESS_SET_DIR HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
-  export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
-  export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
-  export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
-  export HARNESS_GERRIT_VALIDATION_SECRET_DIR HARNESS_BUNDLE_FACTORY_RENDERED_DIR
-  export HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR HARNESS_LDAP_DATA_DIR
-  export HARNESS_LDAP_CONFIG_DIR HARNESS_SHARED_JENKINS_STORAGE_DIR
-  export HARNESS_GERRIT_EVIDENCE_DIR HARNESS_GERRIT_LOG_DIR
-  export HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR HARNESS_JENKINS_CONTROLLER_LOG_DIR
-  export HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
-}
-
-container_name_for_service() {
-  local service
-  service="${1:?service required}"
-  printf '%s-%s\n' "$HARNESS_PROJECT_NAME" "$service"
-}
-
-selected_container_names() {
-  local service
-  for service in "${services[@]}"; do
-    container_name_for_service "$service"
-  done
-}
-
-docker_container_name_exists() {
-  local name
-  name="${1:?container name required}"
-  command -v docker >/dev/null 2>&1 || return 1
-  docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "$name"
-}
-
-selected_containers_exist() {
-  local name
-  command -v docker >/dev/null 2>&1 || return 1
-  while IFS= read -r name; do
-    docker_container_name_exists "$name" && return 0
-  done <<EOF
-$(selected_container_names)
-EOF
-  return 1
-}
-
-existing_selected_container_names() {
-  local name
-  command -v docker >/dev/null 2>&1 || return 0
-  while IFS= read -r name; do
-    docker_container_name_exists "$name" && printf '%s\n' "$name"
-  done <<EOF
-$(selected_container_names)
-EOF
-}
-
-reject_custom_output_paths() {
-  local name value expected
-  for name in \
-    HARNESS_GENERATED_RUN_DIR \
-    HARNESS_HOST_DIR \
-    HARNESS_TARGET_DIR \
-    HARNESS_STATE_DIR \
-    HARNESS_PRODUCT_HOME_DIR \
-    HARNESS_STAGING_DIR \
-    HARNESS_EXPORTED_ARTIFACT_DIR \
-    HARNESS_EVIDENCE_DIR \
-    HARNESS_LOG_DIR \
-    HARNESS_RETAINED_OUTPUT_BACKUP_DIR \
-    HARNESS_RENDERED_ENV \
-    HARNESS_SOURCE_INPUT_DIR \
-    HARNESS_RUNTIME_INPUT_DIR \
-    HARNESS_EFFECTIVE_INPUT_RECORD \
-    HARNESS_BASELINE_CONTRACT \
-    HARNESS_TARGET_SSH_DIR \
-    HARNESS_GERRIT_VALIDATION_SECRET_DIR \
-    HARNESS_BUNDLE_FACTORY_RENDERED_DIR \
-    HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR \
-    HARNESS_LDAP_DATA_DIR \
-    HARNESS_LDAP_CONFIG_DIR \
-    HARNESS_SHARED_JENKINS_STORAGE_DIR \
-    HARNESS_GERRIT_EVIDENCE_DIR \
-    HARNESS_GERRIT_LOG_DIR \
-    HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR \
-    HARNESS_JENKINS_CONTROLLER_LOG_DIR \
-    HARNESS_JENKINS_AGENT_EVIDENCE_DIR \
-    HARNESS_JENKINS_AGENT_LOG_DIR
-  do
-    eval "value=\${$name-}"
-    [ -n "$value" ] || continue
-    case "$name" in
-      HARNESS_GENERATED_RUN_DIR) expected="$(canonical_generated_run_dir)" ;;
-      HARNESS_HOST_DIR) expected="$(canonical_generated_run_dir)/host" ;;
-      HARNESS_TARGET_DIR) expected="$(canonical_generated_run_dir)/target" ;;
-      HARNESS_STATE_DIR) expected="$(canonical_generated_run_dir)/target/helper-state" ;;
-      HARNESS_PRODUCT_HOME_DIR) expected="$(canonical_generated_run_dir)/target/product-homes" ;;
-      HARNESS_STAGING_DIR) expected="$(canonical_generated_run_dir)/target/artifacts/staging" ;;
-      HARNESS_EXPORTED_ARTIFACT_DIR) expected="$(canonical_generated_run_dir)/target/artifacts/exported" ;;
-      HARNESS_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/host/evidence/harness" ;;
-      HARNESS_LOG_DIR) expected="$(canonical_generated_run_dir)/host/logs/harness" ;;
-      HARNESS_RETAINED_OUTPUT_BACKUP_DIR) expected="$(canonical_generated_run_dir)/host/retained-output-backups" ;;
-      HARNESS_RENDERED_ENV) expected="$(canonical_generated_run_dir)/host/rendered/harness.env" ;;
-      HARNESS_SOURCE_INPUT_DIR) expected="$(canonical_generated_run_dir)/host/source-inputs" ;;
-      HARNESS_RUNTIME_INPUT_DIR) expected="$(canonical_generated_run_dir)/host/runtime-inputs" ;;
-      HARNESS_EFFECTIVE_INPUT_RECORD) expected="$(canonical_generated_run_dir)/host/state/effective-inputs.env" ;;
-      HARNESS_BASELINE_CONTRACT) expected="$(canonical_generated_run_dir)/host/rendered/artifact-manifest-contract.txt" ;;
-      HARNESS_TARGET_SSH_DIR) expected="$(canonical_generated_run_dir)/host/target-ssh" ;;
-      HARNESS_GERRIT_VALIDATION_SECRET_DIR) expected="$(canonical_generated_run_dir)/host/validation-secrets/gerrit" ;;
-      HARNESS_BUNDLE_FACTORY_RENDERED_DIR) expected="$(canonical_generated_run_dir)/host/bundle-factory/rendered" ;;
-      HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR) expected="$(canonical_generated_run_dir)/host/bundle-factory/validation-public" ;;
-      HARNESS_LDAP_DATA_DIR) expected="$(canonical_generated_run_dir)/target/ldap/data" ;;
-      HARNESS_LDAP_CONFIG_DIR) expected="$(canonical_generated_run_dir)/target/ldap/config" ;;
-      HARNESS_SHARED_JENKINS_STORAGE_DIR) expected="$(canonical_generated_run_dir)/target/shared-jenkins-storage" ;;
-      HARNESS_GERRIT_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/gerrit" ;;
-      HARNESS_GERRIT_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/gerrit" ;;
-      HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/jenkins-controller" ;;
-      HARNESS_JENKINS_CONTROLLER_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/jenkins-controller" ;;
-      HARNESS_JENKINS_AGENT_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/jenkins-agent" ;;
-      HARNESS_JENKINS_AGENT_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/jenkins-agent" ;;
-      *) die "Internal error: unknown output path $name" ;;
-    esac
-    [ "$value" = "$expected" ] ||
-      die "$name must use the canonical repo-local generated path for v1: $expected"
-  done
-}
-
-validate_canonical_run_root() {
-  local expected actual_real expected_real child
-  expected="$(canonical_generated_run_dir)"
-  [ "$HARNESS_GENERATED_RUN_DIR" = "$expected" ] ||
-    die "HARNESS_GENERATED_RUN_DIR must be $expected"
-  [ -d "$HARNESS_GENERATED_RUN_DIR" ] || die "Missing generated run directory: $HARNESS_GENERATED_RUN_DIR"
-  [ ! -L "$HARNESS_GENERATED_RUN_DIR" ] || die "Generated run directory must not be a symlink"
-  actual_real="$(realpath "$HARNESS_GENERATED_RUN_DIR")"
-  expected_real="$(realpath "$expected")"
-  [ "$actual_real" = "$expected_real" ] ||
-    die "Generated run directory resolved outside the canonical run root"
-  for child in host target; do
-    [ ! -L "$HARNESS_GENERATED_RUN_DIR/$child" ] ||
-      die "Generated run child must not be a symlink: $HARNESS_GENERATED_RUN_DIR/$child"
-  done
-}
-
-write_run_marker() {
-  write_runtime_marker \
-    "$HARNESS_RUN_MARKER" \
-    "$HARNESS_MODE" \
-    docker \
-    "$HARNESS_SET_ID" \
-    "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" \
-    "$repo_root" \
-    "$HARNESS_GENERATED_RUN_DIR" \
-    "$HARNESS_RUNTIME_ENV" \
-    "$HARNESS_SOURCE_INPUT_DIR"
-}
-
-verify_run_marker() {
-  local marker
-  marker="${HARNESS_RUN_MARKER:-$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env}"
-  validate_canonical_run_root
-  verify_runtime_marker \
-    "$marker" \
-    "$HARNESS_MODE" \
-    docker \
-    "$HARNESS_SET_ID" \
-    "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" \
-    "$repo_root" \
-    "$HARNESS_GENERATED_RUN_DIR" \
-    "$HARNESS_RUNTIME_ENV" \
-    "$HARNESS_SOURCE_INPUT_DIR" \
-    "Docker harness run marker"
-}
-
-write_initial_lifecycle_records() {
-  local source_fingerprint
-  source_fingerprint="$(simulation_input_bundle_fingerprint "$HARNESS_SOURCE_INPUT_DIR")" || return $?
-  write_initial_workflow_state \
-    "$HARNESS_WORKFLOW_STATE_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
-    "$HARNESS_RUN_MARKER" none "$source_fingerprint" || return $?
-  write_active_run_record \
-    "$HARNESS_ACTIVE_RUN_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" "$HARNESS_RUN_MARKER" none active none
-}
-
-verify_active_run_binding() {
-  lifecycle_records_are_bound \
-    "$HARNESS_ACTIVE_RUN_FILE" "$HARNESS_RUN_MARKER" \
-    "$HARNESS_WORKFLOW_STATE_FILE" docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" \
-    "$HARNESS_PROJECT_NAME" "$(simulation_input_bundle_fingerprint "$HARNESS_SOURCE_INPUT_DIR")" ||
-    die "Docker active-run, run marker, and workflow state do not agree"
-  simulation_input_state_is_bound "$HARNESS_WORKFLOW_STATE_FILE" "$HARNESS_RUN_MARKER" \
-    docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" "$HARNESS_SOURCE_INPUT_DIR" \
-    "$HARNESS_EFFECTIVE_INPUT_RECORD" "$HARNESS_RUNTIME_INPUT_DIR" ||
-    die "Docker source/effective input state does not agree"
-}
-
-require_docker_effective_inputs() {
-  require_effective_inputs_ready "$HARNESS_WORKFLOW_STATE_FILE" "$HARNESS_RUN_MARKER" \
-    docker "$HARNESS_SET_ID" "$HARNESS_RUN_ID" "$HARNESS_SOURCE_INPUT_DIR" \
-    "$HARNESS_EFFECTIVE_INPUT_RECORD" "$HARNESS_RUNTIME_INPUT_DIR"
-}
-
-validate_core_generated_state() {
-  local role service state_name
-  state_name="Docker generated state"
-  validate_canonical_run_root
-  require_generated_state_file "$state_name" "rendered harness env" "$HARNESS_RENDERED_ENV"
-  require_generated_state_file "$state_name" "runtime harness env" "$HARNESS_RUNTIME_ENV"
-  require_generated_state_file "$state_name" "artifact manifest contract" "$HARNESS_BASELINE_CONTRACT"
-  require_generated_state_file "$state_name" "active-run pointer" "$HARNESS_ACTIVE_RUN_FILE"
-  require_generated_state_file "$state_name" "workflow state" "$HARNESS_WORKFLOW_STATE_FILE"
-  require_generated_state_dir "$state_name" "source input directory" "$HARNESS_SOURCE_INPUT_DIR"
-  require_generated_state_file "$state_name" "source harness env" "$HARNESS_SOURCE_INPUT_DIR/harness.env"
-  require_generated_state_file "$state_name" "source Gerrit env" "$HARNESS_SOURCE_INPUT_DIR/gerrit.env"
-  require_generated_state_file "$state_name" "source Jenkins controller env" "$HARNESS_SOURCE_INPUT_DIR/jenkins-controller.env"
-  require_generated_state_file "$state_name" "source Jenkins agent env" "$HARNESS_SOURCE_INPUT_DIR/jenkins-agent.env"
-  require_generated_state_file "$state_name" "source integration env" "$HARNESS_SOURCE_INPUT_DIR/integration.env"
-  require_generated_state_dir "$state_name" "host contribution directory" "$HARNESS_HOST_DIR"
-  require_generated_state_dir "$state_name" "target contribution directory" "$HARNESS_TARGET_DIR"
-  require_generated_state_dir "$state_name" "product home directory" "$HARNESS_PRODUCT_HOME_DIR"
-  require_generated_state_dir "$state_name" "staging directory" "$HARNESS_STAGING_DIR"
-  require_generated_state_dir "$state_name" "exported artifact directory" "$HARNESS_EXPORTED_ARTIFACT_DIR"
-  require_generated_state_dir "$state_name" "evidence directory" "$HARNESS_EVIDENCE_DIR"
-  require_generated_state_dir "$state_name" "log directory" "$HARNESS_LOG_DIR"
-  require_generated_state_dir "$state_name" "bundle factory operator input source" "$HARNESS_BUNDLE_FACTORY_RENDERED_DIR"
-  require_generated_state_dir "$state_name" "LDAP data bind source" "$HARNESS_LDAP_DATA_DIR"
-  require_generated_state_dir "$state_name" "LDAP config bind source" "$HARNESS_LDAP_CONFIG_DIR"
-  require_generated_state_dir "$state_name" "Gerrit product home bind source" "$HARNESS_PRODUCT_HOME_DIR/gerrit"
-  require_generated_state_dir "$state_name" "Jenkins controller product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller"
-  require_generated_state_dir "$state_name" "Jenkins agent product home bind source" "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent"
-  require_generated_state_dir "$state_name" "shared Jenkins storage bind source" "$HARNESS_SHARED_JENKINS_STORAGE_DIR"
-  require_generated_state_dir "$state_name" "target SSH state" "$HARNESS_TARGET_SSH_DIR"
-  require_generated_state_file "$state_name" "target SSH identity file" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  verify_active_run_binding
-  if [ "$(strict_record_value "$HARNESS_WORKFLOW_STATE_FILE" input_state)" = ready ]; then
-    require_generated_state_file "$state_name" "effective-input binding" "$HARNESS_EFFECTIVE_INPUT_RECORD"
-    require_generated_state_dir "$state_name" "effective input directory" "$HARNESS_RUNTIME_INPUT_DIR"
-    for role in harness gerrit jenkins-controller jenkins-agent integration; do
-      require_generated_state_file "$state_name" "effective $role env" "$HARNESS_RUNTIME_INPUT_DIR/$role.env"
-    done
-  fi
-}
-
 HARNESS_PROJECT_NAME_OPERATOR_SET="${HARNESS_PROJECT_NAME+x}"
 HARNESS_RUN_ID_OPERATOR_SET="${HARNESS_RUN_ID+x}"
 HARNESS_SET_ID_OPERATOR_SET="${HARNESS_SET_ID+x}"
@@ -484,9 +189,6 @@ export HARNESS_GERRIT_EVIDENCE_DIR HARNESS_GERRIT_LOG_DIR
 export HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR HARNESS_JENKINS_CONTROLLER_LOG_DIR
 export HARNESS_JENKINS_AGENT_EVIDENCE_DIR HARNESS_JENKINS_AGENT_LOG_DIR
 
-compose_kind=""
-compose_cmd=()
-
 resolve_repo_relative_path() {
   resolve_base_relative_path "$repo_root" "${1:?path required}"
 }
@@ -615,7 +317,7 @@ reapply_operator_overrides() {
   fi
 }
 
-load_rendered_config_if_present() {
+docker_config_load_runtime_if_present() {
   local runtime
   runtime="${HARNESS_RUNTIME_ENV:-${HARNESS_RENDERED_ENV%.env}.runtime.env}"
   [ -f "$runtime" ] || return 1
@@ -640,44 +342,6 @@ load_rendered_config_if_present() {
   export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
 }
 
-ensure_runtime_config() {
-  if [ -n "$HARNESS_RENDERED_ENV_OPERATOR_SET" ] && load_rendered_config_if_present; then
-    verify_run_marker
-    validate_core_generated_state
-    return 0
-  fi
-  if load_rendered_config_if_present; then
-    verify_run_marker
-    validate_core_generated_state
-    return 0
-  fi
-  if selected_containers_exist; then
-    die "Docker generated state is missing while selected containers exist; use stop and explicit recovery before resuming"
-  fi
-  die "Missing Docker harness runtime config: run init-run first"
-}
-
-runtime_config_valid() {
-  (
-    load_rendered_config_if_present &&
-    verify_run_marker >/dev/null 2>&1 &&
-    validate_core_generated_state >/dev/null 2>&1
-  ) >/dev/null 2>&1
-}
-
-generated_runtime_state_present() {
-  any_path_exists \
-    "$HARNESS_RUN_MARKER" \
-    "$HARNESS_RENDERED_ENV" \
-    "$HARNESS_RUNTIME_ENV" \
-    "$HARNESS_RUNTIME_INPUT_DIR" \
-    "$HARNESS_HOST_DIR/rendered"
-}
-
-verify_selected_container_mounts() {
-  validate_selected_container_mounts
-}
-
 bootstrap_harness_env() {
   load_env_file "$HARNESS_ENV_FILE"
 }
@@ -689,23 +353,6 @@ load_harness_integration_env() {
   HARNESS_JENKINS_SHARED_STORAGE_PATH="${JENKINS_SHARED_STORAGE_PATH:-}"
   validate_shared_storage_path "HARNESS_JENKINS_SHARED_STORAGE_PATH" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
   export HARNESS_JENKINS_SHARED_STORAGE_PATH
-}
-
-ensure_target_ssh_keypair() {
-  require_command ssh-keygen
-  mkdir -p "$HARNESS_TARGET_SSH_DIR"
-  chmod "$LF_MODE_PRIVATE_DIR" "$HARNESS_TARGET_SSH_DIR"
-  if [ ! -s "$HARNESS_TARGET_SSH_IDENTITY_FILE" ]; then
-    ssh-keygen -q -t ed25519 -N '' -C "loopforge-$HARNESS_RUN_ID-target-ssh" \
-      -f "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  fi
-  chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE"
-  ssh-keygen -y -f "$HARNESS_TARGET_SSH_IDENTITY_FILE" >"$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
-  chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_TARGET_SSH_IDENTITY_FILE.pub"
-  if [ ! -e "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE" ]; then
-    : >"$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-    chmod "$LF_MODE_PRIVATE_FILE" "$HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE"
-  fi
 }
 
 snapshot_source_env_inputs() {
@@ -774,6 +421,7 @@ validate_shared_storage_path() {
       ;;
   esac
 }
+
 ensure_preflight_dirs() {
   validate_harness_inputs
   mkdir -p \
@@ -831,42 +479,6 @@ prepare_init_run() {
   chmod "$LF_MODE_PUBLIC_FILE" "$HARNESS_PRODUCT_HOME_DIR/.runtime-identity-pending"
 }
 
-role_evidence_dir() {
-  case "${1:?role required}" in
-    gerrit) printf '%s\n' "$HARNESS_GERRIT_EVIDENCE_DIR" ;;
-    jenkins-controller) printf '%s\n' "$HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR" ;;
-    jenkins-agent) printf '%s\n' "$HARNESS_JENKINS_AGENT_EVIDENCE_DIR" ;;
-    *) printf '%s\n' "$HARNESS_EVIDENCE_DIR" ;;
-  esac
-}
-
-role_log_dir() {
-  case "${1:?role required}" in
-    gerrit) printf '%s\n' "$HARNESS_GERRIT_LOG_DIR" ;;
-    jenkins-controller) printf '%s\n' "$HARNESS_JENKINS_CONTROLLER_LOG_DIR" ;;
-    jenkins-agent) printf '%s\n' "$HARNESS_JENKINS_AGENT_LOG_DIR" ;;
-    *) printf '%s\n' "$HARNESS_LOG_DIR" ;;
-  esac
-}
-
-evidence_dir_for_record() {
-  local checkpoint role
-  checkpoint="${1:?checkpoint required}"
-  role="${2:?role required}"
-  printf '%s\n' "$HARNESS_EVIDENCE_DIR"
-}
-
-bounded_log_dir_for_name() {
-  local name
-  name="${1:?log name required}"
-  printf '%s\n' "$HARNESS_LOG_DIR"
-}
-
-bounded_log_path() {
-  local name
-  name="${1:?log name required}"
-  bounded_log_path_in_dir "$(bounded_log_dir_for_name "$name")" "$name"
-}
 write_rendered_env() {
   require_command python3
   prepare_init_run

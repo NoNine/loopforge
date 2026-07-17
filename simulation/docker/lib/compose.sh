@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+compose_kind=""
+compose_cmd=()
+
 detect_compose() {
   validate_harness_inputs
   if [ "${HARNESS_FORCE_COMPOSE_V1_FOR_TESTS:-0}" = "1" ]; then
@@ -186,4 +189,60 @@ running_loopback_port_for_service_port() {
   port="$(docker inspect -f "{{with index .NetworkSettings.Ports \"$container_port\"}}{{range .}}{{if eq .HostIp \"127.0.0.1\"}}{{.HostPort}}{{\"\\n\"}}{{end}}{{end}}{{end}}" "$container_id" 2>/dev/null | sed -n '1p')"
   [ -n "$port" ] || die "Harness service '$service' has no published loopback port for $container_port"
   printf '%s\n' "$port"
+}
+docker_compose_service_for_role() {
+  case "${1:-}" in
+    gerrit) printf '%s\n' gerrit-target ;;
+    jenkins-controller) printf '%s\n' jenkins-controller-target ;;
+    jenkins-agent) printf '%s\n' jenkins-agent-target ;;
+    *) die "Unknown role '${1:-}'; expected gerrit, jenkins-controller, or jenkins-agent" ;;
+  esac
+}
+
+docker_compose_role_helper_present() {
+  local service helper_path
+  service="${1:?service required}"
+  helper_path="${2:?helper path required}"
+  compose exec -T "$service" test -x "$helper_path" >/dev/null 2>&1
+}
+
+container_name_for_service() {
+  local service
+  service="${1:?service required}"
+  printf '%s-%s\n' "$HARNESS_PROJECT_NAME" "$service"
+}
+
+selected_container_names() {
+  local service
+  for service in "${services[@]}"; do
+    container_name_for_service "$service"
+  done
+}
+
+docker_container_name_exists() {
+  local name
+  name="${1:?container name required}"
+  command -v docker >/dev/null 2>&1 || return 1
+  docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "$name"
+}
+
+selected_containers_exist() {
+  local name
+  command -v docker >/dev/null 2>&1 || return 1
+  while IFS= read -r name; do
+    docker_container_name_exists "$name" && return 0
+  done <<EOF
+$(selected_container_names)
+EOF
+  return 1
+}
+
+existing_selected_container_names() {
+  local name
+  command -v docker >/dev/null 2>&1 || return 0
+  while IFS= read -r name; do
+    docker_container_name_exists "$name" && printf '%s\n' "$name"
+  done <<EOF
+$(selected_container_names)
+EOF
 }

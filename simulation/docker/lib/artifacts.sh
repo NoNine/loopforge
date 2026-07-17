@@ -214,3 +214,189 @@ sha256sum -c checksums.sha256
   fi
   printf 'staged_artifacts_ready role=%s service=%s payload=%s\n' "$role" "$service" "$payload" >>"$log"
 }
+docker_artifacts_prepare() {
+  local role helper_path service log rc evidence artifact_dir host_env_file role_env_file export_archive
+  bootstrap_harness_env
+  docker_set_require_runtime
+  require_docker_effective_inputs
+  role="${1:?role required}"
+  helper_path="$(role_helper_path_for_operator ci-operator "$role")"
+  service="bundle-factory"
+  case "$role" in
+    gerrit)
+      host_env_file="$(host_gerrit_bundle_factory_env_file)"
+      role_env_file="$(gerrit_bundle_factory_env_file)"
+      require_readable_file "Rendered Gerrit bundle factory env file; run init-run first" "$host_env_file"
+      ;;
+    jenkins-controller)
+      host_env_file="$(host_jenkins_controller_bundle_factory_env_file)"
+      role_env_file="$(jenkins_controller_bundle_factory_env_file)"
+      require_readable_file "Rendered Jenkins controller bundle factory env file; run init-run first" "$host_env_file"
+      ;;
+    jenkins-agent)
+      host_env_file="$(host_container_env_file_for_role jenkins-agent "$service")"
+      role_env_file="$(container_env_file_for_role jenkins-agent "$service")"
+      require_readable_file "Rendered jenkins-agent env file; run init-run first" "$host_env_file"
+      ;;
+  esac
+  require_running_service "$service"
+
+  # Guard the boundary-first model: artifact preparation runs only in the
+  # bundle factory, never in target containers.
+  require_running_service "$(docker_compose_service_for_role "$role")"
+  if compose exec -T "$(docker_compose_service_for_role "$role")" env | grep -q '^HARNESS_ENVIRONMENT=bundle-factory$'; then
+    die "Refusing prepare-artifacts: selected target container is incorrectly marked as bundle factory"
+  fi
+
+  log="$(bounded_log_path "prepare-artifacts-$role")"
+  if ! docker_compose_role_helper_present "$service" "$helper_path"; then
+    evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Missing executable role helper $helper_path in bundle factory")"
+    printf 'ERROR: Missing role helper for %s in bundle factory: %s\n' "$role" "$helper_path" >"$log"
+    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence" >&2
+    return 1
+  fi
+
+  : >"$log"
+  role_env_file="$(stage_operator_env_file "$service" "$host_env_file" "$role_env_file" ci-operator ci-operator "$log")"
+
+  if [ "$role" = "gerrit" ]; then
+    if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif [ "$role" = "jenkins-controller" ]; then
+    if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes prepare-artifacts >>"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif [ "$role" = "jenkins-agent" ]; then
+    if compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" prepare-artifacts >>"$log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif compose exec -T -u ci-operator "$service" "$helper_path" prepare-artifacts >>"$log" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    if grep -Eq "is not implemented in this repository step|is a placeholder" "$log"; then
+      evidence="$(write_evidence prepare-artifacts "$role" blocked "simulate.sh prepare-artifacts" "$log" "Role helper exists but prepare-artifacts is not implemented yet")"
+      printf 'ERROR: Role helper for %s exists but prepare-artifacts is not implemented yet\n' "$role" >&2
+    else
+      evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper prepare-artifacts failed in bundle factory")"
+    fi
+    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
+    return "$rc"
+  fi
+
+  if ! artifact_dir="$(copy_bundle_factory_artifacts_to_host "$role" "$service" "$log")"; then
+    evidence="$(write_evidence prepare-artifacts "$role" fail "simulate.sh prepare-artifacts" "$log" "Role helper did not produce valid manifest/checksum artifacts in bundle factory")"
+    print_command_failure prepare-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+  export_archive="$(exported_artifact_archive_for_role "$role")"
+
+  evidence="$(write_evidence prepare-artifacts "$role" pass "simulate.sh prepare-artifacts" "$log" "Role archive pair produced in bundle factory and exported for operator handoff: source=$artifact_dir export=$export_archive")"
+  print_command_summary prepare-artifacts "$role" "ok artifact-export=$(basename "$export_archive")"
+}
+
+__docker_artifacts_prepare_target_workspace() {
+  local role service helper_path log role_env_file
+  role="${1:?role required}"
+  service="${2:?service required}"
+  helper_path="$(role_helper_path_for_operator ci-operator "$role")"
+  log="${3:?log required}"
+  role_env_file="$(stage_container_role_env "$role" "$service" "$log")"
+  compose exec -T -u ci-operator "$service" "$helper_path" --env "$role_env_file" --yes prepare-target-workspace >>"$log" 2>&1
+}
+
+docker_artifacts_stage() {
+  local role service archive checksum target_bundle_dir target_payload_dir log evidence
+  local staging_root archive_name checksum_name container_archive container_checksum extract_script
+  bootstrap_harness_env
+  docker_set_require_runtime
+  require_docker_effective_inputs
+  role="${1:?role required}"
+  service="$(docker_compose_service_for_role "$role")"
+  archive="$(exported_artifact_archive_for_role "$role")"
+  checksum="$(exported_artifact_checksum_for_role "$role")"
+  target_bundle_dir="$(target_bundle_dir_for_role "$role")"
+  target_payload_dir="$(target_payload_dir_for_role "$role")"
+  staging_root="/var/lib/loopforge/staging"
+  archive_name="$(basename "$archive")"
+  checksum_name="$(basename "$checksum")"
+  container_archive="$staging_root/$archive_name"
+  container_checksum="$staging_root/$checksum_name"
+  log="$(bounded_log_path "stage-artifacts-$role")"
+
+  require_running_service "$service"
+  [ -f "$archive" ] || die "Missing exported artifact archive for $role: $archive"
+  [ -f "$checksum" ] || die "Missing exported artifact archive checksum for $role: $checksum"
+
+  : >"$log"
+  if ! verify_checksum_file_in_dir "$checksum" "$(dirname "$archive")" "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Exported artifact archive checksum verification failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+
+  if ! __docker_artifacts_prepare_target_workspace "$role" "$service" "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Role helper target workspace preparation failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+
+  if ! docker_cp_file_to_service "$archive" "$service" "$container_archive" ci-operator ci-operator 0644 "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact archive failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+  if ! docker_cp_file_to_service "$checksum" "$service" "$container_checksum" ci-operator ci-operator 0644 "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Docker cp waiver transfer of artifact checksum failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+
+  extract_script='
+staging_root="$1"
+checksum_name="$2"
+archive_name="$3"
+target_bundle_dir="$4"
+target_payload_dir="$5"
+cd "$staging_root"
+sha256sum -c "$checksum_name"
+rm -rf "$target_bundle_dir"
+tar --no-same-owner -xzf "$archive_name" -C "$staging_root"
+test -d "$target_bundle_dir"
+test -f "$target_payload_dir/manifest.txt"
+test -f "$target_payload_dir/checksums.sha256"
+cd "$target_payload_dir"
+sha256sum -c checksums.sha256
+'
+  if ! compose exec -T -u ci-operator "$service" sh -c "$extract_script" sh \
+    "$staging_root" \
+    "$checksum_name" \
+    "$archive_name" \
+    "$target_bundle_dir" \
+    "$target_payload_dir" >>"$log" 2>&1; then
+    evidence="$(write_evidence stage-artifacts "$role" fail "simulate.sh stage-artifacts" "$log" "Target-side artifact extraction and checksum verification failed")"
+    print_command_failure stage-artifacts "$role" failed "$log" "$evidence"
+    return 1
+  fi
+  printf 'target_artifact_extract role=%s service=%s transfer_mode=docker-cp-waiver bundle=%s payload=%s scope=docker-simulation-only\n' \
+    "$role" "$service" "$target_bundle_dir" "$target_payload_dir" >>"$log"
+
+  if ! validate_role_baseline_manifest_in_target "$role" "$service" "$log"; then
+    evidence="$(write_evidence stage-artifacts "$role" blocked "simulate.sh stage-artifacts" "$log" "Target staged manifest baseline metadata is missing or drifted; comparable readiness is blocked")"
+    printf 'ERROR: Target staged baseline metadata for %s is missing or drifted; log=%s evidence=%s\n' "$role" "$log" "$evidence" >&2
+    print_command_failure stage-artifacts "$role" blocked "$log" "$evidence" >&2
+    return 1
+  fi
+
+  evidence="$(write_evidence stage-artifacts "$role" pass "simulate.sh stage-artifacts" "$log" "Artifacts transferred with Docker cp simulation-only waiver, extracted in target, and verified by manifest/checksum before mutation")"
+  print_command_summary stage-artifacts "$role" ok
+}
