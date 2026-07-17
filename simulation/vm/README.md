@@ -16,15 +16,18 @@ simulation/vm/simulate.sh [--env FILE] <command>
 cross-role integration orchestration. Do not add standalone VM phase scripts or
 a second VM simulation CLI.
 
-Internal harness module structure and implementation contracts are documented
-in `simulation/vm/docs/design.md`. Milestone verification gates are documented in
-`simulation/vm/docs/verification.md`.
+Shared architecture and exact state behavior are documented in
+`simulation/docs/harness-design.md` and
+`simulation/docs/lifecycle-state-model.md`. VM module structure and
+implementation contracts are documented in
+`simulation/vm/docs/implementation-design.md`. Milestone verification gates
+are documented in `simulation/vm/docs/verification.md`.
 
 VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
 mechanics only; VM lifecycle and transport stay in the VM harness. VM-specific
-libvirt/KVM domains, resource groups, snapshots, guest reboot, guest SSH readiness,
-guest-owned NFS-backed shared storage, and `create`/`restore-baseline`/
+libvirt/KVM domains, resource groups, snapshots, guest reboot, guest SSH
+readiness, guest-owned NFS-backed shared storage, and `create`/`restore-baseline`/
 `clean`/`destroy` behavior must not copy Docker backend assumptions such as
 Compose project names, Docker service names, Docker bind-mount checks,
 loopback port ownership, or Docker transfer waivers.

@@ -6,6 +6,12 @@ README files; this file owns the common topology, source boundaries, output
 conventions, and simulation realization details. `docs/contracts/lifecycle-contract.md`
 owns checkpoint semantics for all modes.
 
+Shared internal architecture is defined in
+`simulation/docs/harness-design.md`. Exact simulation state dimensions,
+command guards, and transitions are defined in
+`simulation/docs/lifecycle-state-model.md`. Terminal presentation is defined
+in `simulation/docs/terminal-output.md`.
+
 The model has two layers:
 
 1. Docker-based simulation first, owned by

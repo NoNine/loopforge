@@ -55,10 +55,12 @@ for path in \
   docs/planning/steps/step-15-final-acceptance.md \
   project-state/execution-status.md \
   simulation/README.md \
+  simulation/docs/harness-design.md \
+  simulation/docs/lifecycle-state-model.md \
   simulation/docs/terminal-output.md \
   simulation/docker/README.md \
   simulation/vm/README.md \
-  simulation/vm/docs/design.md \
+  simulation/vm/docs/implementation-design.md \
   simulation/vm/docs/sequences.md \
   simulation/vm/docs/verification.md \
   simulation/vm/docs/decisions/libvirt-module-refactor.md; do
@@ -74,6 +76,7 @@ for path in \
   docs/gerrit-native-operations-reference.md \
   simulation/terminal-output.md \
   simulation/vm/design.md \
+  simulation/vm/docs/design.md \
   simulation/vm/sequences.md \
   simulation/vm/verification.md \
   simulation/vm/libvirt-refactor.md; do

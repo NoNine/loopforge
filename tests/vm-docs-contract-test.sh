@@ -467,7 +467,7 @@ require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'simulation/vm/README.md` for the public VM command contract' \
   'Step 13 plan must point public VM behavior to the VM README'
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
-  'simulation/vm/docs/design.md` for module boundaries and milestone sequence' \
+  'simulation/vm/docs/implementation-design.md` for VM module boundaries and' \
   'Step 13 plan must point internal VM design to the VM design doc'
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'simulation/vm/docs/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,' \
@@ -490,13 +490,13 @@ require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   '| M5 | Run `restore-baseline`, `clean`, `destroy`, and `audit-state`; verify rollback' \
   'Step 13 M5 must perform restore/clean/destroy after baseline prerequisites'
-require_doc_text simulation/vm/docs/design.md \
+require_doc_text simulation/vm/docs/implementation-design.md \
   '| M4 Baseline prerequisites: role OS dependencies and LDAP proof |' \
   'VM design M4 must own baseline prerequisites'
-require_doc_text simulation/vm/docs/design.md \
+require_doc_text simulation/vm/docs/implementation-design.md \
   '| M5 Baseline snapshot, restore, clean, and destroy |' \
   'VM design M5 must own baseline snapshot restore, clean, and destroy'
-require_doc_text simulation/vm/docs/design.md \
+require_doc_text simulation/vm/docs/implementation-design.md \
   'simulation/vm/docs/decisions/libvirt-module-refactor.md`' \
   'VM design must name the accepted libvirt refactor companion'
 require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \

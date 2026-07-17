@@ -72,8 +72,9 @@ Use this order when deciding where a product or process fact belongs:
    native procedural baseline and produce equivalent product state and
    validation outcomes.
 7. Simulation docs own simulation realization details:
-   `simulation/README.md`, `simulation/docker/README.md`,
-   and `simulation/vm/README.md`.
+   `simulation/README.md` and `simulation/docs/` own shared behavior,
+   architecture, state, and presentation; `simulation/docker/README.md`,
+   `simulation/vm/README.md`, and backend-local docs own concrete realization.
 8. Helper scripts, templates, examples, tests, and verifiers implement or
    check the documented model. They should not become the only place where a
    product behavior is defined.

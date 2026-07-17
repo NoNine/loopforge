@@ -238,6 +238,8 @@ conflict and stops.
 `simulation/README.md` owns shared simulation command semantics.
 `simulation/docker/README.md` and `simulation/vm/README.md` own the concrete
 command references for their layers.
+`simulation/docs/lifecycle-state-model.md` owns the exact simulation state
+dimensions, command guards, and transitions that realize this contract.
 
 Commands that perform checkpoint work must preserve the checkpoint semantics
 defined here: input review, artifact preparation, artifact staging,
@@ -250,13 +252,16 @@ and `destroy` are outside the checkpoint progression unless a layer README
 explicitly ties one to a checkpoint. These commands must not silently rerun
 setup phases or claim checkpoint success without checkpoint evidence.
 
-Both simulation backends expose the same resource-state transitions:
+Both simulation backends expose the same condensed resource-state transitions:
 
 ```text
-absent -> create -> stopped -> start -> running
+unclaimed -> init-run -> claimed
+claimed + absent -> create -> baseline-stopped
+claimed + stopped -> start -> running
 running -> stop -> stopped
-stopped -> restore-baseline -> baseline-ready
-stopped -> destroy -> absent
+claimed + stopped -> restore-baseline -> restored-pending-clean
+restored-pending-clean -> clean -> baseline-stopped + unclaimed
+stopped -> destroy -> absent + unclaimed
 ```
 
 `create` establishes or verifies the selected reusable simulation set and its

@@ -1,16 +1,16 @@
-# VM Simulation Harness Design
+# VM Simulation Harness Implementation Design
 
-This document records the internal design and implementation contracts for the
-VM simulation harness. `simulation/vm/README.md` owns the public VM simulation
-command contract; this file owns the harness module structure and internal
-implementation boundaries.
+This document owns VM-specific module structure, libvirt/KVM implementation
+boundaries, provisioning decisions, and historical milestone anatomy.
+`simulation/vm/README.md` owns the public VM command contract.
+`simulation/docs/harness-design.md` owns shared harness architecture, and
+`simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
+command guards.
 
-The design intent is to keep VM simulation near target deployment after the
-clean baseline snapshot while avoiding premature abstraction. VM simulation may
-share backend-neutral mechanics with Docker simulation, but VM lifecycle,
-transport, libvirt/KVM resources, snapshots, seed media, guest SSH readiness,
-and VM-set cleanup remain VM-local until implementation proves a smaller
-durable shared boundary.
+VM simulation stays near target deployment after the clean baseline snapshot.
+Libvirt/KVM resources, snapshots, seed media, guest SSH readiness, and VM
+resource cleanup remain VM-local realizations of the shared simulation-set
+contract.
 
 Per-command internal sequence diagrams are documented in
 `simulation/vm/docs/sequences.md`.
@@ -20,21 +20,17 @@ documented in `simulation/vm/docs/decisions/libvirt-module-refactor.md`. Read th
 changing libvirt operations, VM-set ownership, baked images, seed media,
 snapshots, or guest baseline and LDAP verification.
 
-## Design Direction
+## VM Backend Realization
 
-VM simulation intentionally does not mirror the Docker harness structure when
-Docker structure reflects Compose, container, bind-mount, loopback-port, or
-Docker transfer assumptions.
+VM simulation does not mirror Docker module structure where Docker reflects
+Compose, containers, bind mounts, loopback ports, or transfer waivers. It does
+implement the shared architectural planes with VM-specific mechanisms:
 
-The VM harness has three implementation layers:
-
-1. VM infrastructure: libvirt/KVM domains, networks, storage, seed media,
-   snapshots, VM-set ownership, start/stop, cleanup, and destruction.
-2. Target control plane: target OS SSH as the operator account, known-hosts
-   handling, readiness checks, bounded remote execution, file transfer, and
-   delegated privilege when needed for narrow OS work.
-3. Loopforge lifecycle: artifact preparation and staging, role helper
-   execution, integration setup, validation, proof, evidence, and markers.
+| Shared plane | VM realization |
+| --- | --- |
+| Backend infrastructure | Libvirt/KVM domains, networks, storage, seed media, snapshots, set ownership, power lifecycle, restoration, and destruction |
+| Target control plane | Target OS SSH as the operator account, known-hosts verification, bounded remote execution, file transfer, and narrow delegated privilege |
+| Loopforge lifecycle | Artifact flow, role helpers, integration helper, validation, proof, evidence, and checkpoint markers |
 
 After the clean baseline snapshot is captured, lifecycle checkpoint work must
 use target-like interfaces and helper-visible paths. Host-side VM
@@ -215,41 +211,10 @@ Forbidden dependency directions include:
 
 ## Lifecycle State Model
 
-The harness should fail clearly when a command is run before its prerequisite
-state exists. Cleanup and destruction commands are explicit lifecycle actions,
-not implicit recovery inside normal workflow commands.
-
-```mermaid
-stateDiagram-v2
-  [*] --> NoRun
-
-  NoRun --> RunInitialized: init-run
-  RunInitialized --> VMSetCreated: create
-  VMSetCreated --> Running: start
-  Running --> ArtifactsPrepared: prepare-artifacts
-  ArtifactsPrepared --> ArtifactsStaged: stage-artifacts
-  ArtifactsStaged --> RolesConfigured: configure-role
-  RolesConfigured --> RolesValidated: validate-role
-  RolesValidated --> IntegrationConfigured: configure-integration
-  IntegrationConfigured --> IntegrationValidated: validate-integration
-  IntegrationValidated --> IntegrationProven: prove-integration
-
-  Running --> Stopped: stop
-  Stopped --> Running: start
-  IntegrationProven --> Stopped: stop
-
-  VMSetCreated --> BaselineRestored: restore-baseline
-  Stopped --> BaselineRestored: restore-baseline
-  Stopped --> Stopped: clean
-  BaselineRestored --> Running: start
-
-  VMSetCreated --> Destroyed: destroy
-  Stopped --> Destroyed: destroy
-  BaselineRestored --> Destroyed: destroy
-
-  Running --> Running: reboot
-  RolesValidated --> RolesValidated: reboot + validate-role
-```
+`simulation/docs/lifecycle-state-model.md` owns simulation-set state
+dimensions, command guards, transitions, and the `restored-pending-clean`
+gate. VM command orchestration must implement that model without a VM-local
+alternative state machine.
 
 `reboot` is a VM lifecycle operation, not readiness proof by itself. It may
 run only against running VM targets. Before a later validation begins, the
@@ -264,43 +229,14 @@ and proof after reboot.
 the same run. `run` is a composite over normal workflow commands only; it must
 not call `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`.
 
-## Post-Baseline Boundary Diagram
+## VM Post-Baseline Realization
 
-After baseline capture, lifecycle checkpoint work must pass through target-like
-interfaces. Host-side VM infrastructure remains valid for VM lifecycle
-management, but it must not complete role or integration checkpoints.
-
-```mermaid
-flowchart LR
-  subgraph HostInfrastructure[Host VM infrastructure]
-    LV[libvirt/KVM]
-    SNAP[baseline snapshot]
-    SEED[seed media before baseline]
-  end
-
-  subgraph TargetLike[Post-baseline lifecycle path]
-    SSH[target OS SSH as ci-operator]
-    COPY[SSH file transfer]
-    HELPERS[role helpers]
-    INTSH[scripts/integration-setup.sh]
-    API[product APIs]
-    STAGE["/var/lib/loopforge/staging/&lt;role&gt;"]
-  end
-
-  LV --> SNAP
-  SEED --> SNAP
-
-  SNAP --> SSH
-  SSH --> COPY
-  COPY --> STAGE
-  SSH --> HELPERS
-  SSH --> INTSH
-  HELPERS --> API
-  INTSH --> API
-
-  LV -. forbidden for checkpoint completion .-> STAGE
-  SEED -. forbidden after baseline .-> HELPERS
-```
+The shared boundary and diagram live in
+`simulation/docs/harness-design.md`. VM simulation realizes the target control
+plane with target OS SSH, SSH file transfer, role helpers,
+`scripts/integration-setup.sh`, product APIs, and
+`/var/lib/loopforge/staging/<role>`. Libvirt and seed-media modules remain
+backend infrastructure and cannot complete post-baseline checkpoints.
 
 ## Initial Folded Module API
 
@@ -375,34 +311,20 @@ Snapshot capture and restore additionally depend on baseline readiness, and
 snapshot restore and audit depend on VM-set ownership verification before any
 libvirt mutation.
 
-## Shared Helper Boundary
+## VM Backend Boundary
 
-Backend-neutral mechanics may live under `simulation/lib/`:
+`simulation/docs/harness-design.md` owns the shared-helper qualification rules.
+VM implementation modules may consume those helpers but must keep these
+mechanisms under `simulation/vm/`:
 
-- role parsing and role iteration
-- env loading and required variable checks
-- runtime input custody helpers
-- bounded log setup
-- evidence record helpers
-- marker read/write/verify helpers
-- redaction helpers
-- artifact manifest and checksum helpers
-- shell quoting and compact command summaries
-
-VM-specific behavior must remain under `simulation/vm/`:
-
-- libvirt/KVM domain, network, storage, and snapshot operations
-- VM-set ownership and generated VM-set metadata
+- libvirt/KVM domain, network, storage, and snapshot operations;
+- simulation-set ownership queries and generated VM resource metadata;
 - seed media, cloud-init base provisioning, and role OS dependency baseline
-  fulfillment
-- guest boot, reboot, shutdown, and SSH readiness
-- target OS SSH command execution and file transfer
-- guest-owned NFS-backed shared storage realization
-- VM cleanup, rollback, and destruction behavior
-
-Do not introduce a Docker/VM backend abstraction until the VM harness has
-enough implementation to prove a stable interface. Prefer small shared support
-helpers first.
+  fulfillment;
+- guest boot, reboot, shutdown, and SSH readiness;
+- target OS SSH command execution and file transfer;
+- guest-owned NFS-backed shared storage realization;
+- VM baseline capture, rollback, cleanup, and destruction behavior.
 
 ## Implementation Milestones
 
@@ -461,10 +383,11 @@ integration checkpoints must not use post-baseline cloud-init. Role helpers
 validate OS dependency expectations after the baseline snapshot; they do not
 install Ubuntu/OS dependencies.
 
-## Post-Baseline Rules
+## VM Post-Baseline Guardrails
 
-After `create` captures the clean baseline snapshot, lifecycle checkpoints
-must use target-like interfaces and paths:
+The shared post-baseline boundary is defined in
+`simulation/docs/harness-design.md`. VM realization requires these interfaces
+and paths after `create` captures the clean baseline snapshot:
 
 - target OS SSH as the operator account
 - SSH file transfer
@@ -495,9 +418,12 @@ operator approval requirements.
 When changing VM harness implementation, reviewers should check that:
 
 - public command behavior remains documented in `simulation/vm/README.md`
+- shared architecture and state behavior remain consistent with
+  `simulation/docs/harness-design.md` and
+  `simulation/docs/lifecycle-state-model.md`
 - internal module boundaries remain consistent with this file
-- generated VM-set state and run-scoped output stay separate
-- mutating VM commands validate VM-set ownership before acting
+- generated simulation-set state and run-scoped output stay separate
+- mutating VM commands validate simulation-set ownership before acting
 - post-baseline role and integration work uses target OS SSH and
   helper-visible paths
 - LDAP readiness is proven with simulation-owned bind/search evidence

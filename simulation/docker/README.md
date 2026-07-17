@@ -20,8 +20,10 @@ browser ports, target SSH staging, and cleanup behavior remain Docker harness
 responsibilities rather than generic backend hooks.
 
 Lifecycle checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
-Docker generated-state and stale-container behavior is defined in this
-document.
+Shared harness architecture and exact state guards are defined in
+`simulation/docs/harness-design.md` and
+`simulation/docs/lifecycle-state-model.md`. Docker generated-state and
+stale-container behavior is defined in this document.
 
 The shared Docker target image is a simulation superset. It combines
 role-runtime packages, helper-script packages, and Docker harness packages; it

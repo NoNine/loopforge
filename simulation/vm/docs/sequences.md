@@ -2,8 +2,9 @@
 
 This document records internal command sequence diagrams for the VM simulation
 harness. `simulation/vm/README.md` owns the public command contract, and
-`simulation/vm/docs/design.md` owns the module boundary model. These diagrams
-validate how the public commands should flow through the folded VM modules.
+`simulation/vm/docs/implementation-design.md` owns the VM module boundary
+model. These diagrams validate how the public commands should flow through the
+folded VM modules.
 
 The diagrams use capability-shaped APIs below `lifecycle.sh`. Command-shaped
 APIs should stay in `lifecycle.sh`.
@@ -54,6 +55,7 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
+  participant ST as state.sh
   participant SET as vm-set.sh
   participant BASE as baseline.sh
   participant SNAP as snapshots.sh
@@ -82,6 +84,7 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
+  participant ST as state.sh
   participant SET as vm-set.sh
   participant LV as libvirt.sh
   participant SSH as ssh.sh
@@ -89,6 +92,8 @@ sequenceDiagram
   CLI->>LC: vm_cmd_start(env)
   LC->>CFG: vm_config_load_runtime()
   LC->>SET: vm_set_verify_run_and_set()
+  LC->>ST: vm_state_verify_startable()
+  Note over LC,ST: reset gate normal; durable state baseline or exact-bound
   LC->>LV: vm_libvirt_start_set()
   LC->>SSH: vm_ssh_prepare_all()
   LC-->>CLI: compact start summary
@@ -353,13 +358,17 @@ sequenceDiagram
   participant CLI as simulate.sh
   participant LC as lifecycle.sh
   participant CFG as config.sh
+  participant ST as state.sh
   participant SET as vm-set.sh
   participant SNAP as snapshots.sh
 
   CLI->>LC: vm_cmd_restore_baseline(env)
   LC->>CFG: vm_config_load_runtime()
+  LC->>ST: vm_state_verify_run_marker()
   LC->>SET: vm_set_verify_selected_ownership()
   LC->>SNAP: vm_snapshots_restore()
+  LC->>ST: vm_state_record_restored_pending_clean()
+  Note over LC,ST: publish gate only after matching restore verification
   LC-->>CLI: compact restore-baseline summary
 ```
 
@@ -379,7 +388,9 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>SET: vm_set_verify_selected_ownership()
   LC->>LV: vm_libvirt_require_set_shut_off(clean)
+  LC->>ST: vm_state_verify_restored_pending_clean()
   LC->>ST: vm_state_clean_mutable_run_state()
+  Note over LC,ST: retain review output; clear active-run pointer last
   LC-->>CLI: compact clean summary
 ```
 

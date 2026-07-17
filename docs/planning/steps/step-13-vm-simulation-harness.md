@@ -8,7 +8,11 @@ docs are:
 
 - `simulation/README.md` for shared simulation behavior.
 - `simulation/vm/README.md` for the public VM command contract.
-- `simulation/vm/docs/design.md` for module boundaries and milestone sequence.
+- `simulation/docs/harness-design.md` and
+  `simulation/docs/lifecycle-state-model.md` for shared architecture and state
+  guards.
+- `simulation/vm/docs/implementation-design.md` for VM module boundaries and
+  milestone sequence.
 - `simulation/vm/docs/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,
   snapshot, seed-media, and baseline-verifier refactor; read it before changing
   those implementation boundaries.
@@ -19,7 +23,8 @@ docs are:
 
 - Implement the public VM CLI as `simulation/vm/simulate.sh`; command behavior
   is owned by `simulation/vm/README.md`.
-- Implement the milestone sequence from `simulation/vm/docs/design.md`, M1 through
+- Implement the milestone sequence from
+  `simulation/vm/docs/implementation-design.md`, M1 through
   M8, without treating those milestones as separate product roadmap steps.
 - Keep VM-local implementation under `simulation/vm/` and backend-neutral
   support under `simulation/lib/`; do not depend on Docker harness internals.
@@ -42,7 +47,8 @@ for the specific target and action.
 
 ## Milestone State
 
-Use `simulation/vm/docs/design.md` for the durable M1-M8 milestone sequence. Use
+Use `simulation/vm/docs/implementation-design.md` for the durable M1-M8
+milestone sequence. Use
 `project-state/execution-status.md` for the current milestone, completed milestone
 state, verification logs, blockers, guardrails, and next authorized work.
 

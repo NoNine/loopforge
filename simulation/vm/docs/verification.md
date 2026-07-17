@@ -5,7 +5,7 @@
 This companion document defines the verification gate for VM simulation
 milestones. It is narrower than the public command contract in
 `simulation/vm/README.md` and more detailed than the milestone roadmap in
-`simulation/vm/docs/design.md`.
+`simulation/vm/docs/implementation-design.md`.
 
 A milestone is complete only when its required runtime assertions pass, the
 bounded logs do not contain contradictory failure evidence, and success
@@ -76,10 +76,13 @@ the changed subsystem can affect them:
 - fresh run with an empty selected VM set;
 - fresh run that reuses a retained selected VM set;
 - resume run with an existing selected run marker;
-- `create -> start -> stop -> create` VM-set reuse;
-- `clean -> init-run -> create -> start` with retained VM-set SSH identity;
-- `stop -> restore-baseline -> clean` generated-state cleanup;
-- `clean` after stale metadata that is irrelevant to teardown ownership;
+- `init-run -> create -> start -> stop -> start` with the same run ID;
+- `stop -> restore-baseline` entering `restored-pending-clean`;
+- blocked `start`, `init-run`, workflow phases, and repeated restoration before
+  `clean`;
+- `stop -> restore-baseline -> clean -> init-run -> start` with retained
+  simulation-set resources and a new run ID;
+- failed restoration that cannot authorize `clean` or release active ownership;
 - `destroy` after partial create or missing VM-set metadata;
 - `reboot` with SSH host-key and guest service readiness diagnostics;
 - `audit-state` before and after `clean` and `destroy`.
@@ -108,7 +111,7 @@ re-owning, or bypassing stale state.
 | M2 | Libvirt/KVM tooling and VM-set ownership checks are read-only, fail on inconsistent selected resources, and do not repair state. |
 | M3 | `create`, `start`, `status`, `ssh --role ROLE`, and `stop` prove real VM definitions, guest boot, stable SSH host keys, target OS SSH readiness as the operator account, and clean shutdown. |
 | M4 | `create` proves role OS dependency installation, expected command availability, real LDAP service readiness, seeded entries, local LDAP bind/search, and Gerrit/Jenkins controller LDAP bind/search before writing baseline readiness. |
-| M5 | Baseline snapshot, `restore-baseline`, `clean`, `destroy`, and `audit-state` prove selected VM-set ownership before rollback, generated-state cleanup, or deletion and do not touch unowned resources. |
+| M5 | Baseline snapshot, `restore-baseline`, `clean`, `destroy`, and `audit-state` prove selected set ownership before rollback, cleanup, or deletion; enforce `restored-pending-clean`; retain review output; and do not touch unowned resources. |
 | M6 | `prepare-artifacts` and `stage-artifacts` prove artifact manifests, checksums, source-boundary labels, transfer, and target-side staging paths before mutation. |
 | M7 | `configure-role` establishes real role service/runtime readiness through role helpers. `validate-role` only observes it. `reboot` must prove guest service recovery before post-reboot validation; readiness is never inferred from reboot success. |
 | M8 | `configure-integration`, `validate-integration`, `prove-integration`, and `run` prove actual cross-role SSH, Jenkins node readiness, Gerrit Trigger flow, build execution, and Gerrit `Verified` behavior. |

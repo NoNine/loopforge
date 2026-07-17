@@ -18,8 +18,11 @@ Step 15 depend on this step.
 - `simulation/README.md` for shared command semantics.
 - `simulation/docker/README.md` and `simulation/vm/README.md` for backend
   realization.
-- `simulation/vm/docs/design.md` and `simulation/vm/docs/sequences.md` for VM
-  implementation boundaries.
+- `simulation/docs/harness-design.md` and
+  `simulation/docs/lifecycle-state-model.md` for shared architecture and exact
+  state guards.
+- `simulation/vm/docs/implementation-design.md` and
+  `simulation/vm/docs/sequences.md` for VM implementation boundaries.
 
 ## Public Command Contract
 
@@ -196,6 +199,10 @@ Implementation:
 
 - Require stopped selected simulation sets for `clean`, `restore-baseline`, and
   `destroy` where the backend contract requires it.
+- Record `restored-pending-clean` only after successful baseline restoration.
+  While that gate is active, block `start`, `init-run`, repeated restoration,
+  and every workflow phase; permit only the documented read-only commands,
+  `clean`, and `destroy`.
 - Make `clean` preserve retained output under the immutable old run root,
   remove only mutable active-run state and the set pointer, and preserve
   reusable baseline resources.
@@ -214,6 +221,14 @@ Verification order:
 4. VM lifecycle phases on an explicitly approved remote KVM target.
 5. Fresh Docker and approved VM composite runs using newly generated run IDs
    on the same reusable sets after successful baseline reset and cleanup.
+
+Focused tests:
+
+- Both backends reject `start`, `init-run`, workflow phases, and repeated
+  restoration from `restored-pending-clean`.
+- Failed restoration cannot authorize `clean` or release active-run ownership.
+- Successful `clean` transitions the restored set to baseline-stopped and
+  unclaimed while retaining immutable review output.
 
 Acceptance:
 
