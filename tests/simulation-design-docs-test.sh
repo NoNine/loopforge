@@ -59,6 +59,9 @@ require_text "$simulation_model" \
   '## Shared Operator Interface' \
   'Simulation model must own the shared operator interface'
 require_text "$simulation_model" \
+  'mapping and composite `run` orchestration design.' \
+  'Simulation model must route run implementation design to the shared harness'
+require_text "$simulation_model" \
   '`ssh` requires `--role ROLE`.' \
   'Simulation model must own shared role operand syntax'
 require_text "$simulation_model" \
@@ -145,6 +148,36 @@ require_text "$harness_design" \
 require_text "$harness_design" \
   '| Command orchestration | Own composite workflow sequencing' \
   'Shared harness design must own command orchestration responsibilities'
+require_text "$harness_design" \
+  '## Public Command Shape And Run Composition' \
+  'Shared harness design must document composite run implementation'
+require_text "$harness_design" \
+  'Both `run` and the granular phase commands are first-class public commands.' \
+  'Shared harness design must keep run and phase commands first-class'
+require_text "$harness_design" \
+  'the same command handler before capability delegation.' \
+  'Run must reuse the directly invocable phase command handlers'
+require_text "$harness_design" \
+  '| Docker | `simulation/docker/simulate.sh` | `simulation/docker/lib/lifecycle.sh` |' \
+  'Shared harness design must bind the Docker orchestration implementation'
+require_text "$harness_design" \
+  '| VM | `simulation/vm/simulate.sh` | `simulation/vm/lib/lifecycle.sh` |' \
+  'Shared harness design must bind the VM orchestration implementation'
+require_text "$harness_design" \
+  '| Exact completed run, stopped | `start -> status`, then report `already-complete`' \
+  'Shared harness design must define completed stopped run composition'
+require_text "$harness_design" \
+  '| Exact completed run, running | `status`, then report `already-complete`' \
+  'Shared harness design must define completed running run composition'
+require_text "$harness_design" \
+  '`status` is an intentional user-facing observation in each executable plan.' \
+  'Shared harness design must explain status in run plans'
+require_text "$harness_design" \
+  '`run` does not hold the set lock across the whole composite.' \
+  'Shared harness design must preserve per-command locking in run'
+require_text "$harness_design" \
+  'stops at the first nonzero command result' \
+  'Shared harness design must require fail-fast run orchestration'
 require_text "$harness_design" \
   'Both harnesses source the implemented foundation under `simulation/lib/`:' \
   'Shared harness design must document the implemented shared foundation'

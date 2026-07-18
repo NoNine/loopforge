@@ -315,6 +315,8 @@ libvirt console, and it is separate from Gerrit's service SSH on port `29418`.
 
 Backend simulation guides own the concrete command reference for their entrypoint.
 When a layer uses these command names, the shared simulation semantics are:
+`simulation/docs/shared/harness-design.md` defines the common command-handler
+mapping and composite `run` orchestration design.
 
 | Command | Shared meaning |
 | --- | --- |

@@ -26,6 +26,20 @@ reject_doc_text() {
   fi
 }
 
+reject_mermaid_semicolons() {
+  local file
+  file="${1:?file required}"
+  awk '
+    /^```mermaid$/ { in_mermaid = 1; next }
+    in_mermaid && /^```$/ { in_mermaid = 0; next }
+    in_mermaid && /;/ {
+      printf "Mermaid block contains a statement-separating semicolon at line %d\n", NR > "/dev/stderr"
+      invalid = 1
+    }
+    END { exit invalid }
+  ' "$repo_root/$file"
+}
+
 require_doc_text simulation/docs/shared/simulation-model.md \
   '## Shared Command Semantics' \
   'Shared simulation docs must own command semantics'
@@ -505,3 +519,16 @@ require_doc_text simulation/docs/vm/decisions/libvirt-module-refactor.md \
 require_doc_text simulation/docs/vm/command-sequences.md \
   'verify role OS dependency baselines' \
   'VM create sequence must verify role OS dependency baselines before snapshot'
+require_doc_text simulation/docs/vm/command-sequences.md \
+  'participant RUN as lifecycle.sh: vm_cmd_run' \
+  'VM command sequences must diagram composite run dispatch'
+require_doc_text simulation/docs/vm/command-sequences.md \
+  'vm_command_with_lock(lock mode, vm_cmd_phase)' \
+  'VM run sequence must reuse phase handlers through their normal locks'
+require_doc_text simulation/docs/vm/command-sequences.md \
+  'RUN-->>CLI: same nonzero result and stop plan' \
+  'VM run sequence must propagate the first command failure'
+require_doc_text simulation/docs/vm/command-sequences.md \
+  'an already-running completed run uses `status`' \
+  'VM run sequence must retain the intentional completed-run status output'
+reject_mermaid_semicolons simulation/docs/vm/command-sequences.md

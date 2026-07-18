@@ -99,6 +99,92 @@ Forbidden directions include:
 - backend-specific modules to the other backend;
 - shared helpers to Docker Compose or libvirt/KVM APIs.
 
+## Public Command Shape And Run Composition
+
+Both `run` and the granular phase commands are first-class public commands.
+The distinction is composite versus granular, not primary versus secondary.
+A direct phase invocation and the same phase selected by `run` must converge on
+the same command handler before capability delegation. `run` must not bypass a
+command handler to call its lower-level simulation-set, artifact, role, or
+integration capability directly.
+
+The common command shape is:
+
+| Public command scope | Conceptual command handler | Delegated responsibility |
+| --- | --- | --- |
+| Composite workflow | `<backend>_cmd_run` | Classify selected state, construct the allowed plan, and invoke command handlers from its first required step |
+| Run initialization | `<backend>_cmd_preflight`, `<backend>_cmd_init_run` | Validate prerequisites and claim immutable run state |
+| Simulation-set lifecycle | `<backend>_cmd_create`, `<backend>_cmd_start`, `<backend>_cmd_stop`, `<backend>_cmd_restore_baseline`, `<backend>_cmd_clean`, `<backend>_cmd_destroy` | Delegate to ownership-checked backend set and baseline capabilities |
+| Observation and access | `<backend>_cmd_status`, `<backend>_cmd_audit_state`, `<backend>_cmd_ssh` | Delegate to read-only inspection or current target access capabilities |
+| Artifact lifecycle | `<backend>_cmd_prepare_artifacts`, `<backend>_cmd_stage_artifacts` | Expand the selected roles and delegate to artifact capabilities |
+| Role lifecycle | `<backend>_cmd_configure_role`, `<backend>_cmd_validate_role` | Expand the selected roles and delegate to role capabilities |
+| Integration lifecycle | `<backend>_cmd_configure_integration`, `<backend>_cmd_validate_integration`, `<backend>_cmd_prove_integration` | Delegate to the shared integration invocation adapter |
+
+The placeholder names describe a common implementation shape, not a sourced
+cross-backend shell API. The two backend bindings are intentionally compact:
+
+| Backend | Public entrypoint | Command-orchestration module | Handler prefix | Step and lock adapters | Backend-only command |
+| --- | --- | --- | --- | --- | --- |
+| Docker | `simulation/docker/simulate.sh` | `simulation/docker/lib/lifecycle.sh` | `docker_cmd_` | `__docker_cmd_workflow_step`, `docker_cmd_with_lock` | None |
+| VM | `simulation/vm/simulate.sh` | `simulation/vm/lib/lifecycle.sh` | `vm_cmd_` | `vm_workflow_step`, `vm_command_with_lock` | `reboot` |
+
+The backend entrypoint dispatches a direct phase through its normal lock
+adapter to the command handler. It dispatches `run` to the backend-local run
+handler, which uses shared state mechanics to select a plan and then reaches
+each selected phase through that same lock adapter and command handler.
+
+```mermaid
+flowchart TD
+  CLI[Backend simulate.sh]
+  DIRECT[Direct phase dispatch]
+  RUN[Backend cmd run]
+  CLASSIFY[Classify selected set and run]
+  PLAN[Select allowed command plan]
+  LOCK[Acquire phase lock]
+  HANDLER[First-class phase command handler]
+  CAP[Owning capability]
+
+  CLI --> DIRECT
+  CLI --> RUN
+  DIRECT --> LOCK
+  RUN --> CLASSIFY
+  CLASSIFY --> PLAN
+  PLAN --> LOCK
+  LOCK --> HANDLER
+  HANDLER --> CAP
+```
+
+### Run Plan Selection
+
+`simulation/docs/shared/lifecycle-state-model.md` owns the exact state guards
+and transitions. Command orchestration applies them as follows:
+
+| Selected state | Command plan |
+| --- | --- |
+| Fresh absent set | `preflight -> init-run -> create -> start -> status`, then workflow handlers from the first checkpoint |
+| Unclaimed retained baseline | `init-run -> create -> start -> status`, then workflow handlers from the first checkpoint; `create` verifies the retained set without mutation |
+| Exact resumable run, stopped | `start -> status`, then workflow handlers from the next required checkpoint |
+| Exact resumable run, running | `status`, then workflow handlers from the next required checkpoint |
+| Exact completed run, stopped | `start -> status`, then report `already-complete` without repeating a workflow checkpoint |
+| Exact completed run, running | `status`, then report `already-complete` without repeating a workflow checkpoint |
+| Unsupported or conflicting state | Fail before invoking a mutating phase |
+
+`status` is an intentional user-facing observation in each executable plan. It
+shows the selected set after `start`, or confirms an already-running set before
+resume or completion output. It neither advances the workflow ledger nor owns
+a workflow prerequisite.
+
+`run` does not hold the set lock across the whole composite. Each selected
+command uses the same shared or exclusive lock mode as its direct invocation,
+so every successful command boundary is durable and independently resumable.
+The run handler stops at the first nonzero command result and does not invoke a
+later handler. Checkpoint families and role expansion follow the exact order in
+the lifecycle state model and checkpoint acceptance protocol.
+
+No run plan contains `stop`, `restore-baseline`, `clean`, `destroy`,
+`audit-state`, or a backend-only command such as VM `reboot`. Recovery remains
+an explicit operator action outside the composite.
+
 ## Shared Contract And Backend Ownership
 
 | Concern | Shared contract | Backend-local realization |

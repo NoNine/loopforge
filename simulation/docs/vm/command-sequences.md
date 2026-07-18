@@ -71,7 +71,7 @@ sequenceDiagram
   LC->>CFG: vm_config_load_runtime()
   LC->>SET: vm_set_prepare()
   LC->>SNAP: vm_snapshots_status()
-  Note over LC,SNAP: reuse only matching ready baseline state; fail on stale state
+  Note over LC,SNAP: reuse only matching ready baseline state and fail on stale state
   LC->>SET: vm_set_create()
   LC->>LV: vm_libvirt_start_set()
   LC->>SSH: vm_ssh_prepare_all()
@@ -393,7 +393,7 @@ sequenceDiagram
   LC->>LV: vm_libvirt_require_set_shut_off(clean)
   LC->>ST: vm_state_verify_restored_pending_clean()
   LC->>ST: vm_state_clean_mutable_run_state()
-  Note over LC,ST: retain review output; clear active-run pointer last
+  Note over LC,ST: retain review output and clear active-run pointer last
   LC-->>CLI: compact clean summary
 ```
 
@@ -426,3 +426,48 @@ sequenceDiagram
 `vm_cmd_run` applies the shared composite order through VM command entrypoints.
 It adds no VM-only workflow phase; `reboot` remains an explicit command outside
 the composite.
+
+The shared harness design owns plan selection. This VM binding classifies the
+selected state, then sends every command in the selected plan through the same
+`vm_cmd_*` handler and lock mode used by direct CLI invocation. Individual
+command diagrams above own the capability calls below each handler.
+
+```mermaid
+sequenceDiagram
+  participant CLI as simulate.sh
+  participant RUN as lifecycle.sh: vm_cmd_run
+  participant ST as Shared and VM state
+  participant STEP as lifecycle.sh: vm_workflow_step
+  participant LOCK as lifecycle.sh: vm_command_with_lock
+  participant CMD as lifecycle.sh: vm_cmd_phase
+  participant CAP as Owning VM capability
+
+  CLI->>RUN: vm_cmd_run(env)
+  RUN->>ST: resolve active run and classify selected state
+  ST-->>RUN: allowed command plan or blocked state
+  alt blocked or conflicting
+    RUN-->>CLI: nonzero blocked result
+  else executable plan
+    loop each selected command in order
+      RUN->>STEP: vm_workflow_step(command)
+      STEP->>LOCK: vm_command_with_lock(lock mode, vm_cmd_phase)
+      LOCK->>CMD: invoke first-class command handler
+      CMD->>CAP: delegate owning operation or observation
+      CAP-->>CMD: bounded result
+      CMD-->>LOCK: command result
+      LOCK-->>STEP: command result
+      break command failed
+        STEP-->>RUN: same nonzero result
+        RUN-->>CLI: same nonzero result and stop plan
+      end
+      STEP-->>RUN: command completed and continue plan
+    end
+    RUN-->>CLI: compact run summary
+  end
+```
+
+The selected plan includes the intentional `status` observation described by
+the shared harness design. A stopped resumable or completed run therefore uses
+`start -> status`; an already-running completed run uses `status` before its
+`already-complete` summary. Neither path repeats a completed workflow
+checkpoint.
