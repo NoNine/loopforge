@@ -5,7 +5,8 @@ boundaries, provisioning decisions, and historical milestone anatomy.
 `simulation/vm/README.md` owns the public VM command contract.
 `simulation/docs/harness-design.md` owns shared harness architecture, and
 `simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
-command guards.
+command guards. `simulation/docs/checkpoint-coordination.md` owns the boundary
+among helper completion state, evidence, and workflow publication.
 
 VM simulation stays near target deployment after the clean baseline snapshot.
 Libvirt/KVM resources, snapshots, seed media, guest SSH readiness, and VM
@@ -30,7 +31,7 @@ implement the shared architectural planes with VM-specific mechanisms:
 | --- | --- |
 | Backend infrastructure | Libvirt/KVM domains, networks, storage, seed media, snapshots, set ownership, power lifecycle, restoration, and destruction |
 | Target control plane | Target OS SSH as the operator account, known-hosts verification, bounded remote execution, file transfer, and narrow delegated privilege |
-| Loopforge lifecycle | Artifact flow, role helpers, integration helper, validation, proof, evidence, and checkpoint markers |
+| Loopforge lifecycle | Artifact flow, helper-owned completion state, validation, proof, evidence, and workflow checkpoint publication |
 
 After the clean baseline snapshot is captured, lifecycle checkpoint work must
 use target-like interfaces and helper-visible paths. Host-side VM
@@ -103,7 +104,8 @@ Other modules should ask `paths.sh` for generated locations instead of
 reassembling path contracts.
 
 `state.sh` owns run markers, VM-set markers, ownership metadata, consistency
-checks, checkpoint marker verification, and the first read-only audit checks.
+checks, generic workflow-ledger publication, and the first read-only audit
+checks. It does not define role or integration postconditions.
 
 `libvirt.sh` owns low-level VM infrastructure operations: domains, networks,
 storage, seed media, guest baseline preparation, baseline snapshot capture,
@@ -225,9 +227,10 @@ M7 sequence `reboot --all` followed by a separate `validate-role`; it is not a
 combined command. M8 or final acceptance may require integration validation
 and proof after reboot.
 
-`prove-integration` must require a matching `validate-integration` marker for
-the same run. `run` is a composite over normal workflow commands only; it must
-not call `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`.
+`prove-integration` must require the matching helper-owned validation result
+and exact `validate-integration` workflow predecessor for the same run. `run`
+is a composite over normal workflow commands only; it must not call `stop`,
+`restore-baseline`, `clean`, `destroy`, or `audit-state`.
 
 ## VM Post-Baseline Realization
 
@@ -251,12 +254,12 @@ implementation helpers.
 | `lifecycle.sh` | `vm_cmd_*` | command choreography and composite workflow |
 | `config.sh` | `vm_config_*` | env files, defaults, selected identities, and rendered endpoint values |
 | `paths.sh` | `vm_path_*` | generated run and VM-set path contracts |
-| `state.sh` | `vm_state_*` | run markers, VM-set markers, ownership, checkpoint markers, and audit checks |
+| `state.sh` | `vm_state_*` | run and VM-set markers, ownership, workflow-ledger mechanics, and audit checks |
 | `libvirt.sh` | `vm_libvirt_*` | VM infrastructure primitives, guest baseline preparation, seed media, snapshots, and VM-set lifecycle |
 | `ssh.sh` | `vm_ssh_*` | target OS SSH, known-hosts, readiness, remote command execution, and transfer |
 | `artifacts.sh` | `vm_artifacts_*` | bundle-factory preparation and target-side artifact staging |
-| `roles.sh` | `vm_roles_*` | role-local `configure-role` and `validate-role` helper phases |
-| `integration.sh` | `vm_integration_*` | integration setup, validation, proof, and validation marker enforcement |
+| `roles.sh` | `vm_roles_*` | role-helper invocation and verification for `configure-role` and `validate-role` |
+| `integration.sh` | `vm_integration_*` | integration-helper invocation and verification for setup, validation, and proof |
 
 ## Folded Boundaries
 

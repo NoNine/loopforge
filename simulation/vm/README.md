@@ -18,7 +18,9 @@ a second VM simulation CLI.
 
 Shared architecture and exact state behavior are documented in
 `simulation/docs/harness-design.md` and
-`simulation/docs/lifecycle-state-model.md`. VM module structure and
+`simulation/docs/lifecycle-state-model.md`. Cross-layer checkpoint ownership
+and publication are documented in
+`simulation/docs/checkpoint-coordination.md`. VM module structure and
 implementation contracts are documented in
 `simulation/vm/docs/implementation-design.md`. Milestone verification gates
 are documented in `simulation/vm/docs/verification.md`.

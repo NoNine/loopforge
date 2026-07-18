@@ -22,8 +22,10 @@ responsibilities rather than generic backend hooks.
 Lifecycle checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
 Shared harness architecture and exact state guards are defined in
 `simulation/docs/harness-design.md` and
-`simulation/docs/lifecycle-state-model.md`. Docker generated-state and
-stale-container behavior is defined in this document.
+`simulation/docs/lifecycle-state-model.md`. Cross-layer checkpoint ownership
+and publication are defined in
+`simulation/docs/checkpoint-coordination.md`. Docker generated-state and stale-
+container behavior is defined in this document.
 Docker-local module boundaries and dependency direction are defined in
 `simulation/docker/docs/implementation-design.md`.
 

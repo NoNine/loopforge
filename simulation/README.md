@@ -9,7 +9,9 @@ owns checkpoint semantics for all modes.
 Shared internal architecture is defined in
 `simulation/docs/harness-design.md`. Exact simulation state dimensions,
 command guards, and transitions are defined in
-`simulation/docs/lifecycle-state-model.md`. Terminal presentation is defined
+`simulation/docs/lifecycle-state-model.md`. Coordination among helper-owned
+completion state, evidence, and the workflow ledger is defined in
+`simulation/docs/checkpoint-coordination.md`. Terminal presentation is defined
 in `simulation/docs/terminal-output.md`.
 
 The model has two layers:
@@ -317,8 +319,10 @@ Set mutations use the stable nonblocking lock at
 run-scoped `workflow-state.env` owns only checkpoint activity and progression.
 Strict readers cross-check both records with the immutable run marker,
 baseline, source/effective-input fingerprints, backend ownership, and
-hash-linked checkpoint records. Details and exact transitions are authoritative in
-`simulation/docs/lifecycle-state-model.md`.
+hash-linked checkpoint records. Details and exact transitions are authoritative
+in `simulation/docs/lifecycle-state-model.md`. Checkpoint ownership and
+publication order are defined in
+`simulation/docs/checkpoint-coordination.md`.
 
 ## Terminal Output Convention
 

@@ -21,6 +21,9 @@ Step 15 depend on this step.
 - `simulation/docs/harness-design.md` and
   `simulation/docs/lifecycle-state-model.md` for shared architecture and exact
   state guards.
+- `simulation/docs/checkpoint-coordination.md` for the boundary between shared
+  ledger primitives and the role/integration postconditions implemented in
+  Steps 13b and 13c.
 - `simulation/docker/docs/implementation-design.md` for Docker-local module
   boundaries and dependency direction.
 - `simulation/vm/docs/implementation-design.md` and
@@ -66,7 +69,10 @@ without compatibility aliases.
 
 Implement the exact schemas, classifiers, and guards from
 `simulation/docs/lifecycle-state-model.md`; this plan records dependency order
-rather than redefining them.
+rather than redefining them. Implement only the generic checkpoint state
+mechanics assigned to Step 13a by
+`simulation/docs/checkpoint-coordination.md`; do not synthesize helper-owned
+completion state.
 
 - Validate the canonical 1-24 character `HARNESS_SET_ID` before path or backend
   mutation. Derive `loopforge-docker-<set-id>` and

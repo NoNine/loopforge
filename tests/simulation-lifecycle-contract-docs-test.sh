@@ -10,6 +10,7 @@ evidence="$repo_root/docs/contracts/validation-and-evidence.md"
 endpoint="$repo_root/docs/contracts/endpoint-identity.md"
 shared="$repo_root/simulation/README.md"
 state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
+coordination="$repo_root/simulation/docs/checkpoint-coordination.md"
 docker="$repo_root/simulation/docker/README.md"
 vm="$repo_root/simulation/vm/README.md"
 plan="$repo_root/docs/planning/implementation-plan.md"
@@ -202,6 +203,18 @@ require_text "$state_model" \
 require_text "$state_model" \
   '`state=already-absent`' \
   'Destroy must define idempotent already-absent success'
+require_text "$coordination" \
+  'The global evidence collector validates and aggregates records.' \
+  'Checkpoint coordination must keep aggregation separate from runtime truth'
+require_text "$coordination" \
+  'integration helpers still own their target-local completion state' \
+  'Checkpoint coordination must preserve target-deployment helper ownership'
+require_text "$evidence" \
+  '`simulation/docs/checkpoint-coordination.md` defines how producer-owned' \
+  'Evidence authority must delegate checkpoint coordination'
+require_text "$step" \
+  '`simulation/docs/checkpoint-coordination.md` for the boundary between shared' \
+  'Step 13a must read checkpoint coordination design'
 
 for file in "$shared" "$docker" "$vm"; do
   require_text "$file" '`up` and `down` are' \
@@ -265,7 +278,7 @@ for file in "$agents" "$prd" "$lifecycle" "$directory" "$evidence" \
     "Generation identity must not be part of the contract: $file"
 done
 
-for file in "$lifecycle" "$directory" "$evidence" "$endpoint" "$shared" "$state_model" "$docker" "$vm"; do
+for file in "$lifecycle" "$directory" "$evidence" "$endpoint" "$shared" "$state_model" "$coordination" "$docker" "$vm"; do
   reject_text "$file" 'LOOPFORGE_VM_SET_ID' \
     "Current simulation contracts must not expose the old VM set identity: $file"
   reject_text "$file" 'HARNESS_PROJECT_NAME' \

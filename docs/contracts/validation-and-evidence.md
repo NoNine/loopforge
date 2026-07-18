@@ -127,6 +127,12 @@ operator workflow checkpoint so failed runs can be reviewed from the last
 completed boundary. Native `target-deployment` uses the acceptance checklist
 to track the corresponding outcomes without producing checkpoint records.
 
+Evidence proves an outcome but does not authorize the next simulation phase.
+`simulation/docs/checkpoint-coordination.md` defines how producer-owned
+evidence is bound into the workflow ledger and how it relates to helper-owned
+completion records. This document continues to own evidence content, status,
+redaction, and aggregation rules.
+
 Recommended checkpoints:
 
 - Target-deployment reviewed env files, or simulation source/effective input

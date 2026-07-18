@@ -6,6 +6,8 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 shared_readme="$repo_root/simulation/README.md"
 harness_design="$repo_root/simulation/docs/harness-design.md"
 state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
+coordination="$repo_root/simulation/docs/checkpoint-coordination.md"
+docker_design="$repo_root/simulation/docker/docs/implementation-design.md"
 vm_design="$repo_root/simulation/vm/docs/implementation-design.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
 
@@ -37,6 +39,9 @@ require_text "$shared_readme" \
 require_text "$shared_readme" \
   '`simulation/docs/lifecycle-state-model.md`' \
   'Shared simulation README must link the exact lifecycle state model'
+require_text "$shared_readme" \
+  '`simulation/docs/checkpoint-coordination.md`' \
+  'Shared simulation README must link checkpoint coordination design'
 
 require_text "$harness_design" \
   '## Architectural Planes' \
@@ -59,6 +64,9 @@ require_text "$harness_design" \
 require_text "$harness_design" \
   '| Persistence | Stable set lock, strict active-run and workflow records,' \
   'Shared harness design must assign lifecycle persistence ownership'
+require_text "$harness_design" \
+  '`simulation/docs/checkpoint-coordination.md`' \
+  'Shared harness design must delegate checkpoint coordination'
 
 require_text "$state_model" \
   '## State Dimensions' \
@@ -88,8 +96,11 @@ require_text "$state_model" \
   '## Persistence And Concurrency' \
   'Lifecycle state model must define persistence and locking'
 require_text "$state_model" \
+  '## Checkpoint State Transitions' \
+  'Lifecycle state model must define checkpoint state transitions'
+reject_text "$state_model" \
   '## Workflow Transaction Protocol' \
-  'Lifecycle state model must define checkpoint transaction ordering'
+  'Lifecycle state model must delegate the cross-layer transaction protocol'
 require_text "$state_model" \
   '## Exact-Bound Classification' \
   'Lifecycle state model must assign exact-bound classification'
@@ -97,9 +108,31 @@ require_text "$state_model" \
   'An interrupted observation may' \
   'Lifecycle state model must separate observational interruption from durable corruption'
 
+require_text "$coordination" \
+  '## Ownership Model' \
+  'Checkpoint coordination design must assign state ownership'
+require_text "$coordination" \
+  '## Source-Of-Truth Rules' \
+  'Checkpoint coordination design must define one progression authority'
+require_text "$coordination" \
+  '## Workflow Transaction Protocol' \
+  'Checkpoint coordination design must define publication ordering'
+require_text "$coordination" \
+  '## Existing Marker Disposition' \
+  'Checkpoint coordination design must classify historical markers'
+require_text "$coordination" \
+  'Only `workflow-state.env` and its immutable checkpoint chain authorize' \
+  'Checkpoint coordination design must make the ledger authoritative'
+require_text "$coordination" \
+  'Remove harness-created files whose only meaning is that an orchestration phase' \
+  'Checkpoint coordination design must retire duplicate pass markers'
+
 require_text "$lifecycle" \
   '`simulation/docs/lifecycle-state-model.md` owns the exact simulation state' \
   'Lifecycle authority must delegate exact simulation state realization'
+require_text "$lifecycle" \
+  '`simulation/docs/checkpoint-coordination.md` owns the implementation design' \
+  'Lifecycle authority must delegate checkpoint coordination design'
 require_text "$lifecycle" \
   'restored-pending-clean -> clean -> baseline-stopped + unclaimed' \
   'Lifecycle authority must include the cleanup release transition'
@@ -113,6 +146,15 @@ require_text "$vm_design" \
 require_text "$vm_design" \
   '`simulation/docs/lifecycle-state-model.md` owns simulation-set state' \
   'VM implementation design must delegate shared lifecycle state'
+require_text "$vm_design" \
+  '`simulation/docs/checkpoint-coordination.md` owns the boundary' \
+  'VM implementation design must delegate checkpoint coordination'
+require_text "$docker_design" \
+  '`simulation/docs/checkpoint-coordination.md` owns the boundary' \
+  'Docker implementation design must delegate checkpoint coordination'
+reject_text "$vm_design" \
+  'matching `validate-integration` marker' \
+  'VM implementation design must not retain a duplicate validation marker'
 reject_text "$vm_design" \
   'stateDiagram-v2' \
   'VM implementation design must not define a competing lifecycle state diagram'

@@ -5,7 +5,8 @@ dependency direction, and internal API conventions. `simulation/docker/README.md
 owns the public Docker command contract. `simulation/docs/harness-design.md`
 owns shared harness architecture, and
 `simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
-command guards.
+command guards. `simulation/docs/checkpoint-coordination.md` owns the boundary
+among helper completion state, evidence, and workflow publication.
 
 Docker and VM simulation share lifecycle meanings, not backend APIs. Docker
 modules may follow the VM harness's capability-shaped layering where the
@@ -45,8 +46,9 @@ values, input selection, and rendered configuration. It does not own live
 container queries or checkpoint progression.
 
 `state.sh` owns Docker wrappers around shared run markers, active-run and
-workflow bindings, generated-state validation, and checkpoint markers. It does
-not query live Docker resources.
+workflow bindings, generated-state validation, and generic workflow-ledger
+publication. It does not query live Docker resources or define role and
+integration postconditions.
 
 `compose.sh` and `ports.sh` own Docker infrastructure primitives: Compose
 selection, container identity and runtime queries, mount inspection, and
@@ -70,11 +72,14 @@ the restricted restore container used only by `restore-baseline`.
 `artifacts.sh` owns bundle-factory preparation, exported review copies, Docker
 transfer-waiver staging, and target-side manifest and checksum verification.
 
-`roles.sh` owns role-local configure and observational validate capabilities.
-It must not own container lifecycle or integration setup.
+`roles.sh` owns role-helper invocation and verifies helper-owned configure and
+observational-validation results. It must not own the role postcondition,
+container lifecycle, or integration setup.
 
 `integration.sh` owns the private invocation adapter and calls to
-`scripts/integration-setup.sh` for configuration, validation, and proof.
+`scripts/integration-setup.sh` for configuration, validation, and proof. The
+integration helper owns those postconditions; this module verifies them for
+workflow publication.
 
 `evidence.sh` owns the Docker evidence schema, Docker collection waivers, and
 role evidence normalization. It remains backend-local.

@@ -18,6 +18,8 @@ Read these before implementation:
   credential custody, state binding, proof, and failure classification.
 - `docs/contracts/validation-and-evidence.md` for checkpoint evidence and
   reviewed-input binding.
+- `simulation/docs/checkpoint-coordination.md` for integration completion/wait
+  ownership and the harness publication boundary.
 - `docs/contracts/account-model.md` and `docs/contracts/directory-model.md` for
   accounts, shared storage, protected paths, ownership, and file modes.
 - `docs/architecture/system-model.md` for interfaces and cross-role ownership.
@@ -25,6 +27,8 @@ Read these before implementation:
 
 The authorities own product behavior. This step owns implementation sequence,
 milestone boundaries, focused verification, and acceptance criteria only.
+It defines integration-owned wait, setup, validation, and proof postconditions;
+it does not define or publish the simulation workflow head.
 
 ## Public Command Contract
 

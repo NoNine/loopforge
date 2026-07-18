@@ -8,7 +8,9 @@ realization; backend implementation design files own Docker- or VM-specific
 modules and mechanisms.
 
 The exact simulation state dimensions, command guards, and transitions are
-defined in `simulation/docs/lifecycle-state-model.md`.
+defined in `simulation/docs/lifecycle-state-model.md`. Coordination between
+helper-owned completion state, evidence, and the workflow ledger is defined in
+`simulation/docs/checkpoint-coordination.md`.
 
 ## Design Goals
 
@@ -83,7 +85,7 @@ Forbidden directions include:
 | Lifecycle | Command names, state meanings, guards, preservation rules, and failure behavior | Compose/container operations or libvirt/domain operations |
 | Persistence | Stable set lock, strict active-run and workflow records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
 | Inputs | Source-template custody, first-start effective publication, immutable helper inputs, and ephemeral access separation | Stable endpoint rendering plus Docker published ports or VM DHCP/SSH readiness |
-| Checkpoints | Ordering, transaction state, hash-linked completion, binding, and observational validation | Backend command orchestration and target inventory |
+| Checkpoint coordination | Shared ownership boundaries and publication protocol | Backend orchestration of helper-owned results under the selected set lock |
 | Evidence | Required identities, statuses, redaction, and bounded references | Backend resource metadata and collector mechanics |
 | Terminal output | Compact command summaries and shared set/run fields | Compose project, libvirt prefix, URLs, SSH rows, and other backend fields |
 
@@ -160,6 +162,9 @@ failure semantics, and ownership boundary without backend conditionals.
 Reviewers of either harness should confirm that:
 
 - public behavior matches the shared lifecycle state model and backend README;
+- checkpoint publication follows
+  `simulation/docs/checkpoint-coordination.md` without a second progression
+  marker;
 - every mutating command validates selected set and run ownership first;
 - set mutation is serialized by the stable set lock;
 - `active-run.env` owns set claim/reset gating while `workflow-state.env` owns

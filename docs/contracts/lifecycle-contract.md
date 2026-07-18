@@ -285,6 +285,9 @@ conflict and stops.
 command references for their layers.
 `simulation/docs/lifecycle-state-model.md` owns the exact simulation state
 dimensions, command guards, and transitions that realize this contract.
+`simulation/docs/checkpoint-coordination.md` owns the implementation design for
+coordinating helper completion records, evidence, and the simulation workflow
+ledger without redefining the checkpoint semantics in this contract.
 
 Commands that perform checkpoint work must preserve the checkpoint semantics
 defined here: input review, artifact preparation, artifact staging,

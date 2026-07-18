@@ -5,6 +5,11 @@ and transitions shared by Docker and VM simulation. It realizes, but does not
 override, `docs/contracts/lifecycle-contract.md`. Public command descriptions
 remain in `simulation/README.md` and the backend README files.
 
+`simulation/docs/checkpoint-coordination.md` owns how helper completion
+records, evidence, and this workflow state coordinate across a checkpoint
+transaction. This document owns state schemas, classification, command guards,
+and transitions; it does not define role or integration postconditions.
+
 The model separates reusable simulation-set state from immutable run state.
 It also separates backend resource power, durable content, active-run
 ownership, reset gating, and workflow checkpoint progression. A command is
@@ -163,24 +168,21 @@ source and effective inputs, checkpoint, predecessor, mutation kind, status,
 bounded evidence, and timestamps. Unknown checkpoint names or invalid
 predecessor ordering fail closed.
 
-## Workflow Transaction Protocol
+## Checkpoint State Transitions
 
-A checkpoint command validates its exact predecessor before work. Immediately
-before its first target mutation, it atomically publishes
-`activity=mutating` and `active_checkpoint=<checkpoint>`. It then performs only
-that checkpoint's work, writes the immutable completion record, and atomically
-publishes the idle workflow head last. A crash after mutation begins therefore
-leaves `active-incomplete`; it cannot appear complete.
+Checkpoint activity changes only through strict workflow-state publication.
+`mutating` records an open target mutation, `observing` records an open
+observational phase, and `waiting` records the single reviewed Gerrit access
+wait. Completion publication writes an immutable record and moves the workflow
+head to that record. The head returns to `idle` only for a completed
+checkpoint; the reviewed-access wait retains its bound `waiting` activity.
 
-Observational work uses `activity=observing`. An interrupted observation does
-not classify the durable target as incomplete, but checkpoint progression and
-the composite `run` command remain blocked until the owning observational
-phase is explicitly retried against the unchanged head and inputs.
-
-The reviewed Gerrit access wait is the sole resumable mutation boundary. It
-uses `activity=waiting` and an immutable record binding the exact reviews,
-inputs, and predecessor. It remains `exact-bound`; only the owning integration
-phase may resume it.
+An open `mutating` activity classifies the selected durable state as
+`active-incomplete`. An open `observing` activity blocks checkpoint progression
+without classifying unchanged durable content as incomplete. The exact
+cross-layer publication order, completion-record ownership, evidence binding,
+and failure behavior are defined in
+`simulation/docs/checkpoint-coordination.md`.
 
 Initialization writes the complete run root, immutable run marker, and initial
 workflow state before atomically publishing `active-run.env` last. A crash
