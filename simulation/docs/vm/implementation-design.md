@@ -92,8 +92,9 @@ to command functions. It should not contain lifecycle implementation bodies.
 run identity resolution, and rendered endpoint values that are not large
 enough to justify a separate inventory module.
 
-`paths.sh` owns generated path contracts for run-scoped output and reusable
-Simulation-set state:
+`paths.sh` implements the generated paths defined by
+`simulation/docs/shared/generated-state-layout.md` for run-scoped output and
+reusable simulation-set state:
 
 ```text
 generated/simulation/vm/<run-id>/
@@ -253,7 +254,7 @@ implementation helpers.
 | `simulate.sh` | command dispatch only | CLI parsing, module loading, and command routing |
 | `lifecycle.sh` | `vm_cmd_*` | command choreography and composite workflow |
 | `config.sh` | `vm_config_*` | env files, defaults, selected identities, and rendered endpoint values |
-| `paths.sh` | `vm_path_*` | generated run and VM-set path contracts |
+| `paths.sh` | `vm_path_*` | generated run and VM-set path construction |
 | `state.sh` | `vm_state_*` | run and VM-set markers, ownership, workflow-ledger mechanics, and audit checks |
 | `libvirt.sh` | `vm_libvirt_*` | VM infrastructure primitives, guest baseline preparation, seed media, snapshots, and VM-set lifecycle |
 | `ssh.sh` | `vm_ssh_*` | target OS SSH, known-hosts, readiness, remote command execution, and transfer |

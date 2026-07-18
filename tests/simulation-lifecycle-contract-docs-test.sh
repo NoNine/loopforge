@@ -6,6 +6,7 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 prd="$repo_root/docs/product/prd.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
 directory="$repo_root/docs/contracts/directory-model.md"
+layout="$repo_root/simulation/docs/shared/generated-state-layout.md"
 evidence="$repo_root/docs/contracts/validation-and-evidence.md"
 endpoint="$repo_root/docs/contracts/endpoint-identity.md"
 shared="$repo_root/simulation/docs/shared/simulation-model.md"
@@ -163,36 +164,42 @@ for realization_term in \
   reject_text "$lifecycle" "$realization_term" \
     "Product lifecycle contract must not own simulation realization: $realization_term"
 done
-require_text "$directory" \
-  '## Simulation Baselines And Run Identity' \
-  'Directory contract must define baseline and run identity custody'
-require_text "$directory" \
-  '## Simulation Input Custody' \
-  'Directory contract must define source and effective simulation input custody'
-require_text "$directory" \
+require_text "$layout" \
+  '## Canonical Roots' \
+  'Generated-state layout must define set, lock, and run roots'
+require_text "$layout" \
+  '## Input Custody' \
+  'Generated-state layout must define source and effective input custody'
+require_text "$layout" \
   '`host/state/effective-inputs.env`' \
-  'Directory contract must define the effective-input binding record'
-require_text "$directory" \
-  '## Shared Simulation Backing' \
-  'Directory contract must define the shared generated layout once'
-require_text "$directory" \
-  '## Docker-Specific Backing' \
-  'Directory contract must isolate Docker-specific generated paths'
-require_text "$directory" \
-  '## VM-Specific Backing' \
-  'Directory contract must isolate VM-specific generated paths'
-require_occurrences "$directory" \
+  'Generated-state layout must locate the effective-input binding record'
+require_text "$layout" \
+  '## Docker Realization' \
+  'Generated-state layout must isolate Docker-specific generated paths'
+require_text "$layout" \
+  '## VM Realization' \
+  'Generated-state layout must isolate VM-specific generated paths'
+require_occurrences "$layout" \
   '| `sets/<set-id>/active-run.env` |' 1 \
-  'Directory contract must not duplicate the shared active-run row'
-require_occurrences "$directory" \
+  'Generated-state layout must not duplicate the shared active-run row'
+require_occurrences "$layout" \
   '| `host/source-inputs/` |' 1 \
-  'Directory contract must not duplicate the shared source-input row'
-require_occurrences "$directory" \
+  'Generated-state layout must not duplicate the shared source-input row'
+require_occurrences "$layout" \
   '| `host/state/workflow-state.env` |' 1 \
-  'Directory contract must not duplicate the shared workflow-state row'
-require_occurrences "$directory" \
+  'Generated-state layout must not duplicate the shared workflow-state row'
+require_occurrences "$layout" \
   '| `host/evidence/integration/` |' 1 \
-  'Directory contract must not duplicate the shared integration-evidence row'
+  'Generated-state layout must not duplicate shared integration evidence'
+for simulation_heading in \
+  '## Simulation Baselines And Run Identity' \
+  '## Simulation Input Custody' \
+  '## Shared Simulation Backing' \
+  '## Docker-Specific Backing' \
+  '## VM-Specific Backing'; do
+  reject_text "$directory" "$simulation_heading" \
+    "Target directory contract must not own simulation layout: $simulation_heading"
+done
 require_text "$evidence" \
   'Docker and VM harness checkpoint evidence must identify the immutable' \
   'Evidence contract must bind checkpoint evidence to immutable run ID'
@@ -333,7 +340,7 @@ reject_text "$agents" \
   'use a fresh `HARNESS_RUN_ID`/generated run root' \
   'Repository guardrail must not require manual Docker run ID churn'
 
-for file in "$agents" "$prd" "$lifecycle" "$directory" "$evidence" \
+for file in "$agents" "$prd" "$lifecycle" "$directory" "$layout" "$evidence" \
   "$shared" "$docker" "$vm" "$plan" "$step"; do
   reject_text "$file" 'HARNESS_RUN_GENERATION' \
     "Generation identity must not be part of the contract: $file"

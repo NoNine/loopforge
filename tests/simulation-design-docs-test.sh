@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 simulation_model="$repo_root/simulation/docs/shared/simulation-model.md"
+generated_layout="$repo_root/simulation/docs/shared/generated-state-layout.md"
 harness_design="$repo_root/simulation/docs/shared/harness-design.md"
 state_model="$repo_root/simulation/docs/shared/lifecycle-state-model.md"
 protocol="$repo_root/simulation/docs/shared/checkpoint-acceptance-protocol.md"
@@ -46,16 +47,43 @@ require_text "$simulation_model" \
   '`simulation/docs/shared/checkpoint-acceptance-protocol.md`' \
   'Simulation model must link checkpoint acceptance protocol'
 require_text "$simulation_model" \
+  '`simulation/docs/shared/generated-state-layout.md`' \
+  'Simulation model must link generated-state layout authority'
+require_text "$simulation_model" \
   '## Lifecycle Documentation Boundary' \
   'Simulation model must route lifecycle documentation ownership'
 require_text "$simulation_model" \
   'Backend documents apply these contracts and describe only their realization' \
   'Simulation model must restrict backend lifecycle documentation'
+require_text "$generated_layout" \
+  'Consumer documents may repeat a path when an operator must type, inspect, or' \
+  'Generated-state layout must define the consumer repetition rule'
+require_text "$generated_layout" \
+  '`docs/contracts/directory-model.md` owns paths visible inside the bundle' \
+  'Generated-state layout must preserve the target-path authority boundary'
+
+for removed_heading in \
+  '## Output Locations' \
+  '## Shared Simulation Backing' \
+  '## Docker-Specific Backing' \
+  '## VM-Specific Backing'; do
+  reject_text "$simulation_model" "$removed_heading" \
+    "Public simulation model must not own generated path inventory: $removed_heading"
+done
 
 for file in "$docker_guide" "$vm_guide"; do
   require_text "$file" \
     'realization deltas.' \
     "Backend guide must be realization-scoped: $file"
+  require_text "$file" \
+    '`simulation/docs/shared/generated-state-layout.md`' \
+    "Backend guide must link generated-state authority: $file"
+  reject_text "$file" \
+    '## Output Locations' \
+    "Backend guide must not own a shared output inventory: $file"
+  reject_text "$file" \
+    '| Harness evidence |' \
+    "Backend guide must not repeat shared run-tree rows: $file"
   for shared_term in \
     'already-complete' \
     'state=already-running' \

@@ -151,35 +151,21 @@ This command intentionally uses the target OS control-plane SSH interface. It
 does not use Docker exec and it is separate from Gerrit's service SSH on port
 `29418`.
 
-## Output Locations
+## Generated-State Realization
 
-Docker-generated runtime output is not committed. Reusable simulation-set state and
-immutable run output use separate roots:
+`simulation/docs/shared/generated-state-layout.md` owns the common set, lock,
+and run roots plus their custody and cleanup classes. Docker adds reusable bind
+state under `sets/<set-id>/runtime/`, baseline archives and metadata under
+`sets/<set-id>/baseline/`, and Docker transfer material in the documented
+run-root children. Backend implementation scratch may live below those
+backend-owned children without becoming a new public path contract.
 
-```text
-generated/simulation/docker/sets/<set-id>/
-generated/simulation/docker/<run-id>/
-```
-
-| Output kind | Docker generated pattern |
-| --- | --- |
-| Active-run pointer and baseline | `generated/simulation/docker/sets/<set-id>/` |
-| Stable set lock | `generated/simulation/docker/locks/<set-id>.lock` |
-| Workflow head and checkpoint records | `generated/simulation/docker/<run-id>/host/state/` |
-| Durable bind state | `generated/simulation/docker/sets/<set-id>/runtime/` |
-| Host-contributed inputs | `generated/simulation/docker/<run-id>/host/` |
-| Exported artifacts | `generated/simulation/docker/<run-id>/target/artifacts/exported/<bundle>.tar.gz` |
-| Harness evidence | `generated/simulation/docker/<run-id>/host/evidence/harness/` |
-| Harness bounded logs | `generated/simulation/docker/<run-id>/host/logs/harness/` |
-| Integration evidence and logs | `generated/simulation/docker/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
-| Target role evidence | `generated/simulation/docker/<run-id>/target/evidence/<role>/` |
-| Target role bounded logs | `generated/simulation/docker/<run-id>/target/logs/<role>/` |
-
-Implementation-specific harness state can live below child directories inside
-those roots. Shared simulation contracts for input custody, helper-visible paths,
-artifact staging, LDAP secret handling, retained outputs, and integration key
-custody live in `simulation/docs/shared/simulation-model.md`, `docs/contracts/artifact-bundle-contract.md`,
-and `docs/contracts/directory-model.md`.
+Shared simulation contracts for input custody, helper-visible paths, artifact
+staging, LDAP secret handling, retained outputs, and integration key custody
+live in `simulation/docs/shared/generated-state-layout.md`,
+`simulation/docs/shared/simulation-model.md`,
+`docs/contracts/artifact-bundle-contract.md`, and
+`docs/contracts/directory-model.md`.
 
 Docker realizes those contracts with container lifecycle, generated bind-mount
 sources, and explicitly labeled Docker `cp` waivers:
@@ -237,13 +223,13 @@ credential state required to restore that directory service; they must not be
 used with real organization credentials.
 
 Retained-output and mutable-cleanup classes come from
-`docs/contracts/directory-model.md`. If the host user cannot remove a validated
+`simulation/docs/shared/generated-state-layout.md`. If the host user cannot remove a validated
 container-owned mutable path, Docker `clean` may use a one-shot cleanup
 container mounted only to that generated-state path.
 
 See `docs/contracts/lifecycle-contract.md` for phase behavior rules and
-`docs/contracts/directory-model.md` for generated path ownership and
-host/target dominance.
+`simulation/docs/shared/generated-state-layout.md` for generated path custody
+and host/target dominance.
 
 ## State Consistency And Recovery
 

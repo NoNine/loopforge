@@ -38,8 +38,9 @@ simulation/docker/
 and Docker-local modules, and dispatches only to command-shaped lifecycle
 entrypoints.
 
-`paths.sh` owns canonical run-root and set-root paths. Other modules must not
-reassemble generated path contracts.
+`paths.sh` implements the canonical run-root and set-root paths defined by
+`simulation/docs/shared/generated-state-layout.md`. Other modules must not
+reassemble those paths.
 
 `config.sh` owns defaults, env loading, selected identities, stable endpoint
 values, input selection, and rendered configuration. It does not own live

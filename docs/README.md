@@ -44,7 +44,8 @@ Use this order when deciding where a product or process fact belongs:
    rerun rules, product workflow order, and lifecycle evidence obligations.
 4. Topic authority docs own detailed cross-cutting contracts:
    `docs/contracts/account-model.md` for accounts and credential custody,
-   `docs/contracts/directory-model.md` for path ownership and generated state,
+   `docs/contracts/directory-model.md` for target-visible runtime path
+   ownership,
    `docs/contracts/operator-execution-contract.md` for native and helper
    operator interface parity,
    `docs/baselines/version-baseline.md` for default component versions,
@@ -77,9 +78,11 @@ Use this order when deciding where a product or process fact belongs:
 7. Simulation docs own simulation realization details:
    `simulation/docs/README.md` routes readers without owning behavior;
    `simulation/docs/shared/simulation-model.md` owns the shared public model;
-   `simulation/docs/shared/` owns shared architecture, state, checkpoint
-   acceptance, and presentation; and `simulation/docs/docker/` and
-   `simulation/docs/vm/` own concrete backend guides and realization details.
+   `simulation/docs/shared/generated-state-layout.md` owns host-side generated
+   storage; the other documents under `simulation/docs/shared/` own shared
+   architecture, lifecycle state, checkpoint acceptance, and presentation; and
+   `simulation/docs/docker/` and `simulation/docs/vm/` own concrete backend
+   guides and realization details.
 8. Helper scripts, templates, examples, tests, and verifiers implement or
    check the documented model. They should not become the only place where a
    product behavior is defined.

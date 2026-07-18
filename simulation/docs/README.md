@@ -13,7 +13,8 @@ Use `docs/README.md` to resolve repository-wide documentation authority and
 
 | Scope | Document | Responsibility |
 | --- | --- | --- |
-| Shared | `shared/simulation-model.md` | Public simulation model, topology, terminology, command semantics, source boundaries, and output conventions |
+| Shared | `shared/simulation-model.md` | Public simulation model, topology, terminology, command semantics, and source boundaries |
+| Shared | `shared/generated-state-layout.md` | Host-side generated roots, path custody, sensitivity, and cleanup classes |
 | Shared | `shared/harness-design.md` | Backend-neutral harness architecture and dependency boundaries |
 | Shared | `shared/lifecycle-state-model.md` | Exact simulation state, guards, transitions, and recovery rights |
 | Shared | `shared/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus checkpoint publication |
@@ -29,9 +30,10 @@ Use `docs/README.md` to resolve repository-wide documentation authority and
 ## Reading Order
 
 For shared simulation behavior, read `shared/simulation-model.md`, then the
-shared companion that owns the affected contract. For backend work, read the
-shared model and applicable shared companions before the backend simulation
-guide and implementation companions.
+shared companion that owns the affected contract. Read
+`shared/generated-state-layout.md` for generated storage questions. For backend
+work, read the shared model and applicable shared companions before the backend
+simulation guide and implementation companions.
 
 Implementation plans under `docs/planning/` provide sequencing and historical
 context. They do not replace the simulation authorities listed here. Mutable

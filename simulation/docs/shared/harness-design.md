@@ -11,6 +11,8 @@ The exact simulation state dimensions, command guards, and transitions are
 defined in `simulation/docs/shared/lifecycle-state-model.md`. Acceptance and
 publication of owning-layer results and evidence are defined in
 `simulation/docs/shared/checkpoint-acceptance-protocol.md`.
+Generated set, lock, and run storage is defined in
+`simulation/docs/shared/generated-state-layout.md`.
 
 ## Design Goals
 

@@ -4,8 +4,10 @@ This document defines the artifact bundle contract for bundle-factory
 workspaces, release archive layout, target transfer, target extraction,
 helper-owned execution state, helper-visible artifact paths, and mode
 parity. It is a contract and validation authority, not an operator command
-manual. `docs/contracts/directory-model.md` defines directory ownership, permissions,
-sensitivity, evidence behavior, and simulation backing for these paths.
+manual. `docs/contracts/directory-model.md` defines target-visible directory
+ownership, permissions, sensitivity, and evidence behavior for these paths.
+`simulation/docs/shared/generated-state-layout.md` defines host-side simulation
+copies and backing state.
 
 ## Workspaces
 

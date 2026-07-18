@@ -56,6 +56,7 @@ for path in \
   project-state/execution-status.md \
   simulation/docs/README.md \
   simulation/docs/shared/simulation-model.md \
+  simulation/docs/shared/generated-state-layout.md \
   simulation/docs/shared/checkpoint-acceptance-protocol.md \
   simulation/docs/shared/harness-design.md \
   simulation/docs/shared/lifecycle-state-model.md \
@@ -122,6 +123,7 @@ unexpected_simulation_doc="$(
 
 for simulation_doc in \
   'shared/simulation-model.md' \
+  'shared/generated-state-layout.md' \
   'docker/docker-simulation.md' \
   'vm/vm-simulation.md'; do
   grep -Fq -- "\`$simulation_doc\`" \

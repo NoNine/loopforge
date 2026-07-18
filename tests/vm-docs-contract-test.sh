@@ -57,27 +57,27 @@ reject_doc_text docs/contracts/lifecycle-contract.md \
   'VM simulation infrastructure provisioning for the selected reusable VM set' \
   'Lifecycle contract must not duplicate detailed VM implementation behavior'
 
-require_doc_text docs/contracts/directory-model.md \
-  '## VM-Specific Backing' \
-  'Directory model must own VM simulation backing paths'
-require_doc_text docs/contracts/directory-model.md \
-  'generated/simulation/vm/sets/<set-id>/' \
-  'Directory model must document reusable simulation-set state root'
-require_doc_text docs/contracts/directory-model.md \
+require_doc_text simulation/docs/shared/generated-state-layout.md \
+  '## VM Realization' \
+  'Generated-state layout must own VM simulation backing paths'
+require_doc_text simulation/docs/shared/generated-state-layout.md \
+  'generated/simulation/<backend>/sets/<set-id>/' \
+  'Generated-state layout must document reusable simulation-set state root'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'generated/simulation/vm/<run-id>/' \
-  'Directory model must document VM run-scoped output root'
-require_doc_text docs/contracts/directory-model.md \
+  'VM guide must document its concrete run-scoped realization'
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   '`sets/<set-id>/libvirt/`' \
-  'Directory model must document VM libvirt metadata backing'
-require_doc_text docs/contracts/directory-model.md \
+  'Generated-state layout must document VM libvirt metadata backing'
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   '`sets/<set-id>/snapshots/`' \
-  'Directory model must document VM baseline snapshot records'
-require_doc_text docs/contracts/directory-model.md \
+  'Generated-state layout must document VM baseline snapshot records'
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   'Jenkins-agent-hosted shared storage exported to the controller VM' \
-  'Directory model must document Jenkins-agent-hosted VM shared storage'
-require_doc_text docs/contracts/directory-model.md \
+  'Generated-state layout must document Jenkins-agent-hosted VM shared storage'
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   '`host/artifacts/exported/`' \
-  'Directory model must document VM host-owned artifact review copies'
+  'Generated-state layout must document VM host-owned artifact review copies'
 require_doc_text docs/contracts/directory-model.md \
   '## Operator Input Custody' \
   'Directory model must own operator input custody paths'
@@ -117,15 +117,15 @@ require_doc_text docs/contracts/directory-model.md \
 require_doc_text docs/contracts/directory-model.md \
   'Run IDs and role-specific package directories are not part of the' \
   'Directory model must require one shared role-helper tree'
-require_doc_text docs/contracts/directory-model.md \
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   'VM artifact staging uses target OS SSH' \
-  'Directory model must document VM staging through target OS SSH'
-require_doc_text docs/contracts/directory-model.md \
+  'Generated-state layout must document VM staging through target OS SSH'
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   '`/var/lib/loopforge/staging/<role>/`' \
-  'Directory model must document VM guest-local canonical staging'
-reject_doc_text docs/contracts/directory-model.md \
+  'Generated-state layout must document VM guest-local canonical staging'
+reject_doc_text simulation/docs/shared/generated-state-layout.md \
   'VM-to-target transfer scratch' \
-  'Directory model must not model VM staging as generated transfer scratch'
+  'Generated-state layout must not model VM staging as transfer scratch'
 
 require_doc_text docs/baselines/package-requirements.md \
   'Linux host with libvirt/KVM access' \
@@ -350,9 +350,9 @@ require_doc_text simulation/docs/vm/vm-simulation.md \
 require_doc_text simulation/docs/vm/milestone-verification.md \
   'without requiring direct host file access' \
   'VM verification must avoid operator reads of managed images'
-require_doc_text docs/contracts/directory-model.md \
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   'Libvirt directory-pool target' \
-  'Directory model must identify libvirt-managed VM image paths'
+  'Generated-state layout must identify libvirt-managed VM image paths'
 require_doc_text simulation/docs/vm/vm-simulation.md \
   'Legacy or malformed ownership schemas are conflicting state.' \
   'VM simulation guide must reject legacy ownership fallback'
@@ -419,9 +419,9 @@ require_doc_text simulation/docs/vm/vm-simulation.md \
 require_doc_text simulation/docs/vm/vm-simulation.md \
   'set-local base image' \
   'VM simulation guide must document destroy removes local base image'
-require_doc_text docs/contracts/directory-model.md \
+require_doc_text simulation/docs/shared/generated-state-layout.md \
   'set-local base image' \
-  'Directory model must define simulation-set-local base-image ownership'
+  'Generated-state layout must define simulation-set-local base-image ownership'
 require_doc_text simulation/docs/vm/vm-simulation.md \
   'cleanup-libvirt-resources.sh --dry-run' \
   'VM simulation guide must document host cleanup dry-run'

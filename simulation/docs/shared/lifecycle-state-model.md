@@ -8,6 +8,10 @@ override, `docs/contracts/lifecycle-contract.md`. Public command descriptions
 remain in `simulation/docs/shared/simulation-model.md` and the backend simulation
 guides.
 
+`simulation/docs/shared/generated-state-layout.md` owns the locations and
+custody classes of the records described here. A path named in this document
+locates a state record; it does not transfer directory-layout authority here.
+
 `simulation/docs/shared/checkpoint-acceptance-protocol.md` separately owns the
 cross-layer acceptance and publication protocol: which owning-layer outputs and
 evidence the harness must verify, who verifies them, and when the harness may

@@ -70,9 +70,10 @@ Gerrit, Jenkins controller, and Jenkins agent homes.
 
 The helper-owned paths are not service homes. They are the workspace used by
 helper scripts and integration workflows to prepare, stage, validate, and
-record execution state. `docs/contracts/directory-model.md` defines the concrete paths,
-ownership, permission model, sensitivity, evidence behavior, and simulation
-backing rules.
+record execution state. `docs/contracts/directory-model.md` defines these
+target-visible paths, their ownership, permission model, sensitivity, and
+evidence behavior. `simulation/docs/shared/generated-state-layout.md` separately
+defines the host-side generated storage used to realize simulation.
 
 Helper utilities should be self-contained when practical. A helper should
 create, clean, validate, and report on the role-local helper-owned paths it

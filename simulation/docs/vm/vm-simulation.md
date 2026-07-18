@@ -23,7 +23,9 @@ checkpoint publication are documented in
 `simulation/docs/shared/checkpoint-acceptance-protocol.md`. VM module structure and
 implementation contracts are documented in
 `simulation/docs/vm/implementation-design.md`. Milestone verification gates
-are documented in `simulation/docs/vm/milestone-verification.md`.
+are documented in `simulation/docs/vm/milestone-verification.md`. Shared
+generated path custody is documented in
+`simulation/docs/shared/generated-state-layout.md`.
 
 VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
@@ -35,9 +37,11 @@ Compose project names, Docker service names, Docker bind-mount checks,
 loopback port ownership, or Docker transfer waivers.
 
 The VM layer uses the shared topology, account model, version baseline, source
-boundaries, output conventions, and checkpoint contract from
-`simulation/docs/shared/simulation-model.md`. VM hostnames, browser URLs, SSH host strings, and LDAP
-endpoint identities follow `docs/contracts/endpoint-identity.md`.
+boundaries, and command contract from
+`simulation/docs/shared/simulation-model.md`. Generated output conventions come
+from `simulation/docs/shared/generated-state-layout.md`. VM hostnames, browser
+URLs, SSH host strings, and LDAP endpoint identities follow
+`docs/contracts/endpoint-identity.md`.
 
 VM simulation may use simulation-owned fake LDAP bind passwords for its own
 LDAP VM, matching Docker simulation. Those values must be labeled as test
@@ -329,16 +333,11 @@ This command intentionally uses the target OS control-plane SSH interface. It
 does not use libvirt console access and it is separate from Gerrit's service
 SSH on port `29418`.
 
-## Output Locations
+## Generated-State Realization
 
-VM-generated runtime output is not committed. VM simulation uses generated
-repo-local roots for reusable simulation-set state and run-scoped output:
-
-```text
-generated/simulation/vm/sets/<set-id>/
-generated/simulation/vm/locks/<set-id>.lock
-generated/simulation/vm/<run-id>/
-```
+`simulation/docs/shared/generated-state-layout.md` owns the common set, lock,
+and run roots plus their custody and cleanup classes. This section describes
+only VM-specific realization deltas.
 
 Simulation-set state persists across runs until `destroy`. Run-scoped output
 is tied to `HARNESS_RUN_ID` and may be cleaned or retained independently. The
@@ -353,24 +352,12 @@ settings. Cloud-init validates and reloads that policy without restarting the
 socket-activated listener. `create` and `start` require successful cloud-init
 completion; a missing command or failed cloud-init module blocks readiness.
 
-| Output kind | VM generated pattern |
+| VM output kind | VM-specific generated pattern |
 | --- | --- |
-| Simulation-set registry and ownership metadata | `generated/simulation/vm/sets/<set-id>/` |
-| Stable simulation-set lock | `generated/simulation/vm/locks/<set-id>.lock` |
-| Workflow head and immutable checkpoint records | `generated/simulation/vm/<run-id>/host/state/` |
 | Libvirt XML, seed metadata, and baseline snapshot records | `generated/simulation/vm/sets/<set-id>/libvirt/` |
 | Target OS SSH identity | `generated/simulation/vm/sets/<set-id>/target-ssh/` |
-| Host-contributed run inputs | `generated/simulation/vm/<run-id>/host/` |
-| Private source-template snapshots | `generated/simulation/vm/<run-id>/host/source-inputs/` |
-| Private effective runtime inputs | `generated/simulation/vm/<run-id>/host/runtime-inputs/` |
-| Effective-input binding | `generated/simulation/vm/<run-id>/host/state/effective-inputs.env` |
 | Target OS SSH known hosts | `generated/simulation/vm/<run-id>/host/target-ssh/` |
-| Harness evidence | `generated/simulation/vm/<run-id>/host/evidence/harness/` |
-| Harness bounded logs | `generated/simulation/vm/<run-id>/host/logs/harness/` |
-| Integration evidence and logs | `generated/simulation/vm/<run-id>/host/evidence/integration/`, `host/logs/integration/` |
 | Exported artifact review copies | `generated/simulation/vm/<run-id>/host/artifacts/exported/<bundle>.tar.gz` |
-| Target role evidence | `generated/simulation/vm/<run-id>/target/evidence/<role>/` |
-| Target role bounded logs | `generated/simulation/vm/<run-id>/target/logs/<role>/` |
 
 Artifact staging to service VMs uses target OS SSH into the guest-local
 canonical path `/var/lib/loopforge/staging/<role>/`. The generated run tree may
@@ -379,10 +366,6 @@ target transfer through `target/artifacts/staging/`.
 
 `<set-id>` and `<run-id>` are the identities selected by the shared lifecycle
 state model; this section owns only their VM path realization.
-
-These paths are generated runtime output unless a file in the tree states
-otherwise. Keep them ignored or documented as generated when created by
-simulation steps.
 
 ## Failed Bake Debugging
 
