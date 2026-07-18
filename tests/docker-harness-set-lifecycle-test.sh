@@ -224,6 +224,33 @@ case "${1:-}" in
     exit 0
     ;;
   cp)
+    source_path="${2:-}"
+    destination="${3:-}"
+    case "$source_path" in
+      "$HARNESS_PROJECT_NAME-"*:*) ;;
+      *) exit 0 ;;
+    esac
+    name="${source_path%%:*}"
+    container_path="${source_path#*:}"
+    service="${name#"$HARNESS_PROJECT_NAME-"}"
+    case "$service:$container_path" in
+      ldap:/var/lib/ldap/.) host_path="$HARNESS_LDAP_DATA_DIR" ;;
+      ldap:/etc/ldap/slapd.d/.) host_path="$HARNESS_LDAP_CONFIG_DIR" ;;
+      gerrit-target:/srv/gerrit/.) host_path="$HARNESS_PRODUCT_HOME_DIR/gerrit" ;;
+      jenkins-controller-target:/var/lib/jenkins/.) host_path="$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" ;;
+      jenkins-agent-target:/var/lib/jenkins-agent/.) host_path="$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" ;;
+      jenkins-agent-target:"$HARNESS_JENKINS_SHARED_STORAGE_PATH"/.) host_path="$HARNESS_SHARED_JENKINS_STORAGE_DIR" ;;
+      *:/etc/ssh/ssh_host_*_key.pub)
+        if [ ! -f "$FAKE_DOCKER_BIN/ssh-host-key.pub" ]; then
+          ssh-keygen -q -t ed25519 -N '' -f "$FAKE_DOCKER_BIN/ssh-host-key" >/dev/null
+        fi
+        cp "$FAKE_DOCKER_BIN/ssh-host-key.pub" "$destination"
+        exit 0
+        ;;
+      *) exit 0 ;;
+    esac
+    [ "$destination" = - ] || exit 1
+    tar -C "$host_path" -cpf - .
     exit 0
     ;;
 esac
@@ -352,7 +379,8 @@ evidence="$tmp_dir/checkpoint-evidence"
 record="$checkpoint_dir/prepare-artifacts-gerrit.env"
 printf 'pass\n' >"$evidence"
 workflow_state_publish_activity "$workflow" mutating prepare-artifacts-gerrit
-write_immutable_checkpoint_record "$record" docker "$set_id" "$run_id" none \
+write_immutable_checkpoint_record "$record" docker "$set_id" "$run_id" \
+  "$(strict_record_value "$workflow" baseline_fingerprint)" \
   "$(strict_record_value "$workflow" source_inputs_fingerprint)" \
   "$(strict_record_value "$workflow" effective_inputs_fingerprint)" \
   prepare-artifacts-gerrit none mutating complete "$evidence" \

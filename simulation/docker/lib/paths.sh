@@ -15,6 +15,10 @@ apply_canonical_output_paths() {
   HARNESS_SET_DIR="$(docker_generated_root)/sets/$HARNESS_SET_ID"
   HARNESS_SET_RUNTIME_DIR="$HARNESS_SET_DIR/runtime"
   HARNESS_DOCKER_SET_RECORD="$HARNESS_SET_DIR/docker-set.env"
+  HARNESS_BASELINE_DIR="$HARNESS_SET_DIR/baseline"
+  HARNESS_BASELINE_ARCHIVE_DIR="$HARNESS_BASELINE_DIR/archives"
+  HARNESS_BASELINE_MANIFEST="$HARNESS_BASELINE_DIR/manifest.env"
+  HARNESS_BASELINE_SSH_IDENTITIES="$HARNESS_BASELINE_DIR/target-ssh-identities.txt"
   HARNESS_STATE_DIR="$HARNESS_SET_RUNTIME_DIR/helper-state"
   HARNESS_PRODUCT_HOME_DIR="$HARNESS_SET_RUNTIME_DIR/product-homes"
   HARNESS_STAGING_DIR="$HARNESS_SET_RUNTIME_DIR/artifacts/staging"
@@ -56,6 +60,8 @@ apply_canonical_output_paths() {
   export HARNESS_RUNTIME_INPUT_DIR HARNESS_EFFECTIVE_INPUT_RECORD
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
   export HARNESS_SET_DIR HARNESS_SET_RUNTIME_DIR HARNESS_DOCKER_SET_RECORD
+  export HARNESS_BASELINE_DIR HARNESS_BASELINE_ARCHIVE_DIR
+  export HARNESS_BASELINE_MANIFEST HARNESS_BASELINE_SSH_IDENTITIES
   export HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
   export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
   export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
@@ -83,6 +89,10 @@ reject_custom_output_paths() {
     HARNESS_RETAINED_OUTPUT_BACKUP_DIR \
     HARNESS_SET_RUNTIME_DIR \
     HARNESS_DOCKER_SET_RECORD \
+    HARNESS_BASELINE_DIR \
+    HARNESS_BASELINE_ARCHIVE_DIR \
+    HARNESS_BASELINE_MANIFEST \
+    HARNESS_BASELINE_SSH_IDENTITIES \
     HARNESS_RENDERED_ENV \
     HARNESS_SOURCE_INPUT_DIR \
     HARNESS_RUNTIME_INPUT_DIR \
@@ -110,6 +120,10 @@ reject_custom_output_paths() {
       HARNESS_TARGET_DIR) expected="$(canonical_generated_run_dir)/target" ;;
       HARNESS_SET_RUNTIME_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime" ;;
       HARNESS_DOCKER_SET_RECORD) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/docker-set.env" ;;
+      HARNESS_BASELINE_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/baseline" ;;
+      HARNESS_BASELINE_ARCHIVE_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/baseline/archives" ;;
+      HARNESS_BASELINE_MANIFEST) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/baseline/manifest.env" ;;
+      HARNESS_BASELINE_SSH_IDENTITIES) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/baseline/target-ssh-identities.txt" ;;
       HARNESS_STATE_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/helper-state" ;;
       HARNESS_PRODUCT_HOME_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/product-homes" ;;
       HARNESS_STAGING_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/artifacts/staging" ;;

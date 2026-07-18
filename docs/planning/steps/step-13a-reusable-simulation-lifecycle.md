@@ -280,7 +280,9 @@ Implementation:
   digests, clean LDAP data, empty product homes with numeric ownership, empty
   shared storage, and target SSH identity.
 - Store the checksummed manifest and archives under the selected Docker
-  simulation-set root without including credentials or application setup state.
+  simulation-set root without real credentials or post-baseline application
+  setup state. Clean LDAP archives may retain documented simulation-only fake
+  credential state because it is required to restore the directory service.
 - Require stopped, ownership-validated selected containers before restore.
 - Recreate containers only inside `restore-baseline`, then restore only the
   selected bind data using numeric ownership and metadata-preserving tooling.

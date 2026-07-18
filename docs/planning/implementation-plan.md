@@ -68,7 +68,7 @@ These gates apply to every implementation step:
 | 12 | Accepted | `docs/planning/steps/step-12-shared-simulation-support-library.md` | Extract backend-neutral simulation helpers. |
 | 12a | Accepted | `docs/planning/steps/step-12a-docker-harness-modularization.md` | Modularize Docker harness internals. |
 | 13 | In progress | `docs/planning/steps/step-13-vm-simulation-harness.md` | Implement VM simulation harness milestone by milestone. |
-| 13a | Pending | `docs/planning/steps/step-13a-reusable-simulation-lifecycle.md` | Align simulation-set lifecycle, baseline restore, and run identity behavior. |
+| 13a | In progress | `docs/planning/steps/step-13a-reusable-simulation-lifecycle.md` | Align simulation-set lifecycle, baseline restore, and run identity behavior. |
 | 13b | Pending | `docs/planning/steps/step-13b-fresh-state-role-lifecycle.md` | Align fresh-state role behavior in Gerrit, controller, and agent dependency order. |
 | 13c | Pending | `docs/planning/steps/step-13c-shared-integration-lifecycle.md` | Align shared integration after the role handoffs are accepted. |
 | 14 | Pending | `docs/planning/steps/step-14-boundary-checks.md` | Add cross-repository boundary checks. |

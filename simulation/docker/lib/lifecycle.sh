@@ -110,6 +110,7 @@ docker_cmd_preflight() {
   validate_harness_inputs
   require_command docker
   require_command python3
+  require_command cmp
   require_command sha256sum
   require_command tar
   require_command awk

@@ -198,6 +198,9 @@ It is owned under the selected Docker simulation-set root and is separate from
 run-scoped checkpoint state. Docker `restore-baseline` may use an
 ownership-restricted temporary container to restore numeric ownership and
 metadata, but normal lifecycle and setup commands must not do so.
+The clean LDAP archives may contain the documented simulation-owned fake LDAP
+credential state required to restore the simulation directory service. They
+must not contain real organization credentials or post-baseline setup state.
 
 VM durable baseline state remains owned by `HARNESS_SET_ID` and consists of
 the set-local base image, domain/disk metadata, seed media, and clean

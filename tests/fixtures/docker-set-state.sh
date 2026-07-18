@@ -33,17 +33,46 @@ fake_docker_set_handle() {
     mv "$DOCKER_SET_FAKE_STATE_DIR/containers.tmp" "$DOCKER_SET_FAKE_STATE_DIR/containers"
   }
 
+  fake_docker_set_record_value() {
+    local file key
+    file="$1"
+    key="$2"
+    awk -F= -v key="$key" '$1 == key { print substr($0, length(key) + 2); exit }' "$file"
+  }
+
   fake_docker_set_create_containers() {
-    local selected_service selected_index
-    : >"$DOCKER_SET_FAKE_STATE_DIR/containers"
+    local selected_service selected_index generation container_id
+    generation=0
+    [ ! -f "$DOCKER_SET_FAKE_STATE_DIR/generation" ] ||
+      generation="$(cat "$DOCKER_SET_FAKE_STATE_DIR/generation")"
+    generation=$((generation + 1))
+    printf '%s\n' "$generation" >"$DOCKER_SET_FAKE_STATE_DIR/generation"
+    if [ -f "$DOCKER_SET_FAKE_STATE_DIR/containers" ]; then
+      awk -F '\t' -v prefix="$HARNESS_PROJECT_NAME-" \
+        'index($1, prefix) != 1' "$DOCKER_SET_FAKE_STATE_DIR/containers" \
+        >"$DOCKER_SET_FAKE_STATE_DIR/containers.next"
+      mv "$DOCKER_SET_FAKE_STATE_DIR/containers.next" \
+        "$DOCKER_SET_FAKE_STATE_DIR/containers"
+    else
+      : >"$DOCKER_SET_FAKE_STATE_DIR/containers"
+    fi
     selected_index=0
     for selected_service in "${services[@]}"; do
       selected_index=$((selected_index + 1))
-      printf '%s-%s\tcid-%s\tfalse\timage-%s\toverlayfs\n' \
-        "$HARNESS_PROJECT_NAME" "$selected_service" "$selected_index" \
-        "$selected_service" \
-        >>"$DOCKER_SET_FAKE_STATE_DIR/containers"
+      if [ "$generation" -eq 1 ]; then
+        container_id="cid-$selected_index"
+      else
+        container_id="cid-$generation-$selected_index"
+      fi
+      printf '%s-%s\t%s\tfalse\timage-%s\toverlayfs\n' \
+        "$HARNESS_PROJECT_NAME" "$selected_service" "$container_id" \
+        "$selected_service" >>"$DOCKER_SET_FAKE_STATE_DIR/containers"
     done
+    if [ -n "${DOCKER_SET_FAKE_BASELINE_SECRET:-}" ]; then
+      printf '%s\n' "$HARNESS_LDAP_BIND_PASSWORD" >"$HARNESS_LDAP_DATA_DIR/secret"
+    elif [ -n "${DOCKER_SET_FAKE_BASELINE_MARKER:-}" ]; then
+      printf '%s\n' clean-ldap-baseline >"$HARNESS_LDAP_DATA_DIR/clean-marker"
+    fi
   }
 
   case "$command_text" in
@@ -65,8 +94,9 @@ fake_docker_set_handle() {
           [ "${args[$((index + 1))]:-}" = --no-start ] || return 2
           [ "${args[$((index + 2))]:-}" = --no-build ] || return 2
           fake_docker_set_create_containers
-          printf '%s_harness\tnetwork-id\n' "$HARNESS_PROJECT_NAME" \
-            >"$DOCKER_SET_FAKE_STATE_DIR/network"
+          [ -f "$DOCKER_SET_FAKE_STATE_DIR/network" ] ||
+            printf '%s_harness\tnetwork-id\n' "$HARNESS_PROJECT_NAME" \
+              >"$DOCKER_SET_FAKE_STATE_DIR/network"
           return 0
           ;;
         start)
@@ -141,7 +171,11 @@ fake_docker_set_handle() {
         '{{.Id}}') fake_docker_set_container_field "$name" id; return 0 ;;
         '{{.Image}}') fake_docker_set_container_field "$name" image; return 0 ;;
         '{{json .GraphDriver.Data}}') return 97 ;;
-        '{{.Driver}}') fake_docker_set_container_field "$name" driver; return 0 ;;
+        '{{.Driver}}')
+          [ "${DOCKER_DRIVER_INSPECT_FAIL:-0}" != 1 ] || return 98
+          fake_docker_set_container_field "$name" driver
+          return 0
+          ;;
         '{{.State.Running}}') fake_docker_set_container_field "$name" running; return 0 ;;
         *'.Mounts'*)
           [ "${DOCKER_SET_FAKE_DELEGATE_MOUNTS:-0}" != 1 ] || return 125
@@ -188,6 +222,69 @@ fake_docker_set_handle() {
         *'org.loopforge.set-id'*) printf '%s\n' "$HARNESS_SET_ID"; return 0 ;;
         *'org.loopforge.network'*) printf 'harness\n'; return 0 ;;
       esac
+      ;;
+    cp)
+      local_source="${args[1]:-}"
+      local_destination="${args[2]:-}"
+      name="${local_source%%:*}"
+      container_path="${local_source#*:}"
+      service="${name#"$HARNESS_PROJECT_NAME-"}"
+      case "$service:$container_path" in
+        ldap:/var/lib/ldap/.) host_path="$HARNESS_LDAP_DATA_DIR" ;;
+        ldap:/etc/ldap/slapd.d/.) host_path="$HARNESS_LDAP_CONFIG_DIR" ;;
+        gerrit-target:/srv/gerrit/.) host_path="$HARNESS_PRODUCT_HOME_DIR/gerrit" ;;
+        jenkins-controller-target:/var/lib/jenkins/.) host_path="$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" ;;
+        jenkins-agent-target:/var/lib/jenkins-agent/.) host_path="$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" ;;
+        jenkins-agent-target:"$HARNESS_JENKINS_SHARED_STORAGE_PATH"/.) host_path="$HARNESS_SHARED_JENKINS_STORAGE_DIR" ;;
+        *:/etc/ssh/ssh_host_*_key.pub)
+          if [ ! -f "$DOCKER_SET_FAKE_STATE_DIR/ssh-host-key.pub" ]; then
+            ssh-keygen -q -t ed25519 -N '' -f "$DOCKER_SET_FAKE_STATE_DIR/ssh-host-key" >/dev/null
+          fi
+          cp "$DOCKER_SET_FAKE_STATE_DIR/ssh-host-key.pub" "$local_destination"
+          return 0
+          ;;
+        *) return 125 ;;
+      esac
+      [ "$local_destination" = - ] || return 125
+      tar -C "$host_path" -cpf - .
+      return 0
+      ;;
+    rm)
+      selected="${args[1]:-}"
+      awk -F '\t' -v selected="$selected" 'BEGIN { OFS="\t" } $1 != selected && $2 != selected' \
+        "$DOCKER_SET_FAKE_STATE_DIR/containers" >"$DOCKER_SET_FAKE_STATE_DIR/containers.tmp"
+      mv "$DOCKER_SET_FAKE_STATE_DIR/containers.tmp" "$DOCKER_SET_FAKE_STATE_DIR/containers"
+      return 0
+      ;;
+    run)
+      restore_fake_archive() {
+        local archive target metadata uid rest gid mode
+        archive="$1"
+        target="$2"
+        metadata="$3"
+        uid="${metadata%%:*}"
+        rest="${metadata#*:}"
+        gid="${rest%%:*}"
+        mode="${metadata##*:}"
+        find "$target" -mindepth 1 -delete
+        tar --numeric-owner -xpf "$archive" -C "$target"
+        chown "$uid:$gid" "$target"
+        chmod "$mode" "$target"
+        tar --numeric-owner --compare -f "$archive" -C "$target"
+      }
+      restore_fake_archive "$HARNESS_BASELINE_ARCHIVE_DIR/ldap_data.tar" \
+        "$HARNESS_LDAP_DATA_DIR" "$(fake_docker_set_record_value "$HARNESS_BASELINE_MANIFEST" archive_ldap_data_root_metadata)"
+      restore_fake_archive "$HARNESS_BASELINE_ARCHIVE_DIR/ldap_config.tar" \
+        "$HARNESS_LDAP_CONFIG_DIR" "$(fake_docker_set_record_value "$HARNESS_BASELINE_MANIFEST" archive_ldap_config_root_metadata)"
+      restore_fake_archive "$HARNESS_BASELINE_ARCHIVE_DIR/gerrit_home.tar" \
+        "$HARNESS_PRODUCT_HOME_DIR/gerrit" "$(fake_docker_set_record_value "$HARNESS_BASELINE_MANIFEST" archive_gerrit_home_root_metadata)"
+      restore_fake_archive "$HARNESS_BASELINE_ARCHIVE_DIR/jenkins_controller_home.tar" \
+        "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" "$(fake_docker_set_record_value "$HARNESS_BASELINE_MANIFEST" archive_jenkins_controller_home_root_metadata)"
+      restore_fake_archive "$HARNESS_BASELINE_ARCHIVE_DIR/jenkins_agent_home.tar" \
+        "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" "$(fake_docker_set_record_value "$HARNESS_BASELINE_MANIFEST" archive_jenkins_agent_home_root_metadata)"
+      restore_fake_archive "$HARNESS_BASELINE_ARCHIVE_DIR/shared_jenkins_storage.tar" \
+        "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$(fake_docker_set_record_value "$HARNESS_BASELINE_MANIFEST" archive_shared_jenkins_storage_root_metadata)"
+      return 0
       ;;
   esac
   return 125

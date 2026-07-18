@@ -254,8 +254,12 @@ manifest binding image digests, Compose config digest, bind archive digests,
 numeric ownership, target SSH identity, set identity, derived Compose project
 name, and implementation revision.
 It contains clean LDAP data, empty product homes, and empty shared storage from
-before artifact staging or setup. It must not contain setup credentials,
-private integration keys, application configuration, or proof artifacts.
+before artifact staging or setup. It must not contain real organization setup
+credentials,
+private integration keys, application configuration, or proof artifacts. The
+clean LDAP archives may contain the documented simulation-owned fake LDAP
+credential state required to restore that directory service; they must not be
+used with real organization credentials.
 
 `clean` follows the shared retained-output contract from
 `docs/contracts/directory-model.md`. It verifies the selected run marker and operates

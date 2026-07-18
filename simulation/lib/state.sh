@@ -337,6 +337,85 @@ workflow_state_is_strict() {
     active_checkpoint last_checkpoint last_record_sha256
 }
 
+publish_lifecycle_baseline_binding() {
+  local active workflow fingerprint marker
+  active="${1:?active-run file required}"
+  workflow="${2:?workflow state file required}"
+  fingerprint="${3:?baseline fingerprint required}"
+  marker="${4:?run marker required}"
+  active_run_record_is_strict "$active" ||
+    die "Active-run state has malformed or unexpected fields"
+  workflow_state_is_strict "$workflow" ||
+    die "Workflow state has malformed or unexpected fields"
+  sha256_fingerprint_is_valid "$fingerprint" ||
+    die "Baseline fingerprint is malformed"
+  [ "$(strict_record_value "$active" baseline_fingerprint)" = none ] ||
+    die "Active run already has a baseline binding"
+  [ "$(strict_record_value "$workflow" baseline_fingerprint)" = none ] ||
+    die "Workflow already has a baseline binding"
+  if [ "$(strict_record_value "$active" state)" != active ] ||
+    [ "$(strict_record_value "$active" restore_evidence_sha256)" != none ]; then
+    die "Active run is not eligible for baseline publication"
+  fi
+  if [ "$(strict_record_value "$workflow" activity)" != idle ] ||
+    [ "$(strict_record_value "$workflow" active_checkpoint)" != none ] ||
+    [ "$(strict_record_value "$workflow" last_checkpoint)" != none ] ||
+    [ "$(strict_record_value "$workflow" last_record_sha256)" != none ]; then
+    die "Workflow has progressed before baseline publication"
+  fi
+
+  atomic_write_record "$workflow" "${LF_MODE_REVIEW_FILE:-0640}" \
+    "schema_version=$(strict_record_value "$workflow" schema_version)" \
+    "backend=$(strict_record_value "$workflow" backend)" \
+    "set_id=$(strict_record_value "$workflow" set_id)" \
+    "run_id=$(strict_record_value "$workflow" run_id)" \
+    "run_marker_sha256=$(strict_record_value "$workflow" run_marker_sha256)" \
+    "baseline_fingerprint=$fingerprint" \
+    "source_inputs_fingerprint=$(strict_record_value "$workflow" source_inputs_fingerprint)" \
+    "input_state=$(strict_record_value "$workflow" input_state)" \
+    "effective_inputs_fingerprint=$(strict_record_value "$workflow" effective_inputs_fingerprint)" \
+    "activity=idle" \
+    "active_checkpoint=none" \
+    "last_checkpoint=none" \
+    "last_record_sha256=none" || return $?
+  write_active_run_record "$active" \
+    "$(strict_record_value "$active" backend)" \
+    "$(strict_record_value "$active" set_id)" \
+    "$(strict_record_value "$active" run_id)" \
+    "$(strict_record_value "$active" resource_namespace)" \
+    "$marker" \
+    "$fingerprint" active none
+}
+
+publish_lifecycle_restore_gate() {
+  local active workflow evidence marker fingerprint
+  active="${1:?active-run file required}"
+  workflow="${2:?workflow state file required}"
+  evidence="${3:?restoration evidence required}"
+  marker="${4:?run marker required}"
+  active_run_record_is_strict "$active" ||
+    die "Active-run state has malformed or unexpected fields"
+  workflow_state_is_strict "$workflow" ||
+    die "Workflow state has malformed or unexpected fields"
+  if [ "$(strict_record_value "$active" state)" != active ] ||
+    [ "$(strict_record_value "$active" restore_evidence_sha256)" != none ]; then
+    die "Active run is not eligible for baseline restoration"
+  fi
+  fingerprint="$(strict_record_value "$active" baseline_fingerprint)"
+  sha256_fingerprint_is_valid "$fingerprint" ||
+    die "Active run has no valid baseline binding"
+  [ "$fingerprint" = "$(strict_record_value "$workflow" baseline_fingerprint)" ] ||
+    die "Active-run and workflow baseline bindings do not agree"
+  [ -f "$evidence" ] || die "Restoration evidence is missing: $evidence"
+  write_active_run_record "$active" \
+    "$(strict_record_value "$active" backend)" \
+    "$(strict_record_value "$active" set_id)" \
+    "$(strict_record_value "$active" run_id)" \
+    "$(strict_record_value "$active" resource_namespace)" \
+    "$marker" \
+    "$fingerprint" restored-pending-clean "$(sha256_file "$evidence")"
+}
+
 lifecycle_records_are_bound() {
   local active marker workflow backend set_id run_id namespace source_fingerprint
   local active_state restore activity active_checkpoint

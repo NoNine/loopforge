@@ -177,6 +177,7 @@ docker_set_create() {
   if [ "$presence" = present ] && [ -f "$HARNESS_DOCKER_SET_RECORD" ]; then
     __docker_set_require_runtime_dirs
     __docker_set_verify_record
+    docker_baseline_verify resources
     power="$(selected_container_power_state)"
     [ "$power" = stopped ] ||
       die "Docker create requires the exact selected set to be stopped; current power state is $power"
@@ -223,11 +224,17 @@ docker_set_create() {
   fi
   [ "$(selected_container_power_state)" = stopped ] ||
     die "Docker create did not leave every selected container stopped"
+  docker_baseline_capture "$log" || {
+    evidence="$(write_evidence create harness fail "simulate.sh create" "$log" "Docker clean baseline capture failed")"
+    print_command_failure create "" failed "$log" "$evidence"
+    return 1
+  }
   __docker_set_write_record || {
     evidence="$(write_evidence create harness fail "simulate.sh create" "$log" "Docker simulation-set identity publication failed")"
     print_command_failure create "" failed "$log" "$evidence"
     return 1
   }
+  docker_baseline_verify resources
   validate_selected_container_mounts
   evidence="$(write_evidence create harness pass "simulate.sh create" "$log" "Built and created the exact retained Docker simulation set and left it stopped")"
   print_command_summary create "" "ok state=created resources=stopped"
@@ -457,6 +464,7 @@ docker_set_start() {
     die "Docker start requires the complete selected retained set; resource state is $presence"
   __docker_set_require_runtime_dirs
   __docker_set_verify_record
+  docker_baseline_verify resources
   validate_selected_container_mounts
   classification="$(__docker_set_classification)"
   case "$classification" in
@@ -613,6 +621,7 @@ docker_set_status() {
     die "Docker status found selected resource state: $presence"
   __docker_set_require_runtime_dirs
   __docker_set_verify_record
+  docker_baseline_verify resources
   power="$(selected_container_power_state)"
   case "$power" in running|stopped) ;; *) die "Docker status found conflicting power state: $power" ;; esac
   classification="$(__docker_set_classification)"
@@ -646,6 +655,7 @@ docker_set_audit() {
   docker_set_require_runtime || return $?
   require_command docker
   detect_compose
+  docker_baseline_verify resources
   docker_set_verify_selected_mounts
   print_command_summary audit-state "" "ok"
 }

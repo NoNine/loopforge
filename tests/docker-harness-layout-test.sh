@@ -235,6 +235,18 @@ grep -Fq -- '__docker_set_initialize_or_validate_product_homes' "$repo_root/simu
   printf 'Docker start must initialize fresh homes and validate ownership on later starts\n' >&2
   exit 1
 }
+grep -Fq -- 'docker_baseline_capture' "$repo_root/simulation/docker/lib/baseline.sh" || {
+  printf 'Docker baseline module must own clean baseline capture\n' >&2
+  exit 1
+}
+grep -Fq -- 'publish_lifecycle_restore_gate' "$repo_root/simulation/docker/lib/baseline.sh" || {
+  printf 'Docker restore must publish evidence-bound reset gating\n' >&2
+  exit 1
+}
+if grep -Fq -- 'restore-baseline is not implemented' "$repo_root/simulation/docker/lib/baseline.sh"; then
+  printf 'Docker restore-baseline must not retain the M4 fail-closed stub\n' >&2
+  exit 1
+fi
 grep -Fq -- 'run explicit cleanup and use a fresh run' "$repo_root/simulation/docker/lib/docker-set.sh" || {
   printf 'Docker product-home ownership drift must require explicit cleanup\n' >&2
   exit 1

@@ -63,8 +63,9 @@ reusable resource checks. It may combine Docker infrastructure with state but
 must not complete role or integration checkpoints.
 
 `baseline.sh` is the Step 13a M4 boundary for Docker baseline identity,
-capture, verification, and restore. Until that milestone is implemented it
-contains only the fail-closed command capability.
+capture, verification, and restore. It owns checksummed bind archives, numeric
+root metadata, image and Compose bindings, public target SSH fingerprints, and
+the restricted restore container used only by `restore-baseline`.
 
 `artifacts.sh` owns bundle-factory preparation, exported review copies, Docker
 transfer-waiver staging, and target-side manifest and checksum verification.

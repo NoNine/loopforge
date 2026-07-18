@@ -220,8 +220,10 @@ fi
   printf 'bundle-factory runtime state must not be created under set product homes\n' >&2
   exit 1
 }
-tar -tzf "$export_archive" | grep -Fq 'gerrit/manifest.txt'
-if tar -tzf "$export_archive" | grep -Eq '(^|/)checksums/SHA256SUMS$|source-boundary.log|package-intent.manifest|gerrit-artifacts-bundle.txt'; then
+archive_members="$tmp_dir/exported-archive-members.txt"
+tar -tzf "$export_archive" >"$archive_members"
+grep -Fq 'gerrit/manifest.txt' "$archive_members"
+if grep -Eq '(^|/)checksums/SHA256SUMS$|source-boundary.log|package-intent.manifest|gerrit-artifacts-bundle.txt' "$archive_members"; then
   printf 'exported archive contains removed audit files\n' >&2
   exit 1
 fi
