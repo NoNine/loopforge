@@ -10,7 +10,7 @@ evidence="$repo_root/docs/contracts/validation-and-evidence.md"
 endpoint="$repo_root/docs/contracts/endpoint-identity.md"
 shared="$repo_root/simulation/README.md"
 state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
-coordination="$repo_root/simulation/docs/checkpoint-coordination.md"
+protocol="$repo_root/simulation/docs/checkpoint-acceptance-protocol.md"
 docker="$repo_root/simulation/docker/README.md"
 vm="$repo_root/simulation/vm/README.md"
 plan="$repo_root/docs/planning/implementation-plan.md"
@@ -77,6 +77,9 @@ require_text "$lifecycle" \
 require_text "$lifecycle" \
   'Environment provisioning, power control, baseline restoration, generated-state' \
   'Lifecycle contract must keep environment lifecycle outside product progress'
+require_text "$lifecycle" \
+  'checkpoint mapping;' \
+  'Lifecycle contract must delegate the simulation checkpoint mapping'
 require_text "$shared" \
   '`up` and `down` are removed command names.' \
   'Shared simulation contract must reject removed commands'
@@ -98,9 +101,57 @@ require_text "$shared" \
 require_text "$shared" \
   'Input rendering and publication change host-side generated state only.' \
   'Shared simulation input publication must not claim product progress'
+require_text "$shared" \
+  'It has no Reviewed Access checkpoint, wait, or resume path.' \
+  'Shared simulation contract must exclude Reviewed Access'
+require_text "$shared" 'simulation-only direct Gerrit REST apply' \
+  'Shared simulation contract must define direct ACL apply'
+require_text "$protocol" 'simulation-only direct Gerrit REST apply' \
+  'Checkpoint protocol must bind direct ACL apply evidence'
+for file in "$docker" "$vm"; do
+  reject_text "$file" 'simulation-only direct Gerrit REST apply' \
+    "Backend docs must not redefine direct ACL apply: $file"
+done
 require_text "$state_model" \
   'Backend resource namespaces are derived from the backend and set ID and never' \
   'Lifecycle state model must keep resource namespaces independent of run ID'
+require_text "$state_model" \
+  '## Product-To-Simulation Checkpoint Mapping' \
+  'Lifecycle state model must map product checkpoints to simulation state'
+require_text "$state_model" \
+  'These operations are workflow prerequisites, not workflow' \
+  'Lifecycle state model must keep run and baseline readiness outside the chain'
+require_text "$state_model" \
+  'commands never advance this chain.' \
+  'Lifecycle state model must separate backend lifecycle from workflow progress'
+require_text "$state_model" \
+  'in order to `gerrit`, `jenkins-controller`, then `jenkins-agent`.' \
+  'Lifecycle state model must define the fixed role expansion order'
+require_text "$state_model" \
+  'fully expanded before the next family begins' \
+  'Lifecycle state model must define checkpoint family ordering'
+
+actual_checkpoint_families="$(awk -F'`' '
+  /^## Product-To-Simulation Checkpoint Mapping$/ { mapping = 1; next }
+  mapping && /^## / { exit }
+  mapping && /^\|/ && NF >= 5 { print $4; next }
+  mapping && /^\|/ && NF >= 3 { print $2 }
+' "$state_model")"
+expected_checkpoint_families='prepare-artifacts-<role>
+stage-artifacts-<role>
+configure-role-<role>
+validate-role-<role>
+integration-preflight
+configure-integration
+validate-integration
+prove-integration
+evidence-audit'
+[ "$actual_checkpoint_families" = "$expected_checkpoint_families" ] || {
+  printf '%s\nexpected:\n%s\nactual:\n%s\n' \
+    'Lifecycle state model has the wrong checkpoint family order' \
+    "$expected_checkpoint_families" "$actual_checkpoint_families" >&2
+  exit 1
+}
 for realization_term in \
   'HARNESS_RUN_ID' \
   'HARNESS_SET_ID' \
@@ -214,22 +265,24 @@ require_text "$state_model" \
 require_text "$state_model" \
   '`state=already-absent`' \
   'Destroy must define idempotent already-absent success'
-require_text "$coordination" \
-  'The global evidence collector validates and aggregates records.' \
-  'Checkpoint coordination must keep aggregation separate from runtime truth'
-require_text "$coordination" \
-  'integration helpers still own their target-local completion state' \
-  'Checkpoint coordination must preserve target-deployment helper ownership'
+require_text "$protocol" \
+  '| Evidence audit | Collector result that validates, but does not create,' \
+  'Checkpoint protocol must keep aggregation separate from runtime truth'
+require_text "$protocol" \
+  'Their owning utilities still produce completion state and evidence' \
+  'Checkpoint protocol must preserve target-deployment utility ownership'
 require_text "$evidence" \
-  '`simulation/docs/checkpoint-coordination.md` defines how producer-owned' \
-  'Evidence authority must delegate checkpoint coordination'
+  '`simulation/docs/checkpoint-acceptance-protocol.md` defines how producer-owned' \
+  'Evidence authority must delegate checkpoint acceptance'
 require_text "$step" \
-  '`simulation/docs/checkpoint-coordination.md` for the boundary between shared' \
-  'Step 13a must read checkpoint coordination design'
+  '`simulation/docs/checkpoint-acceptance-protocol.md` for accepting the' \
+  'Step 13a must read checkpoint acceptance protocol'
 
-for file in "$shared" "$docker" "$vm"; do
-  require_text "$file" '`up` and `down` are' \
-    "Simulation documentation must reject removed commands: $file"
+require_text "$shared" '`up` and `down` are' \
+  'Shared simulation contract must reject removed commands'
+for file in "$docker" "$vm"; do
+  reject_text "$file" '`up` and `down` are' \
+    "Backend docs must not restate removed shared commands: $file"
 done
 
 for command in create start stop restore-baseline clean destroy; do
@@ -238,20 +291,17 @@ for command in create start stop restore-baseline clean destroy; do
 done
 
 require_text "$docker" \
-  'then stops the exact containers without removing them.' \
+  '`stop` must not remove containers or the selected network.' \
   'Docker stop must preserve exact containers'
 require_text "$docker" \
-  '`restore-baseline` is the only normal selected-run command that may remove and' \
+  'Docker baseline restoration rejects running containers, image or Compose' \
   'Docker restore must own container recreation'
 require_text "$docker" \
   'generated/simulation/docker/sets/<set-id>/' \
   'Docker docs must separate reusable simulation-set state from run output'
 require_text "$vm" \
-  '`HARNESS_RUN_ID` | Immutable identity for exactly one setup and validation attempt.' \
-  'VM docs must define immutable attempt identity'
-require_text "$vm" \
-  'Each simulation set stores one non-secret `active-run.env` pointer.' \
-  'VM docs must define simulation-set active-run ownership'
+  'Set/run identity and active-run ownership are shared state-model contracts.' \
+  'VM docs must delegate shared identity behavior'
 require_text "$vm" \
   'generated/simulation/vm/sets/<set-id>/' \
   'VM docs must separate reusable simulation-set state from run output'
@@ -289,7 +339,7 @@ for file in "$agents" "$prd" "$lifecycle" "$directory" "$evidence" \
     "Generation identity must not be part of the contract: $file"
 done
 
-for file in "$lifecycle" "$directory" "$evidence" "$endpoint" "$shared" "$state_model" "$coordination" "$docker" "$vm"; do
+for file in "$lifecycle" "$directory" "$evidence" "$endpoint" "$shared" "$state_model" "$protocol" "$docker" "$vm"; do
   reject_text "$file" 'LOOPFORGE_VM_SET_ID' \
     "Current simulation contracts must not expose the old VM set identity: $file"
   reject_text "$file" 'HARNESS_PROJECT_NAME' \

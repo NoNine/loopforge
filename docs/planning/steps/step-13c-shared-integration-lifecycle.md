@@ -14,12 +14,12 @@ VM-specific. Step 13 integration acceptance, Step 14 boundary checks, and Step
 Read these before implementation:
 
 - `docs/contracts/lifecycle-contract.md` for checkpoint and mutation boundaries.
-- `docs/contracts/gerrit-trigger-integration.md` for the two-review workflow,
-  credential custody, state binding, proof, and failure classification.
+- `docs/contracts/gerrit-trigger-integration.md` for mode-specific ACL
+  realization, credential custody, state binding, proof, and failures.
 - `docs/contracts/validation-and-evidence.md` for checkpoint evidence and
   reviewed-input binding.
-- `simulation/docs/checkpoint-coordination.md` for integration completion/wait
-  ownership and the harness publication boundary.
+- `simulation/docs/checkpoint-acceptance-protocol.md` for integration-result
+  acceptance and harness publication.
 - `docs/contracts/account-model.md` and `docs/contracts/directory-model.md` for
   accounts, shared storage, protected paths, ownership, and file modes.
 - `docs/architecture/system-model.md` for interfaces and cross-role ownership.
@@ -27,8 +27,8 @@ Read these before implementation:
 
 The authorities own product behavior. This step owns implementation sequence,
 milestone boundaries, focused verification, and acceptance criteria only.
-It defines integration-owned wait, setup, validation, and proof postconditions;
-it does not define or publish the simulation workflow head.
+It defines integration-owned setup, validation, and proof postconditions plus
+the target-only review wait; it does not publish the simulation workflow head.
 
 ## Public Command Contract
 
@@ -42,11 +42,12 @@ Retain the existing integration helper commands:
 Required behavior changes:
 
 - `configure-integration --dry-run` performs complete non-mutating preflight
-  and reports the two-review plan.
-- `configure-integration` owns reviewed access and shared setup. In
+  and reports the mode-appropriate ACL plan.
+- `configure-integration` owns ACL realization and shared setup. In
   `target-deployment`, it records both Gerrit reviews and returns non-success
   `blocked` without a setup-success marker until both are submitted and
-  effective.
+  effective. In simulation, it directly applies and validates the ACLs without
+  review creation or a wait.
 - `validate-integration` is observational and does not require `--yes`.
 - `prove-integration` requires matching validation state and never invokes
   validation implicitly.
@@ -65,13 +66,14 @@ repair an earlier milestone failure.
 
 | Milestone | Scope | Dependency |
 | --- | --- | --- |
-| M1 | Integration state, preflight, and Gerrit reviewed access | Accepted Step 13b role handoffs |
-| M2 | Jenkins controller and agent SSH custody | M1 reviewed access effective |
+| M1 | Integration state, preflight, and Gerrit ACL realization | Accepted Step 13b role handoffs |
+| M2 | Jenkins controller and agent SSH custody | M1 access effective |
 | M3 | Shared storage, node, and Gerrit Trigger setup | M2 SSH custody complete |
-| M4 | Observational validation and active proof | M3 setup marker complete |
-| M5 | Evidence, simulation alignment, and runtime acceptance | M4 focused checks pass |
+| M4 | Observational validation and active proof | M3 shared-setup completion record |
+| M5 | Workflow-ledger cutover and evidence alignment | M4 focused checks pass; Step 13a ledger primitives available |
+| M6 | Docker, VM, and native runtime acceptance | M5 focused tests pass |
 
-## M1: State, Preflight, And Gerrit Reviewed Access
+## M1: State, Preflight, And Gerrit ACL Realization
 
 Implementation:
 
@@ -82,18 +84,19 @@ Implementation:
   behavior before creating accounts, tokens, keys, reviews, credentials, nodes,
   storage, or trigger state.
 - Bind private state markers to reviewed inputs, target identities, mode,
-  run/selected state, implementation revision, and both Gerrit review IDs.
+  run/selected state, implementation revision, and mode-appropriate ACL state.
 - Replace the constant evidence fingerprint with a real redacted binding.
 - From fresh integration state, create the Gerrit integration service account
   and group. On the bound external-review resume, validate only the account and
   group recorded by that wait state.
-- Implement one `All-Projects` review for `Verified` and `streamEvents` and one
-  target-project review for read and `label-Verified -1..+1` on the reviewed ref.
+- For target deployment, implement one `All-Projects` review for `Verified` and
+  `streamEvents` and one target-project review for scoped read and voting.
 - In target deployment, stop at the approval boundary and resume only with the
-  same inputs and review IDs. In Docker and VM simulation, create the same two
-  reviews and auto-submit only under simulation policy.
+  same inputs and review IDs. In Docker and VM simulation, use only explicitly
+  selected `simulation-only direct Gerrit REST apply`, validate effective
+  global and project/ref permissions, and do not create reviews or wait.
 - Do not create or rotate the Gerrit token or register integration keys before
-  both reviews are effective.
+  mode-appropriate effective access is proven.
 
 Focused tests:
 
@@ -107,8 +110,8 @@ Acceptance:
 - Target deployment records two real reviews and reports `blocked` without a
   setup-success marker.
 - Changed inputs or stale/unbound markers cannot resume the review wait.
-- Simulation produces the same effective two-review state without using direct
-  apply unless the explicit simulation-only fallback is selected.
+- Simulation records Reviewed Access as `not-applicable` and proves the same
+  effective permissions without claiming review activity.
 
 ## M2: Jenkins Controller And Agent SSH Custody
 
@@ -159,11 +162,11 @@ Implementation:
   credentials, scripts, or unrelated build artifacts in shared storage.
 - Register the Jenkins SSH node after agent authorization and known-hosts state
   are ready. Preserve zero executors on the built-in controller node.
-- Generate the initial absent Gerrit token only after reviewed ACL state is
+- Generate the initial absent Gerrit token only after effective ACL state is
   effective, then configure the Jenkins Gerrit credential and Gerrit Trigger.
 - Fail instead of deleting and recreating an existing token ID during normal
   setup.
-- Write the shared-setup marker only after keys, public-key authorization,
+- Write the shared-setup completion record only after keys, public-key authorization,
   credentials, shared storage, node, and trigger configuration all succeed for
   the same bound inputs.
 
@@ -180,7 +183,7 @@ Acceptance:
   cleanup, implicit rotation, validation claims, or disposable proof artifacts.
 - Shared storage source, mount, ownership, GID, mode, export options, and setup
   proof match the reviewed inputs.
-- The setup marker is absent after any partial failure.
+- The setup completion record is absent after any partial failure.
 
 ## M4: Observational Validation And Active Proof
 
@@ -188,13 +191,13 @@ Implementation:
 
 - Remove mutation confirmation and target-directory initialization from
   `validate-integration`.
-- Validate both reviews as submitted and effective, both read-only SSH paths,
-  key custody, storage/export/mount configuration, node configuration and online
+- Validate mode-appropriate effective ACLs, both read-only SSH paths, key
+  custody, storage/export/mount configuration, node configuration and online
   state, and Gerrit Trigger connection.
 - Consume the M3 storage proof without writing another validation file.
 - Do not create or replace credentials, nodes, jobs, builds, changes, events,
   votes, directories, or service state during validation.
-- Bind validation output to the matching M3 marker and reviewed inputs.
+- Bind validation output to the matching M3 completion record and reviewed inputs.
 - Make `prove-integration` create one labeled disposable Jenkins job and one
   disposable Gerrit change. Use that change to prove SSH event delivery, agent
   scheduling and execution, REST `Verified +1`, and final Gerrit review state.
@@ -217,44 +220,74 @@ Acceptance:
 - One disposable change proves event delivery, agent execution, REST voting,
   and Gerrit review state.
 
-## M5: Evidence, Simulation Alignment, And Runtime Acceptance
+## M5: Workflow-Ledger Cutover And Evidence Alignment
 
 Implementation:
 
-- Emit separate reviewed-access, shared-setup, validation, and proof records.
-- Record both review IDs and URLs, reviewed-input binding, target/run identity,
-  public key fingerprints, safe credential IDs, storage result, job, change,
-  build, event, vote, bounded logs, and redaction state as applicable.
+- Emit target-only reviewed-access evidence plus shared-setup, validation, and
+  proof records. Simulation records Reviewed Access as `not-applicable` within
+  shared-setup evidence.
+- Record mode-appropriate ACL realization, effective checks and review fields,
+  input binding, target/run identity, safe identifiers, results, bounded logs,
+  and redaction state.
 - Make `collect-evidence` validate the checkpoint set reached and reject
   contradictory success/failure signals without manufacturing missing success.
-- Align Docker and VM harness markers, phase summaries, resume rules, and
-  `run` orchestration with the refined helper behavior.
+- Make both harnesses accept integration results through `open-checkpoint` and
+  `commit-checkpoint` for integration preflight, setup, validation, proof, and
+  evidence audit.
+- Remove the Docker validate marker and VM integration checkpoint markers plus
+  every old reader. Exact workflow predecessors replace their progression role;
+  owning-layer completion records remain distinct inputs to acceptance.
+- Align phase summaries, resume rules, and `run` orchestration with the workflow
+  head without adding dual old/new readers or fallback paths.
 - Update native and helper manuals alongside the final implemented command
   behavior. Do not document unavailable behavior as accepted runtime support.
+
+Focused tests:
+
+- Extend `tests/simulation-lifecycle-state-library-test.sh` for open/commit,
+  hash-chain, exact-predecessor, interrupted activity, and orphan-record cases.
+- Replace marker expectations in
+  `tests/docker-harness-integration-wiring-test.sh` and
+  `tests/vm-harness-integration-lifecycle-test.sh` with workflow-head checks.
+- Update `tests/docker-harness-run-workflow-test.sh` for exact resume and
+  completed-run behavior through the integration tail.
+- Prove legacy validation/proof markers are rejected rather than consumed.
+
+Acceptance:
+
+- Evidence audit rejects stale, incomplete, unbound, or contradictory state.
+- Only the workflow checkpoint chain authorizes integration progression.
+- No harness validation or proof-prerequisite marker remains in either backend.
+- Docker and VM accept the same helper-owned results with the same predecessor
+  and evidence rules.
+
+## M6: Docker, VM, And Native Runtime Acceptance
 
 Verification order:
 
 1. Run focused shell and documentation tests plus `bash -n` and
-   `git diff --check` after every milestone.
+   `git diff --check`.
 2. Run Docker integration phases individually from a newly generated run ID,
    then run the composite Docker workflow.
 3. Run VM integration phases individually from a newly generated run ID and,
-   when resource identity is suspect, a fresh `HARNESS_SET_ID`; then run
-   the composite VM workflow on an explicitly approved remote KVM target.
+   when resource identity is suspect, a fresh `HARNESS_SET_ID`; then run the
+   composite VM workflow on an explicitly approved remote KVM target.
 4. Run native target-like acceptance only with explicit approval for the
    selected hosts and actions.
 
 Acceptance:
 
-- Evidence audit rejects stale, incomplete, unbound, or contradictory state.
 - Fresh Docker and VM runs pass configure, validate, prove, and composite
-  workflows without direct-apply fallback unless explicitly selected and
-  labeled for simulation.
+  workflows through explicitly selected and labeled direct REST ACL apply.
 - Native acceptance remains separate and cannot be claimed from simulation.
 
 ## State And Recovery Rules
 
 - Do not add compatibility fallbacks for old generated integration state.
+- Replace marker-only integration completion state with bound completion
+  records, remove harness-only validation/proof progression markers when the
+  workflow ledger lands, and do not read old and new progression state together.
 - Inspect stale state read-only, then use documented explicit cleanup and a
   fresh run/state identity.
 - Docker recovery uses `stop`, `restore-baseline`, and `clean` before
@@ -274,5 +307,5 @@ implementation commit.
 
 Prior Step 13 M8 runs remain diagnostic evidence for the old implementation.
 They do not satisfy Step 13c or final integration acceptance. Step 13c is
-complete only after M1-M5 pass their gates and fresh Docker and approved VM
+complete only after M1-M6 pass their gates and fresh Docker and approved VM
 runtime evidence confirms the refined contract.

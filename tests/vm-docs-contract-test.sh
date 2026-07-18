@@ -29,9 +29,12 @@ reject_doc_text() {
 require_doc_text simulation/README.md \
   '## Shared Command Semantics' \
   'Shared simulation docs must own command semantics'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/lifecycle-state-model.md \
+  'then removes the active-run pointer last.' \
+  'Lifecycle state model must own clean review-state behavior'
+reject_doc_text simulation/vm/README.md \
   'removes the active-run pointer last.' \
-  'VM README must own clean review-state behavior'
+  'VM README must not restate shared clean behavior'
 require_doc_text simulation/vm/README.md \
   'The ownership-checked `destroy` command removes the transient domain, bake' \
   'VM README must own failed-bake state cleanup'
@@ -384,8 +387,8 @@ require_doc_text simulation/vm/README.md \
   'modeled success without' \
   'VM README must prohibit modeled VM checkpoint success'
 require_doc_text simulation/vm/README.md \
-  '`create [--env FILE]` | Defines and baselines an absent claimed set' \
-  'VM README must document create behavior'
+  '| `create` | Define the reusable simulation set' \
+  'VM README must document VM create realization'
 require_doc_text simulation/vm/README.md \
   'LDAP service readiness, and LDAP seed verification' \
   'VM README must place LDAP readiness before baseline snapshot capture'
@@ -399,20 +402,20 @@ require_doc_text simulation/vm/docs/verification.md \
   'each VM proves the expected packages and commands are available from the' \
   'VM verification must keep per-VM package and command proof after baking'
 require_doc_text simulation/vm/README.md \
-  '`reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS' \
-  'VM README must document reboot behavior'
+  '| `reboot` | Reboots selected running guests through the guest OS' \
+  'VM README must document VM reboot realization'
 require_doc_text simulation/vm/README.md \
   '`restore-baseline` is destructive to guest disk changes made after the' \
   'VM README must document restore-baseline as snapshot rollback, not VM deletion'
 require_doc_text simulation/vm/README.md \
-  '`clean [--env FILE]` | Requires the set to be stopped and successfully restored' \
-  'VM README must document clean as generated-state cleanup only'
+  '| `clean` | Applies the shared mutable-run cleanup without changing guest disks' \
+  'VM README must document VM clean realization only'
 require_doc_text simulation/vm/README.md \
-  'Use `destroy` only when the reusable simulation set should be permanently removed.' \
-  'VM README must document destroy as permanent simulation-set removal'
+  '| `destroy` | Undefine selected VM domains and remove owned storage' \
+  'VM README must document libvirt destroy realization'
 require_doc_text simulation/vm/README.md \
-  '`destroy [--env FILE]`' \
-  'VM README must document destroy command'
+  '| `destroy` | Removes only ownership-validated selected domains' \
+  'VM README must document VM destroy realization'
 require_doc_text simulation/vm/README.md \
   'set-local base image' \
   'VM README must document destroy removes local base image'

@@ -1,19 +1,56 @@
 # Simulation Lifecycle State Model
 
-This document owns the exact simulation-level state dimensions, command guards,
-and transitions shared by Docker and VM simulation. It realizes, but does not
+This document owns the simulation ledger model shared by Docker and VM:
+persisted state, checkpoint vocabulary and order, record mechanics, command
+guards, classifications, and transition effects. It answers which ledger state
+is valid and what state effect a lifecycle event has. It realizes, but does not
 override, `docs/contracts/lifecycle-contract.md`. Public command descriptions
 remain in `simulation/README.md` and the backend README files.
 
-`simulation/docs/checkpoint-coordination.md` owns how helper completion
-records, evidence, and this workflow state coordinate across a checkpoint
-transaction. This document owns state schemas, classification, command guards,
-and transitions; it does not define role or integration postconditions.
+`simulation/docs/checkpoint-acceptance-protocol.md` separately owns the
+cross-layer acceptance and publication protocol: which owning-layer outputs and
+evidence the harness must verify, who verifies them, and when the harness may
+invoke a transition defined here. The protocol does not add ledger states,
+checkpoint names, classifications, or transition effects. This state model
+does not define owning-layer postconditions, evidence acceptance, or transaction
+steps.
 
 The model separates reusable simulation-set state from immutable run state.
 It also separates backend resource power, durable content, active-run
 ownership, reset gating, and workflow checkpoint progression. A command is
 valid only when all relevant dimensions satisfy its guard.
+
+## Product-To-Simulation Checkpoint Mapping
+
+The product checkpoint semantics and boundaries come from
+`docs/contracts/lifecycle-contract.md`. Simulation source selection is bound by
+`init-run`, and the first successful `start` publishes effective inputs. OS
+dependency readiness is established or verified as part of the clean baseline
+by `create`. These operations are workflow prerequisites, not workflow
+checkpoints, and do not claim application setup success.
+
+The following table is the complete simulation workflow checkpoint chain in
+strict predecessor order. Within each role-qualified family, `<role>` expands
+in order to `gerrit`, `jenkins-controller`, then `jenkins-agent`. A family is
+fully expanded before the next family begins, and each expansion advances
+independently.
+
+| Product checkpoint | Workflow checkpoint |
+| --- | --- |
+| Artifact preparation | `prepare-artifacts-<role>` |
+| Artifact staging | `stage-artifacts-<role>` |
+| Role-local setup | `configure-role-<role>` |
+| Role-local validation | `validate-role-<role>` |
+| Integration preflight | `integration-preflight` |
+| Shared integration setup | `configure-integration` |
+| Cross-role validation | `validate-integration` |
+| End-to-end trigger verification | `prove-integration` |
+| Evidence audit | `evidence-audit` |
+
+The concrete role expansions and five unqualified identifiers in the final
+column are the only non-`none` values accepted by `active_checkpoint` and
+`last_checkpoint`. Backend lifecycle commands never advance this chain.
+Simulation has no Reviewed Access checkpoint, wait, or resume path.
 
 ## Identity And Namespace Derivation
 
@@ -52,7 +89,7 @@ resource.
 | Reset gate | `normal`, `restored-pending-clean` | Whether successful restoration requires cleanup before further execution |
 | Input publication | `pending`, `ready` | Whether only source templates are bound or stable effective helper inputs have been atomically published |
 | Checkpoint progression | `none` or the last valid run checkpoint | Run-scoped workflow progress bound to the active run and source/effective inputs |
-| Checkpoint activity | `idle`, `observing`, `mutating`, `waiting` | Whether no phase is open, an observational phase is open, target mutation is open, or the declared integration review wait is bound |
+| Checkpoint activity | `idle`, `observing`, `mutating` | Whether no phase is open, an observational phase is open, or target mutation is open |
 
 `exact-bound` means all durable state currently present is complete and bound
 to the last successful checkpoint; later phases may still be absent.
@@ -77,8 +114,8 @@ durable state. `conflicting` state always blocks normal mutation.
   preserves active-run ownership and generated run state.
 - Successful restoration sets `restored-pending-clean`.
 - Only `clean` or set destruction removes active-run ownership.
-- Retained artifacts, evidence, and bounded logs remain under the old run root
-  and cannot satisfy another run.
+- Retained artifacts, evidence, and bounded logs remain bound to their original
+  run root.
 - Backend resource namespaces are derived from the backend and set ID and never
   from the run ID.
 
@@ -162,27 +199,42 @@ The effective-input record is published before workflow state changes to
 the existing directory and record byte-for-byte and does not republish them.
 Workflow phases require `input_state=ready`.
 
-Checkpoint completion records are immutable and hash-linked through
+Workflow checkpoint records are immutable and hash-linked through
 `last_record_sha256`. Each record identifies the backend, set, run, baseline,
-source and effective inputs, checkpoint, predecessor, mutation kind, status,
-bounded evidence, and timestamps. Unknown checkpoint names or invalid
-predecessor ordering fail closed.
+source and effective inputs, checkpoint, predecessor, mutation kind,
+`status=complete`, `evidence_sha256`, and timestamps. Unknown checkpoint names
+or invalid predecessor ordering fail closed.
+
+Only completed checkpoints produce workflow checkpoint records. Other outcomes
+do not add a workflow record or advance the chain. The acceptance protocol owns
+which evidence may supply `evidence_sha256`; the mapping above owns every
+accepted checkpoint name and its strict predecessor order.
 
 ## Checkpoint State Transitions
 
-Checkpoint activity changes only through strict workflow-state publication.
-`mutating` records an open target mutation, `observing` records an open
-observational phase, and `waiting` records the single reviewed Gerrit access
-wait. Completion publication writes an immutable record and moves the workflow
-head to that record. The head returns to `idle` only for a completed
-checkpoint; the reviewed-access wait retains its bound `waiting` activity.
+The ledger exposes two checkpoint transitions. Their guards and effects are
+state-model facts; proof ownership and invocation order belong to
+`simulation/docs/checkpoint-acceptance-protocol.md`.
 
-An open `mutating` activity classifies the selected durable state as
-`active-incomplete`. An open `observing` activity blocks checkpoint progression
-without classifying unchanged durable content as incomplete. The exact
-cross-layer publication order, completion-record ownership, evidence binding,
-and failure behavior are defined in
-`simulation/docs/checkpoint-coordination.md`.
+| Transition | Guard | Successful ledger effect |
+| --- | --- | --- |
+| `open-checkpoint(<checkpoint>, <activity>)` | Effective inputs ready, activity `idle`, exact next checkpoint, and `<activity>` is `observing` or `mutating` | Set `active_checkpoint` and `<activity>` without changing the workflow head |
+| `commit-checkpoint(<record>)` | Open activity matches the structurally valid, exact-predecessor record and its immutable run/input bindings | Append the hash-linked workflow record, advance `last_checkpoint` and `last_record_sha256`, then clear the active checkpoint and return to `idle` |
+
+These are internal ledger transitions, not public commands. `open-checkpoint`
+atomically replaces the workflow head. `commit-checkpoint` writes and verifies
+the immutable record before atomically replacing that head. A failure before
+head replacement leaves the prior open head authoritative; an unreferenced
+record cannot advance progression.
+
+An open `mutating` checkpoint classifies durable state as `active-incomplete`.
+An open `observing` checkpoint leaves unchanged durable content exact-bound but
+blocks other checkpoint progression. Failure before `open-checkpoint` leaves
+the ledger unchanged. Failure after it leaves the activity open: mutation uses
+explicit recovery, while observation may retry only the same checkpoint against
+the unchanged head and inputs. No failure path calls `commit-checkpoint`.
+
+## Run And Reset Transitions
 
 Initialization writes the complete run root, immutable run marker, and initial
 workflow state before atomically publishing `active-run.env` last. A crash
@@ -382,6 +434,5 @@ baseline survive `clean`. After `destroy`, a new sequence requires
 - A failed `start` leaves the same run active and does not create a new run ID.
 - A stopped incomplete or conflicting run uses explicit restoration and cleanup
   or destruction; it cannot use `start` to continue.
-- Retained evidence from an old run never satisfies a new run's prerequisite.
 - Record files use strict parsers and atomic same-directory temporary-file
   replacement; they are never loaded with shell `source`.

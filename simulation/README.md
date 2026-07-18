@@ -1,18 +1,34 @@
 # Simulation Model
 
 This directory defines the shared simulation model for the v1 Gerrit/Jenkins
-setup package. Layer-specific command ownership lives in the Docker and VM
-README files; this file owns the common topology, source boundaries, output
-conventions, and simulation realization details. `docs/contracts/lifecycle-contract.md`
-owns checkpoint semantics for all modes.
+setup package. Layer-specific command syntax and backend realization live in
+the Docker and VM README files; this file owns shared command semantics,
+topology, source boundaries, output conventions, and simulation realization.
+`docs/contracts/lifecycle-contract.md` owns checkpoint semantics for all modes.
 
 Shared internal architecture is defined in
 `simulation/docs/harness-design.md`. Exact simulation state dimensions,
 command guards, and transitions are defined in
-`simulation/docs/lifecycle-state-model.md`. Coordination among helper-owned
-completion state, evidence, and the workflow ledger is defined in
-`simulation/docs/checkpoint-coordination.md`. Terminal presentation is defined
-in `simulation/docs/terminal-output.md`.
+`simulation/docs/lifecycle-state-model.md`. Acceptance and publication of
+owning-layer results and evidence are defined in
+`simulation/docs/checkpoint-acceptance-protocol.md`. Terminal presentation is
+defined in `simulation/docs/terminal-output.md`.
+
+## Lifecycle Documentation Boundary
+
+Shared lifecycle contracts do not live in backend documents:
+
+| Document | Lifecycle responsibility |
+| --- | --- |
+| `simulation/README.md` | Shared public command semantics and operator workflow |
+| `simulation/docs/lifecycle-state-model.md` | Exact state, checkpoint order, guards, transitions, and recovery rights |
+| `simulation/docs/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus checkpoint publication |
+| `simulation/docs/harness-design.md` | Shared architectural and dependency boundaries |
+| Docker and VM README files | Accepted backend syntax, backend-only commands, resource mechanisms, transport, and cleanup tools |
+
+Backend documents apply these contracts and describe only their realization
+deltas. They must not restate shared guards, statuses, resume rules, checkpoint
+predecessors, input publication, or recovery sequences.
 
 The model has two layers:
 
@@ -296,7 +312,7 @@ When a layer uses these command names, the shared simulation semantics are:
 | `stage-artifacts` | Artifact transfer plus target-side manifest/checksum verification before service mutation. |
 | `configure-role` | Role-local setup for one or all service roles, including establishing the role runtime. |
 | `validate-role` | Observational role-local readiness validation only; it does not start, restart, enable, or repair a role runtime and makes no cross-role success claim. |
-| `configure-integration` | Shared integration setup through `scripts/integration-setup.sh`. |
+| `configure-integration` | Apply and validate ACLs as `simulation-only direct Gerrit REST apply`, then complete shared integration setup through `scripts/integration-setup.sh`; Reviewed Access is not supported. |
 | `validate-integration` | Passive cross-role readiness validation. |
 | `prove-integration` | Active end-to-end trigger proof after matching validation passed. |
 | `audit-state` | Explicit read-only generated-state and simulation-set consistency inspection. |
@@ -313,6 +329,10 @@ does not claim guest reboot persistence.
 `up` and `down` are removed command names. Layers must reject them rather than
 retain aliases that hide the selected resource transition.
 
+The simulation integration sequence is `integration-preflight`,
+`configure-integration`, `validate-integration`, `prove-integration`, then
+`evidence-audit`. It has no Reviewed Access checkpoint, wait, or resume path.
+
 Set mutations use the stable nonblocking lock at
 `generated/simulation/<backend>/locks/<set-id>.lock`; contention reports
 `set busy`. The set-scoped `active-run.env` owns claim and reset gating. The
@@ -320,9 +340,9 @@ run-scoped `workflow-state.env` owns only checkpoint activity and progression.
 Strict readers cross-check both records with the immutable run marker,
 baseline, source/effective-input fingerprints, backend ownership, and
 hash-linked checkpoint records. Details and exact transitions are authoritative
-in `simulation/docs/lifecycle-state-model.md`. Checkpoint ownership and
-publication order are defined in
-`simulation/docs/checkpoint-coordination.md`.
+in `simulation/docs/lifecycle-state-model.md`. Result and evidence acceptance
+plus publication order are defined in
+`simulation/docs/checkpoint-acceptance-protocol.md`.
 
 ## Terminal Output Convention
 
@@ -398,47 +418,15 @@ state.
 
 ## State Consistency And Recovery
 
-A selected simulation run is consistent only when its generated run marker,
-immutable run ID, selected set's active-run pointer, run-scoped workflow head,
-hash-linked checkpoint records, rendered runtime config, source/effective input
-bindings, baseline identity, and simulation-set markers agree.
-Source snapshots must agree with the run marker. Effective role and integration
-inputs plus their strict binding record must exist before workflow phases that
-need them. Live target access must be re-established after every `start`.
-Layer-specific checks add Docker container/bind-baseline identity or VM resource
-ownership and snapshot validation.
-
-If generated state, simulation-set ownership metadata, bind mounts, snapshots, or
-other selected lifecycle state are inconsistent, lifecycle phases fail clearly
-instead of recreating state or rerunning earlier phases. Recovery must use the
-explicit layer cleanup or teardown commands for the selected run or selected
-simulation set.
+Exact consistency dimensions, classifications, guards, and recovery rights are
+defined only in `simulation/docs/lifecycle-state-model.md`. Public commands fail
+closed on inconsistent selected state and never repair it implicitly. Docker
+and VM documents add only the backend resource probes used to apply that model.
 
 ## Lifecycle Realization
 
-`docs/contracts/lifecycle-contract.md` defines checkpoint semantics, pass/block
-conditions, mutation boundaries, and evidence obligations. Simulation layers
-may split, collapse, or add simulation-only commands, but they must preserve
-that contract and keep terminal output short.
-
-Simulation-specific realization notes:
-
-- `preflight` checks local tooling, command surfaces, run naming, and
-  version/source-boundary constraints before service mutation.
-- `init-run` records actor-selected source templates, while the first
-  successful `start` publishes stable layer-specific effective inputs and each
-  later `start` refreshes only live target access.
-- Artifact preparation runs role helper `prepare-artifacts` commands in the
-  bundle factory.
-- Artifact staging verifies manifest and checksum data on the target side
-  before service mutation.
-- Readiness checks must be real runtime checks. Role-local readiness does not
-  claim cross-role trigger success.
-- End-to-end execution must prove Gerrit event receipt, Jenkins job
-  scheduling, agent execution, and Gerrit `Verified +1`.
-- Evidence audit summarizes retained proof without rerunning the workflow.
-
-Role helpers stay role-local in both layers. Cross-role SSH, trigger setup,
-integration validation, trigger verification, and integration evidence use
-`scripts/integration-setup.sh`. Scaffold-level integration commands must fail
-closed until a real Docker or VM implementation exists.
+`docs/contracts/lifecycle-contract.md` defines product checkpoint semantics and
+mutation boundaries. The state model maps those checkpoints into the simulation
+workflow, and the acceptance protocol defines how owning results enter it.
+Backend orchestration invokes the same role and integration owners through its
+documented transport; it does not create another lifecycle contract.

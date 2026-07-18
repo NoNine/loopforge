@@ -133,6 +133,11 @@ The product must help engineers and operators install and validate:
 - The package must configure LDAP-backed authentication assumptions.
 - The package must support Jenkins-to-Gerrit SSH credentials and Gerrit
   integration permissions.
+- `target-deployment` must establish Gerrit integration permissions through
+  two externally reviewed configuration changes. Docker and VM simulation do
+  not support that review workflow; they use the explicitly selected
+  `simulation-only direct Gerrit REST apply` realization and validate the same
+  effective global and project/ref permissions.
 - The package must support Jenkins build-agent registration and validation.
 - The package must support Gerrit Trigger behavior that posts back a
   `Verified` vote.
@@ -147,6 +152,9 @@ The product must help engineers and operators install and validate:
 - Validation must record checksums, package versions, config inputs, and the
   verification mode used.
 - Evidence must distinguish target-deployment runs from simulation-only runs.
+- Simulation evidence must record Reviewed Access as `not-applicable`, identify
+  the direct ACL realization, and must not claim review creation, approval, or
+  submission.
 - Integration evidence must record public key fingerprints, credential IDs,
   accounts, endpoints, bounded logs, and redaction status only. It must not
   contain private keys, passwords, tokens, or LDAP bind secrets.

@@ -35,7 +35,7 @@ Product phases are strict, single-purpose operations:
   phase was replayed or repaired implicitly.
 - An exact input-bound completion record may return `already-complete` without
   target mutation. This is the only completed-state rerun supported by v1,
-  except for the reviewed Gerrit access wait defined below.
+  except for the target-deployment review wait defined below.
 
 Environment provisioning, power control, baseline restoration, generated-state
 cleanup, and backend destruction do not advance a product checkpoint merely
@@ -137,8 +137,8 @@ one semantic owner, one mutation boundary, and evidence obligations.
 | Role-local setup | Role helper or native operator procedure | Create or adopt the exact reviewed runtime identity, install and configure fresh role-local state, and establish its runtime. Exact completed state is a non-mutating no-op; other existing application state blocks. |
 | Role-local validation | Role helper or native operator procedure | Combine prior checkpoint outcomes with current observational service, endpoint, and application checks without replay, cross-role claims, or repair. |
 | Integration preflight | Shared integration helper or native operator procedure | Observe all three role-readiness handoffs, bound inputs, target inventory, administrator access, selected execution state, and mode support. No target mutation. |
-| Reviewed integration access | Shared integration helper or native operator procedure | From fresh integration state, create the integration account/group and the reviewed global and project Gerrit changes. Target deployment waits until both changes are externally submitted and effective. |
-| Shared integration setup | Shared integration helper or native operator procedure | After reviewed access is effective, create the initial keys, public-key authorization, token, credentials, shared storage, node registration, and Gerrit Trigger state. Exact completed state is a non-mutating no-op; other existing state blocks. |
+| Reviewed integration access (`target-deployment` only) | Shared integration helper or native operator procedure | Create the integration account/group and the reviewed global and project Gerrit changes, then wait until both changes are externally submitted and effective. Simulation does not support or complete this checkpoint. |
+| Shared integration setup | Shared integration helper or native operator procedure | For target deployment, require effective reviewed access. For simulation, apply and validate ACLs as `simulation-only direct Gerrit REST apply` within this checkpoint. Then create the initial keys, public-key authorization, token, credentials, shared storage, node registration, and Gerrit Trigger state. Exact completed state is a non-mutating no-op; other existing state blocks. |
 | Cross-role validation | Shared integration helper or native operator procedure | Observe effective access, SSH paths, key custody, storage, node state, and Gerrit Trigger connection without creating, repairing, or replacing state. |
 | End-to-end trigger verification | Shared integration helper or native operator procedure | Create only the declared disposable job and change, observe event delivery and agent execution, post the vote, and verify final Gerrit review state. |
 | Evidence audit | Global evidence collector and actor review | Validate evidence completeness, redaction, artifact references, input binding, mode labels, and bounded logs without creating runtime success. |
@@ -165,9 +165,10 @@ The normal product workflow is:
 5. Complete role setup and observational validation for Gerrit, the Jenkins
    controller, and the Jenkins agent.
 6. Complete non-mutating integration preflight.
-7. Establish reviewed Gerrit access, waiting for external approval when the
-   selected mode requires it.
-8. Complete shared integration setup.
+7. In `target-deployment`, establish reviewed Gerrit access and wait for
+   external approval. Simulation omits this checkpoint.
+8. Complete shared integration setup, including the simulation-only direct ACL
+   realization when in Docker or VM simulation.
 9. Perform observational cross-role validation.
 10. Perform the active end-to-end trigger proof.
 11. Audit and aggregate evidence.
@@ -181,21 +182,24 @@ successful owning checkpoint.
 Role application artifact bundles remain separate from later integration key
 and public-key handoff state. The artifact bundle contract owns their contents;
 this contract owns only that integration-owned credentials and handoffs occur
-after role readiness and reviewed integration access.
+after role readiness and mode-appropriate effective integration access.
 
 ## Review Wait, Resume, And Existing State
 
 Integration status, completion state, and evidence boundaries bind to the same
-reviewed inputs, target identities, mode, selected execution state, and Gerrit
-review identifiers. A later phase rejects state from different inputs or a
-different execution; record existence alone is not a valid prerequisite.
+inputs, target identities, mode, and selected execution state. Target review
+wait and completion state also bind both Gerrit review identifiers. A later
+phase rejects state from different inputs or a different execution; record
+existence alone is not a valid prerequisite.
 
 An interrupted target-deployment review wait may resume only with the same
 bound inputs and the same two review changes. This external-approval wait is
-the only resumable mutation boundary. Exact input-bound completed integration
-state returns `already-complete` without mutation. Stale, partial, conflicting,
-changed, or unbound state requires explicit cleanup, migration, site-owned
-credential administration, or a fresh selected execution state.
+the only resumable mutation boundary and is outside the simulation checkpoint
+ledger. Simulation has no Reviewed Access wait or resume. Exact input-bound
+completed integration state returns `already-complete` without mutation.
+Stale, partial, conflicting, changed, or unbound state requires explicit
+cleanup, migration, site-owned credential administration, or a fresh selected
+execution state.
 
 Normal setup does not rotate existing tokens or keys, truncate
 `authorized_keys`, remove a working Jenkins credential or node, or delete
@@ -235,10 +239,10 @@ Concrete procedures and implementation facts live below this contract:
 - Docker and VM README files own their concrete backend command behavior;
 - `simulation/docs/harness-design.md` owns shared harness architecture;
 - `simulation/docs/lifecycle-state-model.md` owns exact simulation state
-  schemas, guards, classification, and transitions;
-- `simulation/docs/checkpoint-coordination.md` owns coordination among
-  helper-owned completion state, producer-owned evidence, and the simulation
-  workflow ledger;
+  schemas, guards, classification, transitions, and the product-to-simulation
+  checkpoint mapping;
+- `simulation/docs/checkpoint-acceptance-protocol.md` owns acceptance and
+  publication of owning-layer results and evidence into the simulation ledger;
 - `simulation/docs/terminal-output.md` owns shared terminal presentation; and
 - backend implementation designs own module boundaries and mechanisms.
 

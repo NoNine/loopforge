@@ -281,14 +281,14 @@ Mode-specific behavior:
 | Mode | ACL behavior |
 | --- | --- |
 | `target-deployment` | Create the reviewable `All-Projects` and target-project changes through Gerrit REST, record both review identifiers and URLs, and stop with a non-success `blocked` result until both are approved, submitted, and effective. |
-| `docker-simulation` | Create the same two reviews and auto-submit them as simulation test automation, then validate effective state. |
-| `vm-simulation` | Create the same two reviews and auto-submit them as simulation test automation, then validate effective state. |
+| `docker-simulation` | Apply the global and project/ref ACLs directly through Gerrit REST as `simulation-only direct Gerrit REST apply`, then validate effective state. Reviewed Access is unsupported and `not-applicable`. |
+| `vm-simulation` | Apply the global and project/ref ACLs directly through Gerrit REST as `simulation-only direct Gerrit REST apply`, then validate effective state. Reviewed Access is unsupported and `not-applicable`. |
 
-Direct ACL mutation without a review is an explicit simulation-only fallback.
-It is a narrow waiver for lab automation only, not an alternate product path.
-It must require explicit opt-in, must be labeled `simulation-only direct
-Gerrit REST apply` in docs, logs, and evidence, must validate effective state
-after mutation, and must fail closed outside simulation modes.
+Direct ACL mutation without a review is the only supported simulation
+realization. It is not an alternate target-deployment product path. It must be
+selected explicitly, labeled `simulation-only direct Gerrit REST apply` in
+docs, logs, and evidence, validate effective state after mutation, and fail
+closed outside simulation modes.
 
 Project selection for Jenkins Trigger and disposable verification must match
 the target project named by the project-level access review. The ref pattern in
@@ -304,10 +304,10 @@ bounded logs, and redaction status.
 
 - Integration evidence must distinguish role-local readiness from cross-role
   readiness and end-to-end trigger proof.
-- Gerrit ACL evidence must record ACL mode, both Gerrit change identifiers and
-  review URLs or `not-created`, submit behavior when applicable, effective
-  global and project/ref permission checks, integration actor or group, bounded
-  log references, and redaction status.
+- Gerrit ACL evidence must record ACL mode, mode-appropriate review fields,
+  effective global and project/ref permission checks, integration actor or
+  group, bounded log references, and redaction status. Simulation records
+  Reviewed Access as `not-applicable` and must not claim review activity.
 - Simulation evidence must be labeled as `docker-simulation` or
   `vm-simulation` and must not imply target-deployment acceptance.
 - Native `target-deployment` acceptance uses

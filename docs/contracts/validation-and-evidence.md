@@ -62,13 +62,13 @@ utilities. Every machine-generated evidence record must include:
 - Shared integration group and shared Jenkins storage checks where applicable.
 - Jenkins agent scheduling and execution results where applicable.
 - Gerrit Trigger event, build, and `Verified` vote results where applicable.
-- Gerrit ACL reviewed-workflow planning or blocked results where applicable.
-- Target project, inherited scope, ACL mode, Gerrit version, review change
-  identifier, and actor/group references where applicable.
+- Gerrit ACL realization, effective-permission results, target project,
+  inherited scope, ACL mode, Gerrit version, and actor/group references where
+  applicable.
 - Target SSH aliases or reviewed host identifiers where applicable.
 - Service API origin, such as control node, Gerrit target, or Jenkins
   controller target, where applicable.
-- ACL mode, Gerrit config-review change IDs, config-review URLs, and submit
+- For target deployment, Gerrit config-review change IDs, URLs, and submit
   actor where applicable.
 - Bounded log references.
 - Redaction status.
@@ -83,10 +83,11 @@ may record public key fingerprints, Jenkins credential IDs, account names,
 service endpoints, helper-owned `/var/lib/loopforge/` and
 `/var/log/loopforge/` references, the shared integration group name and GID,
 shared storage path, bounded read/write proof, bounded log paths,
-target SSH aliases, service API origins, ACL mode, Gerrit config-review change
-IDs and URLs, submit actor when applicable, trigger/build/change identifiers,
-and redaction status. They must not record private keys, tokens, passwords,
-LDAP bind secrets, or full secret-bearing env values.
+target SSH aliases, service API origins, ACL mode and realization, effective
+permission results, mode-appropriate Gerrit review fields,
+trigger/build/change identifiers, and redaction status. They must not record
+private keys, tokens, passwords, LDAP bind secrets, or full secret-bearing env
+values.
 
 The global collector accepts legacy Step 7-9 records that do not yet carry
 explicit `package_version` or `helper_command_version` fields. It enriches
@@ -128,9 +129,9 @@ completed boundary. Native `target-deployment` uses the acceptance checklist
 to track the corresponding outcomes without producing checkpoint records.
 
 Evidence proves an outcome but does not authorize the next simulation phase.
-`simulation/docs/checkpoint-coordination.md` defines how producer-owned
-evidence is bound into the workflow ledger and how it relates to helper-owned
-completion records. This document continues to own evidence content, status,
+`simulation/docs/checkpoint-acceptance-protocol.md` defines how producer-owned
+evidence is accepted into the workflow ledger and how it relates to
+owning-layer results. This document continues to own evidence content, status,
 redaction, and aggregation rules.
 
 Recommended checkpoints:
@@ -142,7 +143,7 @@ Recommended checkpoints:
 - Service installation and startup.
 - Role readiness.
 - Integration preflight.
-- Reviewed integration access.
+- Reviewed integration access (`target-deployment` only).
 - Shared integration setup.
 - Observational cross-role validation.
 - End-to-end trigger proof.
@@ -171,17 +172,21 @@ Machine-generated role records are the primary inputs to global aggregation.
 
 ## Integration-Local Evidence
 
-The shared integration helper owns separate evidence for reviewed access,
+The shared integration helper owns evidence for mode-appropriate access,
 shared setup, observational cross-role validation, and active end-to-end proof.
-These records are not substitutes for role-local readiness records and are not
-the final evidence package. They are additional inputs consumed by Docker/VM
-simulation utilities and by global aggregation.
+These records are not substitutes for role-local readiness records or the
+final evidence package. They are inputs to simulation utilities and global
+aggregation.
 
-- Reviewed-access evidence records both Gerrit reviews and a non-success
-  `blocked` state while target-deployment approval or submission is pending.
-- Shared-setup evidence records public key fingerprints, credential and node
-  identifiers, trigger configuration, shared storage state, and its bounded
-  controller-write/agent-read setup result without claiming validation.
+- Target-deployment Reviewed Access evidence records both Gerrit reviews and a
+  non-success `blocked` state while approval or submission is pending.
+- Simulation shared-setup evidence records `reviewed_access.status` as
+  `not-applicable`, `reviewed_access.reason=unsupported-in-simulation`,
+  `acl_realization=simulation-only-direct-rest-apply`, and real effective ACL
+  validation. It must not claim review creation, approval, or submission.
+- Shared-setup evidence also records public key fingerprints, credential and
+  node identifiers, trigger configuration, shared storage state, and its
+  bounded controller-write/agent-read result without claiming validation.
 - Cross-role validation evidence records effective ACL observations, read-only
   SSH results, key custody, storage configuration, node configuration and online
   state, and Gerrit Trigger connection state. It must not result from target or
@@ -191,12 +196,13 @@ simulation utilities and by global aggregation.
 
 Every integration phase record and prerequisite marker must bind to the same
 target-deployment reviewed input set or published simulation effective input
-set, target identities, mode, run or selected state, and both Gerrit review
-identifiers. A constant label or marker existence alone is not an input
-fingerprint and must not authorize a later phase. Public evidence records only
-the redacted binding; private state may retain the protected detail needed to
-verify that binding. Ephemeral simulation transport hosts may be recorded as
-observations but are not part of the stable effective-input fingerprint.
+set, target identities, mode, and run or selected state. Target-deployment
+review state also binds both Gerrit review identifiers. A constant label or
+marker existence alone is not an input fingerprint and must not authorize a
+later phase. Public evidence records only the redacted binding; private state
+may retain the protected detail needed to verify it. Ephemeral simulation
+transport hosts may be recorded as observations but are not part of the stable
+effective-input fingerprint.
 
 For target deployment, `examples/integration.env.example` is the template for
 the single reviewed source of the cross-role Jenkins shared group name, shared
@@ -237,19 +243,25 @@ ACL planning records must include:
 - `target_project`
 - `target_ref_scope`
 - `acl_mode`
+- `acl_realization`
 - `gerrit_version`
 - `all_projects_review_change_id` or `not-created`
 - `all_projects_review_url` or `not-created`
 - `target_project_review_change_id` or `not-created`
 - `target_project_review_url` or `not-created`
 - submit actor and effective-state result for each review, or `not-applicable`
+- `reviewed_access.status`
+- `reviewed_access.reason` when status is `not-applicable`
+- effective global and project/ref permission results
 - `integration_actor_or_group`
 - `service_api_origin`
 - target SSH alias or reviewed host identifier for each target involved
 - validation result summaries
 
-Blocked or dry-run records must not claim mutation success, auto-submit, or a
-real Gerrit review when none occurred.
+Simulation records must set review fields to `not-created`, Reviewed Access to
+`not-applicable`, and ACL realization to
+`simulation-only-direct-rest-apply`. Blocked or dry-run records must not claim
+mutation success, submission, or a real Gerrit review when none occurred.
 
 ## Global Aggregation
 

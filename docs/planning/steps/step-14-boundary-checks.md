@@ -39,8 +39,8 @@ Acceptance criteria:
 - Simulation-only fallback is visibly labeled in docs, logs, and summaries.
 - No helper exposes supported offline Ubuntu dependency bundle workflows.
 - Role and integration helpers accept only fresh selected state or exact
-  input-bound completed state, with only the Gerrit external-review wait
-  resumable during mutation.
+  input-bound completed state, with only the target-deployment Gerrit
+  external-review wait resumable during mutation.
 - No v1 helper or native setup procedure claims reinstall, reconfiguration,
   repair, or credential rotation support.
 - Docker and VM expose `start`, `stop`, and `restore-baseline`, reject `up` and

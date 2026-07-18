@@ -21,9 +21,8 @@ Step 15 depend on this step.
 - `simulation/docs/harness-design.md` and
   `simulation/docs/lifecycle-state-model.md` for shared architecture and exact
   state guards.
-- `simulation/docs/checkpoint-coordination.md` for the boundary between shared
-  ledger primitives and the role/integration postconditions implemented in
-  Steps 13b and 13c.
+- `simulation/docs/checkpoint-acceptance-protocol.md` for accepting the
+  role/integration results implemented in Steps 13b and 13c.
 - `simulation/docker/docs/implementation-design.md` for Docker-local module
   boundaries and dependency direction.
 - `simulation/vm/docs/implementation-design.md` and
@@ -69,10 +68,10 @@ without compatibility aliases.
 
 Implement the exact schemas, classifiers, and guards from
 `simulation/docs/lifecycle-state-model.md`; this plan records dependency order
-rather than redefining them. Implement only the generic checkpoint state
-mechanics assigned to Step 13a by
-`simulation/docs/checkpoint-coordination.md`; do not synthesize helper-owned
-completion state.
+rather than redefining them. Implement the generic checkpoint transitions plus
+the harness-side acceptance boundary from
+`simulation/docs/checkpoint-acceptance-protocol.md`; do not synthesize the
+owning-layer results delivered by Steps 13b and 13c.
 
 - Validate the canonical 1-24 character `HARNESS_SET_ID` before path or backend
   mutation. Derive `loopforge-docker-<set-id>` and
@@ -134,8 +133,11 @@ Implementation:
   `init-run` fail when either record, its referenced run, or other prior state
   is malformed.
 - Add immutable hash-linked checkpoint records and atomic same-directory
-  publication helpers. Establish `idle`, `observing`, `mutating`, and `waiting`
-  activity without implementing Step 13b/13c checkpoint postconditions yet.
+  publication helpers. Establish `idle`, `observing`, and `mutating` activity
+  without implementing Step 13b/13c checkpoint postconditions yet.
+- Remove harness-only validation-pass and proof-prerequisite markers when the
+  workflow chain replaces them. Retain backend resource and baseline ownership
+  records, and do not add dual old/new progression readers.
 - Add the shared durable classifier. Treat an open target mutation as
   `active-incomplete`, record/fingerprint/order disagreement as `conflicting`,
   and allow restart only from `baseline` or `exact-bound`.

@@ -24,14 +24,14 @@ Read these before implementation:
 - `docs/contracts/artifact-bundle-contract.md` and
   `docs/contracts/validation-and-evidence.md` for staged inputs and evidence
   binding.
-- `simulation/docs/checkpoint-coordination.md` for role completion-record
-  ownership and the harness publication boundary.
+- `simulation/docs/checkpoint-acceptance-protocol.md` for role-result acceptance
+  and harness publication.
 - `docs/operations/native/review-guide.md` for the role-manual review profile.
 
 The authorities own product behavior. This step owns implementation sequence,
 milestone boundaries, focused verification, and acceptance criteria only. It
-defines the role completion postconditions consumed by the coordination
-design; it does not define or publish the simulation workflow head.
+defines the role completion postconditions consumed by the acceptance protocol;
+it does not define or publish the simulation workflow head.
 
 ## Public Lifecycle Contract
 
@@ -193,8 +193,10 @@ Acceptance:
 
 Implementation:
 
-- Align Docker and VM role gates, phase summaries, marker consumers, reboot
-  checks, and composite orchestration with the M1-M4 handoffs.
+- Align Docker and VM role gates, phase summaries, completion-record consumers,
+  reboot checks, and composite orchestration with the M1-M4 handoffs.
+- Publish accepted role results through the shared workflow ledger and remove
+  harness-only role progression markers without dual old/new readers.
 - Record state classification, completion binding, `already-complete`, and
   blocked conflicts without storing secrets or manufacturing success.
 - Update setup manuals, native references, simulations, and focused contract

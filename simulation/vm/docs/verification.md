@@ -7,6 +7,10 @@ milestones. It is narrower than the public command contract in
 `simulation/vm/README.md` and more detailed than the milestone roadmap in
 `simulation/vm/docs/implementation-design.md`.
 
+Shared lifecycle sequences and outcomes come only from
+`simulation/docs/lifecycle-state-model.md`; this document selects VM scenarios
+and runtime assertions without redefining them.
+
 A milestone is complete only when its required runtime assertions pass, the
 bounded logs do not contain contradictory failure evidence, and success
 summaries or markers are emitted after the proof they summarize. A zero exit
@@ -17,9 +21,9 @@ log shows failed commands.
 
 - Commands must fail closed when a required runtime assertion cannot be
   proven.
-- Success markers such as `baseline-prereqs=ready`, `os-baseline`,
-  `ldap-service=ready`, role validation summaries, and proof markers are
-  summaries of completed checks, not independent proof.
+- Backend readiness records such as `baseline-prereqs=ready`, `os-baseline`,
+  and `ldap-service=ready` summarize completed checks and are not independent
+  proof or workflow progression.
 - Bounded logs invalidate matching readiness markers when they contain
   relevant failure evidence such as apt errors, missing commands, missing
   service units, failed bind/search, checksum mismatch, ownership mismatch,
@@ -70,22 +74,10 @@ Changes touching artifacts, integration, status output, systemd-resolved
 helpers, or cleanup tooling must also run the matching focused
 `tests/vm-harness-*-test.sh` or `tests/vm-*-test.sh` file.
 
-The stubbed lifecycle gate must cover these command and state sequences where
-the changed subsystem can affect them:
-
-- fresh run with an empty selected VM set;
-- fresh run that reuses a retained selected VM set;
-- resume run with an existing selected run marker;
-- `init-run -> create -> start -> stop -> start` with the same run ID;
-- `stop -> restore-baseline` entering `restored-pending-clean`;
-- blocked `start`, `init-run`, workflow phases, and repeated restoration before
-  `clean`;
-- `stop -> restore-baseline -> clean -> init-run -> start` with retained
-  simulation-set resources and a new run ID;
-- failed restoration that cannot authorize `clean` or release active ownership;
-- `destroy` after partial create or missing VM-set metadata;
-- `reboot` with SSH host-key and guest service readiness diagnostics;
-- `audit-state` before and after `clean` and `destroy`.
+The stubbed lifecycle gate applies every relevant shared state-model case to the
+VM backend without redefining that matrix here. VM-specific additions cover
+partial libvirt creation, snapshot failure, `reboot` with SSH host-key and guest
+service diagnostics, and `audit-state` around VM cleanup and destruction.
 
 Tests should model retained-state side effects when practical. Examples
 include stale target SSH known-host entries, non-teardown metadata drift,
@@ -99,9 +91,9 @@ hidden repair path.
 
 Recovery remains explicit. Only `stop`, `restore-baseline`, `clean`, and
 `destroy` may recover VM lifecycle state as defined by
-`docs/contracts/lifecycle-contract.md` and `simulation/vm/README.md`. Other commands
-must fail clearly on inconsistent state instead of deleting, repairing,
-re-owning, or bypassing stale state.
+`simulation/docs/lifecycle-state-model.md`. Other commands must fail clearly on
+inconsistent state instead of deleting, repairing, re-owning, or bypassing
+stale state.
 
 ## Milestone Gates
 
@@ -111,7 +103,7 @@ re-owning, or bypassing stale state.
 | M2 | Libvirt/KVM tooling and VM-set ownership checks are read-only, fail on inconsistent selected resources, and do not repair state. |
 | M3 | `create`, `start`, `status`, `ssh --role ROLE`, and `stop` prove real VM definitions, guest boot, stable SSH host keys, target OS SSH readiness as the operator account, and clean shutdown. |
 | M4 | `create` proves role OS dependency installation, expected command availability, real LDAP service readiness, seeded entries, local LDAP bind/search, and Gerrit/Jenkins controller LDAP bind/search before writing baseline readiness. |
-| M5 | Baseline snapshot, `restore-baseline`, `clean`, `destroy`, and `audit-state` prove selected set ownership before rollback, cleanup, or deletion; enforce `restored-pending-clean`; retain review output; and do not touch unowned resources. |
+| M5 | Baseline snapshot, restore, cleanup, destruction, and audit apply the shared reset gate while proving selected libvirt ownership and preserving review output. |
 | M6 | `prepare-artifacts` and `stage-artifacts` prove artifact manifests, checksums, source-boundary labels, transfer, and target-side staging paths before mutation. |
 | M7 | `configure-role` establishes real role service/runtime readiness through role helpers. `validate-role` only observes it. `reboot` must prove guest service recovery before post-reboot validation; readiness is never inferred from reboot success. |
 | M8 | `configure-integration`, `validate-integration`, `prove-integration`, and `run` prove actual cross-role SSH, Jenkins node readiness, Gerrit Trigger flow, build execution, and Gerrit `Verified` behavior. |

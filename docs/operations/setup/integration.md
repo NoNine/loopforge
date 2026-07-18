@@ -33,6 +33,10 @@ not provide native OS operation instructions.
 `All-Projects` change contains the global `Verified` CI label and
 `stream-events` capability. The target-project change contains Jenkins read
 access and `label-Verified -1..+1` grants on the reviewed ref pattern.
+Docker and VM simulation do not create those reviews. Their
+`configure-integration` phase uses the selected `apply-direct` mode, labeled
+`simulation-only direct Gerrit REST apply`, and validates the same effective
+permissions.
 Jenkins Gerrit Trigger uses SSH for authentication and event streaming, while
 the Gerrit REST review API is the default path for posting `Verified` votes.
 For the REST path, the helper generates a Gerrit HTTP auth token for the
@@ -79,9 +83,9 @@ Before running the shared helper:
   `JENKINS_SHARED_STORAGE_PATH`, normally `/data/jenkins-shared`, and the
   Jenkins controller host can mount that agent export at the same path.
 - Shared application and credential state is fresh. The only permitted
-  existing state is the target-deployment review wait bound to the same two
+  existing state is a target-deployment review wait bound to the same two
   Gerrit changes, or exact input-bound completed state that returns
-  `already-complete` without mutation.
+  `already-complete` without mutation. Simulation has no review wait.
 - Operators have confirmed that any public internet fallback on target hosts is
   simulation-only and will be labeled that way in docs, logs, and evidence.
 
@@ -206,8 +210,7 @@ The shared helper supports these ACL workflow modes:
 | Mode | Default environment | Behavior |
 | --- | --- | --- |
 | `create-review` | `target-deployment` | Create the reviewable `All-Projects` and target-project changes through REST, record both change IDs and URLs, and return `blocked` without setup success until external approved submission makes both effective. |
-| `create-review-and-submit` | `docker-simulation`, `vm-simulation` | Create the same two Gerrit config reviews, auto-submit them under simulation policy, and then validate effective global and project/ref state. |
-| `apply-direct` | Explicit simulation-only fallback | Directly apply Gerrit REST label/access changes only when explicitly opted in and labeled `simulation-only direct Gerrit REST apply`. |
+| `apply-direct` | `docker-simulation`, `vm-simulation` | Directly apply Gerrit REST label/access changes when explicitly selected, label the action `simulation-only direct Gerrit REST apply`, and validate effective global and project/ref state. Reviewed Access is `not-applicable`. |
 
 `target-deployment` setup resumes only with the same reviewed inputs, targets,
 selected state, ACL mode, and two review identifiers. It must fail closed until
@@ -215,13 +218,9 @@ both reviews have been submitted and Gerrit reports the global `Verified`
 label, `stream-events`, and scoped read and `label-Verified -1..+1`
 permissions as effective.
 
-`create-review-and-submit` is not a `target-deployment` default. It may be
-introduced for `target-deployment` only by a future documented automation
-policy with explicit approval and evidence requirements.
-
-`apply-direct` must fail closed outside simulation modes. It is retained only
-as an emergency or lab fallback and must not be the normal Docker or VM
-simulation path.
+`apply-direct` must fail closed outside simulation modes. Simulation evidence
+must not claim review creation, approval, submission, or target-deployment
+acceptance.
 
 ## Helper Command Workflow
 
@@ -287,7 +286,8 @@ votes, or evidence that claims runtime success.
 `validate-integration` is observational. It requires matching shared-setup
 state and performs read-only SSH and application queries for:
 
-- Both Gerrit reviews submitted and effective.
+- Mode-appropriate Gerrit access is effective: both target-deployment reviews
+  are submitted, or simulation direct global and project/ref checks pass.
 - Jenkins-to-Gerrit SSH authentication as the integration account.
 - Global `Verified`, `stream-events`, and target-project read/vote authority.
 - Jenkins-to-agent SSH authentication from the controller.

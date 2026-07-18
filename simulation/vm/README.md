@@ -18,9 +18,9 @@ a second VM simulation CLI.
 
 Shared architecture and exact state behavior are documented in
 `simulation/docs/harness-design.md` and
-`simulation/docs/lifecycle-state-model.md`. Cross-layer checkpoint ownership
-and publication are documented in
-`simulation/docs/checkpoint-coordination.md`. VM module structure and
+`simulation/docs/lifecycle-state-model.md`. Cross-layer result acceptance and
+checkpoint publication are documented in
+`simulation/docs/checkpoint-acceptance-protocol.md`. VM module structure and
 implementation contracts are documented in
 `simulation/vm/docs/implementation-design.md`. Milestone verification gates
 are documented in `simulation/vm/docs/verification.md`.
@@ -52,6 +52,8 @@ simulation-owned directory with the entries defined in `simulation/README.md`
 before the clean baseline snapshot is captured. The harness must prove LDAP
 service readiness, seeded entry presence, and LDAP bind/search behavior with
 simulation-owned test credentials only.
+Proof requires the exact expected entry DNs.
+A successful LDAP operation with no matching entries is a failure.
 The committed VM seed source is `simulation/vm/ldap/50-harness-seed.ldif`;
 the harness renders it into simulation-set seed media before applying it inside the
 LDAP VM.
@@ -123,68 +125,37 @@ baked image and enabling only role-owned services on each VM.
 
 ## Milestone Verification Gates
 
-VM milestone completion requires fail-closed runtime proof. Terminal summaries,
-marker files, and evidence records summarize checks; they are not proof by
-themselves when bounded logs contain contradictory failures. A command must not
-emit a readiness marker such as `baseline-prereqs=ready`, role validation
-success, integration validation success, or proof success until the runtime
-assertions for that milestone have passed.
-
-The detailed gate contract is `simulation/vm/docs/verification.md`. Public command
-behavior follows these rules:
-
-- `create` fails closed when VM provisioning, target OS SSH readiness, role OS
-  dependency image bake or reuse, command availability, LDAP service
-  readiness, LDAP seed proof, or LDAP consumer reachability cannot be proven.
-- LDAP seed and consumer proof requires the exact expected entry DNs; a
-  successful LDAP operation with no matching entries is a failure.
-- `clean` and `destroy` fail closed unless selected simulation-set ownership and
-  rollback or deletion boundaries are proven first.
-- `prepare-artifacts` and `stage-artifacts` fail closed unless manifests,
-  checksums, source-boundary labels, transfer, and target-side staging are
-  proven.
-- `validate-role`, `validate-integration`, and `prove-integration` fail closed
-  unless the already-running real service, product API, scheduling, trigger,
-  build, or vote behavior claimed by the command is proven.
+`simulation/vm/docs/verification.md` applies the shared lifecycle and evidence
+contracts to VM milestones. Its VM-specific gates cover real libvirt resources,
+guest SSH, dependency-prepared images, LDAP runtime proof, target-side artifact
+transfer, snapshots, and guest service recovery after reboot. It does not define
+shared checkpoint success or progression.
 
 ## Command Reference
 
-This section owns VM command behavior. The command-to-checkpoint mapping is
-summarized in `docs/contracts/lifecycle-contract.md`.
+Shared command meanings and state outcomes are authoritative in
+`simulation/README.md` and `simulation/docs/lifecycle-state-model.md`. VM
+accepts that command surface through `simulation/vm/simulate.sh`; this section
+lists only VM syntax and realization deltas.
 
-Composite commands:
+`ssh` requires `--role ROLE`. `prepare-artifacts`, `stage-artifacts`,
+`configure-role`, and `validate-role` accept optional `--role ROLE`; omission
+selects all roles in shared order. VM-only `reboot` accepts `--role ROLE` or
+`--all`. `ROLE` is `gerrit`, `jenkins-controller`, or `jenkins-agent`.
 
-| Command | Purpose |
+| Command scope | VM realization |
 | --- | --- |
-| `run [--env FILE]` | Initializes fresh state or resumes the exact active immutable run at its next required phase, leaving the set running. An exact completed run returns `already-complete`; interrupted, conflicting, restored, run-ID-mismatched, or input-changed state blocks. It does not run `stop`, `restore-baseline`, `clean`, `destroy`, or `audit-state`. |
-| `ssh [--env FILE] --role ROLE` | Opens an interactive host-to-target OS SSH session using current target access resolved and verified by `start`. This is for target OS access as the operator account, not Gerrit service SSH. |
-
-Phase and lifecycle commands:
-
-| Command | Purpose |
-| --- | --- |
-| `preflight [--env FILE]` | Validates required local tooling, including `flock`, libvirt/KVM access, static harness files, baseline labels, source-boundary labels, and script wiring. Terminal output is a short `preflight: ok ...` summary; details stay in generated evidence. |
-| `init-run [--env FILE]` | Resolves `HARNESS_SET_ID`, generates a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accepts an unused explicit value, snapshots selected source templates, writes source-bound run state and VM inventory expectations, and creates the simulation set's active-run pointer with effective inputs pending. It rejects a set with an active run. |
-| `create [--env FILE]` | Defines and baselines an absent claimed set, leaving it stopped. For an exact stopped existing set it verifies set metadata and returns non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, unowned, or mismatched state blocks. |
-| `start [--env FILE]` | Starts the selected simulation set, waits for current DHCP and SSH readiness, and atomically publishes stable effective inputs on the first successful start. From exact-bound state, guest systemd starts configured services without setup mutation. Repeated start verifies stable inputs and refreshes only live access. An exact running set returns `state=already-running`; other state blocks. |
-| `status [--env FILE]` | Reports coherent absent, unclaimed, stopped, or running VM state, including set/run identity, durable classification, reset gate, and access data when available. Contradictory state reports `conflicting` and exits nonzero. |
-| `prepare-artifacts [--env FILE] [--role ROLE]` | Runs one role, or all VM roles when `--role` is omitted, inside the bundle factory VM and exports bundle archives plus checksums. Success prints compact `prepare-artifacts[role]: ok` summaries. |
-| `stage-artifacts [--env FILE] [--role ROLE]` | Transfers prepared artifact archives from the bundle factory VM to the target VM, verifies archive manifests and checksums on the target side, and stages them under the helper-visible staging path before mutation. Success prints compact `stage-artifacts[role]: ok` summaries. |
-| `configure-role [--env FILE] [--role ROLE]` | Runs one initial role-local configuration phase, or all VM roles when `--role` is omitted, against target VMs, installs fresh guest service state, establishes the role runtime, and records evidence. |
-| `validate-role [--env FILE] [--role ROLE]` | Observes one role-local runtime, or all VM roles when `--role` is omitted, against target VMs and records evidence. It must not start, restart, enable, or repair a service. Success prints `validate-role[role]: ok`; failures include `log=` and `evidence=`. |
-| `configure-integration [--env FILE]` | Configures shared integration state for Jenkins-to-Gerrit SSH, Jenkins-to-agent SSH, shared storage, and the Gerrit Trigger server through `scripts/integration-setup.sh`. Success prints a short `configure-integration: ok` summary. |
-| `validate-integration [--env FILE]` | Runs passive cross-role readiness validation and writes a marker for later verification. Success prints a short `validate-integration: ok` summary. |
-| `prove-integration [--env FILE]` | Requires a matching successful validate marker for the same run, then runs the active cross-role proof. It does not run `validate-integration` implicitly. Success prints a short `prove-integration: ok` summary. |
-| `reboot [--env FILE] [--role ROLE\|--all]` | Reboots selected running VM targets through the guest OS as the operator account with delegated privilege, waits for SSH return and system readiness, then proves required guest services recovered before any later validation. It does not rerun configuration or validation phases implicitly. |
-| `audit-state [--env FILE]` | Performs an explicit read-only sweep of selected simulation-set resources, snapshots, generated state, inventory, and run markers. It does not rerun other phases. |
-| `stop [--env FILE]` | Gracefully shuts down selected simulation-set domains while retaining VM disks, snapshots, generated state, logs, artifacts, and evidence. An ownership-valid stopped set returns `state=already-stopped` with its durable classification and reset gate. |
-| `restore-baseline [--env FILE]` | Requires the selected simulation set to be stopped, validates ownership and baseline snapshot records, and reverts guest disks to the clean baseline. It does not clean generated run state or delete VMs. |
-| `clean [--env FILE]` | Requires the set to be stopped and successfully restored, deletes mutable workflow/run state, and removes the active-run pointer last. It preserves the immutable run marker, checkpoint records, retained review output, and VM baseline resources. |
-| `destroy [--env FILE]` | Permanently removes an ownership-validated selected set. A fully absent unclaimed set returns `state=already-absent`; missing or mismatched ownership metadata blocks rather than authorizing name-derived deletion. |
-
-`ROLE` is one of `gerrit`, `jenkins-controller`, or `jenkins-agent`. `--all`
-for `reboot` includes those service VMs and dependency VMs needed for the
-selected run.
+| `preflight` | Checks `flock`, libvirt/KVM access, source image inputs, static harness files, and VM wiring |
+| `create`, `start`, `stop`, `status` | Operate on libvirt domains, networks, managed volumes, snapshots, DHCP, SSH readiness, and systemd-backed guests |
+| `ssh` | Opens guest OS SSH as the simulation operator account |
+| `prepare-artifacts` | Runs role helpers in the bundle-factory VM and exports review archives |
+| `stage-artifacts` | Transfers archives over target OS SSH and verifies guest-local manifests and checksums |
+| Role and integration phases | Invoke the shared owners over target OS SSH and publish results through the shared checkpoint protocol |
+| `reboot` | Reboots selected running guests through the guest OS and waits for machine readiness without performing later validation |
+| `audit-state` | Adds an explicit libvirt resource, snapshot, volume, inventory, DHCP, and SSH identity sweep |
+| `restore-baseline` | Reverts selected stopped guest disks to their ownership-validated baseline snapshots |
+| `clean` | Applies the shared mutable-run cleanup without changing guest disks or reusable libvirt resources |
+| `destroy` | Removes only ownership-validated selected domains, networks, volumes, snapshots, seed media, set-local base image, and metadata |
 
 VM commands that mutate host, libvirt, VM, guest OS, Jenkins, or Gerrit state
 require explicit operator approval and must describe expected side effects
@@ -197,24 +168,11 @@ records also store full generated bounded-log paths rather than basenames.
 Success summaries stay compact and omit log and evidence paths unless a
 command's public contract says otherwise.
 
-## Simulation Set And Run Identity
+## VM Resource Namespace
 
-VM simulation has two identities:
-
-| Identity | Purpose |
-| --- | --- |
-| `HARNESS_SET_ID` | Names the reusable simulation set. It uses the shared 1-24 character lowercase letter/digit/internal-hyphen grammar and defaults to `default`. |
-| `HARNESS_RUN_ID` | Immutable identity for exactly one setup and validation attempt. `init-run` generates it when omitted; an explicit value must be unused. |
-
-The default experience behaves like a single active simulation set. Most local
-runs can omit `HARNESS_SET_ID` and use the implicit `default` set. Advanced
-runs may select separate simulation sets for parallel experiments or CI
-isolation.
-
-Each simulation set stores one non-secret `active-run.env` pointer. Every
-VM-mutating command prints and records the selected set. Every active artifact,
-log, marker, and evidence record binds `set_id` and `run_id`. `stop` followed by
-`start` preserves both identities.
+Set/run identity and active-run ownership are shared state-model contracts.
+VM-mutating commands include those selected identities in their records without
+defining a VM-local identity lifecycle.
 
 The VM harness derives the libvirt resource prefix exactly as
 `loopforge-vm-<set-id>`. That injective prefix is backend resource metadata,
@@ -229,16 +187,9 @@ If `--env FILE` is omitted, the harness uses the committed
 defined by the VM harness. Copy committed examples outside the examples tree
 before using real operator values.
 
-The harness env file must identify role and integration source templates using
-the same role boundaries as Docker simulation. During `init-run`, the selected
-files are copied to the run-scoped `host/source-inputs/` directory with mode
-`0600` and bound to the run marker. The first successful `start` verifies VM
-ownership, DHCP, and SSH identity before rendering stable helper files under
-`host/runtime-inputs/` and atomically publishing
-`host/state/effective-inputs.env`. Later commands verify both bindings before
-operating. `init-run` rejects a set with an active-run pointer or an explicit
-run ID whose canonical root already exists. After `stop`, successful
-`restore-baseline`, and `clean`, it generates a new run ID when omitted.
+Source/effective input custody and publication are shared contracts in
+`simulation/README.md` and the lifecycle state model. The VM harness adds only
+live transport discovery and the private invocation adapter below.
 
 DHCP addresses are live target access and are not written to the stable
 effective files. Each `start` refreshes them. Integration phases verify the
@@ -426,9 +377,8 @@ canonical path `/var/lib/loopforge/staging/<role>/`. The generated run tree may
 retain host-owned exported artifact review copies, but it must not model VM
 target transfer through `target/artifacts/staging/`.
 
-`<set-id>` defaults to `default` when `HARNESS_SET_ID` is omitted.
-`<run-id>` uniquely identifies one immutable attempt. The simulation-set-scoped
-`active-run.env` pointer contains that run ID and its marker fingerprint.
+`<set-id>` and `<run-id>` are the identities selected by the shared lifecycle
+state model; this section owns only their VM path realization.
 
 These paths are generated runtime output unless a file in the tree states
 otherwise. Keep them ignored or documented as generated when created by
@@ -482,100 +432,38 @@ test images, or source cloud images. This is a host-wide recovery tool, not
 the ownership-checked, selected simulation-set behavior of the M5 `destroy`
 command.
 
-`stop`, `restore-baseline`, `clean`, and `destroy` are deliberately separate:
-
-- `stop` stops selected VM domains and preserves VM state.
-- `restore-baseline` rolls back stopped guest disks in the selected simulation
-  set to the clean baseline snapshot. It preserves generated state for review
-  and debugging.
-- `clean` removes mutable generated state for the selected run only. It
-  requires the selected simulation set to be stopped and successfully restored
-  to the matching baseline, and preserves exported artifacts, evidence, bounded
-  logs, the immutable run marker, checkpoint completion records, and the
-  simulation-set target SSH identity. It removes run-scoped SSH known-hosts,
-  the mutable workflow head, and the set's active-run pointer last, then permits
-  `init-run` to generate a new run ID.
-- `destroy` permanently deletes the selected simulation set and its owned
-  libvirt resources, including the set-local base image and target
-  SSH identity.
+Shared stop, restore, clean, and destroy rights are defined in the lifecycle
+state model. VM realizes them with domain shutdown, snapshot rollback, shared
+mutable-run cleanup, and ownership-validated libvirt resource deletion.
 
 `restore-baseline` validates the selected run marker, selected simulation-set
 marker, and baseline snapshot records before rollback. It must fail clearly
 rather than roll back an unowned, running, or mismatched simulation set.
-`clean` validates the selected run marker and set before generated-state cleanup.
-`destroy` requires ownership-valid simulation-set metadata before deleting any
-present libvirt resource. A fully absent unclaimed set is an idempotent
-`already-absent` success. Missing resources contradicted by retained metadata,
-or present resources without their ownership metadata, are conflicting state
-and block.
+`destroy` validates simulation-set ownership before deleting any present
+domain, network, managed volume, snapshot, seed medium, or set-local base image.
 
 ## State Consistency And Recovery
 
-The selected simulation set is consistent only when generated set metadata and
+VM applies the shared state model by checking that generated set metadata and
 libvirt resources agree:
 
 - The simulation-set marker exists under
   `generated/simulation/vm/sets/<set-id>/`.
 - Expected libvirt domains, networks, storage volumes, and baseline snapshots
   exist and carry the selected ownership identity.
-- The generated run marker exists under `generated/simulation/vm/<run-id>/`
-  and matches the simulation set's `active-run.env` pointer.
-- The strict run-scoped `workflow-state.env`, effective-input record, and
-  hash-linked checkpoint records match the pointer, marker, baseline, and
-  source/effective input fingerprints.
-- Rendered runtime config exists and fingerprints match the run marker.
-- Effective runtime inputs exist for the harness, Gerrit, Jenkins controller,
-  Jenkins agent, and integration env files before workflow phases.
 - VM SSH host fingerprints match the rendered inventory or are recorded as a
   deliberate first-use capture before mutation.
-
-If generated state, simulation-set metadata, snapshots, or libvirt resources
-are inconsistent, lifecycle phases fail clearly instead of recreating state or
-rerunning earlier phases. Recover with explicit `stop`, `restore-baseline`,
-`clean`, or `destroy` commands for the selected simulation set and run.
 
 Legacy or malformed ownership schemas are conflicting state. Normal commands
 do not add old-field readers, name-derived recovery, or compatibility cleanup
 paths; operators must use an explicit migration or separately approved
 host-level cleanup procedure.
 
-Typical flow:
-
-```bash
-simulation/vm/simulate.sh --env FILE init-run
-simulation/vm/simulate.sh --env FILE create
-simulation/vm/simulate.sh --env FILE start
-simulation/vm/simulate.sh --env FILE prepare-artifacts
-simulation/vm/simulate.sh --env FILE stage-artifacts
-simulation/vm/simulate.sh --env FILE configure-role
-simulation/vm/simulate.sh --env FILE validate-role
-simulation/vm/simulate.sh --env FILE configure-integration
-simulation/vm/simulate.sh --env FILE validate-integration
-simulation/vm/simulate.sh --env FILE prove-integration
-simulation/vm/simulate.sh --env FILE reboot --all
-# Prove unit recovery before the following observational checks.
-simulation/vm/simulate.sh --env FILE validate-role
-simulation/vm/simulate.sh --env FILE validate-integration
-simulation/vm/simulate.sh --env FILE stop
-simulation/vm/simulate.sh --env FILE restore-baseline
-simulation/vm/simulate.sh --env FILE clean
-```
-
-Use `destroy` only when the reusable simulation set should be permanently removed.
-
 ## Integration Boundary
 
-Role helpers stay role-local. Cross-role SSH, Gerrit Trigger setup,
-integration validation, trigger verification, and integration evidence use
-`scripts/integration-setup.sh`.
-
-`validate-integration` and `prove-integration` must fail or report blocked
-rather than claim VM readiness when real integration proof is unavailable.
-Forbidden synthetic success markers in role or integration logs are treated as
-failures.
-
-`up` and `down` are unsupported command names. The CLI must reject them and
-must not provide compatibility aliases.
+VM invokes the shared integration owner over target OS SSH through its private
+transport adapter. Integration checkpoint semantics, predecessors, evidence
+acceptance, and failure behavior remain shared.
 
 Public internet fallback on target hosts is simulation-only and applies only
 to Ubuntu/OS dependency installation. It is not a fallback for target-host

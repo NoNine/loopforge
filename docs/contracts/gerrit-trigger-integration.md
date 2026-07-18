@@ -5,11 +5,12 @@ Jenkins and Gerrit. It is based on the behavior digest in
 `docs/references/reference-digest.md` and stays within the product boundary in
 `docs/product/prd.md`.
 
-The contract covers the integration account, SSH key custody, the reviewed
-Gerrit ACL workflow, the `Verified` label, Gerrit Trigger controller settings,
-default REST vote posting, disposable verification artifacts, failure
-classification, and the simulation acceptance contract. It is a policy and
-validation contract, not the command manual. Operators should use
+The contract covers the integration account, SSH key custody, the
+target-deployment reviewed ACL workflow, the simulation-only direct ACL
+realization, the `Verified` label, Gerrit Trigger controller settings, default
+REST vote posting, disposable verification artifacts, failure classification,
+and the simulation acceptance contract. It is a policy and validation
+contract, not the command manual. Operators should use
 `docs/operations/setup/integration.md` for the shared helper command workflow.
 
 ## Required State
@@ -31,7 +32,9 @@ Before end-to-end verification starts:
 - The Jenkins Gerrit integration account exists as a Gerrit service account,
   is separate from human administrator accounts, and belongs to the reviewed
   integration group.
-- Both Gerrit configuration reviews are submitted and effective.
+- Mode-appropriate global and project/ref Gerrit permissions are effective.
+  Target deployment reaches that state through two submitted reviews;
+  simulation reaches it through direct REST application without reviews.
 - Jenkins controller owns both integration private keys; Gerrit and the Jenkins
   agent consume only their matching public keys.
 - Shared storage setup and its controller-write/agent-read setup check passed.
@@ -58,18 +61,19 @@ controller-write/agent-read proof.
    Unsupported or unavailable behavior fails before mutation.
 2. Gerrit creates or validates the Jenkins Gerrit integration service account
    and group. The account remains separate from human administrators.
-3. Gerrit creates two reviewable configuration changes through REST: an
-   `All-Projects` change for the global `Verified` label and `streamEvents`, and
-   a target-project change for read and `label-Verified -1..+1` on the reviewed
-   ref pattern.
+3. `target-deployment` creates two reviewable configuration changes through
+   REST: an `All-Projects` change for the global `Verified` label and
+   `streamEvents`, and a target-project change for read and
+   `label-Verified -1..+1` on the reviewed ref pattern.
 4. `target-deployment` records both review identifiers and URLs, reports
    `blocked`, and stops without shared-setup success until both changes are
-   externally approved and submitted. Docker and VM simulation create the same
-   reviews and may auto-submit them under simulation policy.
-5. A matching resume validates that both changes are effective before further
-   mutation. The resume must use the same reviewed target-deployment inputs or
-   published effective simulation inputs, targets, ACL mode, selected state,
-   and review identifiers.
+   externally approved and submitted. A matching resume validates that both
+   changes are effective using the same inputs, targets, state, ACL mode, and
+   review identifiers.
+5. Docker and VM simulation omit Reviewed Access. During
+   `configure-integration`, they apply the same global and project/ref ACL
+   outcome directly through Gerrit REST, labeled `simulation-only direct
+   Gerrit REST apply`, and validate effective permissions before continuing.
 6. Jenkins controller creates or validates the Jenkins-to-Gerrit and
    Jenkins-to-agent keypairs. Gerrit and the agent receive only the matching
    public keys, without truncating unrelated authorized keys.
@@ -90,14 +94,16 @@ controller-write/agent-read proof.
     Trigger schedules the job on the reviewed agent, and the successful build
     posts `Verified +1` through Gerrit REST.
 12. Evidence records the mode-appropriate input and selected-state binding,
-    both ACL reviews, public key fingerprints, shared storage result, change,
-    build, event delivery, vote, bounded logs, and verification mode.
+    ACL realization and effective checks, public key fingerprints, shared
+    storage result, change, build, event delivery, vote, bounded logs, and
+    verification mode.
 
 ## State And Existing Credentials
 
 Integration phase markers must bind to the reviewed target-deployment input set
-or published effective simulation input set, target identities, mode, run or
-selected state, and both Gerrit review identifiers.
+or published effective simulation input set, target identities, mode, and run
+or selected state. Target-deployment review state also binds both Gerrit review
+identifiers.
 Marker existence without that binding does not satisfy a later prerequisite.
 
 An expected target-deployment review wait may resume only with its original
@@ -137,11 +143,11 @@ using these templates in later helper steps.
 REST API is the selected Gerrit configuration and review interface for the
 package. `target-deployment` label and ACL setup must create the reviewable
 `All-Projects` and target-project changes through REST and must not auto-submit
-them. Docker and VM simulation create the same two changes and may auto-submit
-them under simulation policy. Direct editing of bare repositories is not the
-automation path, even though `refs/meta/config/project.config` remains Gerrit's
-underlying storage model. Dashboard or remote-management integrations should
-use REST for the same reason.
+them. Docker and VM simulation must not create or submit those reviews; they
+apply the ACLs directly through REST. Direct editing of bare repositories is
+not the automation path, even though `refs/meta/config/project.config` remains
+Gerrit's underlying storage model. Dashboard or remote-management integrations
+should use REST for the same reason.
 
 Apply modes:
 
@@ -150,18 +156,15 @@ Apply modes:
 - `create-review` is the `target-deployment` default. It creates Gerrit config
   reviews through REST, records change IDs and URLs, and waits for external
   approval/submission before validation can pass.
-- `create-review-and-submit` is the Docker and VM simulation default. It
-  creates the same Gerrit config reviews through REST, auto-submits them under
-  simulation policy, and validates the effective label/access state.
-- `apply-direct` is allowed only for explicitly labeled
-  `simulation-only`, `docker-simulation`, or `vm-simulation` lab modes and
-  requires explicit opt-in plus `--yes`. It must fail closed in
-  `target-deployment` mode even when credentials would permit direct mutation.
+- `apply-direct` is the only supported Docker and VM simulation mode. It
+  requires explicit selection plus `--yes`, uses direct Gerrit REST mutation,
+  and must fail closed in `target-deployment` even when credentials permit it.
 
-Direct Gerrit REST label/access mutation is a simulation-only emergency or lab
-fallback. It must be recorded in logs and evidence as
+Direct Gerrit REST label/access mutation is the simulation ACL realization. It
+must be recorded in logs and evidence as
 `simulation-only direct Gerrit REST apply` and must not be presented as
-`target-deployment` reviewed ACL proof. This simulation allowance does not
+`target-deployment` reviewed ACL proof. Reviewed Access is `not-applicable` in
+simulation. This simulation allowance does not
 permit direct `All-Projects.git` editing, direct site-Git mutation, direct
 `refs/meta/config` Git editing, or `gerrit set-account` fallbacks.
 
@@ -209,13 +212,14 @@ the v1 REST baseline. Non-default Gerrit versions may be used only when
 runtime REST compatibility checks pass. If the server version or REST behavior
 is unsupported, the helper must fail closed before any configuration mutation.
 
-Evidence planning for ACL configuration records both review identifiers, URLs,
-and revisions; the project/ref vote scope; ACL mode; Gerrit version; submit
-actors when applicable; Jenkins integration actor or group; validation
-results; service API origin; bounded log references; and redaction status.
-Planned records must use `not-created` for review identifiers. A blocked review
-wait records the real created review identifiers without claiming submission,
-effective access, or shared setup success.
+Evidence planning for ACL configuration records the project/ref vote scope,
+ACL mode, Gerrit version, Jenkins integration actor or group, validation
+results, service API origin, bounded log references, and redaction status.
+Target-deployment records also include both review identifiers, URLs,
+revisions, and submit actors when applicable. Simulation records use
+`not-created` for review fields and must not claim review or submission
+activity. A blocked target review wait records real review identifiers without
+claiming submission, effective access, or shared setup success.
 
 Shared storage evidence records the shared group name, GID, storage path, the
 controller runtime account as writer, the agent runtime account as reader, and
@@ -253,13 +257,13 @@ End-to-end verification must report these failures separately:
 
 | Failure point | Report as |
 | --- | --- |
-| Integration mode or reviewed-change workflow is unsupported during preflight | Unsupported integration mode or ACL workflow; no mutation attempted. |
+| Integration mode or mode-selected ACL workflow is unsupported during preflight | Unsupported integration mode or ACL workflow; no mutation attempted. |
 | Target-deployment reviews exist but either is not submitted and effective | `blocked` awaiting external Gerrit review approval/submission. |
-| A later phase marker does not match the mode-appropriate bound inputs, targets, mode, state, or review IDs | Integration state-binding failure. |
+| A later phase marker does not match the mode-appropriate bound inputs, targets, mode, state, or target-deployment review IDs | Integration state-binding failure. |
 | Jenkins cannot authenticate to Gerrit over SSH | SSH credential or Gerrit integration account setup failure. |
 | SSH works but event streaming fails | `stream-events` permission or Gerrit Trigger server connectivity failure. |
-| Global `Verified` label or `streamEvents` is absent | `All-Projects` reviewed-state failure. |
-| Jenkins lacks read or `label-Verified -1..+1` on the reviewed project/ref | Target-project reviewed-access failure. |
+| Global `Verified` label or `streamEvents` is absent | Global Gerrit access-state failure. |
+| Jenkins lacks read or `label-Verified -1..+1` on the selected project/ref | Project/ref Gerrit access-state failure. |
 | Jenkins cannot authenticate to the agent over SSH | Jenkins-to-agent credential or public-key authorization failure. |
 | Shared group, export, mount, or setup-owned write/read result is wrong | Jenkins shared-storage setup failure. |
 | Jenkins node is absent, offline, or has the wrong remote filesystem, executors, or labels | Jenkins node readiness failure. |

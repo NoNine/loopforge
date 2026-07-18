@@ -5,8 +5,8 @@ boundaries, provisioning decisions, and historical milestone anatomy.
 `simulation/vm/README.md` owns the public VM command contract.
 `simulation/docs/harness-design.md` owns shared harness architecture, and
 `simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/checkpoint-coordination.md` owns the boundary
-among helper completion state, evidence, and workflow publication.
+command guards. `simulation/docs/checkpoint-acceptance-protocol.md` owns result
+and evidence acceptance plus workflow publication.
 
 VM simulation stays near target deployment after the clean baseline snapshot.
 Libvirt/KVM resources, snapshots, seed media, guest SSH readiness, and VM
@@ -228,10 +228,9 @@ M7 sequence `reboot --all` followed by a separate `validate-role`; it is not a
 combined command. M8 or final acceptance may require integration validation
 and proof after reboot.
 
-`prove-integration` must require the matching helper-owned validation result
-and exact `validate-integration` workflow predecessor for the same run. `run`
-is a composite over normal workflow commands only; it must not call `stop`,
-`restore-baseline`, `clean`, `destroy`, or `audit-state`.
+All non-VM-specific checkpoint predecessors and composite `run` behavior come
+from the shared simulation contracts. This design adds only the `reboot`
+realization described above.
 
 ## VM Post-Baseline Realization
 

@@ -45,13 +45,22 @@ require_text "$architecture" \
 require_text "$architecture" \
   'The target-project grant must not be moved to `All-Projects`' \
   'Architecture must preserve project-scoped least privilege'
+require_text "$architecture" \
+  '`simulation-only direct Gerrit REST apply`' \
+  'Architecture must define the simulation ACL realization'
+require_text "$architecture" \
+  'Reviewed Access is unsupported and `not-applicable`.' \
+  'Architecture must exclude Reviewed Access from simulation'
+reject_text "$architecture" \
+  'auto-submit them as simulation test automation' \
+  'Architecture must not claim simulation review submission'
 reject_text "$architecture" \
   'uses one Gerrit configuration review in `All-Projects`' \
   'Architecture must not retain the single-review ACL model'
 
 for checkpoint in \
   '| Integration preflight |' \
-  '| Reviewed integration access |' \
+  '| Reviewed integration access (`target-deployment` only) |' \
   '| Shared integration setup |' \
   '| Cross-role validation |' \
   '| End-to-end trigger verification |'; do
@@ -62,11 +71,14 @@ require_text "$lifecycle" \
   'Observe effective access, SSH paths, key custody, storage, node state,' \
   'Lifecycle must keep integration validation observational'
 require_text "$lifecycle" \
-  'record existence alone is not a valid prerequisite.' \
+  'existence alone is not a valid prerequisite.' \
   'Lifecycle must bind integration completion state to reviewed state'
 require_text "$lifecycle" \
-  'the only resumable mutation boundary.' \
+  'the only resumable mutation boundary' \
   'Lifecycle must limit mutation resume to Gerrit external review'
+require_text "$lifecycle" \
+  'Simulation has no Reviewed Access wait or resume.' \
+  'Lifecycle must exclude the target review wait from simulation'
 require_text "$lifecycle" \
   'state returns `already-complete` without mutation.' \
   'Lifecycle must define exact completed-state no-op behavior'
@@ -87,8 +99,10 @@ reject_text "$operator_contract" \
   'Operator contract must not promise generic idempotent operations'
 
 for contract_rule in \
-  'creates two reviewable configuration changes through REST' \
+  'creates two reviewable configuration changes through' \
   '`blocked`, and stops without shared-setup success' \
+  'Docker and VM simulation omit Reviewed Access.' \
+  '`simulation-only direct Gerrit REST apply`' \
   'without truncating unrelated authorized keys' \
   'disposable Gerrit change. The change emits `patchset-created`' \
   'Loopforge v1 does not perform rotation.'; do
@@ -97,8 +111,8 @@ for contract_rule in \
 done
 for failure_class in \
   'Integration state-binding failure.' \
-  '`All-Projects` reviewed-state failure.' \
-  'Target-project reviewed-access failure.' \
+  'Global Gerrit access-state failure.' \
+  'Project/ref Gerrit access-state failure.' \
   'Jenkins shared-storage setup failure.' \
   'Gerrit review-state verification failure.'; do
   require_text "$integration_contract" "$failure_class" \
@@ -112,8 +126,15 @@ for evidence_field in \
     "Evidence contract is missing review field: $evidence_field"
 done
 require_text "$evidence_contract" \
-  'A constant label or marker existence alone is not a' \
+  'marker existence alone is not an input fingerprint' \
   'Evidence contract must reject unbound integration markers'
+for simulation_field in \
+  '`reviewed_access.status`' \
+  '`reviewed_access.reason=unsupported-in-simulation`' \
+  '`acl_realization=simulation-only-direct-rest-apply`'; do
+  require_text "$evidence_contract" "$simulation_field" \
+    "Evidence contract is missing simulation field: $simulation_field"
+done
 
 require_text "$native_manual" \
   'Create exactly two reviewable Gerrit configuration changes' \
@@ -143,6 +164,12 @@ require_text "$setup_manual" \
 require_text "$setup_manual" \
   'returns `blocked` without a setup-success marker.' \
   'Helper manual must document the approval stop'
+require_text "$setup_manual" \
+  '| `apply-direct` | `docker-simulation`, `vm-simulation` |' \
+  'Helper manual must select direct ACL application for simulation'
+reject_text "$setup_manual" \
+  '`create-review-and-submit`' \
+  'Helper manual must not support simulation review submission'
 reject_text "$setup_manual" \
   '`validate-integration` and `prove-integration` must prove real cross-role behavior' \
   'Helper manual must not collapse validation and proof'
@@ -166,11 +193,12 @@ for milestone in \
     "Step 13b is missing milestone: $milestone"
 done
 for milestone in \
-  '## M1: State, Preflight, And Gerrit Reviewed Access' \
+  '## M1: State, Preflight, And Gerrit ACL Realization' \
   '## M2: Jenkins Controller And Agent SSH Custody' \
   '## M3: Shared Storage, Node, And Gerrit Trigger Setup' \
   '## M4: Observational Validation And Active Proof' \
-  '## M5: Evidence, Simulation Alignment, And Runtime Acceptance'; do
+  '## M5: Workflow-Ledger Cutover And Evidence Alignment' \
+  '## M6: Docker, VM, And Native Runtime Acceptance'; do
   require_text "$integration_step_plan" "$milestone" \
     "Step 13c is missing milestone: $milestone"
 done
@@ -183,6 +211,9 @@ reject_text "$integration_step_plan" \
 require_text "$boundary_plan" \
   'fresh-state role lifecycle, and Step 13c shared integration lifecycle' \
   'Boundary checks must depend on Steps 13a through 13c'
+require_text "$boundary_plan" \
+  'with only the target-deployment Gerrit' \
+  'Boundary checks must scope the review wait to target deployment'
 require_text "$final_acceptance" \
   '13a, 13b, and 13c are accepted and Step 14 boundary checks pass.' \
   'Final acceptance must depend on Steps 13a through 13c'

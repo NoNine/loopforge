@@ -6,6 +6,11 @@ harness. `simulation/vm/README.md` owns the public command contract, and
 model. These diagrams validate how the public commands should flow through the
 folded VM modules.
 
+Shared guards, checkpoint opening/commit, predecessor order, and failure effects
+are intentionally omitted. `simulation/docs/lifecycle-state-model.md` and
+`simulation/docs/checkpoint-acceptance-protocol.md` wrap each applicable phase;
+the diagrams show only VM-specific module flow.
+
 The diagrams use capability-shaped APIs below `lifecycle.sh`. Command-shaped
 APIs should stay in `lifecycle.sh`.
 
@@ -93,7 +98,6 @@ sequenceDiagram
   LC->>CFG: vm_config_load_runtime()
   LC->>SET: vm_set_verify_run_and_set()
   LC->>ST: vm_state_verify_startable()
-  Note over LC,ST: reset gate normal; durable state baseline or exact-bound
   LC->>LV: vm_libvirt_start_set()
   LC->>SSH: vm_ssh_prepare_all()
   LC-->>CLI: compact start summary
@@ -265,7 +269,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>INT: vm_integration_validate()
   INT->>SSH: vm_ssh_run(controller and targets, integration validation)
-  INT->>ST: vm_state_write_checkpoint_marker(validate-integration)
+  INT-->>LC: validation result and evidence
   LC-->>CLI: compact validate-integration summary
 ```
 
@@ -283,7 +287,6 @@ sequenceDiagram
   CLI->>LC: vm_cmd_prove_integration()
   LC->>CFG: vm_config_load_runtime()
   LC->>ST: vm_state_verify_run_marker()
-  LC->>ST: vm_state_verify_checkpoint_marker(validate-integration)
   LC->>INT: vm_integration_prove()
   INT->>SSH: vm_ssh_run(controller and targets, integration proof)
   LC-->>CLI: compact prove-integration summary
@@ -420,26 +423,6 @@ sequenceDiagram
 
 ## run
 
-```mermaid
-sequenceDiagram
-  participant CLI as simulate.sh
-  participant LC as lifecycle.sh
-  participant ST as state.sh
-
-  CLI->>LC: vm_cmd_run(env)
-  LC->>ST: vm_state_detect_run_mode()
-  LC-->>CLI: run mode summary
-  LC->>LC: vm_cmd_preflight()
-  LC->>LC: vm_cmd_init_run()
-  LC->>LC: vm_cmd_create()
-  LC->>LC: vm_cmd_start()
-  LC->>LC: vm_cmd_status()
-  LC->>LC: vm_cmd_prepare_artifacts()
-  LC->>LC: vm_cmd_stage_artifacts()
-  LC->>LC: vm_cmd_configure_role()
-  LC->>LC: vm_cmd_validate_role()
-  LC->>LC: vm_cmd_configure_integration()
-  LC->>LC: vm_cmd_validate_integration()
-  LC->>LC: vm_cmd_prove_integration()
-  LC-->>CLI: compact run summary
-```
+`vm_cmd_run` applies the shared composite order through VM command entrypoints.
+It adds no VM-only workflow phase; `reboot` remains an explicit command outside
+the composite.

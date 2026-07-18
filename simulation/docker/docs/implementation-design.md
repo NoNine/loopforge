@@ -5,8 +5,8 @@ dependency direction, and internal API conventions. `simulation/docker/README.md
 owns the public Docker command contract. `simulation/docs/harness-design.md`
 owns shared harness architecture, and
 `simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/checkpoint-coordination.md` owns the boundary
-among helper completion state, evidence, and workflow publication.
+command guards. `simulation/docs/checkpoint-acceptance-protocol.md` owns result
+and evidence acceptance plus workflow publication.
 
 Docker and VM simulation share lifecycle meanings, not backend APIs. Docker
 modules may follow the VM harness's capability-shaped layering where the

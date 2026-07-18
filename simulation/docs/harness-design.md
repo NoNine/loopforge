@@ -8,9 +8,9 @@ realization; backend implementation design files own Docker- or VM-specific
 modules and mechanisms.
 
 The exact simulation state dimensions, command guards, and transitions are
-defined in `simulation/docs/lifecycle-state-model.md`. Coordination between
-helper-owned completion state, evidence, and the workflow ledger is defined in
-`simulation/docs/checkpoint-coordination.md`.
+defined in `simulation/docs/lifecycle-state-model.md`. Acceptance and
+publication of owning-layer results and evidence are defined in
+`simulation/docs/checkpoint-acceptance-protocol.md`.
 
 ## Design Goals
 
@@ -85,7 +85,7 @@ Forbidden directions include:
 | Lifecycle | Command names, state meanings, guards, preservation rules, and failure behavior | Compose/container operations or libvirt/domain operations |
 | Persistence | Stable set lock, strict active-run and workflow records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
 | Inputs | Source-template custody, first-start effective publication, immutable helper inputs, and ephemeral access separation | Stable endpoint rendering plus Docker published ports or VM DHCP/SSH readiness |
-| Checkpoint coordination | Shared ownership boundaries and publication protocol | Backend orchestration of helper-owned results under the selected set lock |
+| Checkpoint acceptance | Shared proof and publication protocol | Backend acceptance of owning-layer results under the selected set lock |
 | Evidence | Required identities, statuses, redaction, and bounded references | Backend resource metadata and collector mechanics |
 | Terminal output | Compact command summaries and shared set/run fields | Compose project, libvirt prefix, URLs, SSH rows, and other backend fields |
 
@@ -161,24 +161,11 @@ failure semantics, and ownership boundary without backend conditionals.
 
 Reviewers of either harness should confirm that:
 
-- public behavior matches the shared lifecycle state model and backend README;
-- checkpoint publication follows
-  `simulation/docs/checkpoint-coordination.md` without a second progression
-  marker;
-- every mutating command validates selected set and run ownership first;
-- set mutation is serialized by the stable set lock;
-- `active-run.env` owns set claim/reset gating while `workflow-state.env` owns
-  only the selected run's checkpoint progression;
-- interrupted target mutation remains `active-incomplete` and never appears
-  exact-bound;
+- public behavior delegates state and checkpoint publication to the shared
+  state model and acceptance protocol;
+- module dependencies follow the architectural planes and do not call upward;
 - backend lifecycle operations do not complete Loopforge checkpoints;
-- the first successful `start` publishes stable effective inputs before
-  workflow readiness and repeated `start` never rewrites them;
-- live transport refresh remains outside source/effective fingerprints;
 - role and integration work uses the owning helpers and target-like interfaces;
-- `start` performs no setup or repair;
-- validation is observational;
-- cleanup, restoration, destruction, and audit remain explicit commands;
-- retained evidence cannot satisfy another run;
+- backend-local mechanisms do not create a second shared state or input model;
 - logs, evidence, terminal summaries, and generated records remain bounded and
   redacted.

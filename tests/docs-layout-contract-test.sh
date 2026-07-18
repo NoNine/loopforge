@@ -55,7 +55,7 @@ for path in \
   docs/planning/steps/step-15-final-acceptance.md \
   project-state/execution-status.md \
   simulation/README.md \
-  simulation/docs/checkpoint-coordination.md \
+  simulation/docs/checkpoint-acceptance-protocol.md \
   simulation/docs/harness-design.md \
   simulation/docs/lifecycle-state-model.md \
   simulation/docs/terminal-output.md \
@@ -77,6 +77,7 @@ for path in \
   docs/gerrit-setup-manual.md \
   docs/gerrit-native-operations-reference.md \
   simulation/terminal-output.md \
+  simulation/docs/checkpoint-coordination.md \
   simulation/vm/design.md \
   simulation/vm/docs/design.md \
   simulation/vm/sequences.md \
