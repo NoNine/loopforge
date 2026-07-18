@@ -53,6 +53,11 @@ with broken generated state.
 Temporary environment changes may prove causality; they must not replace the
 formal code fix or become hidden recovery paths.
 
+## Test File Modes
+
+Commit new runnable `tests/**/*-test.sh` files as executable (`100755`);
+keep sourced fixtures non-executable unless they are also direct commands.
+
 ## Commit Messages
 
 Use standard Git-style commit messages. Treat these as hard requirements, not
