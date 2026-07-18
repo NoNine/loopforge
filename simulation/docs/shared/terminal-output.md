@@ -1,7 +1,7 @@
 # Simulation Terminal Output
 
 This document owns shared terminal presentation conventions for simulation
-commands. Layer README files own concrete command behavior for their
+commands. Backend simulation guides own concrete command behavior for their
 entrypoints; this document owns the cross-layer output shape and examples.
 
 Simulation terminal output is an operator-facing summary, not an audit report.
@@ -30,7 +30,7 @@ LDAP bind secrets, or evidence path inventories in routine command output.
 ## Summary Preview
 
 These previews show intended summary shape only. They do not replace the
-layer README files as command contracts.
+backend simulation guides as command contracts.
 
 ```text
 preflight: ok mode=vm libvirt=available
@@ -64,7 +64,7 @@ their access models differ.
 When seeded simulation login accounts are useful to operators, status output
 uses the shared `Login accounts` table convention: system, username, default
 simulation-only password, and purpose. It may list the seeded simulation LDAP
-users documented in `simulation/README.md`. It must not print later
+users documented in `simulation/docs/shared/simulation-model.md`. It must not print later
 integration service accounts as password-backed login accounts.
 
 Use layer-specific `audit-state`, bounded logs, and evidence records for
@@ -73,7 +73,7 @@ backend state, generated path inventories, and retained proof.
 ## Docker Preview
 
 This preview shows the intended shape for Docker simulation status output. It
-is not a complete transcript and does not replace `simulation/docker/README.md`
+is not a complete transcript and does not replace `simulation/docs/docker/docker-simulation.md`
 as the command contract.
 
 ```text
@@ -98,7 +98,7 @@ Login accounts
 ## VM Preview
 
 This preview shows the intended shape for VM simulation status output. It is
-not a complete transcript and does not replace `simulation/vm/README.md` as
+not a complete transcript and does not replace `simulation/docs/vm/vm-simulation.md` as
 the command contract.
 
 ```text

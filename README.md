@@ -120,7 +120,7 @@ simulation/docker/simulate.sh clean
 Use `clean` when generated runtime state should be removed.
 
 To use a copied harness env file instead of the default example, pass
-`--env FILE` to each command. See `simulation/docker/README.md` for command
+`--env FILE` to each command. See `simulation/docs/docker/docker-simulation.md` for command
 details, phase commands, inputs, outputs, generated paths, and simulation
 accounts.
 
@@ -133,9 +133,10 @@ accounts.
 ├── examples/             # Reviewed env-file examples with placeholder values
 ├── project-state/        # Mutable implementation resume ledger
 ├── scripts/              # Role helpers, integration setup, and evidence collection
-├── simulation/           # Shared simulation model and mode-specific harnesses
-│   ├── docker/           # Docker simulation CLI, Compose file, and operator docs
-│   └── vm/               # Planned VM simulation model and command contract
+├── simulation/           # Simulation documentation and mode-specific harnesses
+│   ├── docs/             # Shared, Docker, and VM simulation documentation
+│   ├── docker/           # Docker simulation CLI and Compose implementation
+│   └── vm/               # VM simulation CLI and libvirt implementation
 ├── templates/            # Gerrit, Jenkins, agent, job, and integration templates
 ├── tests/                # Repository validation and contract tests
 ├── generated/            # Generated simulation/runtime output; not committed
@@ -177,11 +178,12 @@ Topic references:
 
 Simulation:
 
-- `simulation/README.md` defines the shared simulation topology, version
+- `simulation/docs/README.md` is the simulation documentation entrypoint.
+- `simulation/docs/shared/simulation-model.md` defines the shared simulation topology, version
   baseline, output conventions, and simulation realization details.
-- `simulation/docker/README.md` documents the Docker simulation CLI command
+- `simulation/docs/docker/docker-simulation.md` documents the Docker simulation CLI command
   surface.
-- `simulation/vm/README.md` documents the VM simulation CLI command surface.
+- `simulation/docs/vm/vm-simulation.md` documents the VM simulation CLI command surface.
 
 Operator manuals:
 

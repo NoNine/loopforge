@@ -22,9 +22,12 @@ apply that fact instead of restating the full policy.
 - `issues/` contains historical issue reports and root-cause analyses.
 - `references/` contains non-authoritative research and historical input.
 
-Simulation realization documents remain beside the implementation they
-describe under `simulation/`. Mutable repository resume state lives outside
-the stable documentation tree in `project-state/execution-status.md`.
+Simulation realization documents are centralized under `simulation/docs/`;
+`simulation/docs/README.md` is their navigation entrypoint. The shared,
+Docker, and VM subtrees preserve their owning scope while the
+backend CLIs and implementation remain under `simulation/docker/` and
+`simulation/vm/`. Mutable repository resume state lives outside the stable
+documentation tree in `project-state/execution-status.md`.
 
 ## Authority Layers
 
@@ -72,9 +75,11 @@ Use this order when deciding where a product or process fact belongs:
    native procedural baseline and produce equivalent product state and
    validation outcomes.
 7. Simulation docs own simulation realization details:
-   `simulation/README.md` and `simulation/docs/` own shared behavior,
-   architecture, state, and presentation; `simulation/docker/README.md`,
-   `simulation/vm/README.md`, and backend-local docs own concrete realization.
+   `simulation/docs/README.md` routes readers without owning behavior;
+   `simulation/docs/shared/simulation-model.md` owns the shared public model;
+   `simulation/docs/shared/` owns shared architecture, state, checkpoint
+   acceptance, and presentation; and `simulation/docs/docker/` and
+   `simulation/docs/vm/` own concrete backend guides and realization details.
 8. Helper scripts, templates, examples, tests, and verifiers implement or
    check the documented model. They should not become the only place where a
    product behavior is defined.

@@ -1,11 +1,11 @@
 # Docker Simulation Harness Implementation Design
 
 This document owns Docker-specific module structure, capability boundaries,
-dependency direction, and internal API conventions. `simulation/docker/README.md`
-owns the public Docker command contract. `simulation/docs/harness-design.md`
+dependency direction, and internal API conventions. `simulation/docs/docker/docker-simulation.md`
+owns the public Docker command contract. `simulation/docs/shared/harness-design.md`
 owns shared harness architecture, and
-`simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/checkpoint-acceptance-protocol.md` owns result
+`simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
+command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result
 and evidence acceptance plus workflow publication.
 
 Docker and VM simulation share lifecycle meanings, not backend APIs. Docker

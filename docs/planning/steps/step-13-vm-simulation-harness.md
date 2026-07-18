@@ -6,25 +6,25 @@ library from Step 12. Do not add a separate numbered scaffold step.
 Apply `docs/README.md` before implementation. Task-local companion
 docs are:
 
-- `simulation/README.md` for shared simulation behavior.
-- `simulation/vm/README.md` for the public VM command contract.
-- `simulation/docs/harness-design.md` and
-  `simulation/docs/lifecycle-state-model.md` for shared architecture and state
+- `simulation/docs/shared/simulation-model.md` for shared simulation behavior.
+- `simulation/docs/vm/vm-simulation.md` for the public VM command contract.
+- `simulation/docs/shared/harness-design.md` and
+  `simulation/docs/shared/lifecycle-state-model.md` for shared architecture and state
   guards.
-- `simulation/vm/docs/implementation-design.md` for VM module boundaries and
+- `simulation/docs/vm/implementation-design.md` for VM module boundaries and
   milestone sequence.
-- `simulation/vm/docs/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,
+- `simulation/docs/vm/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,
   snapshot, seed-media, and baseline-verifier refactor; read it before changing
   those implementation boundaries.
-- `simulation/vm/docs/sequences.md` for command flow.
-- `simulation/vm/docs/verification.md` for milestone pass/fail gates.
+- `simulation/docs/vm/command-sequences.md` for command flow.
+- `simulation/docs/vm/milestone-verification.md` for milestone pass/fail gates.
 
 ## Roadmap Scope
 
 - Implement the public VM CLI as `simulation/vm/simulate.sh`; command behavior
-  is owned by `simulation/vm/README.md`.
+  is owned by `simulation/docs/vm/vm-simulation.md`.
 - Implement the milestone sequence from
-  `simulation/vm/docs/implementation-design.md`, M1 through
+  `simulation/docs/vm/implementation-design.md`, M1 through
   M8, without treating those milestones as separate product roadmap steps.
 - Keep VM-local implementation under `simulation/vm/` and backend-neutral
   support under `simulation/lib/`; do not depend on Docker harness internals.
@@ -47,7 +47,7 @@ for the specific target and action.
 
 ## Milestone State
 
-Use `simulation/vm/docs/implementation-design.md` for the durable M1-M8
+Use `simulation/docs/vm/implementation-design.md` for the durable M1-M8
 milestone sequence. Use
 `project-state/execution-status.md` for the current milestone, completed milestone
 state, verification logs, blockers, guardrails, and next authorized work.
@@ -58,7 +58,7 @@ Verification is milestone-scoped. For each milestone, run syntax checks,
 focused tests added for that milestone, docs contract checks, and the VM
 commands that are in scope for that milestone. A milestone is not accepted
 from marker presence or zero exit alone; the pass/fail gate in
-`simulation/vm/docs/verification.md` must be satisfied, and bounded logs with
+`simulation/docs/vm/milestone-verification.md` must be satisfied, and bounded logs with
 contradictory failure evidence invalidate matching readiness markers.
 
 M1 verification:

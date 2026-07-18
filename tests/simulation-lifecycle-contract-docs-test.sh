@@ -8,11 +8,11 @@ lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
 directory="$repo_root/docs/contracts/directory-model.md"
 evidence="$repo_root/docs/contracts/validation-and-evidence.md"
 endpoint="$repo_root/docs/contracts/endpoint-identity.md"
-shared="$repo_root/simulation/README.md"
-state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
-protocol="$repo_root/simulation/docs/checkpoint-acceptance-protocol.md"
-docker="$repo_root/simulation/docker/README.md"
-vm="$repo_root/simulation/vm/README.md"
+shared="$repo_root/simulation/docs/shared/simulation-model.md"
+state_model="$repo_root/simulation/docs/shared/lifecycle-state-model.md"
+protocol="$repo_root/simulation/docs/shared/checkpoint-acceptance-protocol.md"
+docker="$repo_root/simulation/docs/docker/docker-simulation.md"
+vm="$repo_root/simulation/docs/vm/vm-simulation.md"
 plan="$repo_root/docs/planning/implementation-plan.md"
 step="$repo_root/docs/planning/steps/step-13a-reusable-simulation-lifecycle.md"
 agents="$repo_root/AGENTS.md"
@@ -272,10 +272,10 @@ require_text "$protocol" \
   'Their owning utilities still produce completion state and evidence' \
   'Checkpoint protocol must preserve target-deployment utility ownership'
 require_text "$evidence" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md` defines how producer-owned' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` defines how producer-owned' \
   'Evidence authority must delegate checkpoint acceptance'
 require_text "$step" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md` for accepting the' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` for accepting the' \
   'Step 13a must read checkpoint acceptance protocol'
 
 require_text "$shared" '`up` and `down` are' \

@@ -18,7 +18,7 @@ Read these before implementation:
   realization, credential custody, state binding, proof, and failures.
 - `docs/contracts/validation-and-evidence.md` for checkpoint evidence and
   reviewed-input binding.
-- `simulation/docs/checkpoint-acceptance-protocol.md` for integration-result
+- `simulation/docs/shared/checkpoint-acceptance-protocol.md` for integration-result
   acceptance and harness publication.
 - `docs/contracts/account-model.md` and `docs/contracts/directory-model.md` for
   accounts, shared storage, protected paths, ownership, and file modes.

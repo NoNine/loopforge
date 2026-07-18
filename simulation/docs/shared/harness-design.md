@@ -2,15 +2,15 @@
 
 This document owns the backend-neutral internal architecture for Docker and VM
 simulation. It is subordinate to `docs/contracts/lifecycle-contract.md` for
-product lifecycle semantics and to `simulation/README.md` for the public shared
-simulation command contract. Backend README files own concrete command
+product lifecycle semantics and to `simulation/docs/shared/simulation-model.md` for
+the public shared simulation command contract. Backend simulation guides own concrete command
 realization; backend implementation design files own Docker- or VM-specific
 modules and mechanisms.
 
 The exact simulation state dimensions, command guards, and transitions are
-defined in `simulation/docs/lifecycle-state-model.md`. Acceptance and
+defined in `simulation/docs/shared/lifecycle-state-model.md`. Acceptance and
 publication of owning-layer results and evidence are defined in
-`simulation/docs/checkpoint-acceptance-protocol.md`.
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`.
 
 ## Design Goals
 

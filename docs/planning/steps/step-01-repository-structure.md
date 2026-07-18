@@ -30,11 +30,14 @@ examples/
 scripts/
 templates/
 simulation/
-  README.md
   docs/
+    README.md
+    shared/
+      simulation-model.md
+    docker/
+    vm/
   docker/
   vm/
-    docs/
 logs/
 ```
 
@@ -52,6 +55,9 @@ Implementation notes:
 - `templates/` contains service config, JCasC, job, and integration templates.
 - `simulation/docker/` contains the first executable simulation model.
 - `simulation/vm/` contains the later target-deployment verification model.
+- `simulation/docs/` centralizes shared and backend-specific simulation
+  documentation under an ownership-oriented hierarchy, with `README.md` as
+  its navigation entrypoint.
 - `logs/` is used for local command logs and should not store committed
   verbose runtime output.
 

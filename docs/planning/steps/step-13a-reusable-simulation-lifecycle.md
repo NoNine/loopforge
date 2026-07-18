@@ -15,18 +15,18 @@ Step 15 depend on this step.
   behavior, run identity, and recovery boundaries.
 - `docs/contracts/directory-model.md` for baseline and retained-output custody.
 - `docs/contracts/validation-and-evidence.md` for immutable run binding.
-- `simulation/README.md` for shared command semantics.
-- `simulation/docker/README.md` and `simulation/vm/README.md` for backend
+- `simulation/docs/shared/simulation-model.md` for shared command semantics.
+- `simulation/docs/docker/docker-simulation.md` and `simulation/docs/vm/vm-simulation.md` for backend
   realization.
-- `simulation/docs/harness-design.md` and
-  `simulation/docs/lifecycle-state-model.md` for shared architecture and exact
+- `simulation/docs/shared/harness-design.md` and
+  `simulation/docs/shared/lifecycle-state-model.md` for shared architecture and exact
   state guards.
-- `simulation/docs/checkpoint-acceptance-protocol.md` for accepting the
+- `simulation/docs/shared/checkpoint-acceptance-protocol.md` for accepting the
   role/integration results implemented in Steps 13b and 13c.
-- `simulation/docker/docs/implementation-design.md` for Docker-local module
+- `simulation/docs/docker/implementation-design.md` for Docker-local module
   boundaries and dependency direction.
-- `simulation/vm/docs/implementation-design.md` and
-  `simulation/vm/docs/sequences.md` for VM implementation boundaries.
+- `simulation/docs/vm/implementation-design.md` and
+  `simulation/docs/vm/command-sequences.md` for VM implementation boundaries.
 
 ## Public Command Contract
 
@@ -67,10 +67,10 @@ without compatibility aliases.
 ## Approved Implementation Decisions
 
 Implement the exact schemas, classifiers, and guards from
-`simulation/docs/lifecycle-state-model.md`; this plan records dependency order
+`simulation/docs/shared/lifecycle-state-model.md`; this plan records dependency order
 rather than redefining them. Implement the generic checkpoint transitions plus
 the harness-side acceptance boundary from
-`simulation/docs/checkpoint-acceptance-protocol.md`; do not synthesize the
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`; do not synthesize the
 owning-layer results delivered by Steps 13b and 13c.
 
 - Validate the canonical 1-24 character `HARNESS_SET_ID` before path or backend

@@ -54,7 +54,7 @@ make root a Loopforge account, login identity, helper execution identity, or
 runtime identity.
 
 Simulation-specific realizations of the operator account, seeded LDAP accounts,
-and fake test credentials are documented in `simulation/README.md`.
+and fake test credentials are documented in `simulation/docs/shared/simulation-model.md`.
 
 ## Numeric Identity Policy
 
@@ -178,7 +178,7 @@ The operator account runs orchestration, SSH access, helper commands, and
 evidence collection in all modes. It is never `root`. Keeping it separate makes
 operator control-plane access distinct from product accounts and prevents
 evidence collection access from being treated as Gerrit or Jenkins authority.
-Simulation-specific operator behavior is documented in `simulation/README.md`.
+Simulation-specific operator behavior is documented in `simulation/docs/shared/simulation-model.md`.
 
 ## Credential Custody
 

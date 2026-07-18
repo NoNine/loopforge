@@ -6,19 +6,19 @@ source-boundary, or evidence authorities.
 Step 3-owned files:
 
 ```text
-simulation/README.md
-simulation/docker/README.md
-simulation/vm/README.md
+simulation/docs/shared/simulation-model.md
+simulation/docs/docker/docker-simulation.md
+simulation/docs/vm/vm-simulation.md
 ```
 
 Implementation notes:
 
-- `simulation/README.md` owns the common five-environment topology, version
+- `simulation/docs/shared/simulation-model.md` owns the common five-environment topology, version
   baseline, source boundaries, generated-output conventions, and checkpoint
   meanings for simulation layers.
-- `simulation/docker/README.md` owns Docker simulation command behavior and
+- `simulation/docs/docker/docker-simulation.md` owns Docker simulation command behavior and
   Docker-specific generated paths.
-- `simulation/vm/README.md` owns VM simulation and future VM command
+- `simulation/docs/vm/vm-simulation.md` owns VM simulation and future VM command
   behavior.
 - The simulation docs must derive account usage from `docs/contracts/account-model.md`
   and mode terminology from `docs/architecture/system-model.md`.
@@ -31,12 +31,12 @@ Implementation notes:
 Verification:
 
 ```bash
-test -f simulation/README.md
-test -f simulation/docker/README.md
-test -f simulation/vm/README.md
-rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|ci-operator" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "docker-simulation|vm-simulation|target-deployment|simulation-only" simulation/README.md simulation/docker/README.md simulation/vm/README.md
-rg -n "supported offline|offline Ubuntu|offline-bundle" simulation/README.md simulation/docker/README.md simulation/vm/README.md
+test -f simulation/docs/shared/simulation-model.md
+test -f simulation/docs/docker/docker-simulation.md
+test -f simulation/docs/vm/vm-simulation.md
+rg -n "bundle factory|LDAP|Gerrit|Jenkins controller|Jenkins agent|ci-operator" simulation/docs/shared/simulation-model.md simulation/docs/docker/docker-simulation.md simulation/docs/vm/vm-simulation.md
+rg -n "docker-simulation|vm-simulation|target-deployment|simulation-only" simulation/docs/shared/simulation-model.md simulation/docs/docker/docker-simulation.md simulation/docs/vm/vm-simulation.md
+rg -n "supported offline|offline Ubuntu|offline-bundle" simulation/docs/shared/simulation-model.md simulation/docs/docker/docker-simulation.md simulation/docs/vm/vm-simulation.md
 ```
 
 Acceptance criteria:

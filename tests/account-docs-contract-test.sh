@@ -71,44 +71,44 @@ require_doc_text docs/contracts/account-model.md \
   'For NFS-backed storage, keep `root_squash` enabled' \
   'Account model must document NFS root_squash guidance'
 
-require_doc_text simulation/README.md \
+require_doc_text simulation/docs/shared/simulation-model.md \
   'The simulation model derives account roles and numeric identity policy from' \
-  'Simulation README must point to the shared account model'
-require_doc_text simulation/README.md \
+  'Simulation model must point to the shared account model'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'default shared group is `jenkins-share` with no UID and GID `61040`.' \
-  'Simulation README must document the Jenkins shared group example GID'
-require_doc_text simulation/README.md \
+  'Simulation model must document the Jenkins shared group example GID'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'separate `jenkins-share` integration group from' \
-  'Simulation README must document shared storage as group-based access'
-require_doc_text simulation/README.md \
+  'Simulation model must document shared storage as group-based access'
+require_doc_text simulation/docs/shared/simulation-model.md \
   '`scripts/integration-setup.sh` owns creating or' \
-  'Simulation README must assign shared storage setup to integration setup'
-require_doc_text simulation/README.md \
+  'Simulation model must assign shared storage setup to integration setup'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'simulation-set-local bind mount' \
-  'Simulation README must keep Docker durable storage outside run roots'
+  'Simulation model must keep Docker durable storage outside run roots'
 
-require_doc_text simulation/docker/README.md \
+require_doc_text simulation/docs/docker/docker-simulation.md \
   'The shared simulation account contract, including seeded LDAP login accounts,' \
-  'Docker README must point to the shared simulation account contract'
-require_doc_text simulation/docker/README.md \
+  'Docker simulation guide must point to the shared simulation account contract'
+require_doc_text simulation/docs/docker/docker-simulation.md \
   'Docker realizes Jenkins shared storage by bind-mounting one simulation-set-local' \
-  'Docker README must document Docker shared storage realization'
-require_doc_text simulation/docker/README.md \
+  'Docker simulation guide must document Docker shared storage realization'
+require_doc_text simulation/docs/docker/docker-simulation.md \
   '`runtime/shared-jenkins-storage` directory into both the Jenkins controller and' \
-  'Docker README must document Docker shared storage bind source'
-reject_doc_text simulation/docker/README.md \
+  'Docker simulation guide must document Docker shared storage bind source'
+reject_doc_text simulation/docs/docker/docker-simulation.md \
   'This local `ci-operator` OS account has' \
-  'Docker README must not call target ci-operator the local host account'
+  'Docker simulation guide must not call target ci-operator the local host account'
 
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'The shared simulation account contract, including seeded LDAP login accounts,' \
-  'VM README must point to the shared simulation account contract'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must point to the shared simulation account contract'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'VM simulation models Jenkins shared storage as a Jenkins-agent-hosted' \
-  'VM README must document VM shared storage realization'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document VM shared storage realization'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'Jenkins runtime home and not a sixth product role.' \
-  'VM README must document VM shared storage is not a product role'
+  'VM simulation guide must document VM shared storage is not a product role'
 
 for native_reference in \
   docs/operations/native/gerrit.md \

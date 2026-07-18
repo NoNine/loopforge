@@ -114,9 +114,12 @@ vm_cmd_preflight() {
   require_command base64
   require_command flock
   [ -f "$vm_env_example" ] || die "Missing VM example env: $vm_env_example"
-  [ -f "$vm_dir/README.md" ] || die "Missing VM README"
-  [ -f "$vm_dir/docs/implementation-design.md" ] || die "Missing VM implementation design doc"
-  [ -f "$vm_dir/docs/sequences.md" ] || die "Missing VM command sequence doc"
+  [ -f "$repo_root/simulation/docs/vm/vm-simulation.md" ] ||
+    die "Missing VM simulation guide"
+  [ -f "$repo_root/simulation/docs/vm/implementation-design.md" ] ||
+    die "Missing VM implementation design doc"
+  [ -f "$repo_root/simulation/docs/vm/command-sequences.md" ] ||
+    die "Missing VM command sequence doc"
   [ -x "$repo_root/scripts/integration-setup.sh" ] ||
     die "Missing executable integration helper: $repo_root/scripts/integration-setup.sh"
   vm_cmd_preflight_readonly_checks >/dev/null || {

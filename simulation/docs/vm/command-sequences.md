@@ -1,14 +1,14 @@
 # VM Simulation Command Sequences
 
 This document records internal command sequence diagrams for the VM simulation
-harness. `simulation/vm/README.md` owns the public command contract, and
-`simulation/vm/docs/implementation-design.md` owns the VM module boundary
+harness. `simulation/docs/vm/vm-simulation.md` owns the public command contract, and
+`simulation/docs/vm/implementation-design.md` owns the VM module boundary
 model. These diagrams validate how the public commands should flow through the
 folded VM modules.
 
 Shared guards, checkpoint opening/commit, predecessor order, and failure effects
-are intentionally omitted. `simulation/docs/lifecycle-state-model.md` and
-`simulation/docs/checkpoint-acceptance-protocol.md` wrap each applicable phase;
+are intentionally omitted. `simulation/docs/shared/lifecycle-state-model.md` and
+`simulation/docs/shared/checkpoint-acceptance-protocol.md` wrap each applicable phase;
 the diagrams show only VM-specific module flow.
 
 The diagrams use capability-shaped APIs below `lifecycle.sh`. Command-shaped

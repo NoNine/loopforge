@@ -41,7 +41,7 @@ installation is simulation-only.
 | --- | --- | --- |
 | Product/runtime | Packages required for the role service to run. | Native role install command and this document. |
 | Operator/helper | Packages required because native operators or Loopforge helpers validate, stage, configure, or collect evidence. | Native install commands, helper defaults, env examples, setup manuals, and this document. |
-| Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker README and this document. |
+| Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker simulation guide and this document. |
 
 VM simulation realizes role target OS dependency baselines during VM
 provisioning before the clean baseline snapshot. The VM harness bakes one
@@ -72,12 +72,12 @@ document owns the layered rationale.
 | Integration native operations | `docs/operations/native/integration.md` keeps the manual cross-role SSH, Gerrit access, Jenkins node, trigger, vote, and evidence procedures. |
 | Bundle-factory baseline | `docs/contracts/artifact-bundle-contract.md` records the shared package list used to prepare role artifact bundles. |
 | Docker shared target image | `simulation/docker/target/Dockerfile` installs the shared superset used by Gerrit, Jenkins controller, and Jenkins agent target containers. |
-| Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docker/README.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
+| Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docs/docker/docker-simulation.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
 | Docker `procps` layer | `simulation/docker/simulate.sh`, Gerrit helper runtime checks, and Jenkins agent SSH readiness checks use process inspection inside slim containers. |
 | Target-host `ldap-utils` layer | The Gerrit and Jenkins native procedures and role helpers use `ldapsearch` to prove bind/search readiness. |
 | Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
-| VM simulation host tooling | `simulation/vm/README.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, and SSH client tools. |
-| VM LDAP guest service | `simulation/vm/README.md` documents the real LDAP service and seeded directory contract; VM evidence proves service readiness, seeded entries, and bind/search behavior. |
+| VM simulation host tooling | `simulation/docs/vm/vm-simulation.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, and SSH client tools. |
+| VM LDAP guest service | `simulation/docs/vm/vm-simulation.md` documents the real LDAP service and seeded directory contract; VM evidence proves service readiness, seeded entries, and bind/search behavior. |
 | Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
 
 ## Docker Removal Candidates

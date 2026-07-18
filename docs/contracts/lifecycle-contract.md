@@ -234,16 +234,16 @@ Concrete procedures and implementation facts live below this contract:
 - `docs/README.md` maps account, directory, artifact, endpoint, integration,
   and evidence details to their topic authority documents;
 - setup and native manuals own role- and interface-specific operator steps;
-- `simulation/README.md` owns shared simulation command semantics, input
+- `simulation/docs/shared/simulation-model.md` owns shared simulation command semantics, input
   realization, and resource lifecycle;
-- Docker and VM README files own their concrete backend command behavior;
-- `simulation/docs/harness-design.md` owns shared harness architecture;
-- `simulation/docs/lifecycle-state-model.md` owns exact simulation state
+- Docker and VM simulation guides own their concrete backend command behavior;
+- `simulation/docs/shared/harness-design.md` owns shared harness architecture;
+- `simulation/docs/shared/lifecycle-state-model.md` owns exact simulation state
   schemas, guards, classification, transitions, and the product-to-simulation
   checkpoint mapping;
-- `simulation/docs/checkpoint-acceptance-protocol.md` owns acceptance and
+- `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns acceptance and
   publication of owning-layer results and evidence into the simulation ledger;
-- `simulation/docs/terminal-output.md` owns shared terminal presentation; and
+- `simulation/docs/shared/terminal-output.md` owns shared terminal presentation; and
 - backend implementation designs own module boundaries and mechanisms.
 
 Every realization must preserve this product phase order, checkpoint

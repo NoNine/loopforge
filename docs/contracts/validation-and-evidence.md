@@ -129,7 +129,7 @@ completed boundary. Native `target-deployment` uses the acceptance checklist
 to track the corresponding outcomes without producing checkpoint records.
 
 Evidence proves an outcome but does not authorize the next simulation phase.
-`simulation/docs/checkpoint-acceptance-protocol.md` defines how producer-owned
+`simulation/docs/shared/checkpoint-acceptance-protocol.md` defines how producer-owned
 evidence is accepted into the workflow ledger and how it relates to
 owning-layer results. This document continues to own evidence content, status,
 redaction, and aggregation rules.

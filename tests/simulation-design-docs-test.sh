@@ -3,15 +3,15 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-shared_readme="$repo_root/simulation/README.md"
-harness_design="$repo_root/simulation/docs/harness-design.md"
-state_model="$repo_root/simulation/docs/lifecycle-state-model.md"
-protocol="$repo_root/simulation/docs/checkpoint-acceptance-protocol.md"
-docker_design="$repo_root/simulation/docker/docs/implementation-design.md"
-vm_design="$repo_root/simulation/vm/docs/implementation-design.md"
+simulation_model="$repo_root/simulation/docs/shared/simulation-model.md"
+harness_design="$repo_root/simulation/docs/shared/harness-design.md"
+state_model="$repo_root/simulation/docs/shared/lifecycle-state-model.md"
+protocol="$repo_root/simulation/docs/shared/checkpoint-acceptance-protocol.md"
+docker_design="$repo_root/simulation/docs/docker/implementation-design.md"
+vm_design="$repo_root/simulation/docs/vm/implementation-design.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
-docker_readme="$repo_root/simulation/docker/README.md"
-vm_readme="$repo_root/simulation/vm/README.md"
+docker_guide="$repo_root/simulation/docs/docker/docker-simulation.md"
+vm_guide="$repo_root/simulation/docs/vm/vm-simulation.md"
 step13c="$repo_root/docs/planning/steps/step-13c-shared-integration-lifecycle.md"
 
 require_text() {
@@ -36,26 +36,26 @@ reject_text() {
   fi
 }
 
-require_text "$shared_readme" \
-  '`simulation/docs/harness-design.md`' \
-  'Shared simulation README must link the harness design'
-require_text "$shared_readme" \
-  '`simulation/docs/lifecycle-state-model.md`' \
-  'Shared simulation README must link the exact lifecycle state model'
-require_text "$shared_readme" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md`' \
-  'Shared simulation README must link checkpoint acceptance protocol'
-require_text "$shared_readme" \
+require_text "$simulation_model" \
+  '`simulation/docs/shared/harness-design.md`' \
+  'Simulation model must link the harness design'
+require_text "$simulation_model" \
+  '`simulation/docs/shared/lifecycle-state-model.md`' \
+  'Simulation model must link the exact lifecycle state model'
+require_text "$simulation_model" \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md`' \
+  'Simulation model must link checkpoint acceptance protocol'
+require_text "$simulation_model" \
   '## Lifecycle Documentation Boundary' \
-  'Shared simulation README must route lifecycle documentation ownership'
-require_text "$shared_readme" \
+  'Simulation model must route lifecycle documentation ownership'
+require_text "$simulation_model" \
   'Backend documents apply these contracts and describe only their realization' \
-  'Shared simulation README must restrict backend lifecycle documentation'
+  'Simulation model must restrict backend lifecycle documentation'
 
-for file in "$docker_readme" "$vm_readme"; do
+for file in "$docker_guide" "$vm_guide"; do
   require_text "$file" \
     'realization deltas.' \
-    "Backend README must be realization-scoped: $file"
+    "Backend guide must be realization-scoped: $file"
   for shared_term in \
     'already-complete' \
     'state=already-running' \
@@ -67,16 +67,16 @@ for file in "$docker_readme" "$vm_readme"; do
     'matching successful validate marker' \
     'Typical flow:'; do
     reject_text "$file" "$shared_term" \
-      "Backend README must not restate shared lifecycle term: $shared_term"
+      "Backend guide must not restate shared lifecycle term: $shared_term"
   done
 done
 
-require_text "$vm_readme" \
+require_text "$vm_guide" \
   '## VM Resource Namespace' \
-  'VM README must keep only backend resource identity realization'
-reject_text "$vm_readme" \
+  'VM simulation guide must keep only backend resource identity realization'
+reject_text "$vm_guide" \
   '## Simulation Set And Run Identity' \
-  'VM README must not define shared set/run identity'
+  'VM simulation guide must not define shared set/run identity'
 
 require_text "$harness_design" \
   '## Architectural Planes' \
@@ -100,7 +100,7 @@ require_text "$harness_design" \
   '| Persistence | Stable set lock, strict active-run and workflow records,' \
   'Shared harness design must assign lifecycle persistence ownership'
 require_text "$harness_design" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md`' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md`' \
   'Shared harness design must delegate checkpoint acceptance'
 
 require_text "$state_model" \
@@ -140,7 +140,7 @@ require_text "$state_model" \
   'It answers which ledger state' \
   'Lifecycle state model must state its valid-state responsibility'
 require_text "$state_model" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md` separately owns the' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` separately owns the' \
   'Lifecycle state model must delegate the acceptance protocol'
 require_text "$state_model" \
   'does not define owning-layer postconditions, evidence acceptance, or transaction' \
@@ -223,13 +223,13 @@ reject_text "$protocol" \
   'Checkpoint protocol must not define simulation waiting state'
 
 require_text "$lifecycle" \
-  '`simulation/docs/lifecycle-state-model.md` owns exact simulation state' \
+  '`simulation/docs/shared/lifecycle-state-model.md` owns exact simulation state' \
   'Lifecycle authority must delegate exact simulation state realization'
 require_text "$lifecycle" \
   'checkpoint mapping;' \
   'Lifecycle authority must delegate the simulation checkpoint mapping'
 require_text "$lifecycle" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md` owns acceptance and' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns acceptance and' \
   'Lifecycle authority must delegate checkpoint acceptance'
 reject_text "$lifecycle" \
   'restored-pending-clean' \
@@ -242,16 +242,16 @@ require_text "$vm_design" \
   '# VM Simulation Harness Implementation Design' \
   'VM design must be explicitly implementation-scoped'
 require_text "$vm_design" \
-  '`simulation/docs/harness-design.md` owns shared harness architecture' \
+  '`simulation/docs/shared/harness-design.md` owns shared harness architecture' \
   'VM implementation design must delegate shared architecture'
 require_text "$vm_design" \
-  '`simulation/docs/lifecycle-state-model.md` owns simulation-set state' \
+  '`simulation/docs/shared/lifecycle-state-model.md` owns simulation-set state' \
   'VM implementation design must delegate shared lifecycle state'
 require_text "$vm_design" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md` owns result' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result' \
   'VM implementation design must delegate checkpoint acceptance'
 require_text "$docker_design" \
-  '`simulation/docs/checkpoint-acceptance-protocol.md` owns result' \
+  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result' \
   'Docker implementation design must delegate checkpoint acceptance'
 reject_text "$vm_design" \
   'matching `validate-integration` marker' \

@@ -13,7 +13,7 @@
 | Diagnostic support | `640f751` (`Preserve failed VM image bakes for debugging`) |
 
 This report is a historical root-cause analysis. The current VM behavior is
-owned by [the VM simulation documentation](../../simulation/vm/README.md),
+owned by [the VM simulation documentation](../../simulation/docs/vm/vm-simulation.md),
 and current resume state is owned by
 [`project-state/execution-status.md`](../../project-state/execution-status.md).
 

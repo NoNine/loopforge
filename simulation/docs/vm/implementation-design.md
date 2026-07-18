@@ -2,10 +2,10 @@
 
 This document owns VM-specific module structure, libvirt/KVM implementation
 boundaries, provisioning decisions, and historical milestone anatomy.
-`simulation/vm/README.md` owns the public VM command contract.
-`simulation/docs/harness-design.md` owns shared harness architecture, and
-`simulation/docs/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/checkpoint-acceptance-protocol.md` owns result
+`simulation/docs/vm/vm-simulation.md` owns the public VM command contract.
+`simulation/docs/shared/harness-design.md` owns shared harness architecture, and
+`simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
+command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result
 and evidence acceptance plus workflow publication.
 
 VM simulation stays near target deployment after the clean baseline snapshot.
@@ -14,10 +14,10 @@ resource cleanup remain VM-local realizations of the shared simulation-set
 contract.
 
 Per-command internal sequence diagrams are documented in
-`simulation/vm/docs/sequences.md`.
+`simulation/docs/vm/command-sequences.md`.
 
 The accepted detailed decision for splitting the M5 `libvirt.sh` monolith is
-documented in `simulation/vm/docs/decisions/libvirt-module-refactor.md`. Read that companion before
+documented in `simulation/docs/vm/decisions/libvirt-module-refactor.md`. Read that companion before
 changing libvirt operations, VM-set ownership, baked images, seed media,
 snapshots, or guest baseline and LDAP verification.
 
@@ -214,7 +214,7 @@ Forbidden dependency directions include:
 
 ## Lifecycle State Model
 
-`simulation/docs/lifecycle-state-model.md` owns simulation-set state
+`simulation/docs/shared/lifecycle-state-model.md` owns simulation-set state
 dimensions, command guards, transitions, and the `restored-pending-clean`
 gate. VM command orchestration must implement that model without a VM-local
 alternative state machine.
@@ -235,7 +235,7 @@ realization described above.
 ## VM Post-Baseline Realization
 
 The shared boundary and diagram live in
-`simulation/docs/harness-design.md`. VM simulation realizes the target control
+`simulation/docs/shared/harness-design.md`. VM simulation realizes the target control
 plane with target OS SSH, SSH file transfer, role helpers,
 `scripts/integration-setup.sh`, product APIs, and
 `/var/lib/loopforge/staging/<role>`. Libvirt and seed-media modules remain
@@ -308,7 +308,7 @@ The implemented dependency direction is
 `state.sh` must not query live libvirt resources, and the `libvirt-*.sh`
 implementation files must not call target SSH or state functions. Detailed
 rationale, current anatomy, API policy, migration slices, and verification are
-owned by `simulation/vm/docs/decisions/libvirt-module-refactor.md`.
+owned by `simulation/docs/vm/decisions/libvirt-module-refactor.md`.
 
 Snapshot capture and restore additionally depend on baseline readiness, and
 snapshot restore and audit depend on VM-set ownership verification before any
@@ -316,7 +316,7 @@ libvirt mutation.
 
 ## VM Backend Boundary
 
-`simulation/docs/harness-design.md` owns the shared-helper qualification rules.
+`simulation/docs/shared/harness-design.md` owns the shared-helper qualification rules.
 VM implementation modules may consume those helpers but must keep these
 mechanisms under `simulation/vm/`:
 
@@ -337,7 +337,7 @@ bounded logs, generated evidence where applicable, and no hidden cleanup or
 destruction side effects.
 
 Milestone completion requires fail-closed runtime proof as defined in
-`simulation/vm/docs/verification.md`. Marker files, terminal summaries, and
+`simulation/docs/vm/milestone-verification.md`. Marker files, terminal summaries, and
 evidence records summarize checks; they do not satisfy a milestone when
 bounded logs contain contradictory failure evidence.
 
@@ -389,7 +389,7 @@ install Ubuntu/OS dependencies.
 ## VM Post-Baseline Guardrails
 
 The shared post-baseline boundary is defined in
-`simulation/docs/harness-design.md`. VM realization requires these interfaces
+`simulation/docs/shared/harness-design.md`. VM realization requires these interfaces
 and paths after `create` captures the clean baseline snapshot:
 
 - target OS SSH as the operator account
@@ -420,10 +420,10 @@ operator approval requirements.
 
 When changing VM harness implementation, reviewers should check that:
 
-- public command behavior remains documented in `simulation/vm/README.md`
+- public command behavior remains documented in `simulation/docs/vm/vm-simulation.md`
 - shared architecture and state behavior remain consistent with
-  `simulation/docs/harness-design.md` and
-  `simulation/docs/lifecycle-state-model.md`
+  `simulation/docs/shared/harness-design.md` and
+  `simulation/docs/shared/lifecycle-state-model.md`
 - internal module boundaries remain consistent with this file
 - generated simulation-set state and run-scoped output stay separate
 - mutating VM commands validate simulation-set ownership before acting

@@ -16,7 +16,7 @@ Verification:
 ```bash
 test -f docs/contracts/lifecycle-contract.md
 rg -n "Operator Workflow Contract|Lifecycle Checkpoints|Docker Command Mapping" docs/contracts/lifecycle-contract.md
-rg -n "lifecycle-contract.md" docs/README.md docs/architecture/system-model.md simulation/docker/README.md
+rg -n "lifecycle-contract.md" docs/README.md docs/architecture/system-model.md simulation/docs/docker/docker-simulation.md
 rg -n "^[[:space:]]*(run|configure-controller-node)$" docs/planning/implementation-plan.md
 ```
 

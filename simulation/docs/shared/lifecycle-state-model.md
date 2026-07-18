@@ -5,9 +5,10 @@ persisted state, checkpoint vocabulary and order, record mechanics, command
 guards, classifications, and transition effects. It answers which ledger state
 is valid and what state effect a lifecycle event has. It realizes, but does not
 override, `docs/contracts/lifecycle-contract.md`. Public command descriptions
-remain in `simulation/README.md` and the backend README files.
+remain in `simulation/docs/shared/simulation-model.md` and the backend simulation
+guides.
 
-`simulation/docs/checkpoint-acceptance-protocol.md` separately owns the
+`simulation/docs/shared/checkpoint-acceptance-protocol.md` separately owns the
 cross-layer acceptance and publication protocol: which owning-layer outputs and
 evidence the harness must verify, who verifies them, and when the harness may
 invoke a transition defined here. The protocol does not add ledger states,
@@ -214,7 +215,7 @@ accepted checkpoint name and its strict predecessor order.
 
 The ledger exposes two checkpoint transitions. Their guards and effects are
 state-model facts; proof ownership and invocation order belong to
-`simulation/docs/checkpoint-acceptance-protocol.md`.
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`.
 
 | Transition | Guard | Successful ledger effect |
 | --- | --- | --- |

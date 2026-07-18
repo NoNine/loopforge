@@ -185,4 +185,4 @@ This PRD is based on the current repo materials, especially:
 - `lab/README.md`
 - `scripts/gerrit-operator.sh`
 - `scripts/jenkins-operator.sh`
-- `simulation/vm/README.md`
+- `simulation/docs/vm/vm-simulation.md`

@@ -17,13 +17,13 @@ cross-role integration orchestration. Do not add standalone VM phase scripts or
 a second VM simulation CLI.
 
 Shared architecture and exact state behavior are documented in
-`simulation/docs/harness-design.md` and
-`simulation/docs/lifecycle-state-model.md`. Cross-layer result acceptance and
+`simulation/docs/shared/harness-design.md` and
+`simulation/docs/shared/lifecycle-state-model.md`. Cross-layer result acceptance and
 checkpoint publication are documented in
-`simulation/docs/checkpoint-acceptance-protocol.md`. VM module structure and
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`. VM module structure and
 implementation contracts are documented in
-`simulation/vm/docs/implementation-design.md`. Milestone verification gates
-are documented in `simulation/vm/docs/verification.md`.
+`simulation/docs/vm/implementation-design.md`. Milestone verification gates
+are documented in `simulation/docs/vm/milestone-verification.md`.
 
 VM simulation should be implemented above shared support helpers from
 `simulation/lib/` when those helpers exist. Shared helpers cover common
@@ -36,7 +36,7 @@ loopback port ownership, or Docker transfer waivers.
 
 The VM layer uses the shared topology, account model, version baseline, source
 boundaries, output conventions, and checkpoint contract from
-`simulation/README.md`. VM hostnames, browser URLs, SSH host strings, and LDAP
+`simulation/docs/shared/simulation-model.md`. VM hostnames, browser URLs, SSH host strings, and LDAP
 endpoint identities follow `docs/contracts/endpoint-identity.md`.
 
 VM simulation may use simulation-owned fake LDAP bind passwords for its own
@@ -48,7 +48,7 @@ names and publishes FQDN aliases only; cloud-init configures guests to query
 the libvirt gateway DNS with the simulation search domain.
 
 The LDAP VM must run a real LDAP service. VM provisioning seeds the
-simulation-owned directory with the entries defined in `simulation/README.md`
+simulation-owned directory with the entries defined in `simulation/docs/shared/simulation-model.md`
 before the clean baseline snapshot is captured. The harness must prove LDAP
 service readiness, seeded entry presence, and LDAP bind/search behavior with
 simulation-owned test credentials only.
@@ -125,7 +125,7 @@ baked image and enabling only role-owned services on each VM.
 
 ## Milestone Verification Gates
 
-`simulation/vm/docs/verification.md` applies the shared lifecycle and evidence
+`simulation/docs/vm/milestone-verification.md` applies the shared lifecycle and evidence
 contracts to VM milestones. Its VM-specific gates cover real libvirt resources,
 guest SSH, dependency-prepared images, LDAP runtime proof, target-side artifact
 transfer, snapshots, and guest service recovery after reboot. It does not define
@@ -134,7 +134,7 @@ shared checkpoint success or progression.
 ## Command Reference
 
 Shared command meanings and state outcomes are authoritative in
-`simulation/README.md` and `simulation/docs/lifecycle-state-model.md`. VM
+`simulation/docs/shared/simulation-model.md` and `simulation/docs/shared/lifecycle-state-model.md`. VM
 accepts that command surface through `simulation/vm/simulate.sh`; this section
 lists only VM syntax and realization deltas.
 
@@ -188,7 +188,7 @@ defined by the VM harness. Copy committed examples outside the examples tree
 before using real operator values.
 
 Source/effective input custody and publication are shared contracts in
-`simulation/README.md` and the lifecycle state model. The VM harness adds only
+`simulation/docs/shared/simulation-model.md` and the lifecycle state model. The VM harness adds only
 live transport discovery and the private invocation adapter below.
 
 DHCP addresses are live target access and are not written to the stable
@@ -265,7 +265,7 @@ directly.
 ## Simulation Accounts
 
 The shared simulation account contract, including seeded LDAP login accounts,
-is defined in `simulation/README.md`. VM provisioning realizes the default
+is defined in `simulation/docs/shared/simulation-model.md`. VM provisioning realizes the default
 simulation operator. Role `install` creates or verifies the reviewed product
 runtime accounts and product homes inside the target VMs; the VM harness does
 not create those identities before invoking the helpers.

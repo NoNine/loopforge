@@ -21,13 +21,13 @@ responsibilities rather than generic backend hooks.
 
 Lifecycle checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
 Shared harness architecture and exact state guards are defined in
-`simulation/docs/harness-design.md` and
-`simulation/docs/lifecycle-state-model.md`. Cross-layer result acceptance and
+`simulation/docs/shared/harness-design.md` and
+`simulation/docs/shared/lifecycle-state-model.md`. Cross-layer result acceptance and
 checkpoint publication are defined in
-`simulation/docs/checkpoint-acceptance-protocol.md`. Docker generated-state and
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`. Docker generated-state and
 stale-container behavior is defined in this document.
 Docker-local module boundaries and dependency direction are defined in
-`simulation/docker/docs/implementation-design.md`.
+`simulation/docs/docker/implementation-design.md`.
 
 The shared Docker target image is a simulation superset. It combines
 role-runtime packages, helper-script packages, and Docker harness packages; it
@@ -51,7 +51,7 @@ this phase boundary is pending implementation.
 ## Command Reference
 
 Shared command meanings and state outcomes are authoritative in
-`simulation/README.md` and `simulation/docs/lifecycle-state-model.md`. Docker
+`simulation/docs/shared/simulation-model.md` and `simulation/docs/shared/lifecycle-state-model.md`. Docker
 accepts that command surface through `simulation/docker/simulate.sh`; this
 section lists only Docker syntax and realization deltas.
 
@@ -89,7 +89,7 @@ HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
 ```
 
 Source/effective input custody, set/run identity, and publication behavior are
-shared contracts in `simulation/README.md` and the lifecycle state model. The
+shared contracts in `simulation/docs/shared/simulation-model.md` and the lifecycle state model. The
 Docker harness consumes those records without a backend-local input lifecycle.
 
 The Docker harness derives the Compose project name exactly as
@@ -114,7 +114,7 @@ generated/simulation/docker/<run-id>/
 ## Simulation Accounts
 
 The shared simulation account contract, including seeded LDAP login accounts,
-is defined in `simulation/README.md`. The Docker target image realizes that
+is defined in `simulation/docs/shared/simulation-model.md`. The Docker target image realizes that
 contract with the default simulation operator and product runtime accounts.
 During `create`, the clean baseline initializes empty bind-mounted product-home
 roots to the baked runtime accounts' reviewed numeric ownership. Later
@@ -178,7 +178,7 @@ generated/simulation/docker/<run-id>/
 Implementation-specific harness state can live below child directories inside
 those roots. Shared simulation contracts for input custody, helper-visible paths,
 artifact staging, LDAP secret handling, retained outputs, and integration key
-custody live in `simulation/README.md`, `docs/contracts/artifact-bundle-contract.md`,
+custody live in `simulation/docs/shared/simulation-model.md`, `docs/contracts/artifact-bundle-contract.md`,
 and `docs/contracts/directory-model.md`.
 
 Docker realizes those contracts with container lifecycle, generated bind-mount
@@ -296,4 +296,4 @@ predecessors, evidence acceptance, and failure behavior remain shared.
 
 Source-boundary rules, including simulation-only public internet fallback for
 target-host Ubuntu/OS dependency installation, are shared in
-`simulation/README.md`.
+`simulation/docs/shared/simulation-model.md`.

@@ -54,18 +54,19 @@ for path in \
   docs/planning/steps/step-13c-shared-integration-lifecycle.md \
   docs/planning/steps/step-15-final-acceptance.md \
   project-state/execution-status.md \
-  simulation/README.md \
-  simulation/docs/checkpoint-acceptance-protocol.md \
-  simulation/docs/harness-design.md \
-  simulation/docs/lifecycle-state-model.md \
-  simulation/docs/terminal-output.md \
-  simulation/docker/README.md \
-  simulation/docker/docs/implementation-design.md \
-  simulation/vm/README.md \
-  simulation/vm/docs/implementation-design.md \
-  simulation/vm/docs/sequences.md \
-  simulation/vm/docs/verification.md \
-  simulation/vm/docs/decisions/libvirt-module-refactor.md; do
+  simulation/docs/README.md \
+  simulation/docs/shared/simulation-model.md \
+  simulation/docs/shared/checkpoint-acceptance-protocol.md \
+  simulation/docs/shared/harness-design.md \
+  simulation/docs/shared/lifecycle-state-model.md \
+  simulation/docs/shared/terminal-output.md \
+  simulation/docs/docker/docker-simulation.md \
+  simulation/docs/docker/implementation-design.md \
+  simulation/docs/vm/vm-simulation.md \
+  simulation/docs/vm/implementation-design.md \
+  simulation/docs/vm/command-sequences.md \
+  simulation/docs/vm/milestone-verification.md \
+  simulation/docs/vm/decisions/libvirt-module-refactor.md; do
   require_file "$path"
 done
 
@@ -76,10 +77,23 @@ for path in \
   docs/implementation \
   docs/gerrit-setup-manual.md \
   docs/gerrit-native-operations-reference.md \
+  simulation/README.md \
   simulation/terminal-output.md \
+  simulation/docker/README.md \
+  simulation/docker/docs/implementation-design.md \
   simulation/docs/checkpoint-coordination.md \
+  simulation/docs/simulation-model.md \
+  simulation/docs/checkpoint-acceptance-protocol.md \
+  simulation/docs/harness-design.md \
+  simulation/docs/lifecycle-state-model.md \
+  simulation/docs/terminal-output.md \
+  simulation/vm/README.md \
   simulation/vm/design.md \
   simulation/vm/docs/design.md \
+  simulation/vm/docs/implementation-design.md \
+  simulation/vm/docs/sequences.md \
+  simulation/vm/docs/verification.md \
+  simulation/vm/docs/decisions/libvirt-module-refactor.md \
   simulation/vm/sequences.md \
   simulation/vm/verification.md \
   simulation/vm/libvirt-refactor.md; do
@@ -95,6 +109,52 @@ unexpected_top_level="$(
     "${unexpected_top_level#"$repo_root/"}" >&2
   exit 1
 }
+
+unexpected_simulation_doc="$(
+  find "$repo_root/simulation" -path "$repo_root/simulation/docs" -prune -o \
+    -type f -name '*.md' -print -quit
+)"
+[ -z "$unexpected_simulation_doc" ] || {
+  printf 'Simulation documentation must live under simulation/docs: %s\n' \
+    "${unexpected_simulation_doc#"$repo_root/"}" >&2
+  exit 1
+}
+
+for simulation_doc in \
+  'shared/simulation-model.md' \
+  'docker/docker-simulation.md' \
+  'vm/vm-simulation.md'; do
+  grep -Fq -- "\`$simulation_doc\`" \
+    "$repo_root/simulation/docs/README.md" || {
+    printf 'Simulation documentation index must link %s\n' \
+      "$simulation_doc" >&2
+    exit 1
+  }
+done
+
+grep -Fq -- 'It is an index, not a behavioral authority.' \
+  "$repo_root/simulation/docs/README.md" || {
+  printf 'Simulation documentation index must disclaim behavioral authority\n' \
+    >&2
+  exit 1
+}
+
+for vm_preflight_doc in \
+  'simulation/docs/vm/vm-simulation.md' \
+  'simulation/docs/vm/implementation-design.md' \
+  'simulation/docs/vm/command-sequences.md'; do
+  grep -Fq -- "$vm_preflight_doc" \
+    "$repo_root/simulation/vm/lib/lifecycle.sh" || {
+    printf 'VM preflight must require canonical documentation path: %s\n' \
+      "$vm_preflight_doc" >&2
+    exit 1
+  }
+done
+
+if grep -Fq -- '$vm_dir/docs/' "$repo_root/simulation/vm/lib/lifecycle.sh"; then
+  printf 'VM preflight must not require backend-local documentation\n' >&2
+  exit 1
+fi
 
 grep -Fq -- '`setup/` documents repository-assisted setup workflows.' \
   "$repo_root/docs/operations/README.md" || {

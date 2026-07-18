@@ -1,18 +1,18 @@
 # Simulation Model
 
-This directory defines the shared simulation model for the v1 Gerrit/Jenkins
+This document defines the shared simulation model for the v1 Gerrit/Jenkins
 setup package. Layer-specific command syntax and backend realization live in
-the Docker and VM README files; this file owns shared command semantics,
+the Docker and VM simulation guides; this file owns shared command semantics,
 topology, source boundaries, output conventions, and simulation realization.
 `docs/contracts/lifecycle-contract.md` owns checkpoint semantics for all modes.
 
 Shared internal architecture is defined in
-`simulation/docs/harness-design.md`. Exact simulation state dimensions,
+`simulation/docs/shared/harness-design.md`. Exact simulation state dimensions,
 command guards, and transitions are defined in
-`simulation/docs/lifecycle-state-model.md`. Acceptance and publication of
+`simulation/docs/shared/lifecycle-state-model.md`. Acceptance and publication of
 owning-layer results and evidence are defined in
-`simulation/docs/checkpoint-acceptance-protocol.md`. Terminal presentation is
-defined in `simulation/docs/terminal-output.md`.
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`. Terminal presentation is
+defined in `simulation/docs/shared/terminal-output.md`.
 
 ## Lifecycle Documentation Boundary
 
@@ -20,11 +20,18 @@ Shared lifecycle contracts do not live in backend documents:
 
 | Document | Lifecycle responsibility |
 | --- | --- |
-| `simulation/README.md` | Shared public command semantics and operator workflow |
-| `simulation/docs/lifecycle-state-model.md` | Exact state, checkpoint order, guards, transitions, and recovery rights |
-| `simulation/docs/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus checkpoint publication |
-| `simulation/docs/harness-design.md` | Shared architectural and dependency boundaries |
-| Docker and VM README files | Accepted backend syntax, backend-only commands, resource mechanisms, transport, and cleanup tools |
+| `simulation/docs/shared/simulation-model.md` | Shared public command semantics and operator workflow |
+| `simulation/docs/shared/lifecycle-state-model.md` | Exact state, checkpoint order, guards, transitions, and recovery rights |
+| `simulation/docs/shared/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus checkpoint publication |
+| `simulation/docs/shared/harness-design.md` | Shared architectural and dependency boundaries |
+| `simulation/docs/shared/terminal-output.md` | Shared terminal presentation conventions |
+| `simulation/docs/docker/docker-simulation.md` | Accepted Docker syntax, resource mechanisms, transport, and cleanup tools |
+| `simulation/docs/docker/implementation-design.md` | Docker module boundaries and dependency direction |
+| `simulation/docs/vm/vm-simulation.md` | Accepted VM syntax, resource mechanisms, transport, and cleanup tools |
+| `simulation/docs/vm/implementation-design.md` | VM module boundaries and provisioning decisions |
+| `simulation/docs/vm/command-sequences.md` | VM command flow through internal capabilities |
+| `simulation/docs/vm/milestone-verification.md` | VM milestone pass/fail gates |
+| `simulation/docs/vm/decisions/` | Narrow VM implementation decisions |
 
 Backend documents apply these contracts and describe only their realization
 deltas. They must not restate shared guards, statuses, resume rules, checkpoint
@@ -296,7 +303,7 @@ commands preserve the same review and recovery boundaries:
 
 ## Shared Command Semantics
 
-Layer README files own the concrete command reference for their entrypoint.
+Backend simulation guides own the concrete command reference for their entrypoint.
 When a layer uses these command names, the shared simulation semantics are:
 
 | Command | Shared meaning |
@@ -340,15 +347,15 @@ run-scoped `workflow-state.env` owns only checkpoint activity and progression.
 Strict readers cross-check both records with the immutable run marker,
 baseline, source/effective-input fingerprints, backend ownership, and
 hash-linked checkpoint records. Details and exact transitions are authoritative
-in `simulation/docs/lifecycle-state-model.md`. Result and evidence acceptance
+in `simulation/docs/shared/lifecycle-state-model.md`. Result and evidence acceptance
 plus publication order are defined in
-`simulation/docs/checkpoint-acceptance-protocol.md`.
+`simulation/docs/shared/checkpoint-acceptance-protocol.md`.
 
 ## Terminal Output Convention
 
-`simulation/docs/terminal-output.md` owns shared simulation terminal presentation
+`simulation/docs/shared/terminal-output.md` owns shared simulation terminal presentation
 conventions, including compact command summaries and Docker/VM `status`
-previews. Layer README files own concrete command behavior for their
+previews. Backend simulation guides own concrete command behavior for their
 entrypoints.
 
 ## Input And Secret Handling
@@ -419,7 +426,7 @@ state.
 ## State Consistency And Recovery
 
 Exact consistency dimensions, classifications, guards, and recovery rights are
-defined only in `simulation/docs/lifecycle-state-model.md`. Public commands fail
+defined only in `simulation/docs/shared/lifecycle-state-model.md`. Public commands fail
 closed on inconsistent selected state and never repair it implicitly. Docker
 and VM documents add only the backend resource probes used to apply that model.
 

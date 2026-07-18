@@ -24,7 +24,7 @@ Read these before implementation:
 - `docs/contracts/artifact-bundle-contract.md` and
   `docs/contracts/validation-and-evidence.md` for staged inputs and evidence
   binding.
-- `simulation/docs/checkpoint-acceptance-protocol.md` for role-result acceptance
+- `simulation/docs/shared/checkpoint-acceptance-protocol.md` for role-result acceptance
   and harness publication.
 - `docs/operations/native/review-guide.md` for the role-manual review profile.
 

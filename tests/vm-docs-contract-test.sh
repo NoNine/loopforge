@@ -26,18 +26,18 @@ reject_doc_text() {
   fi
 }
 
-require_doc_text simulation/README.md \
+require_doc_text simulation/docs/shared/simulation-model.md \
   '## Shared Command Semantics' \
   'Shared simulation docs must own command semantics'
-require_doc_text simulation/docs/lifecycle-state-model.md \
+require_doc_text simulation/docs/shared/lifecycle-state-model.md \
   'then removes the active-run pointer last.' \
   'Lifecycle state model must own clean review-state behavior'
-reject_doc_text simulation/vm/README.md \
+reject_doc_text simulation/docs/vm/vm-simulation.md \
   'removes the active-run pointer last.' \
-  'VM README must not restate shared clean behavior'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must not restate shared clean behavior'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'The ownership-checked `destroy` command removes the transient domain, bake' \
-  'VM README must own failed-bake state cleanup'
+  'VM simulation guide must own failed-bake state cleanup'
 reject_doc_text docs/contracts/lifecycle-contract.md \
   '## Simulation Command Relationship' \
   'Product lifecycle contract must not own simulation commands'
@@ -202,272 +202,272 @@ reject_doc_text docs/contracts/endpoint-identity.md \
   '## VM Simulation Endpoint Realization' \
   'Endpoint identity must not duplicate Applied To Loopforge with a VM-only section'
 
-require_doc_text simulation/README.md \
+require_doc_text simulation/docs/shared/simulation-model.md \
   'Docker simulation may use explicit simulation-only waivers' \
-  'Shared simulation README must distinguish Docker waivers from VM behavior'
-require_doc_text simulation/README.md \
+  'Simulation model must distinguish Docker waivers from VM behavior'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'VM simulation is expected to be stricter' \
-  'Shared simulation README must require stricter VM simulation'
-require_doc_text simulation/README.md \
+  'Simulation model must require stricter VM simulation'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'near target deployment' \
-  'Shared simulation README must define VM as near target deployment'
-require_doc_text simulation/README.md \
+  'Simulation model must define VM as near target deployment'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'realize LDAP as a simulation-owned directory' \
-  'Shared simulation README must require real simulation LDAP behavior'
-require_doc_text simulation/README.md \
+  'Simulation model must require real simulation LDAP behavior'
+require_doc_text simulation/docs/shared/simulation-model.md \
   'They must not satisfy LDAP readiness' \
-  'Shared simulation README must reject modeled LDAP readiness'
-require_doc_text simulation/README.md \
+  'Simulation model must reject modeled LDAP readiness'
+require_doc_text simulation/docs/shared/simulation-model.md \
   '| `gerrit-admin` | LDAP user | `admin-password` | Gerrit administrator login. |' \
-  'Shared simulation README must document the seeded Gerrit admin account'
-require_doc_text simulation/README.md \
+  'Simulation model must document the seeded Gerrit admin account'
+require_doc_text simulation/docs/shared/simulation-model.md \
   '| `jenkins-admin` | LDAP user | `admin-password` | Jenkins administrator login. |' \
-  'Shared simulation README must document the seeded Jenkins admin account'
-require_doc_text simulation/README.md \
+  'Simulation model must document the seeded Jenkins admin account'
+require_doc_text simulation/docs/shared/simulation-model.md \
   '| `test-user` | LDAP user | `test-password` | Disposable Gerrit login and change workflow user. |' \
-  'Shared simulation README must document the seeded test account'
-require_doc_text simulation/README.md \
+  'Simulation model must document the seeded test account'
+require_doc_text simulation/docs/shared/simulation-model.md \
   '| `readonly` / `cn=readonly,dc=example,dc=test` | LDAP bind account | `readonly-password` | Read-only Gerrit and Jenkins directory search account. |' \
-  'Shared simulation README must document the seeded LDAP bind account'
-require_doc_text simulation/README.md \
+  'Simulation model must document the seeded LDAP bind account'
+require_doc_text simulation/docs/shared/simulation-model.md \
   '## Terminal Output Convention' \
-  'Shared simulation README must document the terminal output convention'
-require_doc_text simulation/README.md \
-  '`simulation/docs/terminal-output.md` owns shared simulation terminal presentation' \
-  'Shared simulation README must point terminal convention to the companion doc'
-require_doc_text simulation/docs/terminal-output.md \
+  'Simulation model must document the terminal output convention'
+require_doc_text simulation/docs/shared/simulation-model.md \
+  '`simulation/docs/shared/terminal-output.md` owns shared simulation terminal presentation' \
+  'Simulation model must point terminal convention to the companion doc'
+require_doc_text simulation/docs/shared/terminal-output.md \
   '# Simulation Terminal Output' \
   'Terminal output companion doc must exist'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'Routine command success should use compact summary lines' \
   'Terminal output companion doc must define compact command summaries'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'Commands must not claim success when proof is missing.' \
   'Terminal output companion doc must require honest command states'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'Failure summaries should start with a compact reason' \
   'Terminal output companion doc must define compact failure summaries'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'The `status` command is an operator-facing summary, not an audit report.' \
   'Terminal output companion doc must keep status operator-facing'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'Layers must not force identical backend fields when' \
   'Terminal output companion doc must allow layer-specific status fields'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'uses the shared `Login accounts` table convention' \
   'Terminal output companion doc must document the login accounts table convention'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'integration service accounts as password-backed login accounts' \
   'Terminal output companion doc must prohibit password-backed integration accounts in status'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   '## Summary Preview' \
   'Terminal output companion doc must include command summary previews'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   '## Docker Preview' \
   'Terminal output companion doc must include a Docker preview'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   '## VM Preview' \
   'Terminal output companion doc must include a VM preview'
-require_doc_text simulation/docs/terminal-output.md \
+require_doc_text simulation/docs/shared/terminal-output.md \
   'not print raw libvirt URIs, VM resource marker values, domain dumps, Docker' \
   'Terminal output companion doc must keep backend internals out of normal output'
 
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'The VM layer uses the shared topology, account model, version baseline, source' \
-  'VM README must point to shared simulation authorities'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must point to shared simulation authorities'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'The LDAP VM must run a real LDAP service' \
-  'VM README must require a real LDAP service on the LDAP VM'
-require_doc_text simulation/vm/README.md \
-  'simulation-owned directory with the entries defined in `simulation/README.md`' \
-  'VM README must point seeded LDAP users and groups to the shared simulation README'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require a real LDAP service on the LDAP VM'
+require_doc_text simulation/docs/vm/vm-simulation.md \
+  'simulation-owned directory with the entries defined in `simulation/docs/shared/simulation-model.md`' \
+  'VM simulation guide must point seeded LDAP users and groups to the shared simulation model'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'before the clean baseline snapshot is captured' \
-  'VM README must require LDAP seeding before baseline'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require LDAP seeding before baseline'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'service readiness, seeded entry presence, and LDAP' \
-  'VM README must require LDAP service and seed verification'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require LDAP service and seed verification'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`simulation/vm/ldap/50-harness-seed.ldif`' \
-  'VM README must document the VM LDAP seed source'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document the VM LDAP seed source'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'LDAP endpoint is reachable from the Gerrit and Jenkins controller VMs' \
-  'VM README must require LDAP reachability from consuming VMs'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require LDAP reachability from consuming VMs'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`simulation/lib/`' \
-  'VM README must point implementation at shared simulation helpers'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must point implementation at shared simulation helpers'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '## Near-Target Lifecycle Boundary' \
-  'VM README must define the near-target lifecycle boundary'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must define the near-target lifecycle boundary'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'VM simulation is expected to be near target deployment for lifecycle' \
-  'VM README must require near-target checkpoint execution'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require near-target checkpoint execution'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '## Shared Base-Image Service Waiver' \
-  'VM README must document the shared-image service waiver'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document the shared-image service waiver'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'does not apply to target deployment' \
   'VM service waiver must not weaken target deployment'
-require_doc_text simulation/vm/docs/verification.md \
+require_doc_text simulation/docs/vm/milestone-verification.md \
   '## Shared Base-Image Service Waiver Gate' \
   'VM verification must define the shared-image waiver gate'
-require_doc_text simulation/vm/docs/verification.md \
+require_doc_text simulation/docs/vm/milestone-verification.md \
   '`audit-state: ok` is necessary but not sufficient' \
   'VM waiver verification must not rely on audit-state alone'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'VM provisioning must satisfy the role target OS dependency baselines before' \
-  'VM README must place role OS dependencies before baseline snapshot'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must place role OS dependencies before baseline snapshot'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'automatic baked base-image' \
-  'VM README must allow create-owned baked base-image preparation'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must allow create-owned baked base-image preparation'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'successful LDAP operation with no matching entries is a failure' \
-  'VM README must require exact LDAP entry proof'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require exact LDAP entry proof'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'set-local base image' \
-  'VM README must document simulation-set-local base-image ownership'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document simulation-set-local base-image ownership'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'account-scoped OpenSSH policy' \
-  'VM README must document the operator SSH seed policy'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document the operator SSH seed policy'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'failed cloud-init module blocks readiness' \
-  'VM README must require successful cloud-init completion'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require successful cloud-init completion'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`VM_DEBUG_PRESERVE_FAILED_BAKE=1`' \
-  'VM README must document failed bake debug preservation'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document failed bake debug preservation'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'while the debug marker exists so the next attempt' \
-  'VM README must protect preserved bake evidence from create reruns'
+  'VM simulation guide must protect preserved bake evidence from create reruns'
 require_doc_text simulation/vm/examples/vm.env.example \
   'VM_DEBUG_PRESERVE_FAILED_BAKE=0' \
   'VM example environment must keep bake debug preservation opt-in'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'become libvirt-managed volumes' \
-  'VM README must define libvirt-managed image ownership'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must define libvirt-managed image ownership'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   "libvirt-reported path as a file-backed" \
-  'VM README must use file-backed attachment for managed volumes'
-require_doc_text simulation/vm/docs/verification.md \
+  'VM simulation guide must use file-backed attachment for managed volumes'
+require_doc_text simulation/docs/vm/milestone-verification.md \
   'without requiring direct host file access' \
   'VM verification must avoid operator reads of managed images'
 require_doc_text docs/contracts/directory-model.md \
   'Libvirt directory-pool target' \
   'Directory model must identify libvirt-managed VM image paths'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'Legacy or malformed ownership schemas are conflicting state.' \
-  'VM README must reject legacy ownership fallback'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must reject legacy ownership fallback'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'name-derived recovery, or compatibility cleanup' \
-  'VM README must reject name-derived legacy cleanup'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must reject name-derived legacy cleanup'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'size, and VM package matrix' \
-  'VM README must document baked base-image invalidation inputs'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document baked base-image invalidation inputs'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'they do not install Ubuntu/OS dependencies' \
-  'VM README must keep role helpers out of OS dependency installation'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must keep role helpers out of OS dependency installation'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'checkpoint work must use target-like' \
-  'VM README must require target-like checkpoint interfaces'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must require target-like checkpoint interfaces'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'target OS SSH as `ci-operator`' \
-  'VM README must use target OS SSH as the checkpoint control plane'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must use target OS SSH as the checkpoint control plane'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`/var/lib/loopforge/staging/<role>`' \
-  'VM README must use guest-local canonical staging'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must use guest-local canonical staging'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'must not use libvirt console access' \
-  'VM README must prohibit libvirt console checkpoint shortcuts'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must prohibit libvirt console checkpoint shortcuts'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'direct guest disk or image' \
-  'VM README must prohibit direct guest image edits'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must prohibit direct guest image edits'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'post-baseline cloud-init' \
-  'VM README must prohibit post-baseline cloud-init checkpoint shortcuts'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must prohibit post-baseline cloud-init checkpoint shortcuts'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'modeled success without' \
-  'VM README must prohibit modeled VM checkpoint success'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must prohibit modeled VM checkpoint success'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '| `create` | Define the reusable simulation set' \
-  'VM README must document VM create realization'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document VM create realization'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'LDAP service readiness, and LDAP seed verification' \
-  'VM README must place LDAP readiness before baseline snapshot capture'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must place LDAP readiness before baseline snapshot capture'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'OS dependency fulfillment, LDAP service readiness' \
-  'VM README must place role OS dependency fulfillment before baseline snapshot capture'
-require_doc_text simulation/vm/docs/verification.md \
+  'VM simulation guide must place role OS dependency fulfillment before baseline snapshot capture'
+require_doc_text simulation/docs/vm/milestone-verification.md \
   '`create` baked a simulation-owned dependency-prepared base image' \
   'VM verification must require baked base-image proof for M4'
-require_doc_text simulation/vm/docs/verification.md \
+require_doc_text simulation/docs/vm/milestone-verification.md \
   'each VM proves the expected packages and commands are available from the' \
   'VM verification must keep per-VM package and command proof after baking'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '| `reboot` | Reboots selected running guests through the guest OS' \
-  'VM README must document VM reboot realization'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document VM reboot realization'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`restore-baseline` is destructive to guest disk changes made after the' \
-  'VM README must document restore-baseline as snapshot rollback, not VM deletion'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document restore-baseline as snapshot rollback, not VM deletion'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '| `clean` | Applies the shared mutable-run cleanup without changing guest disks' \
-  'VM README must document VM clean realization only'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document VM clean realization only'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '| `destroy` | Undefine selected VM domains and remove owned storage' \
-  'VM README must document libvirt destroy realization'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document libvirt destroy realization'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '| `destroy` | Removes only ownership-validated selected domains' \
-  'VM README must document VM destroy realization'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document VM destroy realization'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'set-local base image' \
-  'VM README must document destroy removes local base image'
+  'VM simulation guide must document destroy removes local base image'
 require_doc_text docs/contracts/directory-model.md \
   'set-local base image' \
   'Directory model must define simulation-set-local base-image ownership'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'cleanup-libvirt-resources.sh --dry-run' \
-  'VM README must document host cleanup dry-run'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document host cleanup dry-run'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'host-wide recovery tool' \
-  'VM README must distinguish host cleanup from selected VM-set destroy'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must distinguish host cleanup from selected VM-set destroy'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'configure-systemd-resolved.sh --dry-run' \
-  'VM README must document the systemd-resolved split-DNS helper'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document the systemd-resolved split-DNS helper'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`simulation/vm/examples/vm.env.example`, matching the VM simulation CLI' \
   'VM systemd-resolved helper must document default --env behavior'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`--apply` and `--revert` require non-interactive sudo' \
   'VM systemd-resolved helper must document no-sudo fail-fast behavior'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'mutate only systemd-resolved'\''s temporary per-link runtime' \
   'VM systemd-resolved helper must document temporary-only runtime behavior'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'does not edit `/etc/hosts`' \
   'VM systemd-resolved helper must not be documented as persistent host DNS mutation'
-require_doc_text simulation/vm/README.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'Exported artifact review copies' \
-  'VM README must document exported artifacts as review copies'
-require_doc_text simulation/vm/README.md \
+  'VM simulation guide must document exported artifacts as review copies'
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'Artifact staging to service VMs uses target OS SSH' \
-  'VM README must document target OS SSH artifact staging'
-reject_doc_text simulation/vm/README.md \
+  'VM simulation guide must document target OS SSH artifact staging'
+reject_doc_text simulation/docs/vm/vm-simulation.md \
   'generated/simulation/vm/<run-id>/target/artifacts/staging' \
-  'VM README must not model VM staging as generated target sideband'
+  'VM simulation guide must not model VM staging as generated target sideband'
 
-reject_doc_text simulation/vm/README.md \
+reject_doc_text simulation/docs/vm/vm-simulation.md \
   'Docker service names such as `gerrit-target`' \
-  'VM README must not use Docker service names as VM endpoint identities'
+  'VM simulation guide must not use Docker service names as VM endpoint identities'
 
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
-  'simulation/vm/README.md` for the public VM command contract' \
-  'Step 13 plan must point public VM behavior to the VM README'
+  'simulation/docs/vm/vm-simulation.md` for the public VM command contract' \
+  'Step 13 plan must point public VM behavior to the VM simulation guide'
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
-  'simulation/vm/docs/implementation-design.md` for VM module boundaries and' \
+  'simulation/docs/vm/implementation-design.md` for VM module boundaries and' \
   'Step 13 plan must point internal VM design to the VM design doc'
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
-  'simulation/vm/docs/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,' \
+  'simulation/docs/vm/decisions/libvirt-module-refactor.md` for the accepted libvirt, VM-set,' \
   'Step 13 plan must name the accepted libvirt refactor companion'
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
-  'simulation/vm/docs/sequences.md` for command flow' \
+  'simulation/docs/vm/command-sequences.md` for command flow' \
   'Step 13 plan must point VM command flow to the sequence companion doc'
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   'M2-M8 verification remains milestone-scoped' \
@@ -484,24 +484,24 @@ require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
 require_doc_text docs/planning/steps/step-13-vm-simulation-harness.md \
   '| M5 | Run `restore-baseline`, `clean`, `destroy`, and `audit-state`; verify rollback' \
   'Step 13 M5 must perform restore/clean/destroy after baseline prerequisites'
-require_doc_text simulation/vm/docs/implementation-design.md \
+require_doc_text simulation/docs/vm/implementation-design.md \
   '| M4 Baseline prerequisites: role OS dependencies and LDAP proof |' \
   'VM design M4 must own baseline prerequisites'
-require_doc_text simulation/vm/docs/implementation-design.md \
+require_doc_text simulation/docs/vm/implementation-design.md \
   '| M5 Baseline snapshot, restore, clean, and destroy |' \
   'VM design M5 must own baseline snapshot restore, clean, and destroy'
-require_doc_text simulation/vm/docs/implementation-design.md \
-  'simulation/vm/docs/decisions/libvirt-module-refactor.md`' \
+require_doc_text simulation/docs/vm/implementation-design.md \
+  'simulation/docs/vm/decisions/libvirt-module-refactor.md`' \
   'VM design must name the accepted libvirt refactor companion'
-require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \
+require_doc_text simulation/docs/vm/decisions/libvirt-module-refactor.md \
   'This decision is implemented.' \
   'VM libvirt refactor companion must record its implemented status'
-require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \
+require_doc_text simulation/docs/vm/decisions/libvirt-module-refactor.md \
   '`lifecycle -> vm-set/baseline/snapshots -> libvirt/ssh/state -> config/paths`' \
   'VM libvirt refactor companion must define the target dependency direction'
-require_doc_text simulation/vm/docs/decisions/libvirt-module-refactor.md \
+require_doc_text simulation/docs/vm/decisions/libvirt-module-refactor.md \
   'The public CLI is unchanged.' \
   'VM libvirt refactor companion must preserve the public CLI'
-require_doc_text simulation/vm/docs/sequences.md \
+require_doc_text simulation/docs/vm/command-sequences.md \
   'verify role OS dependency baselines' \
   'VM create sequence must verify role OS dependency baselines before snapshot'

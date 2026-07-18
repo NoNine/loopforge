@@ -6,7 +6,7 @@ This document owns how Docker and VM harnesses accept owning-layer results and
 producer evidence before publishing simulation workflow progress. It defines
 proof ownership, binding, verification, and publication order.
 
-`simulation/docs/lifecycle-state-model.md` owns the ledger schemas, checkpoint
+`simulation/docs/shared/lifecycle-state-model.md` owns the ledger schemas, checkpoint
 vocabulary and order, command guards, classifications, and transition effects.
 This protocol invokes `open-checkpoint` and `commit-checkpoint`; it does not add
 states, transitions, or checkpoint names. Product checkpoint semantics remain

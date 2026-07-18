@@ -4,11 +4,11 @@
 
 This companion document defines the verification gate for VM simulation
 milestones. It is narrower than the public command contract in
-`simulation/vm/README.md` and more detailed than the milestone roadmap in
-`simulation/vm/docs/implementation-design.md`.
+`simulation/docs/vm/vm-simulation.md` and more detailed than the milestone roadmap in
+`simulation/docs/vm/implementation-design.md`.
 
 Shared lifecycle sequences and outcomes come only from
-`simulation/docs/lifecycle-state-model.md`; this document selects VM scenarios
+`simulation/docs/shared/lifecycle-state-model.md`; this document selects VM scenarios
 and runtime assertions without redefining them.
 
 A milestone is complete only when its required runtime assertions pass, the
@@ -91,7 +91,7 @@ hidden repair path.
 
 Recovery remains explicit. Only `stop`, `restore-baseline`, `clean`, and
 `destroy` may recover VM lifecycle state as defined by
-`simulation/docs/lifecycle-state-model.md`. Other commands must fail clearly on
+`simulation/docs/shared/lifecycle-state-model.md`. Other commands must fail clearly on
 inconsistent state instead of deleting, repairing, re-owning, or bypassing
 stale state.
 

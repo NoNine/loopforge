@@ -5,8 +5,8 @@
 This decision is implemented. The accepted module boundaries, dependency
 rules, and compatibility policy below describe the current VM harness.
 
-`simulation/vm/README.md` remains the public VM simulation command contract.
-`simulation/vm/docs/implementation-design.md` owns VM harness module
+`simulation/docs/vm/vm-simulation.md` remains the public VM simulation command contract.
+`simulation/docs/vm/implementation-design.md` owns VM harness module
 boundaries. This document is
 the task-local implementation companion for the accepted `libvirt.sh`
 refactor: it records the measured construction, decision rationale, target
