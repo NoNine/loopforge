@@ -102,17 +102,17 @@ Docker and VM simulation use separate public CLIs:
 `simulation/docker/simulate.sh` and `simulation/vm/simulate.sh`. Do not
 replace them with a single backend-dispatching entrypoint.
 
-Shared implementation support belongs under `simulation/lib/` when code is
-extracted. Extract only backend-neutral mechanics there: role parsing, env
-loading, runtime input custody, command summaries, quoting helpers, artifact
-manifest/checksum helpers, evidence helpers, and lifecycle marker utilities.
+Both harnesses consume the implemented backend-neutral foundation under
+`simulation/lib/`. `simulation/docs/shared/harness-design.md` owns its module
+inventory, internal architecture, and the qualification rule for further
+extraction.
 
-Layer lifecycle and transport stay local to each harness until real VM code
-proves a stable boundary. Docker-specific Compose, image, container,
-bind-mount, `docker cp`, loopback-port, and cleanup behavior belongs in the
-Docker harness. VM-specific libvirt/KVM domains, resource groups, snapshots,
-guest reboot, guest SSH readiness, guest-owned NFS-backed shared storage, and VM
-`create`/`clean`/`destroy` behavior belongs in the VM harness.
+Layer lifecycle and transport stay local to each harness. Docker-specific
+Compose, image, container, bind-mount, `docker cp`, loopback-port, and cleanup
+behavior belongs in the Docker harness. VM-specific libvirt/KVM domains,
+resource groups, snapshots, guest reboot, guest SSH readiness, guest-owned
+NFS-backed shared storage, and VM `create`/`clean`/`destroy` behavior belongs in
+the VM harness.
 
 Docker simulation may use explicit simulation-only waivers where containers
 cannot naturally model target hosts. VM simulation is expected to be stricter:
@@ -120,10 +120,10 @@ libvirt/KVM provides the lab infrastructure, but lifecycle checkpoint work
 should remain near target deployment and use target-like interfaces rather
 than inheriting Docker shortcuts.
 
-Do not introduce a Docker/VM backend abstraction before the VM harness has
-enough implementation to prove a durable interface. Prefer small shared
-support libraries first; if repeated backend-shaped code remains after the VM
-harness is working, promote only that proven boundary.
+The implemented common foundation does not imply a Docker/VM backend object
+API. Promote more code only when both implementations prove the same inputs,
+outputs, ownership boundary, and failure semantics without backend
+conditionals.
 
 ## Simulation Accounts
 
@@ -269,6 +269,47 @@ commands preserve the same review and recovery boundaries:
 | Clean generated host-side state | `stop -> restore-baseline -> clean` | `stop -> restore-baseline -> clean` |
 | Full rerun-oriented reset | `stop -> restore-baseline -> clean -> init-run -> start` | `stop -> restore-baseline -> clean -> init-run -> start` |
 | Remove reusable backend artifacts | `stop -> destroy` | `stop -> destroy` |
+
+## Shared Operator Interface
+
+Docker and VM retain separate entrypoints while exposing one shared command
+grammar:
+
+```text
+simulation/docker/simulate.sh [--env FILE] <command> [options]
+simulation/vm/simulate.sh [--env FILE] <command> [options]
+```
+
+`--env FILE` may be supplied before the command or as a command option. When it
+is omitted, each backend selects its committed backend example as the bootstrap
+env file. Committed examples are templates; copy them outside the examples tree
+before supplying real operator values.
+
+Both backend env files select the same role and integration inputs:
+
+```text
+HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
+HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
+HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
+HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
+```
+
+`ssh` requires `--role ROLE`. `prepare-artifacts`, `stage-artifacts`,
+`configure-role`, and `validate-role` accept optional `--role ROLE`; omission
+selects every role in shared order. `ROLE` is `gerrit`,
+`jenkins-controller`, or `jenkins-agent`. Commands without documented operands
+reject backend-specific extras. A backend may add a narrowly scoped extension;
+VM `reboot --role ROLE|--all` is the only current extension.
+
+Shared `status` states and fields are defined in
+`simulation/docs/shared/terminal-output.md`. Backend guides and implementations
+add only their resource namespace and currently available access fields; they
+do not define another status lifecycle.
+
+After `start`, `ssh --role ROLE` opens target OS control-plane SSH as the
+target-local `ci-operator`. It uses current start-owned target access and the
+backend's documented SSH identity custody. It does not use Docker exec or a
+libvirt console, and it is separate from Gerrit's service SSH on port `29418`.
 
 ## Shared Command Semantics
 

@@ -41,6 +41,27 @@ success. The target control plane transports published effective inputs and
 invokes the owning helper or product API; it does not own application
 configuration.
 
+## Common Harness Structure
+
+Both harnesses implement the architectural planes with the same conceptual
+module roles. Backend implementation designs map concrete files onto these
+roles and document backend-only splits.
+
+| Module role | Shared responsibility |
+| --- | --- |
+| Backend entrypoint | Parse the public CLI, load shared and backend-local modules, and dispatch command-shaped functions. It remains thin and contains no lifecycle implementation bodies. |
+| Command orchestration | Own composite workflow sequencing, set-lock selection, command summaries, and delegation. It is the only command-shaped implementation layer. |
+| Simulation-set capabilities | Coordinate create, start, stop, restore, status, audit, clean, and destroy against ownership-validated backend resources without completing product checkpoints. |
+| Lifecycle capabilities | Prepare and stage artifacts, invoke role helpers, invoke the integration owner, and verify owning-layer results for orchestration acceptance. They do not redefine role or integration postconditions. |
+| Target control plane | Provide current target access, bounded command execution, input and artifact transfer, and interactive operator SSH through backend-approved mechanisms. |
+| Backend infrastructure | Implement Compose/container or libvirt/VM resource primitives without calling lifecycle capabilities or command orchestration. |
+| Backend foundation | Realize canonical paths, backend configuration, shared-state adapters, and backend evidence metadata. State adapters do not query live backend resources. |
+| Shared foundation | Provide backend-neutral identity, locking, state, input, role, artifact, permission, log, evidence-path, and quoting mechanics under `simulation/lib/`. |
+
+The common roles do not require identical filenames or functions. They define
+ownership and dependency direction. Matching backend filenames are useful only
+when they describe the same role; they do not create a cross-backend API.
+
 ## Dependency Direction
 
 Command orchestration may call both backend infrastructure and lifecycle
@@ -129,20 +150,21 @@ below the baseline or simulation-set lifecycle boundary.
 
 ## Shared Helper Boundary
 
-Backend-neutral support may live under `simulation/lib/` when both harnesses
-need the same semantics:
+Both harnesses source the implemented foundation under `simulation/lib/`:
 
-- role parsing and iteration;
-- env loading and required-value checks;
-- set/run identity validation and marker encoding;
-- stable set locking and strict fixed-key state-record parsing;
-- active-run pointer, workflow-head, and checkpoint-chain verification;
-- atomic same-directory state publication;
-- source/effective input custody and strict binding;
-- bounded log setup and compact summaries;
-- evidence record and redaction helpers;
-- manifest and checksum helpers;
-- shell quoting and repo-relative path resolution.
+| Shared module | Responsibility |
+| --- | --- |
+| `common.sh`, `quote.sh` | Fail-closed command utilities, compact summaries, timestamps, readable-file checks, and shell/JSON quoting. |
+| `roles.sh`, `artifacts.sh` | Shared role vocabulary and iteration plus artifact names, manifest parsing, baseline validation, and checksum verification. |
+| `env.sh` | Env loading, base-relative path resolution, env record updates, and atomic simulation input-bundle custody. |
+| `identity.sh`, `locking.sh` | Canonical set/run identity, resource namespace derivation, stable set locks, and lock-scoped execution. |
+| `state.sh` | Strict records, active-run and workflow binding, input publication, baseline/reset binding, checkpoint chains, and selected-state classification. |
+| `permissions.sh`, `logs.sh`, `evidence.sh` | Shared permission classes plus bounded-log and evidence-record path construction. |
+
+Backend modules consume these mechanics rather than defining alternate shared
+state, identity, input, or permission models. Shared modules must not inspect
+Docker Compose or libvirt/KVM resources, discover live transport, or dispatch
+backend commands.
 
 The following remain backend-local:
 

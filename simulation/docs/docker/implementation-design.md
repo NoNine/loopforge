@@ -1,17 +1,18 @@
 # Docker Simulation Harness Implementation Design
 
 This document owns Docker-specific module structure, capability boundaries,
-dependency direction, and internal API conventions. `simulation/docs/docker/docker-simulation.md`
-owns the public Docker command contract. `simulation/docs/shared/harness-design.md`
-owns shared harness architecture, and
+dependency direction, and internal API conventions.
+`simulation/docs/shared/simulation-model.md` owns the common public command
+contract, while `simulation/docs/docker/docker-simulation.md` owns Docker
+syntax and realization deltas. `simulation/docs/shared/harness-design.md` owns
+the common harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
 command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result
 and evidence acceptance plus workflow publication.
 
-Docker and VM simulation share lifecycle meanings, not backend APIs. Docker
-modules may follow the VM harness's capability-shaped layering where the
-ownership boundary is the same, but Compose, containers, bind data, loopback
-ports, baseline archives, and Docker transfer waivers remain Docker-local.
+Docker realizes the shared module roles with Docker-local capability APIs.
+Compose, containers, bind data, loopback ports, baseline archives, transport
+waivers, and live resource ownership are not shared backend APIs.
 
 ## Module Layout
 
@@ -24,6 +25,7 @@ simulation/docker/
     state.sh
     compose.sh
     ports.sh
+    inputs.sh
     ssh.sh
     docker-set.sh
     baseline.sh
@@ -34,22 +36,21 @@ simulation/docker/
     lifecycle.sh
 ```
 
-`simulate.sh` is the public entrypoint. It parses CLI arguments, loads shared
-and Docker-local modules, and dispatches only to command-shaped lifecycle
-entrypoints.
+`simulate.sh` maps the Docker entrypoint onto the shared thin-CLI role and
+dispatches only to `docker_cmd_*` lifecycle entrypoints.
 
-`paths.sh` implements the canonical run-root and set-root paths defined by
-`simulation/docs/shared/generated-state-layout.md`. Other modules must not
-reassemble those paths.
+`paths.sh` maps the shared path-foundation role onto the Docker set, lock, run,
+bind-runtime, and baseline paths defined by
+`simulation/docs/shared/generated-state-layout.md`.
 
-`config.sh` owns defaults, env loading, selected identities, stable endpoint
-values, input selection, and rendered configuration. It does not own live
-container queries or checkpoint progression.
+`config.sh` owns Docker defaults, env selection, selected identities, stable
+loopback endpoint values, and rendered Docker configuration. `inputs.sh` owns
+effective Docker input rendering and publication. Neither owns live container
+queries or checkpoint progression.
 
-`state.sh` owns Docker wrappers around shared run markers, active-run and
-workflow bindings, generated-state validation, and generic workflow-ledger
-publication. It does not query live Docker resources or define role and
-integration postconditions.
+`state.sh` adapts shared run, active-run, workflow, and checkpoint mechanics to
+Docker generated state. It does not query live Docker resources or define role
+and integration postconditions.
 
 `compose.sh` and `ports.sh` own Docker infrastructure primitives: Compose
 selection, container identity and runtime queries, mount inspection, and
@@ -85,9 +86,8 @@ workflow publication.
 `evidence.sh` owns the Docker evidence schema, Docker collection waivers, and
 role evidence normalization. It remains backend-local.
 
-`lifecycle.sh` is the only command-shaped orchestration layer. It owns
-composite workflow sequencing, set locking, command summaries, and delegation
-to the capability modules.
+`lifecycle.sh` maps the shared command-orchestration role onto Docker
+capabilities. It remains the only Docker command-shaped implementation layer.
 
 ## Dependency Direction
 
@@ -95,8 +95,9 @@ The intended dependency direction is:
 
 ```text
 simulate -> lifecycle
-lifecycle -> docker-set/baseline/artifacts/roles/integration/ssh/state/config
+lifecycle -> docker-set/baseline/inputs/artifacts/roles/integration/ssh/state/config
 docker-set/baseline -> compose/ports/state/config/paths
+inputs -> artifacts/state/config/paths
 artifacts/roles/integration/ssh -> compose/state/config/paths/evidence
 compose/ports -> config/paths
 state -> config/paths
@@ -118,15 +119,6 @@ helpers use `__docker_*` when a name is needed outside a small local scope.
 Mechanical extraction may temporarily retain established function names while
 callers and tests are characterized. Do not retain compatibility wrappers
 after all repository callers move to the capability API.
-
-## Shared Extraction Rule
-
-Symmetric placement makes comparable contracts visible, but symmetry alone is
-not a reason to move code into `simulation/lib/`. Promote a helper only when
-Docker and VM expose the same inputs, outputs, ownership boundary, and failure
-semantics without backend conditionals. Public CLIs, command orchestration,
-backend resource lifecycle, baseline mechanics, transport discovery, and
-backend evidence collection remain separate.
 
 ## Refactor And Verification Policy
 

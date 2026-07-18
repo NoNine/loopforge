@@ -55,10 +55,7 @@ Shared command meanings and state outcomes are authoritative in
 accepts that command surface through `simulation/docker/simulate.sh`; this
 section lists only Docker syntax and realization deltas.
 
-`ssh` requires `--role ROLE`. `prepare-artifacts`, `stage-artifacts`,
-`configure-role`, and `validate-role` accept optional `--role ROLE`; omission
-selects all roles in shared order. `ROLE` is `gerrit`, `jenkins-controller`, or
-`jenkins-agent`. Other shared commands take no backend-specific operands.
+Docker adds no backend-only command or operand to the shared command surface.
 
 | Command scope | Docker realization |
 | --- | --- |
@@ -77,16 +74,6 @@ selects all roles in shared order. `ROLE` is `gerrit`, `jenkins-controller`, or
 
 If `--env FILE` is omitted, the harness uses
 `simulation/docker/examples/docker.env.example` as the bootstrap env file.
-Copy that file outside committed examples before using real operator values.
-
-The harness env file must identify role and integration env inputs:
-
-```text
-HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example
-HARNESS_JENKINS_CONTROLLER_ENV_FILE=examples/jenkins-controller.env.example
-HARNESS_JENKINS_AGENT_ENV_FILE=examples/jenkins-agent.env.example
-HARNESS_INTEGRATION_ENV_FILE=examples/integration.env.example
-```
 
 Source/effective input custody, set/run identity, and publication behavior are
 shared contracts in `simulation/docs/shared/simulation-model.md` and the lifecycle state model. The
@@ -97,19 +84,9 @@ The Docker harness derives the Compose project name exactly as
 remains stable across runs of the set, and must not include `HARNESS_RUN_ID` or
 act as another operator identity.
 
-`harness.env` is the rendered harness record for inspection. The private
-`harness.runtime.env` retains lifecycle values and points at the runtime input
-copies. Non-secret run markers and manifest contracts are public/read-only
-metadata, not secret material.
-
-For v1, Docker simulation does not support arbitrary generated/output roots.
-Reusable resources and run output use these repo-local roots:
-
-```text
-generated/simulation/docker/sets/<set-id>/
-generated/simulation/docker/locks/<set-id>.lock
-generated/simulation/docker/<run-id>/
-```
+Docker renders stable loopback endpoint values into the shared effective input
+bundle. Current published ports and target SSH access remain live backend
+state and are verified before use.
 
 ## Simulation Accounts
 
@@ -128,28 +105,6 @@ Jenkins agent containers at `JENKINS_SHARED_STORAGE_PATH`, normally
 `/data/jenkins-shared`. `configure-integration` applies the shared
 `jenkins-share` group, setgid group-writable permissions, and read/write proof
 inside those containers.
-
-Use `simulate.sh status --env FILE` to inspect the selected set in absent,
-unclaimed, stopped, or running state. The status command prints the set ID,
-active run when present, derived Compose project name, durable classification,
-and reset gate. It prints live browser URLs and seeded login accounts only
-when the running state can prove them; it does not substitute stale rendered
-port data.
-
-Use `simulate.sh ssh --role ROLE` after `start` to log into a target OS
-environment as the target-local `ci-operator` through SSH from the host. The
-command uses the published effective `INTEGRATION_*_TARGET_SSH_*` values and
-the run-scoped target SSH key and known-hosts file:
-
-```bash
-simulation/docker/simulate.sh ssh --role gerrit
-simulation/docker/simulate.sh ssh --role jenkins-controller
-simulation/docker/simulate.sh ssh --role jenkins-agent
-```
-
-This command intentionally uses the target OS control-plane SSH interface. It
-does not use Docker exec and it is separate from Gerrit's service SSH on port
-`29418`.
 
 ## Generated-State Realization
 

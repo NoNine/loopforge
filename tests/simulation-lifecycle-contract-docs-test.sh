@@ -303,15 +303,12 @@ require_text "$docker" \
 require_text "$docker" \
   'Docker baseline restoration rejects running containers, image or Compose' \
   'Docker restore must own container recreation'
-require_text "$docker" \
-  'generated/simulation/docker/sets/<set-id>/' \
-  'Docker docs must separate reusable simulation-set state from run output'
+require_text "$layout" \
+  'generated/simulation/<backend>/sets/<set-id>/' \
+  'Shared layout must separate reusable simulation-set state from run output'
 require_text "$vm" \
   'Set/run identity and active-run ownership are shared state-model contracts.' \
   'VM docs must delegate shared identity behavior'
-require_text "$vm" \
-  'generated/simulation/vm/sets/<set-id>/' \
-  'VM docs must separate reusable simulation-set state from run output'
 reject_text "$vm" \
   'by exact selected resource names during recovery' \
   'VM destroy must not delete by derived names without ownership metadata'

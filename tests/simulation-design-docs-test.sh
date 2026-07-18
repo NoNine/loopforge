@@ -55,6 +55,15 @@ require_text "$simulation_model" \
 require_text "$simulation_model" \
   'Backend documents apply these contracts and describe only their realization' \
   'Simulation model must restrict backend lifecycle documentation'
+require_text "$simulation_model" \
+  '## Shared Operator Interface' \
+  'Simulation model must own the shared operator interface'
+require_text "$simulation_model" \
+  '`ssh` requires `--role ROLE`.' \
+  'Simulation model must own shared role operand syntax'
+require_text "$simulation_model" \
+  'HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example' \
+  'Simulation model must own the shared bootstrap input schema'
 require_text "$generated_layout" \
   'Consumer documents may repeat a path when an operator must type, inspect, or' \
   'Generated-state layout must define the consumer repetition rule'
@@ -84,6 +93,12 @@ for file in "$docker_guide" "$vm_guide"; do
   reject_text "$file" \
     '| Harness evidence |' \
     "Backend guide must not repeat shared run-tree rows: $file"
+  reject_text "$file" \
+    '`ssh` requires `--role ROLE`.' \
+    "Backend guide must not repeat shared operand syntax: $file"
+  reject_text "$file" \
+    'HARNESS_GERRIT_ENV_FILE=examples/gerrit.env.example' \
+    "Backend guide must not repeat the shared bootstrap schema: $file"
   for shared_term in \
     'already-complete' \
     'state=already-running' \
@@ -124,6 +139,18 @@ require_text "$harness_design" \
 require_text "$harness_design" \
   '## Shared Helper Boundary' \
   'Shared harness design must define helper promotion rules'
+require_text "$harness_design" \
+  '## Common Harness Structure' \
+  'Shared harness design must own common module roles'
+require_text "$harness_design" \
+  '| Command orchestration | Own composite workflow sequencing' \
+  'Shared harness design must own command orchestration responsibilities'
+require_text "$harness_design" \
+  'Both harnesses source the implemented foundation under `simulation/lib/`:' \
+  'Shared harness design must document the implemented shared foundation'
+require_text "$harness_design" \
+  '| `identity.sh`, `locking.sh` |' \
+  'Shared harness design must map shared identity and locking modules'
 require_text "$harness_design" \
   '| Persistence | Stable set lock, strict active-run and workflow records,' \
   'Shared harness design must assign lifecycle persistence ownership'
@@ -270,8 +297,14 @@ require_text "$vm_design" \
   '# VM Simulation Harness Implementation Design' \
   'VM design must be explicitly implementation-scoped'
 require_text "$vm_design" \
-  '`simulation/docs/shared/harness-design.md` owns shared harness architecture' \
+  '`simulation/docs/shared/harness-design.md` owns the common' \
   'VM implementation design must delegate shared architecture'
+require_text "$vm_design" \
+  '## Current Module Mapping' \
+  'VM implementation design must map current modules to shared roles'
+require_text "$vm_design" \
+  'No VM module defines an alternate shared identity,' \
+  'VM implementation design must reject backend-local shared state models'
 require_text "$vm_design" \
   '`simulation/docs/shared/lifecycle-state-model.md` owns simulation-set state' \
   'VM implementation design must delegate shared lifecycle state'
@@ -281,6 +314,21 @@ require_text "$vm_design" \
 require_text "$docker_design" \
   '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result' \
   'Docker implementation design must delegate checkpoint acceptance'
+require_text "$docker_design" \
+  '`simulation/docs/shared/harness-design.md` owns' \
+  'Docker implementation design must delegate common harness structure'
+require_text "$docker_design" \
+  'inputs.sh' \
+  'Docker implementation design must include the implemented input module'
+reject_text "$docker_design" \
+  '## Shared Extraction Rule' \
+  'Docker implementation design must not duplicate the shared extraction rule'
+reject_text "$vm_design" \
+  '## Initial Module Layout' \
+  'VM implementation design must not present the historical layout as current'
+reject_text "$vm_design" \
+  'Until the accepted refactor is implemented' \
+  'VM implementation design must not describe the accepted refactor as pending'
 reject_text "$vm_design" \
   'matching `validate-integration` marker' \
   'VM implementation design must not retain a duplicate validation marker'

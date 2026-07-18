@@ -2,8 +2,10 @@
 
 This document owns VM-specific module structure, libvirt/KVM implementation
 boundaries, provisioning decisions, and historical milestone anatomy.
-`simulation/docs/vm/vm-simulation.md` owns the public VM command contract.
-`simulation/docs/shared/harness-design.md` owns shared harness architecture, and
+`simulation/docs/shared/simulation-model.md` owns the common public command
+contract, while `simulation/docs/vm/vm-simulation.md` owns VM syntax and
+realization deltas. `simulation/docs/shared/harness-design.md` owns the common
+harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
 command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result
 and evidence acceptance plus workflow publication.
@@ -38,6 +40,25 @@ use target-like interfaces and helper-visible paths. Host-side VM
 infrastructure mechanisms remain available for VM lifecycle management, but
 they must not complete Loopforge role or integration checkpoints.
 
+## Current Module Mapping
+
+The VM harness maps the shared conceptual module roles onto this implemented
+layout:
+
+| Shared role | VM modules | VM-specific ownership |
+| --- | --- | --- |
+| Backend entrypoint | `simulate.sh` | VM option parsing, module loading, and dispatch to `vm_cmd_*` functions |
+| Command orchestration | `lifecycle.sh` | VM workflow composition, locking mode, summaries, and capability delegation; the only VM command-shaped layer |
+| Backend foundation | `paths.sh`, `config.sh`, `state.sh` | VM set/run paths, VM defaults and rendered inventory, and adapters around shared lifecycle state; `state.sh` does not query libvirt |
+| Target control plane | `ssh.sh` | Domain-address discovery through the logical libvirt API, host-key custody, SSH readiness, bounded guest commands, transfer, and interactive SSH |
+| Simulation-set capabilities | `vm-set.sh`, `baseline.sh`, `snapshots.sh` | Ownership coordination, guest baseline proof, snapshot capture and restore, audit, and destruction |
+| Lifecycle capabilities | `artifacts.sh`, `roles.sh`, `integration.sh` | VM artifact transfer, role-helper invocation, integration-helper invocation, and owning-result verification over target OS SSH |
+| Backend infrastructure | `libvirt.sh`, `libvirt-core.sh`, `libvirt-storage.sh`, `libvirt-domain.sh`, `libvirt-image.sh` | Libvirt resource primitives, storage, domain and network definitions, seed media, and baked-image publication |
+
+`simulate.sh` and these VM modules consume the backend-neutral implementation
+under `simulation/lib/`. No VM module defines an alternate shared identity,
+input, locking, permission, or workflow-state model.
+
 ## Host Storage Ownership
 
 The host operator owns generated control metadata, including pool and volume
@@ -63,11 +84,11 @@ against adopted volume paths. This keeps validation and later M5 destruction
 independent of libvirt DAC ownership restoration, SELinux, and AppArmor
 details.
 
-## Initial Module Layout
+## Historical Initial Module Layout
 
-The VM harness should start with a folded module layout. The folded structure
-keeps important ownership boundaries visible without scattering early
-implementation across many tiny files.
+The VM harness started with a folded module layout. That structure kept early
+ownership boundaries visible while M1 through M3 established the backend. The
+accepted capability refactor later in this document supersedes this inventory.
 
 ```text
 simulation/vm/
@@ -84,9 +105,9 @@ simulation/vm/
     integration.sh
 ```
 
-`simulate.sh` is the public entrypoint. It should stay thin: parse CLI
-arguments, load shared and VM-local modules, install common traps, and dispatch
-to command functions. It should not contain lifecycle implementation bodies.
+`simulate.sh` was designed as the thin public entrypoint: parse CLI arguments,
+load shared and VM-local modules, install common traps, and dispatch to command
+functions without lifecycle implementation bodies.
 
 `config.sh` owns VM harness configuration, defaults, env selection, VM-set and
 run identity resolution, and rendered endpoint values that are not large
@@ -242,12 +263,13 @@ plane with target OS SSH, SSH file transfer, role helpers,
 `/var/lib/loopforge/staging/<role>`. Libvirt and seed-media modules remain
 backend infrastructure and cannot complete post-baseline checkpoints.
 
-## Initial Folded Module API
+## Historical Folded Module API
 
-Until the accepted refactor is implemented, public module functions use a
-`vm_` prefix. Module-private helpers should use a `__vm_` prefix or remain
-local to the file. `simulate.sh` should call command functions, not low-level
-implementation helpers.
+Before the accepted refactor, public module functions used a `vm_` prefix and
+module-private helpers used a `__vm_` prefix or remained local to the file.
+The current implementation preserves that API convention while narrowing
+package-private libvirt functions. `simulate.sh` calls command functions, not
+low-level implementation helpers.
 
 | Module | Public API shape | Owns |
 | --- | --- | --- |
@@ -330,21 +352,20 @@ mechanisms under `simulation/vm/`:
 - guest-owned NFS-backed shared storage realization;
 - VM baseline capture, rollback, cleanup, and destruction behavior.
 
-## Implementation Milestones
+## Historical Implementation Milestones
 
-VM simulation should be implemented milestone by milestone. Each milestone
-should leave the harness in a reviewable state with compact terminal output,
-bounded logs, generated evidence where applicable, and no hidden cleanup or
-destruction side effects.
+VM simulation was implemented milestone by milestone. Each milestone left the
+harness in a reviewable state with compact terminal output, bounded logs,
+generated evidence where applicable, and no hidden cleanup or destruction
+side effects.
 
 Milestone completion requires fail-closed runtime proof as defined in
 `simulation/docs/vm/milestone-verification.md`. Marker files, terminal summaries, and
 evidence records summarize checks; they do not satisfy a milestone when
 bounded logs contain contradictory failure evidence.
 
-Composite `run` should be implemented only after the individual lifecycle
-commands are credible. Early milestones should prefer explicit command
-execution so failures expose the exact boundary that is not ready.
+Composite `run` followed the individual lifecycle commands so early failures
+exposed the exact boundary that was not ready.
 
 | Milestone | Commands | Main modules | Acceptance shape |
 | --- | --- | --- | --- |
@@ -357,9 +378,9 @@ execution so failures expose the exact boundary that is not ready.
 | M7 Role configure/validate phases | `configure-role`, `validate-role`, `reboot` | `roles.sh`, `ssh.sh`, `lifecycle.sh` | Role helpers run over target OS SSH, role evidence is captured, real service/runtime readiness is proven, and any readiness claim after reboot is re-established by validation. |
 | M8 Integration validate/prove and composite run | `configure-integration`, `validate-integration`, `prove-integration`, `run` | `integration.sh`, `lifecycle.sh`, `ssh.sh` | Shared integration setup runs through `scripts/integration-setup.sh`; validation/proof require real cross-role SSH, Jenkins node readiness, trigger/build behavior, and Gerrit `Verified` proof. |
 
-M1 is the first implementation unit. It creates the VM CLI skeleton, initial
+M1 was the first implementation unit. It created the VM CLI skeleton, initial
 folded modules, read-only command dispatch, source input custody, generated
-run paths, and run marker handling. It must not create, modify, or delete
+run paths, and run marker handling without creating, modifying, or deleting
 libvirt resources.
 
 M3 and M4 are the highest-risk early milestones. M3 proves that the VM control
@@ -387,35 +408,16 @@ integration checkpoints must not use post-baseline cloud-init. Role helpers
 validate OS dependency expectations after the baseline snapshot; they do not
 install Ubuntu/OS dependencies.
 
-## VM Post-Baseline Guardrails
+## VM Implementation Guardrails
 
-The shared post-baseline boundary is defined in
-`simulation/docs/shared/harness-design.md`. VM realization requires these interfaces
-and paths after `create` captures the clean baseline snapshot:
-
-- target OS SSH as the operator account
-- SSH file transfer
-- role helpers
-- `scripts/integration-setup.sh`
-- product APIs
-- runtime accounts
-- target-side checksum verification
-- `/var/lib/loopforge/staging/<role>`
-
-The VM harness must not use the following mechanisms to complete post-baseline
-Loopforge lifecycle checkpoints:
-
-- libvirt console access
-- direct guest disk or image edits
-- post-baseline cloud-init
-- host-side injection into guest helper or product paths
-- generated target sideband staging
-- modeled success without runtime evidence
-- synthetic role or integration success markers
-
-Host-side libvirt/KVM operations remain valid for VM infrastructure commands
-such as `start`, `stop`, `clean`, and `destroy`, subject to ownership checks and
-operator approval requirements.
+The shared post-baseline architecture is defined in
+`simulation/docs/shared/harness-design.md`, and the public VM restrictions and
+approved interfaces are defined in
+`simulation/docs/vm/vm-simulation.md`. VM infrastructure modules may implement
+set lifecycle below that boundary, but they must not expose libvirt, disk,
+seed-media, or modeled-success shortcuts to artifact, role, or integration
+capabilities. Mutating infrastructure capabilities validate selected-set
+ownership before acting.
 
 ## Review Checks
 

@@ -142,10 +142,7 @@ Shared command meanings and state outcomes are authoritative in
 accepts that command surface through `simulation/vm/simulate.sh`; this section
 lists only VM syntax and realization deltas.
 
-`ssh` requires `--role ROLE`. `prepare-artifacts`, `stage-artifacts`,
-`configure-role`, and `validate-role` accept optional `--role ROLE`; omission
-selects all roles in shared order. VM-only `reboot` accepts `--role ROLE` or
-`--all`. `ROLE` is `gerrit`, `jenkins-controller`, or `jenkins-agent`.
+VM adds only `reboot --role ROLE|--all` to the shared command grammar.
 
 | Command scope | VM realization |
 | --- | --- |
@@ -188,8 +185,7 @@ versioned hash derivation and still require full ownership verification.
 
 If `--env FILE` is omitted, the harness uses the committed
 `simulation/vm/examples/vm.env.example` file
-defined by the VM harness. Copy committed examples outside the examples tree
-before using real operator values.
+defined by the VM harness.
 
 Source/effective input custody and publication are shared contracts in
 `simulation/docs/shared/simulation-model.md` and the lifecycle state model. The VM harness adds only
@@ -201,11 +197,6 @@ owned running domains and SSH identity, copy only the effective
 `integration.env` to a private temporary file, overlay the three current target
 SSH host fields, invoke the shared helper, and delete the temporary file. Role
 env files and stable integration values are never rewritten after publication.
-
-The rendered harness record is written for inspection. Private runtime config
-retains lifecycle values and points at the published effective input files.
-Non-secret run markers and manifest contracts are public/read-only metadata,
-not secret material.
 
 ## Libvirt/KVM Lifecycle
 
@@ -289,10 +280,7 @@ creation, service management, ownership changes, guest reboot, or controlled
 shutdown. Root is not a Loopforge account, helper execution identity, runtime
 identity, or supported direct login identity.
 
-Use `simulate.sh status --env FILE` after `start` to inspect the selected running
-VM simulation. The status command prints the run ID, set ID, derived libvirt
-resource prefix, browser URLs, SSH endpoints, and seeded VM simulation login
-accounts.
+## Host Browser DNS
 
 When the VM browser URLs use FQDNs such as
 `http://gerrit.example.test:8080/`, the libvirt network DNS owns those names
@@ -318,34 +306,17 @@ state for the selected bridge. The helper does not edit `/etc/hosts`,
 `/etc/resolv.conf`, NetworkManager profiles, dnsmasq configuration, systemd
 unit files, or persistent network files.
 
-Use `simulate.sh ssh --role ROLE` after `start` to log into a target OS
-environment as the target-local `ci-operator` through SSH from the host. The
-command resolves current start-owned target access and uses the simulation-set
-target SSH key plus run-scoped known-hosts file:
-
-```bash
-simulation/vm/simulate.sh ssh --role gerrit
-simulation/vm/simulate.sh ssh --role jenkins-controller
-simulation/vm/simulate.sh ssh --role jenkins-agent
-```
-
-This command intentionally uses the target OS control-plane SSH interface. It
-does not use libvirt console access and it is separate from Gerrit's service
-SSH on port `29418`.
-
 ## Generated-State Realization
 
 `simulation/docs/shared/generated-state-layout.md` owns the common set, lock,
 and run roots plus their custody and cleanup classes. This section describes
 only VM-specific realization deltas.
 
-Simulation-set state persists across runs until `destroy`. Run-scoped output
-is tied to `HARNESS_RUN_ID` and may be cleaned or retained independently. The
-baked base image is stored inside the selected simulation set and is removed
-by `destroy` with the rest of that set. The target OS SSH identity is also
-simulation-set state because its public key is seeded into reusable guest disks
-during cloud-init. SSH `known_hosts` trust state remains run-scoped and is
-recreated for each selected run.
+The baked base image is stored inside the selected simulation set and is
+removed by `destroy` with the rest of that set. The target OS SSH identity is
+also simulation-set state because its public key is seeded into reusable guest
+disks during cloud-init. SSH `known_hosts` trust state remains run-scoped and
+is recreated for each selected run.
 Seed media installs a root-owned, account-scoped OpenSSH policy that requires
 public-key authentication for the VM operator without changing site listener
 settings. Cloud-init validates and reloads that policy without restarting the
@@ -447,7 +418,3 @@ host-level cleanup procedure.
 VM invokes the shared integration owner over target OS SSH through its private
 transport adapter. Integration checkpoint semantics, predecessors, evidence
 acceptance, and failure behavior remain shared.
-
-Public internet fallback on target hosts is simulation-only and applies only
-to Ubuntu/OS dependency installation. It is not a fallback for target-host
-application artifact downloads, and v1 is not a strict air-gapped installer.
