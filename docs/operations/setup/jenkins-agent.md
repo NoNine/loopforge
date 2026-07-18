@@ -256,7 +256,7 @@ Mutation side effects:
 Docker simulation validates the same effective account policy and reloads its
 existing root-owned `sshd` master process. It does not claim guest-OS systemd
 or reboot behavior. Operator-interface parity rules are defined in
-`docs/contracts/operator-execution-contract.md`.
+`docs/operations/README.md`.
 
 Helper:
 

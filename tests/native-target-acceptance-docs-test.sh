@@ -100,14 +100,14 @@ fi
 
 require_text docs/operations/README.md \
   'native/acceptance-checklist.md' \
-  'Operations index must link the native acceptance checklist'
+  'Operations authority must link the native acceptance checklist'
 require_text docs/contracts/validation-and-evidence.md \
   'Native `target-deployment` installation and configuration are fully manual.' \
   'Evidence contract must define fully manual native target deployment'
 require_text docs/contracts/validation-and-evidence.md \
   'It is not required for the native `target-deployment` acceptance checklist.' \
   'Evidence contract must exclude the native checklist from global aggregation'
-require_text docs/contracts/operator-execution-contract.md \
+require_text docs/operations/README.md \
   'records the result in the native acceptance checklist' \
   'Operator contract must define checklist-based native acceptance'
 require_text docs/contracts/lifecycle-contract.md \

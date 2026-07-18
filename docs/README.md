@@ -17,7 +17,8 @@ apply that fact instead of restating the full policy.
 - `architecture/` owns the conceptual system model.
 - `contracts/` owns lifecycle and cross-cutting behavioral contracts.
 - `baselines/` owns component versions and package prerequisites.
-- `operations/` contains setup manuals and native operation references.
+- `operations/` owns the operator interface contract and contains setup
+  manuals and native operation references.
 - `planning/` contains the implementation roadmap and per-step plans.
 - `issues/` contains historical issue reports and root-cause analyses.
 - `references/` contains non-authoritative research and historical input.
@@ -46,8 +47,6 @@ Use this order when deciding where a product or process fact belongs:
    `docs/contracts/account-model.md` for accounts and credential custody,
    `docs/contracts/directory-model.md` for target-visible runtime path
    ownership,
-   `docs/contracts/operator-execution-contract.md` for native and helper
-   operator interface parity,
    `docs/baselines/version-baseline.md` for default component versions,
    `docs/baselines/package-requirements.md` for host and package prerequisites,
    `docs/contracts/artifact-bundle-contract.md` for artifact contents and source
@@ -57,7 +56,9 @@ Use this order when deciding where a product or process fact belongs:
    `docs/contracts/gerrit-trigger-integration.md` for Gerrit Trigger and
    `Verified` behavior, and `docs/contracts/ci-model.md` for external product
    CI configuration ownership and generated Jenkins job modeling.
-5. Native operation references own the direct OS and application procedures
+5. `docs/operations/README.md` owns native and helper operator interface parity
+   and the responsibilities of their operation documents.
+6. Native operation references own the direct OS and application procedures
    and are the procedural baseline for operation documentation:
    `docs/operations/native/gerrit.md`,
    `docs/operations/native/jenkins-controller.md`,
@@ -67,7 +68,7 @@ Use this order when deciding where a product or process fact belongs:
    `docs/operations/native/acceptance-checklist.md` applies the native
    references as one manual `target-deployment` acceptance gate without
    becoming another command reference.
-6. Setup manuals own the repository-assisted application of the model and
+7. Setup manuals own the repository-assisted application of the model and
    lifecycle contract:
    `docs/operations/setup/gerrit.md`,
    `docs/operations/setup/jenkins-controller.md`,
@@ -75,7 +76,7 @@ Use this order when deciding where a product or process fact belongs:
    `docs/operations/setup/integration.md`. They must remain aligned with the
    native procedural baseline and produce equivalent product state and
    validation outcomes.
-7. Simulation docs own simulation realization details:
+8. Simulation docs own simulation realization details:
    `simulation/docs/README.md` routes readers without owning behavior;
    `simulation/docs/shared/simulation-model.md` owns the shared public model;
    `simulation/docs/shared/generated-state-layout.md` owns host-side generated
@@ -83,7 +84,7 @@ Use this order when deciding where a product or process fact belongs:
    architecture, lifecycle state, checkpoint acceptance, and presentation; and
    `simulation/docs/docker/` and `simulation/docs/vm/` own concrete backend
    guides and realization details.
-8. Helper scripts, templates, examples, tests, and verifiers implement or
+9. Helper scripts, templates, examples, tests, and verifiers implement or
    check the documented model. They should not become the only place where a
    product behavior is defined.
 

@@ -9,7 +9,7 @@ integration="$repo_root/docs/operations/native/integration.md"
 prd="$repo_root/docs/product/prd.md"
 system_model="$repo_root/docs/architecture/system-model.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
-operator_contract="$repo_root/docs/contracts/operator-execution-contract.md"
+operator_contract="$repo_root/docs/operations/README.md"
 review_guide="$repo_root/docs/operations/native/review-guide.md"
 step_plan="$repo_root/docs/planning/steps/step-09-jenkins-agent-manual-and-helper.md"
 

@@ -30,7 +30,6 @@ for path in \
   docs/contracts/account-model.md \
   docs/contracts/directory-model.md \
   docs/contracts/endpoint-identity.md \
-  docs/contracts/operator-execution-contract.md \
   docs/contracts/artifact-bundle-contract.md \
   docs/contracts/validation-and-evidence.md \
   docs/contracts/gerrit-trigger-integration.md \
@@ -72,6 +71,8 @@ for path in \
 done
 
 for path in \
+  docs/contracts/operator-execution-contract.md \
+  docs/operations/operator-execution-contract.md \
   docs/docs-management.md \
   docs/execution-status.md \
   docs/implementation-plan.md \
@@ -160,13 +161,13 @@ fi
 
 grep -Fq -- '`setup/` documents repository-assisted setup workflows.' \
   "$repo_root/docs/operations/README.md" || {
-  printf 'Operations index must define the setup-manual boundary\n' >&2
+  printf 'Operations authority must define the setup-manual boundary\n' >&2
   exit 1
 }
 
 grep -Fq -- '`native/` documents direct OS and application procedures' \
   "$repo_root/docs/operations/README.md" || {
-  printf 'Operations index must define the native-reference boundary\n' >&2
+  printf 'Operations authority must define the native-reference boundary\n' >&2
   exit 1
 }
 
@@ -180,19 +181,19 @@ setup_heading_line="$(
 )"
 [ -n "$native_heading_line" ] && [ -n "$setup_heading_line" ] &&
   [ "$native_heading_line" -lt "$setup_heading_line" ] || {
-  printf 'Operations index must present native references before setup manuals\n' >&2
+  printf 'Operations authority must present native references before setup manuals\n' >&2
   exit 1
 }
 
 grep -Fq -- 'Native references are operator-first and operator-friendly.' \
-  "$repo_root/docs/operations/README.md" || {
-  printf 'Operations index must define the native operator-first standard\n' >&2
+  "$repo_root/docs/operations/native/review-guide.md" || {
+  printf 'Native review guide must define the operator-first standard\n' >&2
   exit 1
 }
 
 grep -Fq -- '`native/review-guide.md`' \
   "$repo_root/docs/operations/README.md" || {
-  printf 'Operations index must link the native manual review guide\n' >&2
+  printf 'Operations authority must link the native manual review guide\n' >&2
   exit 1
 }
 
@@ -238,20 +239,14 @@ for integration_checkpoint in \
   }
 done
 
-grep -Fq -- \
-  'does not apply directly to the integration manual.' \
-  "$repo_root/docs/operations/README.md" || {
-  printf 'Operations index must distinguish the integration review profile\n' >&2
-  exit 1
-}
-
 for operator_rule in \
   'Use the shortest reviewable sequence of OS and application-native commands' \
   "Prefer a tool's own validation, status, and" \
   'Commands should be independently runnable, keep their output inspectable' \
   'reproduce helper implementation logic, generated state machines, or'; do
-  grep -Fq -- "$operator_rule" "$repo_root/docs/operations/README.md" || {
-    printf 'Operations index is missing native operator-first rule: %s\n' \
+  grep -Fq -- "$operator_rule" \
+    "$repo_root/docs/operations/native/review-guide.md" || {
+    printf 'Native review guide is missing operator-first rule: %s\n' \
       "$operator_rule" >&2
     exit 1
   }

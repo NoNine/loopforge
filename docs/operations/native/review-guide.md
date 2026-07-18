@@ -48,13 +48,25 @@ tasks when combining them would make review or rollback unsafe.
 
 ### Operator Procedure Checks
 
+Native references are operator-first and operator-friendly. Organize them
+around the operator's task sequence, place prerequisites and inputs before
+mutation, put native commands beside the task they perform, state expected
+outcomes and failure boundaries, and make validation and handoffs clear.
+
+- Use the shortest reviewable sequence of OS and application-native commands
+  that preserves the owning contract.
+- Prefer a tool's own validation, status, and reporting options over embedded
+  shell parsers or helper-like orchestration.
+- Commands should be independently runnable, keep their output inspectable,
+  and name the operator decision or stop condition immediately afterward.
+- Use shell loops or parsing only when the native tool has no suitable
+  operation. Keep that logic small, local to the task, and directly auditable;
+  do not reproduce helper implementation logic, generated state machines, or
+  machine-evidence pipelines in a native manual.
 - Trace every placeholder from the input inventory to each command and
   configuration consumer.
 - Remove unused inputs and replace hardcoded values that override reviewed
   choices.
-- Keep commands independently runnable, with inspectable output and an
-  immediate expected result or stop condition.
-- Prefer application and OS native validation over shell parsing.
 - Reject broad diagnostic dumps, helper-like orchestration, masked failures,
   retries that hide defects, and unavailable tools.
 - Check delegated privilege at the point of use; root is not a Loopforge

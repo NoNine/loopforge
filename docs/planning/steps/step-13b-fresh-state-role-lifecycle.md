@@ -17,7 +17,7 @@ Read these before implementation:
 - `docs/product/prd.md` for the initial-only v1 product boundary.
 - `docs/contracts/lifecycle-contract.md` for identity and application-state
   classification, completion binding, and validation behavior.
-- `docs/contracts/operator-execution-contract.md` for native/helper parity.
+- `docs/operations/README.md` for native/helper parity.
 - `docs/contracts/account-model.md` and
   `docs/contracts/directory-model.md` for identities, homes, ownership, and
   protected state.

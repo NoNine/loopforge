@@ -285,7 +285,7 @@ Mutation side effects:
 
 Validation is observational: it checks an already-running Jenkins runtime and
 must fail rather than start or repair it. The operator-interface parity rules
-are defined in `docs/contracts/operator-execution-contract.md`.
+are defined in `docs/operations/README.md`.
 
 Helper:
 

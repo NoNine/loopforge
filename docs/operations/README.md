@@ -1,59 +1,114 @@
-# Operations Documentation
+# Loopforge Operations
 
-Loopforge has two operator documentation families. Use the document for the
-target role and the kind of procedure being performed.
+Use this page to choose how you will install and configure Loopforge on target
+hosts. You can follow the native OS and application procedures directly, or use
+the repository helpers after reviewing their inputs and stop points.
+
+Both paths are for initial setup. They must produce the same product state and
+reach the same validation outcomes. They differ in who performs each operation
+and how the result is recorded.
 
 ## Native Operation References
 
-`native/` documents direct OS and application procedures without repository
-helper command transcripts or helper-equivalent workflows. These references
-are the procedural baseline for operation documentation.
+Use the native path when you will perform and review each OS and application
+operation yourself. `native/` documents direct OS and application procedures
+without repository helper commands or helper-equivalent workflows.
 
-Native references are operator-first and operator-friendly. Organize them
-around the operator's task sequence, place prerequisites and inputs before
-mutation, put native commands beside the task they perform, state expected
-outcomes and failure boundaries, and make validation and handoffs clear. Write
-for the operator completing the deployment, not for a repository maintainer
-explaining helper internals.
+Choose the document for the target you are preparing:
 
-Use the shortest reviewable sequence of OS and application-native commands that
-preserves the owning contract. Prefer a tool's own validation, status, and
-reporting options over embedded shell parsers or helper-like orchestration.
-Commands should be independently runnable, keep their output inspectable, and
-name the operator decision or stop condition immediately after the command.
-Use shell loops or parsing only when the native tool has no suitable operation;
-keep that logic small, local to the task, and directly auditable. Do not
-reproduce helper implementation logic, generated state machines, or
-machine-evidence pipelines in a native manual.
+- `native/gerrit.md`: install and validate the Gerrit role.
+- `native/jenkins-controller.md`: install and validate the Jenkins controller.
+- `native/jenkins-agent.md`: prepare and validate the outbound SSH agent host.
+- `native/integration.md`: connect the three completed roles and prove the
+  Gerrit-to-Jenkins workflow.
 
-- `native/gerrit.md`
-- `native/jenkins-controller.md`
-- `native/jenkins-agent.md`
-- `native/integration.md`
+Perform commands in the documented order and stop when a prerequisite or
+expected result does not match. Native validation is observational: it checks
+the state you established without starting, repairing, or reconfiguring it.
+The operator records the result in the native acceptance checklist; detailed
+logs remain on the target hosts.
 
-Use the common checks and the appropriate role or integration profile in
-`native/review-guide.md` to review these manuals consistently. The role profile
-does not apply directly to the integration manual. Keep static review,
-native-tool proof, and runtime acceptance distinct.
-
-For a release claiming native `target-deployment` readiness, use
-`native/acceptance-checklist.md` as the single end-to-end signoff surface after
-following the four native operation references. The checklist records outcomes
-without duplicating commands or requiring machine-generated evidence.
+After completing all four procedures, use
+`native/acceptance-checklist.md` for the single end-to-end native
+`target-deployment` signoff. The checklist records outcomes without duplicating
+commands or requiring helper-generated evidence.
 
 ## Setup Manuals
 
-`setup/` documents repository-assisted setup workflows. These manuals apply
-the shared lifecycle and operator execution contracts through the Loopforge
-helper commands, including their review and stop points. They follow the
-native procedural baseline and must produce equivalent product state and
-validation outcomes without redefining the direct procedure.
+`setup/` documents repository-assisted setup workflows. Use this path when
+reviewed inputs are ready and the Loopforge helpers are available for the
+selected target mode.
 
-- `setup/gerrit.md`
-- `setup/jenkins-controller.md`
-- `setup/jenkins-agent.md`
-- `setup/integration.md`
+Choose the manual that matches the role or integration work:
 
-Product behavior remains owned by the authorities linked from
-`docs/README.md`. These operation documents narrowly apply those facts and
-must not redefine them.
+- `setup/gerrit.md`: review inputs, run the Gerrit helper phases, and validate
+  the role.
+- `setup/jenkins-controller.md`: review inputs, run the controller helper
+  phases, and validate the role.
+- `setup/jenkins-agent.md`: review inputs, run the agent helper phases, and
+  validate the host.
+- `setup/integration.md`: connect the completed roles and prove the shared
+  workflow.
+
+Each setup manual identifies its inputs, commands, stop points, effects, and
+handoff. Review those details before invoking a helper. Helpers perform the
+same initial setup scope as the native path and collect the redacted evidence
+required for the selected mode.
+
+## Before You Begin
+
+- Start with freshly provisioned target state. Loopforge v1 does not reinstall,
+  reconfigure, repair, or rotate credentials in existing product state.
+- Use the operator account for control-plane work. Direct root login is not a
+  supported Loopforge identity; privileged OS operations use delegated
+  privilege.
+- Review all declared inputs before mutation. Stop if an account, endpoint,
+  credential, artifact, or selected mode differs from the approved input.
+- OS dependency provisioning may occur before application artifacts are
+  prepared and staged. Verify staged artifacts before creating runtime
+  identities, product homes, application configuration, or services.
+- Follow the phase, checkpoint, mutation, and reboot rules in
+  `docs/contracts/lifecycle-contract.md`. Configuration establishes runtime
+  state; validation observes it.
+
+The helper returns non-mutating `already-complete` for exact input-bound completed state.
+A native operator may likewise confirm only exact completed work that is bound
+to the reviewed inputs. Stale, partial, conflicting, changed, or unrecognized
+state is not resumable; stop for explicit operator action or begin again with
+fresh selected state.
+
+## Equivalent Outcomes
+
+The native and helper paths may use different command sequences, but they must
+agree on:
+
+- runtime accounts and protected paths;
+- reviewed and verified inputs;
+- installed application and service configuration;
+- credential-custody boundaries;
+- role-local and integration ownership;
+- validation results and secret redaction.
+
+Gerrit and the Jenkins controller use systemd in VM simulation and target
+deployment. The outbound Jenkins agent uses the target's SSH service and does
+not require a separate Jenkins agent daemon.
+
+Role setup ends with a role-readiness handoff. It does not create cross-role
+keys or credentials, register the Jenkins node, configure the Gerrit trigger,
+prove scheduling, or cast a Gerrit vote. Perform that work only after all three
+roles are ready, using `native/integration.md` or `setup/integration.md`.
+
+## Documentation And Support
+
+Native references are the direct procedural baseline. Setup manuals describe
+how the helpers apply that baseline. Helper scripts implement the setup-manual
+interface, and simulation documentation explains how each backend realizes it.
+
+Maintainers and reviewers use `native/review-guide.md` to review native manuals;
+operators do not need that guide to perform a documented procedure.
+
+This page owns the relationship between the native and helper paths. Detailed
+lifecycle behavior belongs to `docs/contracts/lifecycle-contract.md`, and
+evidence schemas belong to `docs/contracts/validation-and-evidence.md`. Current
+implementation availability, blockers, and waivers are recorded in
+`project-state/execution-status.md`.
