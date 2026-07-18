@@ -32,10 +32,15 @@ Step 15 depend on this step.
 
 Both backends expose:
 
+- `run`: classify selected state and compose the same first-class command
+  handlers available for granular invocation without directly publishing
+  lifecycle or workflow state.
 - `create`: establish or verify the reusable simulation set and clean baseline,
   leaving the set stopped.
 - `start`: start baseline prerequisites or exact completed services without
   setup mutation.
+- `status`: report coherent selected state without mutation or workflow
+  progression.
 - `stop`: gracefully stop services and preserve durable state.
 - `restore-baseline`: reset stopped durable runtime state only.
 - `clean`: preserve retained output and remove mutable active-run state only.
@@ -105,8 +110,28 @@ owning-layer results delivered by Steps 13b and 13c.
 | M2 | Simulation source/effective input lifecycle and start-owned target access | M1 |
 | M3 | Docker create/start/stop state machine | M2 |
 | M4 | Docker baseline capture and restore | M3 |
-| M5 | VM start/stop migration, active-run binding, and effective-input adoption | M2 |
-| M6 | Cleanup, evidence, composite workflows, and acceptance | M3-M5 |
+| M5 | VM reusable-set lifecycle and effective-input parity | M2 and existing VM baseline mechanics |
+| M6 | Cross-backend reset, cleanup, status, and lifecycle evidence | M4-M5 |
+| M7 | First-class command convergence and state-aware `run` planning | M1 and M6 |
+| M8 | Reusable lifecycle acceptance and downstream handoff | M6-M7 |
+
+## Downstream Correlation And Handoff
+
+The remaining milestones separate reusable lifecycle completion from the
+workflow tails that depend on later owning-layer postconditions:
+
+| Producer | Handoff | Consumer |
+| --- | --- | --- |
+| Step 13a M6 | Complete Docker/VM lifecycle, reset, status, and evidence semantics | Step 13a M7 command planning and Step 13b runtime fixtures |
+| Step 13a M7 | Backend-local `run` planners that reuse first-class handlers and select the next checkpoint without publishing one directly | Step 13b M5 role checkpoint tail and Step 13c M5 integration/evidence tail |
+| Step 13a M8 | Accepted reusable lifecycle and immutable run isolation | Step 13b role implementation |
+| Step 13b M5 | Accepted role results and workflow head through the role checkpoint families | Step 13c integration preflight and composite completion |
+| Step 13c M5 | Integration and evidence-audit tail attached to the accepted planner | Step 13c M6 full composite runtime acceptance |
+
+Step 13a does not accept a full product workflow. Step 13b proves individual
+role phases and their composite plan segment. Step 13c is the first step that
+can accept end-to-end `run`, because only then do all owning role, integration,
+proof, and evidence results exist.
 
 ## M1: Shared Identity, Lock, Records, And Classifier
 
@@ -310,7 +335,7 @@ Acceptance:
 - Restored Docker state is equivalent to the recorded clean baseline and ready
   for a new run ID after `clean` and `init-run`.
 
-## M5: VM Start/Stop Migration And Effective-Input Adoption
+## M5: VM Reusable-Set Lifecycle And Effective-Input Parity
 
 Implementation:
 
@@ -324,25 +349,29 @@ Implementation:
   runtime inputs, status, evidence, integration markers, reboot evidence, and
   cleanup to its immutable run ID.
 - Reject removed command names and old unbound markers.
-- Apply the same existing-create, already-running start, already-stopped stop,
-  coherent status, and already-absent destroy outcomes as Docker. Remove
-  name-derived deletion when full ownership metadata is unavailable.
+- Apply the same existing-create, already-running start, and already-stopped
+  stop outcomes as Docker. Preserve exact VM resources across `stop -> start`
+  and remove name-derived mutation when full ownership metadata is unavailable.
 - Adopt the M2 source/effective input records, first-start publication, exact
   role env transfer, and per-start DHCP/SSH refresh without adding a second VM
   input model.
 
 Focused tests:
 
-- Updated VM lifecycle, terminal-summary, docs, and run-workflow tests.
-- Same-set new-run tests after stop/restore/clean.
-- Same-run stop/start tests and cross-run evidence/marker rejection tests.
+- Updated VM create/start/stop, terminal-summary, documentation, active-run,
+  and effective-input tests.
+- Same-run stop/start tests with stable effective inputs and refreshed live
+  DHCP/SSH access.
+- Cross-run input, evidence, marker, and selected-resource rejection tests.
 
 Acceptance:
 
-- VM `start`/`stop` retain current runtime semantics and pass existing resource
-  ownership and baseline gates with active-run binding added.
+- VM `create`, `start`, and `stop` retain their backend behavior while exposing
+  the same shared state meanings as Docker.
+- The VM set, active run, source/effective inputs, and live target access remain
+  separately bound across stop/start.
 
-## M6: Cleanup, Evidence, Composite Workflows, And Acceptance
+## M6: Cross-Backend Reset, Cleanup, Status, And Lifecycle Evidence
 
 Implementation:
 
@@ -355,31 +384,15 @@ Implementation:
 - Make `clean` preserve the immutable run marker, checkpoint records, and
   retained output under the old run root, remove only known mutable active-run
   state, and remove the set pointer last while preserving baseline resources.
-- Make Docker and VM `run` state-aware. Fresh absent state initializes,
-  creates, and starts; an unclaimed retained baseline initializes and verifies
-  existing `create`; an exact active run resumes at its next required phase;
-  an exact completed run is made running and returns `already-complete`.
-- When run ID is omitted for a claimed set, resolve the active pointer and print
-  `mode=resume`. Block explicit run-ID mismatch, changed input fingerprints,
-  interrupted/partial/conflicting state, and `restored-pending-clean`.
-- Keep `run` free of stop, restore, clean, destroy, or audit calls and leave the
-  selected set running.
 - Make `status` succeed for coherent absent, unclaimed, stopped, and running
   states and fail nonzero with `conflicting` for contradictory state. Make
   `destroy` return `already-absent` only for a fully absent unclaimed set.
-- Update help, examples, terminal-output docs, cleanup tools, tests, and
-  repository guardrails in the same accepted command migration.
-- Emit baseline, reusable-set, and immutable run evidence without secrets or
-  verbose logs.
-
-Verification order:
-
-1. Focused shell tests and `bash -n` after each milestone.
-2. Shared and backend documentation contracts plus `git diff --check`.
-3. Docker lifecycle phases from baseline through stop/start and full reset.
-4. VM lifecycle phases on an explicitly approved remote KVM target.
-5. Fresh Docker and approved VM composite runs using newly generated run IDs
-   on the same reusable sets after successful baseline reset and cleanup.
+- Finish VM restore, clean, destroy, audit, and retained-output behavior against
+  the same shared guards already applied to Docker.
+- Emit baseline, reusable-set, immutable-run, restoration, and cleanup evidence
+  without secrets or verbose logs.
+- Update help, examples, terminal-output docs, cleanup tools, and repository
+  guardrails for the accepted lifecycle surface.
 
 Focused tests:
 
@@ -388,10 +401,10 @@ Focused tests:
 - Failed restoration cannot authorize `clean` or release active-run ownership.
 - Successful `clean` transitions the restored set to baseline-stopped and
   unclaimed while retaining immutable review output.
-- Fresh, retained-baseline, exact-resume, stopped-resume, completed,
-  run-ID-mismatch, changed-input, interrupted, and conflicting `run` cases.
 - Cross-backend idempotent `create`, `start`, `stop`, `status`, and `destroy`
   cases with identical shared meanings.
+- Same-set new-run tests after exact `stop -> restore-baseline -> clean`, with
+  old run output retained and rejected as a new prerequisite.
 
 Acceptance:
 
@@ -399,6 +412,81 @@ Acceptance:
 - Both backends prove restart without setup mutation.
 - Both backends prove baseline reset and new-run isolation.
 - `up` and `down` are absent from supported command surfaces.
+
+## M7: First-Class Command Convergence And State-Aware Run Planning
+
+Implementation:
+
+- Keep `run` and every granular phase as first-class public commands. Direct
+  invocation and composite selection must converge on the same backend-local
+  `*_cmd_<phase>` handler before capability delegation.
+- Keep the `run` handler state-passive: it resolves selected identity, reads and
+  classifies state, constructs the allowed command plan, invokes handlers, and
+  prints a summary. It does not write the active-run pointer, workflow head,
+  checkpoint record, completion marker, or backend state directly.
+- Make Docker and VM select the shared plans for fresh absent, retained
+  baseline, exact resumable, stopped resumable, already-running completed, and
+  stopped completed state. Include `status` as the intentional user-facing
+  observation after conditional `start` or before resume/completion output.
+- When `HARNESS_RUN_ID` is omitted for a claimed set, resolve the active pointer
+  and report `mode=resume`. Block explicit run-ID mismatch, changed input
+  fingerprints, `active-incomplete`, `conflicting`, and
+  `restored-pending-clean` before later mutation.
+- Acquire and release the normal shared or exclusive set lock at every selected
+  command boundary; do not hold one lock across the composite.
+- Stop at the first nonzero handler result. Never invoke `stop`,
+  `restore-baseline`, `clean`, `destroy`, `audit-state`, or VM `reboot` from a
+  run plan, and never perform rollback or repair.
+- Dispatch checkpoint families in the shared order, but defer acceptance of
+  role-owned results to Step 13b M5 and integration/evidence results to Step
+  13c M5. Step 13a tests orchestration with focused handlers and fixtures; it
+  does not claim the downstream product workflow passes.
+
+Focused tests:
+
+- Both backends cover fresh, retained-baseline, exact-resume, stopped-resume,
+  completed-running, completed-stopped, run-ID-mismatch, changed-input,
+  active-incomplete, and conflicting plan selection.
+- Direct and composite invocation reach the same command handler, lock mode,
+  summary contract, and failure result for every shared command family.
+- `status` appears in every executable plan at the documented observation
+  boundary and never advances the workflow ledger.
+- A failed handler prevents every later handler, and no recovery or
+  backend-only command appears in any selected plan.
+- Run-level before/after state comparison proves that only invoked command
+  handlers, not the run planner itself, publish durable changes.
+
+Acceptance:
+
+- Docker and VM implement the same public command shape without a shared
+  backend dispatcher or cross-backend shell API.
+- Every state change observed during `run` is owned by an invoked first-class
+  command handler.
+- Exact plan selection is ready to consume Step 13b role results and Step 13c
+  integration/evidence results without another orchestration model.
+
+## M8: Reusable Lifecycle Acceptance And Downstream Handoff
+
+Verification order:
+
+1. Run focused shell and documentation tests plus `bash -n` and
+   `git diff --check` after M5-M7.
+2. Run Docker lifecycle commands individually from fresh state through
+   stop/start, baseline restoration, cleanup, and a new run identity.
+3. Run the same VM lifecycle commands on an explicitly approved remote KVM
+   target, using a fresh set when retained resource identity is suspect.
+4. Exercise every `run` plan branch with bounded local fixtures or command
+   stubs that prove handler selection, locking, status, and failure propagation
+   without claiming role or integration runtime success.
+
+Acceptance:
+
+- Fresh Docker and approved VM evidence proves lifecycle parity, restart
+  preservation, baseline reset, and immutable run isolation.
+- Focused orchestration evidence proves both backends are ready for the Step
+  13b role checkpoint tail.
+- Full Docker and VM composite runtime acceptance remains deferred to Step 13c
+  M6 after role, integration, proof, and evidence-audit results are accepted.
 
 ## State And Recovery Rules
 
@@ -414,9 +502,11 @@ Acceptance:
 ## Commit And Completion Strategy
 
 Use one logical commit per accepted milestone. Keep shared primitives, input
-lifecycle, Docker lifecycle, Docker baseline restore, VM migration, and
-cross-backend acceptance independently reviewable. Do not include
-execution-ledger state in implementation commits.
+lifecycle, Docker lifecycle, Docker baseline restore, VM parity, cross-backend
+cleanup, run planning, and reusable lifecycle acceptance independently
+reviewable. Do not include execution-ledger state in implementation commits.
 
-Step 13a is complete only after M1-M6 pass and fresh Docker plus approved VM
-runtime evidence proves lifecycle parity and immutable run isolation.
+Step 13a is complete only after M1-M8 pass. Fresh Docker plus approved VM
+runtime evidence must prove reusable lifecycle parity and immutable run
+isolation; focused orchestration evidence must prove the downstream handoff
+without claiming full composite workflow success.

@@ -188,16 +188,28 @@ for milestone in \
   '## M2: Gerrit Role Lifecycle' \
   '## M3: Jenkins Controller Role Lifecycle' \
   '## M4: Jenkins Agent Role Lifecycle' \
-  '## M5: Role Gates, Evidence, And Runtime Acceptance'; do
+  '## M5: Role Gates, Workflow Tail, Evidence, And Runtime Acceptance'; do
   require_text "$role_step_plan" "$milestone" \
     "Step 13b is missing milestone: $milestone"
 done
+require_text "$role_step_plan" \
+  'through the role tail without accepting the integration tail.' \
+  'Step 13b must not claim full composite integration acceptance'
+require_text "$role_step_plan" \
+  '## Role Correlation And Consumers' \
+  'Step 13b must map independent role results to cross-role consumers'
+require_text "$role_step_plan" \
+  'No role helper consumes another role helper' \
+  'Step 13b must not invent cross-role helper dependencies'
+require_text "$role_step_plan" \
+  '| M4 | Jenkins agent role lifecycle | M1 shared semantics |' \
+  'Step 13b agent implementation must depend on shared role semantics'
 for milestone in \
   '## M1: State, Preflight, And Gerrit ACL Realization' \
   '## M2: Jenkins Controller And Agent SSH Custody' \
   '## M3: Shared Storage, Node, And Gerrit Trigger Setup' \
   '## M4: Observational Validation And Active Proof' \
-  '## M5: Workflow-Ledger Cutover And Evidence Alignment' \
+  '## M5: Workflow-Ledger Cutover, Composite Completion, And Evidence Alignment' \
   '## M6: Docker, VM, And Native Runtime Acceptance'; do
   require_text "$integration_step_plan" "$milestone" \
     "Step 13c is missing milestone: $milestone"
@@ -205,6 +217,21 @@ done
 require_text "$integration_step_plan" \
   'Do not add compatibility fallbacks for old generated integration state.' \
   'Step 13c must require explicit stale-state recovery'
+require_text "$integration_step_plan" \
+  'M1-M4 bound outputs, accepted Step 13a run planner, and Step 13b role tail' \
+  'Step 13c composite completion must depend on earlier planner and role work'
+require_text "$integration_step_plan" \
+  'never publish composite-owned workflow state.' \
+  'Step 13c must preserve phase-owned workflow publication'
+require_text "$integration_step_plan" \
+  '`tests/vm-harness-run-workflow-test.sh`' \
+  'Step 13c must add focused VM composite run coverage'
+require_text "$integration_step_plan" \
+  '## Integration Correlation And Cutover' \
+  'Step 13c must map producer outputs to sequential integration consumers'
+require_text "$integration_step_plan" \
+  'M5 is one fail-closed harness cutover after every producer contract exists' \
+  'Step 13c must defer ledger cutover until producer contracts exist'
 reject_text "$integration_step_plan" \
   'native rotation procedure' \
   'Step 13c must not depend on a Loopforge rotation procedure'

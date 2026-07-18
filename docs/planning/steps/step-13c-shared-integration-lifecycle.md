@@ -66,12 +66,30 @@ repair an earlier milestone failure.
 
 | Milestone | Scope | Dependency |
 | --- | --- | --- |
-| M1 | Integration state, preflight, and Gerrit ACL realization | Accepted Step 13b role handoffs |
-| M2 | Jenkins controller and agent SSH custody | M1 access effective |
-| M3 | Shared storage, node, and Gerrit Trigger setup | M2 SSH custody complete |
-| M4 | Observational validation and active proof | M3 shared-setup completion record |
-| M5 | Workflow-ledger cutover and evidence alignment | M4 focused checks pass; Step 13a ledger primitives available |
+| M1 | Integration state, preflight, and Gerrit ACL realization | Accepted Step 13b M5 workflow head and all three role handoffs |
+| M2 | Jenkins controller and agent SSH custody | M1 bound integration state and effective ACLs |
+| M3 | Shared storage, node, and Gerrit Trigger setup | M1 effective ACLs, M2 SSH custody, and role handoffs |
+| M4 | Observational validation and active proof | M3 shared-setup completion; validation precedes proof |
+| M5 | Workflow-ledger cutover, composite completion, and evidence alignment | M1-M4 bound outputs, accepted Step 13a run planner, and Step 13b role tail |
 | M6 | Docker, VM, and native runtime acceptance | M5 focused tests pass |
+
+## Integration Correlation And Cutover
+
+Step 13c is intentionally sequential because each milestone creates state that
+the next milestone consumes:
+
+| Producer | Required output | Consumer |
+| --- | --- | --- |
+| Step 13b M5 | Three bound role handoffs and workflow head at the end of the role tail | M1 preflight and M5 composite continuation |
+| M1 | Bound integration state and mode-appropriate effective Gerrit ACLs | M2 credential/SSH custody and M3 Gerrit Trigger setup |
+| M2 | Bound Jenkins-to-Gerrit and Jenkins-to-agent SSH custody | M3 node, credential, and trigger setup |
+| M3 | Shared-setup completion covering storage, node, credentials, and trigger | M4 observational validation |
+| M4 | Bound validation evidence followed by active proof evidence | M5 harness acceptance and evidence audit |
+| M5 | Workflow head through evidence audit and completed backend-local run plans | M6 Docker/VM composite runtime acceptance |
+
+M1-M4 create producer-owned results without publishing composite-owned state.
+M5 is one fail-closed harness cutover after every producer contract exists; it
+removes old progression markers instead of maintaining dual readers.
 
 ## M1: State, Preflight, And Gerrit ACL Realization
 
@@ -220,7 +238,7 @@ Acceptance:
 - One disposable change proves event delivery, agent execution, REST voting,
   and Gerrit review state.
 
-## M5: Workflow-Ledger Cutover And Evidence Alignment
+## M5: Workflow-Ledger Cutover, Composite Completion, And Evidence Alignment
 
 Implementation:
 
@@ -238,8 +256,10 @@ Implementation:
 - Remove the Docker validate marker and VM integration checkpoint markers plus
   every old reader. Exact workflow predecessors replace their progression role;
   owning-layer completion records remain distinct inputs to acceptance.
-- Align phase summaries, resume rules, and `run` orchestration with the workflow
-  head without adding dual old/new readers or fallback paths.
+- Extend the accepted backend-local run plans from the Step 13b role tail
+  through integration preflight, setup, validation, proof, and evidence audit.
+  Align summaries, exact resume, and `already-complete` with the workflow head
+  without adding another orchestration model, dual readers, or fallback paths.
 - Update native and helper manuals alongside the final implemented command
   behavior. Do not document unavailable behavior as accepted runtime support.
 
@@ -250,8 +270,10 @@ Focused tests:
 - Replace marker expectations in
   `tests/docker-harness-integration-wiring-test.sh` and
   `tests/vm-harness-integration-lifecycle-test.sh` with workflow-head checks.
-- Update `tests/docker-harness-run-workflow-test.sh` for exact resume and
-  completed-run behavior through the integration tail.
+- Update `tests/docker-harness-run-workflow-test.sh` and add
+  `tests/vm-harness-run-workflow-test.sh` for exact resume, first-failure
+  propagation, intentional `status`, and completed-run behavior through the
+  integration tail.
 - Prove legacy validation/proof markers are rejected rather than consumed.
 
 Acceptance:
@@ -261,6 +283,8 @@ Acceptance:
 - No harness validation or proof-prerequisite marker remains in either backend.
 - Docker and VM accept the same helper-owned results with the same predecessor
   and evidence rules.
+- Both backend planners reach `already-complete` only after the evidence-audit
+  checkpoint and never publish composite-owned workflow state.
 
 ## M6: Docker, VM, And Native Runtime Acceptance
 

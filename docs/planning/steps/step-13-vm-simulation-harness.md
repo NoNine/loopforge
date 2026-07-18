@@ -104,4 +104,4 @@ fresh-state role correction, and Step 13c owns the shared-integration
 correction discovered during M8. Earlier runs remain diagnostic evidence for
 the prior implementation and do not satisfy the refined lifecycle contracts.
 Step 13 integration acceptance cannot close until Steps 13a-13c complete and a
-new generated VM run passes the Step 13c M5 gate.
+new generated VM run passes the Step 13c M6 full composite gate.

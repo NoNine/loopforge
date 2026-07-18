@@ -372,8 +372,11 @@ reject_text "$vm_design" \
   'BaselineRestored --> Running' \
   'VM implementation design must not permit start directly after restoration'
 require_text "$step13c" \
-  '## M5: Workflow-Ledger Cutover And Evidence Alignment' \
+  '## M5: Workflow-Ledger Cutover, Composite Completion, And Evidence Alignment' \
   'Step 13c must schedule the executable workflow-ledger cutover'
+require_text "$step13c" \
+  'M1-M4 bound outputs, accepted Step 13a run planner, and Step 13b role tail' \
+  'Step 13c run completion must depend on accepted upstream handoffs'
 require_text "$step13c" \
   'tests/docker-harness-integration-wiring-test.sh' \
   'Step 13c ledger cutover must name Docker focused coverage'

@@ -321,11 +321,22 @@ for milestone in \
   '## M2: Simulation Input Lifecycle And Start-Owned Access' \
   '## M3: Docker Create, Start, And Stop' \
   '## M4: Docker Baseline Capture And Restore' \
-  '## M5: VM Start/Stop Migration And Effective-Input Adoption' \
-  '## M6: Cleanup, Evidence, Composite Workflows, And Acceptance'; do
+  '## M5: VM Reusable-Set Lifecycle And Effective-Input Parity' \
+  '## M6: Cross-Backend Reset, Cleanup, Status, And Lifecycle Evidence' \
+  '## M7: First-Class Command Convergence And State-Aware Run Planning' \
+  '## M8: Reusable Lifecycle Acceptance And Downstream Handoff'; do
   require_text "$step" "$milestone" \
     "Step 13a is missing milestone: $milestone"
 done
+require_text "$step" \
+  '## Downstream Correlation And Handoff' \
+  'Step 13a must correlate reusable lifecycle work with downstream tails'
+require_text "$step" \
+  'can accept end-to-end `run`' \
+  'Step 13a must defer full composite acceptance until all tails exist'
+require_text "$step" \
+  'Keep the `run` handler state-passive:' \
+  'Step 13a must keep composite-owned state out of run orchestration'
 
 require_text "$agents" \
   '`stop` followed by `start` continues the same' \
