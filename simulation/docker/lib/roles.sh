@@ -3,7 +3,7 @@
 docker_roles_configure() {
   local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
   role="${1:?role required}"
   helper_path="$(role_helper_path_for_operator ci-operator "$role")"
@@ -116,7 +116,7 @@ __docker_roles_validate_jenkins_controller_authorization() {
 docker_roles_validate() {
   local role helper_path service log rc evidence role_env_file
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
   role="${1:?role required}"
   helper_path="$(role_helper_path_for_operator ci-operator "$role")"

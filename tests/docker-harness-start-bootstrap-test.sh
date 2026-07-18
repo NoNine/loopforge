@@ -7,17 +7,12 @@ tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="bootstrap-start-$$"
 set_id="bootstrap-$$"
-second_run_id="bootstrap-v1-$$"
-second_set_id="bootstrap-v1-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
-second_run_dir="$repo_root/generated/simulation/docker/$second_run_id"
 calls="$tmp_dir/docker-calls.log"
 cleanup() {
-  rm -rf "$tmp_dir" "$run_dir" "$second_run_dir" \
-    "$repo_root/generated/simulation/docker/sets/$set_id" \
-    "$repo_root/generated/simulation/docker/sets/$second_set_id"
-  rm -f "$repo_root/generated/simulation/docker/locks/$set_id.lock" \
-    "$repo_root/generated/simulation/docker/locks/$second_set_id.lock"
+  rm -rf "$tmp_dir" "$run_dir" \
+    "$repo_root/generated/simulation/docker/sets/$set_id"
+  rm -f "$repo_root/generated/simulation/docker/locks/$set_id.lock"
 }
 trap cleanup EXIT
 
@@ -26,6 +21,8 @@ cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
   *"compose build"*) exit 0 ;;
@@ -37,23 +34,9 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
-cat >"$fake_bin/docker-compose" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
-case "$*" in
-  *"up -d"*)
-    printf "ERROR: for gerrit-target  'ContainerConfig'\n" >&2
-    exit 1
-    ;;
-  *"down --remove-orphans"*)
-    printf 'compose down must not be called by start recovery\n' >&2
-    exit 99
-    ;;
-  *) exit 0 ;;
-esac
-SH
-chmod +x "$fake_bin/docker-compose"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
@@ -81,19 +64,21 @@ PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" create >"$tmp_dir/create.out"
-grep -Fq "create: ok images=project-built" "$tmp_dir/create.out"
+grep -Fq "create: ok state=created resources=stopped" "$tmp_dir/create.out"
 
+start_line=$(( $(wc -l <"$calls") + 1 ))
 PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" \
   --env "$tmp_dir/harness.env" start >"$tmp_dir/start.out"
 
 grep -Fq "HARNESS_RUN_ID=$run_id" "$rendered_dir/harness.runtime.env"
-grep -Fq "start: ok resources=running target-access=ready inputs=ready" "$tmp_dir/start.out"
+grep -Fq "start: ok state=started durable=baseline resources=running target-access=ready inputs=ready" "$tmp_dir/start.out"
 [ -d "$run_dir/host/runtime-inputs" ]
 [ -f "$run_dir/host/state/effective-inputs.env" ]
 grep -Fxq 'input_state=ready' "$run_dir/host/state/workflow-state.env"
-if grep -Fq -- 'start -d --build' "$calls"; then
+tail -n +"$start_line" "$calls" >"$tmp_dir/start-calls.log"
+if grep -Eq -- 'compose .* start .*--build|compose .* up' "$tmp_dir/start-calls.log"; then
   printf 'start must not build images; create owns image build\n' >&2
   exit 1
 fi
@@ -104,45 +89,3 @@ for service in bundle-factory gerrit-target jenkins-controller-target jenkins-ag
       exit 1
     }
 done
-
-rm -f "$calls"
-sed \
-  -e "s/^HARNESS_RUN_ID=.*/HARNESS_RUN_ID=$second_run_id/" \
-  -e "s/^HARNESS_SET_ID=.*/HARNESS_SET_ID=$second_set_id/" \
-  "$tmp_dir/harness.env" >"$tmp_dir/harness-v1.env"
-PATH="$fake_bin:$PATH" \
-  DOCKER_CALLS_LOG="$calls" \
-  HARNESS_FORCE_COMPOSE_V1_FOR_TESTS=1 \
-  "$repo_root/simulation/docker/simulate.sh" \
-  --env "$tmp_dir/harness-v1.env" init-run >/dev/null
-
-PATH="$fake_bin:$PATH" \
-  DOCKER_CALLS_LOG="$calls" \
-  HARNESS_FORCE_COMPOSE_V1_FOR_TESTS=1 \
-  "$repo_root/simulation/docker/simulate.sh" \
-  --env "$tmp_dir/harness-v1.env" create >/dev/null
-
-set +e
-PATH="$fake_bin:$PATH" \
-  DOCKER_CALLS_LOG="$calls" \
-  HARNESS_FORCE_COMPOSE_V1_FOR_TESTS=1 \
-  "$repo_root/simulation/docker/simulate.sh" \
-  --env "$tmp_dir/harness-v1.env" start >"$tmp_dir/start-compose-v1.out" 2>&1
-rc=$?
-set -e
-[ "$rc" -ne 0 ] || {
-  printf 'start should fail when docker-compose v1 reports ContainerConfig recreate bug\n' >&2
-  exit 1
-}
-grep -Fq 'start: failed' "$tmp_dir/start-compose-v1.out"
-start_log="$(sed -n 's/^log=//p' "$tmp_dir/start-compose-v1.out" | tail -1)"
-[ -n "$start_log" ] || {
-  printf 'start failure must report a bounded log path\n' >&2
-  exit 1
-}
-grep -Fq 'compose_recovery_required=docker-compose-v1-containerconfig' "$start_log"
-grep -Fq 'recovery_instruction=run-stop-then-restore-baseline' "$start_log"
-if grep -Fq -- 'down --remove-orphans' "$calls"; then
-  printf 'start must not call compose down --remove-orphans for lifecycle recovery\n' >&2
-  exit 1
-fi

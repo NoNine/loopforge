@@ -9,6 +9,7 @@ calls="$tmp_dir/docker-calls.log"
 run_id="state-lifecycle-$$"
 set_id="state-life-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
+set_runtime_dir="$repo_root/generated/simulation/docker/sets/$set_id/runtime"
 cleanup() {
   rc=$?
   if [ "$rc" -ne 0 ] && [ -f "$calls" ]; then
@@ -71,10 +72,10 @@ EOF_MOUNT
     if printf '%s\n' "$script" | grep -Fq 'rm -rf -- /cleanup-root/target/helper-state'; then
       rm -rf -- \
         "$source_path/target/helper-state" \
-        "$source_path/target/product-homes" \
+        "$SET_RUNTIME_DIR/product-homes" \
         "$source_path/target/artifacts/staging" \
-        "$source_path/target/ldap" \
-        "$source_path/target/shared-jenkins-storage" \
+        "$SET_RUNTIME_DIR/ldap" \
+        "$SET_RUNTIME_DIR/shared-jenkins-storage" \
         "$source_path/host/rendered" \
         "$source_path/host/runtime-inputs" \
         "$source_path/host/target-ssh" \
@@ -136,8 +137,8 @@ EOF_MOUNT
     case "$*" in
       *-gerrit-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/target/helper-state/gerrit" /var/lib/loopforge
-        printf '%s\t%s\n' "$RUN_DIR/target/product-homes/gerrit" /srv/gerrit
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/helper-state/gerrit" /var/lib/loopforge
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/product-homes/gerrit" /srv/gerrit
         printf '%s\t%s\n' "$RUN_DIR/host/validation-secrets/gerrit" /var/lib/loopforge/validation-secrets
         printf '%s\t%s\n' "$RUN_DIR/target/evidence/gerrit" /var/lib/loopforge/evidence
         printf '%s\t%s\n' "$RUN_DIR/target/logs/gerrit" /var/log/loopforge
@@ -170,6 +171,7 @@ common_env=(
   DOCKER_CONTAINERS_FILE="$tmp_dir/containers"
   REPO_ROOT="$repo_root"
   RUN_DIR="$run_dir"
+  SET_RUNTIME_DIR="$set_runtime_dir"
 )
 
 printf 'loopforge-docker-%s-bundle-factory\n' "$set_id" >"$tmp_dir/containers"
@@ -206,8 +208,15 @@ if grep -Fq 'compose up -d --build' "$calls"; then
   exit 1
 fi
 
+set +e
 env "${common_env[@]}" \
-  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stop >"$tmp_dir/stop.out"
-grep -Fq 'stop: stopped harness containers' "$tmp_dir/stop.out"
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stop >"$tmp_dir/stop.out" 2>&1
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || {
+  printf 'stop should reject a partial selected container set\n' >&2
+  exit 1
+}
+grep -Fq 'resource state is partial' "$tmp_dir/stop.out"
 [ -f "$repo_root/generated/simulation/docker/sets/$set_id/active-run.env" ]
 [ -f "$run_dir/.loopforge-docker-run.env" ]

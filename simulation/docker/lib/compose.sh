@@ -51,11 +51,96 @@ compose_v1_recreate_bug_detected() {
   grep -Eq "KeyError: 'ContainerConfig'|ERROR: .*'ContainerConfig'" "$log"
 }
 
+compose_definition_fingerprint() {
+  compose config | sha256sum | awk '{print $1}'
+}
+
+docker_container_inspect_value() {
+  local name format
+  name="${1:?container name required}"
+  format="${2:?inspect format required}"
+  docker inspect -f "$format" "$name" 2>/dev/null
+}
+
+docker_container_id_by_name() {
+  docker_container_inspect_value "${1:?container name required}" '{{.Id}}'
+}
+
+docker_container_image_id_by_name() {
+  docker_container_inspect_value "${1:?container name required}" '{{.Image}}'
+}
+
+docker_container_storage_driver_by_name() {
+  local name driver
+  name="${1:?container name required}"
+  if ! driver="$(docker_container_inspect_value "$name" '{{.Driver}}')"; then
+    die "Could not inspect Docker storage driver for selected container: $name"
+  fi
+  [ -n "$driver" ] ||
+    die "Docker storage driver is empty for selected container: $name"
+  printf '%s\n' "$driver"
+}
+
+docker_container_label_by_name() {
+  local name label
+  name="${1:?container name required}"
+  label="${2:?container label required}"
+  docker_container_inspect_value "$name" "{{index .Config.Labels \"$label\"}}"
+}
+
+docker_network_name() {
+  printf '%s_harness\n' "$HARNESS_PROJECT_NAME"
+}
+
+docker_network_exists() {
+  [ -n "$(docker network inspect -f '{{.Id}}' "${1:?network name required}" 2>/dev/null || true)" ]
+}
+
+docker_network_inspect_value() {
+  local name format
+  name="${1:?network name required}"
+  format="${2:?inspect format required}"
+  docker network inspect -f "$format" "$name" 2>/dev/null
+}
+
+docker_network_label() {
+  local name label
+  name="${1:?network name required}"
+  label="${2:?network label required}"
+  docker_network_inspect_value "$name" "{{index .Labels \"$label\"}}"
+}
+
 container_running_by_name() {
   local name running
   name="${1:?container name required}"
   running="$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)"
   [ "$running" = "true" ]
+}
+
+selected_container_power_state() {
+  local service name running running_count stopped_count
+  running_count=0
+  stopped_count=0
+  for service in "${services[@]}"; do
+    name="$(container_name_for_service "$service")"
+    docker_container_name_exists "$name" || {
+      printf 'partial\n'
+      return
+    }
+    running="$(docker_container_inspect_value "$name" '{{.State.Running}}' || true)"
+    case "$running" in
+      true) running_count=$((running_count + 1)) ;;
+      false) stopped_count=$((stopped_count + 1)) ;;
+      *) printf 'conflicting\n'; return ;;
+    esac
+  done
+  if [ "$running_count" -eq "${#services[@]}" ]; then
+    printf 'running\n'
+  elif [ "$stopped_count" -eq "${#services[@]}" ]; then
+    printf 'stopped\n'
+  else
+    printf 'mixed\n'
+  fi
 }
 
 container_mount_source_for_destination() {
@@ -115,6 +200,7 @@ require_mount_source_matches() {
 mount_identity() {
   local path
   path="${1:?path required}"
+  [ -d "$path" ] || die "Docker bind source directory is missing: $path"
   stat -Lc '%d:%i' "$path"
 }
 
@@ -154,21 +240,21 @@ validate_selected_container_mounts() {
   require_command docker
   detect_compose
   validate_container_mount bundle-factory "$repo_root" /workspace repo
-  validate_container_mount ldap "$HARNESS_LDAP_DATA_DIR" /var/lib/ldap
-  validate_container_mount ldap "$HARNESS_LDAP_CONFIG_DIR" /etc/ldap/slapd.d
+  validate_container_mount ldap "$HARNESS_LDAP_DATA_DIR" /var/lib/ldap set
+  validate_container_mount ldap "$HARNESS_LDAP_CONFIG_DIR" /etc/ldap/slapd.d set
   validate_container_mount gerrit-target "$repo_root" /workspace repo
-  validate_container_mount gerrit-target "$HARNESS_PRODUCT_HOME_DIR/gerrit" /srv/gerrit
+  validate_container_mount gerrit-target "$HARNESS_PRODUCT_HOME_DIR/gerrit" /srv/gerrit set
   validate_container_mount jenkins-controller-target "$repo_root" /workspace repo
-  validate_container_mount jenkins-controller-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" /var/lib/jenkins
-  validate_container_mount jenkins-controller-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
+  validate_container_mount jenkins-controller-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-controller" /var/lib/jenkins set
+  validate_container_mount jenkins-controller-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH" set
   validate_container_mount jenkins-agent-target "$repo_root" /workspace repo
-  validate_container_mount jenkins-agent-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" /var/lib/jenkins-agent
-  validate_container_mount jenkins-agent-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH"
+  validate_container_mount jenkins-agent-target "$HARNESS_PRODUCT_HOME_DIR/jenkins-agent" /var/lib/jenkins-agent set
+  validate_container_mount jenkins-agent-target "$HARNESS_SHARED_JENKINS_STORAGE_DIR" "$HARNESS_JENKINS_SHARED_STORAGE_PATH" set
 }
 container_id_for_service() {
   local service
   service="${1:?service required}"
-  compose ps -q "$service"
+  docker_container_id_by_name "$(container_name_for_service "$service")"
 }
 
 require_running_service() {

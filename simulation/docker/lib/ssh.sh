@@ -22,7 +22,7 @@ docker_ssh_interactive() {
   local role host port user identity_file known_hosts_file
   role="${1:?role required}"
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_command ssh
   require_running_service "$(docker_compose_service_for_role "$role")"
   require_readable_file "Runtime integration env file" "$HARNESS_INTEGRATION_ENV_FILE"

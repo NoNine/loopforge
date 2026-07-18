@@ -84,7 +84,7 @@ __docker_integration_require_validate_marker() {
 docker_integration_configure() {
   local log rc evidence
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
@@ -110,7 +110,7 @@ docker_integration_configure() {
 docker_integration_validate() {
   local log rc evidence
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
 
   [ -x "$integration_helper" ] || die "Missing executable integration helper: $integration_helper"
@@ -139,7 +139,7 @@ docker_integration_validate() {
 docker_integration_prove() {
   local log rc evidence
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
   __docker_integration_require_validate_marker
 

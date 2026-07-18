@@ -64,8 +64,8 @@ require_pattern scripts/integration-setup.sh \
   'Integration helper must default JENKINS_HOME to /var/lib/jenkins'
 
 require_docker_harness_pattern \
-  'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_TARGET_DIR/product-homes}"' \
-  'Docker harness must default product-home backing outside HARNESS_STATE_DIR'
+  'HARNESS_PRODUCT_HOME_DIR="${HARNESS_PRODUCT_HOME_DIR:-$HARNESS_SET_RUNTIME_DIR/product-homes}"' \
+  'Docker harness must default product-home backing under the reusable set root'
 require_docker_harness_pattern \
   'HARNESS_TARGET_DIR="${HARNESS_TARGET_DIR:-$HARNESS_GENERATED_RUN_DIR/target}"' \
   'Docker harness must group target-dominated generated output under target/'

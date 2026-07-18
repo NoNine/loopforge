@@ -8,6 +8,7 @@ fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
 run_id="role-order-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
+set_dir="$repo_root/generated/simulation/docker/sets/$run_id"
 cleanup() {
   rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -18,6 +19,11 @@ cleanup() {
     if [ -f "$calls" ]; then
       printf '%s\n' '--- docker calls ---' >&2
       sed -n '1,200p' "$calls" >&2
+    fi
+    if [ -d "$run_dir/host/logs/harness" ]; then
+      printf '%s\n' '--- harness logs ---' >&2
+      find "$run_dir/host/logs/harness" -maxdepth 1 -type f -print \
+        -exec tail -30 {} \; >&2
     fi
   fi
   rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id"
@@ -31,6 +37,8 @@ cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   *"compose version --short"*) printf '2.0.0\n' ;;
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
@@ -117,8 +125,9 @@ case "$*" in
         ;;
     esac
     ;;
-  cp\ container-id:/*)
-    src="${2#container-id:}"
+  cp\ *:/*)
+    case "$2" in *:/*) ;; *) exit 0 ;; esac
+    src="${2#*:}"
     dest="${3:-}"
     mkdir -p "$(dirname "$dest")"
     case "$src" in
@@ -154,6 +163,9 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
@@ -191,13 +203,13 @@ common_env=(
   PATH="$fake_bin:$PATH"
   DOCKER_CALLS_LOG="$calls"
   DOCKER_CONTAINERS_READY="$tmp_dir/containers-ready"
-  HARNESS_TEST_STUB_ROLE_COMMANDS="$tmp_dir/role-calls.log"
   HARNESS_ENV_FILE="$tmp_dir/harness.env"
 )
 
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
-touch "$tmp_dir/containers-ready"
+env "${common_env[@]}" \
+  "$repo_root/simulation/docker/simulate.sh" create --env "$tmp_dir/harness.env" >/dev/null
 env "${common_env[@]}" \
   "$repo_root/simulation/docker/simulate.sh" start --env "$tmp_dir/harness.env" >/dev/null
 
@@ -255,14 +267,14 @@ grep -Fq '"service_log_reference": "/var/lib/jenkins-agent/logs/agent-service.lo
   printf 'jenkins-agent service log metadata reference was not preserved\n' >&2
   exit 1
 }
-if grep -Fq "$run_dir/target/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
+if grep -Fq "$set_dir/runtime/product-homes" "$gerrit_host_evidence" "$controller_host_evidence" "$agent_host_evidence"; then
   printf 'product-home paths must not be normalized into bounded log references\n' >&2
   exit 1
 fi
 
-gerrit_env_copy_line="$(grep -n 'runtime-inputs/gerrit.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
-controller_env_copy_line="$(grep -n 'runtime-inputs/jenkins-controller.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
-agent_env_copy_line="$(grep -n 'runtime-inputs/jenkins-agent.env container-id:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
+gerrit_env_copy_line="$(grep -n 'runtime-inputs/gerrit.env cid-3:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
+controller_env_copy_line="$(grep -n 'runtime-inputs/jenkins-controller.env cid-4:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
+agent_env_copy_line="$(grep -n 'runtime-inputs/jenkins-agent.env cid-5:/tmp/loopforge-input-cp-' "$calls" | cut -d: -f1 | head -1)"
 gerrit_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/gerrit-setup.sh --env /home/ci-operator/loopforge-inputs/gerrit.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 controller_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/jenkins-controller-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-controller.env --yes install' "$calls" | cut -d: -f1 | head -1)"
 agent_install_line="$(grep -n '/home/ci-operator/loopforge/scripts/jenkins-agent-setup.sh --env /home/ci-operator/loopforge-inputs/jenkins-agent.env --yes install' "$calls" | cut -d: -f1 | head -1)"

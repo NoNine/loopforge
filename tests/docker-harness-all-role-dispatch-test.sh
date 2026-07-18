@@ -9,13 +9,15 @@ run_id="dispatch-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
 trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id"; rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"' EXIT
 
-state_dir="$run_dir/target/helper-state"
+state_dir="$repo_root/generated/simulation/docker/sets/$run_id/runtime/helper-state"
 calls="$tmp_dir/calls.log"
 
 mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
   *" ps -q "*) printf 'container-id\n' ;;
@@ -25,6 +27,9 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"

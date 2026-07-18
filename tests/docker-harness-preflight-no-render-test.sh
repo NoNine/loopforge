@@ -22,7 +22,7 @@ esac
 SH
 chmod +x "$fake_bin/docker"
 
-state_dir="$run_dir/target/helper-state"
+state_dir="$repo_root/generated/simulation/docker/sets/$set_id/runtime/helper-state"
 
 PATH="$fake_bin:$PATH" \
 HARNESS_RUN_ID="$run_id" \

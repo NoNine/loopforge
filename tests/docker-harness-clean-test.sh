@@ -8,6 +8,7 @@ tmp_dir="$(mktemp -d)"
 fake_bin="$tmp_dir/bin"
 run_id="clean-test-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
+set_runtime_dir="$repo_root/generated/simulation/docker/sets/$run_id/runtime"
 calls="$tmp_dir/docker-calls.log"
 trap 'rm -rf "$tmp_dir" "$run_dir" "$repo_root/generated/simulation/docker/sets/$run_id"; rm -f "$repo_root/generated/simulation/docker/locks/$run_id.lock"' EXIT
 
@@ -78,17 +79,17 @@ DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
 
 mkdir -p \
-  "$run_dir/target/helper-state/runtime" \
-  "$run_dir/target/product-homes/gerrit" \
-  "$run_dir/target/artifacts/staging/gerrit" \
+  "$set_runtime_dir/helper-state/runtime" \
+  "$set_runtime_dir/product-homes/gerrit" \
+  "$set_runtime_dir/artifacts/staging/gerrit" \
   "$run_dir/target/artifacts/exported/gerrit" \
   "$run_dir/host/evidence/harness" \
   "$run_dir/host/logs/harness" \
   "$run_dir/target/evidence/gerrit" \
   "$run_dir/target/logs/gerrit"
-printf 'state\n' >"$run_dir/target/helper-state/runtime/file"
-printf 'product\n' >"$run_dir/target/product-homes/gerrit/file"
-printf 'stage\n' >"$run_dir/target/artifacts/staging/gerrit/file"
+printf 'state\n' >"$set_runtime_dir/helper-state/runtime/file"
+printf 'product\n' >"$set_runtime_dir/product-homes/gerrit/file"
+printf 'stage\n' >"$set_runtime_dir/artifacts/staging/gerrit/file"
 printf 'artifact\n' >"$run_dir/target/artifacts/exported/gerrit/file"
 printf 'evidence\n' >"$run_dir/host/evidence/harness/file"
 printf 'log\n' >"$run_dir/host/logs/harness/file"
@@ -105,16 +106,16 @@ if grep -Eq '/.*/host/retained-output-backups/clean-[0-9]{8}T[0-9]{6}Z' "$tmp_di
   exit 1
 fi
 grep -Fq 'down --remove-orphans' "$calls"
-[ ! -e "$run_dir/target/helper-state" ] || {
-  printf 'clean should remove state\n' >&2
+[ -f "$set_runtime_dir/helper-state/runtime/file" ] || {
+  printf 'clean must preserve durable helper state\n' >&2
   exit 1
 }
-[ ! -e "$run_dir/target/product-homes" ] || {
-  printf 'clean should remove product homes\n' >&2
+[ -f "$set_runtime_dir/product-homes/gerrit/file" ] || {
+  printf 'clean must preserve durable product homes\n' >&2
   exit 1
 }
-[ ! -e "$run_dir/target/artifacts/staging" ] || {
-  printf 'clean should remove staging\n' >&2
+[ -f "$set_runtime_dir/artifacts/staging/gerrit/file" ] || {
+  printf 'clean must preserve durable target staging\n' >&2
   exit 1
 }
 backup_dir="$(find "$run_dir/host/retained-output-backups" -mindepth 1 -maxdepth 1 -type d -name 'clean-*' -print | sort | tail -1)"

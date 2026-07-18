@@ -9,6 +9,7 @@ fake_bin="$tmp_dir/bin"
 calls="$tmp_dir/docker-calls.log"
 run_id="role-env-test-$$"
 run_dir="$repo_root/generated/simulation/docker/$run_id"
+set_dir="$repo_root/generated/simulation/docker/sets/$run_id"
 cleanup() {
   rc=$?
   if [ "$rc" -ne 0 ] && [ -f "$calls" ]; then
@@ -26,6 +27,8 @@ cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   "ps -a --format {{.Names}}")
     if [ "${FAKE_CONTAINERS_EXIST:-0}" = "1" ]; then
@@ -98,6 +101,9 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
@@ -146,27 +152,9 @@ DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
 
 host_dir="$run_dir/host"
-state_dir="$run_dir/target/helper-state"
+state_dir="$set_dir/runtime/helper-state"
 runtime_dir="$host_dir/runtime-inputs"
-product_home_dir="$run_dir/target/product-homes"
-[ -d "$product_home_dir/gerrit" ] || {
-  printf 'Expected Gerrit product home backing dir outside harness state: %s\n' "$product_home_dir/gerrit" >&2
-  exit 1
-}
-[ -d "$product_home_dir/jenkins-controller" ] || {
-  printf 'Expected Jenkins product home backing dir outside harness state: %s\n' "$product_home_dir/jenkins-controller" >&2
-  exit 1
-}
-[ -d "$product_home_dir/jenkins-agent" ] || {
-  printf 'Expected agent product home backing dir outside harness state: %s\n' "$product_home_dir/jenkins-agent" >&2
-  exit 1
-}
-case "$product_home_dir" in
-  "$state_dir"|"$state_dir"/*)
-    printf 'Product home backing dir must not be under harness state: %s\n' "$product_home_dir" >&2
-    exit 1
-    ;;
-esac
+product_home_dir="$set_dir/runtime/product-homes"
 cat >"$tmp_dir/gerrit.env" <<'EOF'
 GERRIT_DOWNLOAD_ARTIFACTS="0"
 GERRIT_SENTINEL=mutated-after-render
@@ -185,6 +173,18 @@ EOF
 }
 PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" create --env "$tmp_dir/harness.env" >/dev/null
+for role in gerrit jenkins-controller jenkins-agent; do
+  [ -d "$product_home_dir/$role" ] || {
+    printf 'Expected create to establish product home: %s\n' "$product_home_dir/$role" >&2
+    exit 1
+  }
+done
+case "$product_home_dir" in
+  "$state_dir"|"$state_dir"/*)
+    printf 'Product home backing dir must not be under harness state: %s\n' "$product_home_dir" >&2
+    exit 1
+    ;;
+esac
 PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" start --env "$tmp_dir/harness.env" >/dev/null
 

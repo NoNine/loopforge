@@ -12,9 +12,12 @@ apply_canonical_output_paths() {
   HARNESS_GENERATED_RUN_DIR="$(canonical_generated_run_dir)"
   HARNESS_HOST_DIR="$HARNESS_GENERATED_RUN_DIR/host"
   HARNESS_TARGET_DIR="$HARNESS_GENERATED_RUN_DIR/target"
-  HARNESS_STATE_DIR="$HARNESS_TARGET_DIR/helper-state"
-  HARNESS_PRODUCT_HOME_DIR="$HARNESS_TARGET_DIR/product-homes"
-  HARNESS_STAGING_DIR="$HARNESS_TARGET_DIR/artifacts/staging"
+  HARNESS_SET_DIR="$(docker_generated_root)/sets/$HARNESS_SET_ID"
+  HARNESS_SET_RUNTIME_DIR="$HARNESS_SET_DIR/runtime"
+  HARNESS_DOCKER_SET_RECORD="$HARNESS_SET_DIR/docker-set.env"
+  HARNESS_STATE_DIR="$HARNESS_SET_RUNTIME_DIR/helper-state"
+  HARNESS_PRODUCT_HOME_DIR="$HARNESS_SET_RUNTIME_DIR/product-homes"
+  HARNESS_STAGING_DIR="$HARNESS_SET_RUNTIME_DIR/artifacts/staging"
   HARNESS_EXPORTED_ARTIFACT_DIR="$HARNESS_TARGET_DIR/artifacts/exported"
   HARNESS_EVIDENCE_DIR="$HARNESS_HOST_DIR/evidence/harness"
   HARNESS_LOG_DIR="$HARNESS_HOST_DIR/logs/harness"
@@ -26,7 +29,6 @@ apply_canonical_output_paths() {
   HARNESS_EFFECTIVE_INPUT_RECORD="$HARNESS_HOST_DIR/state/effective-inputs.env"
   HARNESS_BASELINE_CONTRACT="$HARNESS_HOST_DIR/rendered/artifact-manifest-contract.txt"
   HARNESS_RUN_MARKER="$HARNESS_GENERATED_RUN_DIR/.loopforge-docker-run.env"
-  HARNESS_SET_DIR="$(docker_generated_root)/sets/$HARNESS_SET_ID"
   HARNESS_SET_LOCK="$(simulation_set_lock_path "$(docker_generated_root)" "$HARNESS_SET_ID")"
   HARNESS_ACTIVE_RUN_FILE="$HARNESS_SET_DIR/active-run.env"
   HARNESS_WORKFLOW_STATE_FILE="$HARNESS_HOST_DIR/state/workflow-state.env"
@@ -37,9 +39,9 @@ apply_canonical_output_paths() {
   HARNESS_GERRIT_VALIDATION_SECRET_DIR="$HARNESS_HOST_DIR/validation-secrets/gerrit"
   HARNESS_BUNDLE_FACTORY_RENDERED_DIR="$HARNESS_HOST_DIR/bundle-factory/rendered"
   HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR="$HARNESS_HOST_DIR/bundle-factory/validation-public"
-  HARNESS_LDAP_DATA_DIR="$HARNESS_TARGET_DIR/ldap/data"
-  HARNESS_LDAP_CONFIG_DIR="$HARNESS_TARGET_DIR/ldap/config"
-  HARNESS_SHARED_JENKINS_STORAGE_DIR="$HARNESS_TARGET_DIR/shared-jenkins-storage"
+  HARNESS_LDAP_DATA_DIR="$HARNESS_SET_RUNTIME_DIR/ldap/data"
+  HARNESS_LDAP_CONFIG_DIR="$HARNESS_SET_RUNTIME_DIR/ldap/config"
+  HARNESS_SHARED_JENKINS_STORAGE_DIR="$HARNESS_SET_RUNTIME_DIR/shared-jenkins-storage"
   HARNESS_GERRIT_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/gerrit"
   HARNESS_GERRIT_LOG_DIR="$HARNESS_TARGET_DIR/logs/gerrit"
   HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR="$HARNESS_TARGET_DIR/evidence/jenkins-controller"
@@ -53,7 +55,8 @@ apply_canonical_output_paths() {
   export HARNESS_RENDERED_ENV HARNESS_RUNTIME_ENV HARNESS_SOURCE_INPUT_DIR
   export HARNESS_RUNTIME_INPUT_DIR HARNESS_EFFECTIVE_INPUT_RECORD
   export HARNESS_BASELINE_CONTRACT HARNESS_RUN_MARKER
-  export HARNESS_SET_DIR HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
+  export HARNESS_SET_DIR HARNESS_SET_RUNTIME_DIR HARNESS_DOCKER_SET_RECORD
+  export HARNESS_SET_LOCK HARNESS_ACTIVE_RUN_FILE
   export HARNESS_WORKFLOW_STATE_FILE HARNESS_CHECKPOINT_RECORD_DIR
   export HARNESS_TARGET_SSH_DIR HARNESS_TARGET_SSH_IDENTITY_FILE
   export HARNESS_TARGET_SSH_KNOWN_HOSTS_FILE
@@ -78,6 +81,8 @@ reject_custom_output_paths() {
     HARNESS_EVIDENCE_DIR \
     HARNESS_LOG_DIR \
     HARNESS_RETAINED_OUTPUT_BACKUP_DIR \
+    HARNESS_SET_RUNTIME_DIR \
+    HARNESS_DOCKER_SET_RECORD \
     HARNESS_RENDERED_ENV \
     HARNESS_SOURCE_INPUT_DIR \
     HARNESS_RUNTIME_INPUT_DIR \
@@ -103,9 +108,11 @@ reject_custom_output_paths() {
       HARNESS_GENERATED_RUN_DIR) expected="$(canonical_generated_run_dir)" ;;
       HARNESS_HOST_DIR) expected="$(canonical_generated_run_dir)/host" ;;
       HARNESS_TARGET_DIR) expected="$(canonical_generated_run_dir)/target" ;;
-      HARNESS_STATE_DIR) expected="$(canonical_generated_run_dir)/target/helper-state" ;;
-      HARNESS_PRODUCT_HOME_DIR) expected="$(canonical_generated_run_dir)/target/product-homes" ;;
-      HARNESS_STAGING_DIR) expected="$(canonical_generated_run_dir)/target/artifacts/staging" ;;
+      HARNESS_SET_RUNTIME_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime" ;;
+      HARNESS_DOCKER_SET_RECORD) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/docker-set.env" ;;
+      HARNESS_STATE_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/helper-state" ;;
+      HARNESS_PRODUCT_HOME_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/product-homes" ;;
+      HARNESS_STAGING_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/artifacts/staging" ;;
       HARNESS_EXPORTED_ARTIFACT_DIR) expected="$(canonical_generated_run_dir)/target/artifacts/exported" ;;
       HARNESS_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/host/evidence/harness" ;;
       HARNESS_LOG_DIR) expected="$(canonical_generated_run_dir)/host/logs/harness" ;;
@@ -119,9 +126,9 @@ reject_custom_output_paths() {
       HARNESS_GERRIT_VALIDATION_SECRET_DIR) expected="$(canonical_generated_run_dir)/host/validation-secrets/gerrit" ;;
       HARNESS_BUNDLE_FACTORY_RENDERED_DIR) expected="$(canonical_generated_run_dir)/host/bundle-factory/rendered" ;;
       HARNESS_BUNDLE_FACTORY_VALIDATION_PUBLIC_DIR) expected="$(canonical_generated_run_dir)/host/bundle-factory/validation-public" ;;
-      HARNESS_LDAP_DATA_DIR) expected="$(canonical_generated_run_dir)/target/ldap/data" ;;
-      HARNESS_LDAP_CONFIG_DIR) expected="$(canonical_generated_run_dir)/target/ldap/config" ;;
-      HARNESS_SHARED_JENKINS_STORAGE_DIR) expected="$(canonical_generated_run_dir)/target/shared-jenkins-storage" ;;
+      HARNESS_LDAP_DATA_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/ldap/data" ;;
+      HARNESS_LDAP_CONFIG_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/ldap/config" ;;
+      HARNESS_SHARED_JENKINS_STORAGE_DIR) expected="$(docker_generated_root)/sets/$HARNESS_SET_ID/runtime/shared-jenkins-storage" ;;
       HARNESS_GERRIT_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/gerrit" ;;
       HARNESS_GERRIT_LOG_DIR) expected="$(canonical_generated_run_dir)/target/logs/gerrit" ;;
       HARNESS_JENKINS_CONTROLLER_EVIDENCE_DIR) expected="$(canonical_generated_run_dir)/target/evidence/jenkins-controller" ;;

@@ -17,6 +17,8 @@ cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   "ps -a --format {{.Names}}")
     if [ "${FAKE_CONTAINERS_EXIST:-0}" = "1" ]; then
@@ -28,8 +30,8 @@ case "$*" in
     src="${2:?source required}"
     dest="${3:?destination required}"
     case "$src" in
-      container-id:*)
-        rel="${src#container-id:}"
+      *:*)
+        rel="${src#*:}"
         cp -R "$FAKE_CONTAINER_FS$rel" "$dest"
         ;;
       *)
@@ -118,6 +120,9 @@ EOF
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
@@ -143,7 +148,11 @@ FAKE_CONTAINERS_EXIST=0 \
 PATH="$fake_bin:$PATH" \
 DOCKER_CALLS_LOG="$calls" \
 FAKE_CONTAINER_FS="$container_fs" \
-FAKE_CONTAINERS_EXIST=1 \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" create >/dev/null
+
+PATH="$fake_bin:$PATH" \
+DOCKER_CALLS_LOG="$calls" \
+FAKE_CONTAINER_FS="$container_fs" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" start >/dev/null
 
 PATH="$fake_bin:$PATH" \
@@ -196,9 +205,9 @@ if grep -Fq -- 'ldap-bind-password' "$calls"; then
   printf 'prepare-artifacts must not create or stage LDAP bind secrets\n' >&2
   exit 1
 fi
-grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz' "$calls"
-grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
-if grep -Fq -- 'cp container-id:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.txt' "$calls"; then
+grep -Fq -- 'cp cid-1:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz' "$calls"
+grep -Fq -- 'cp cid-1:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.tar.gz.sha256' "$calls"
+if grep -Fq -- 'cp cid-1:/var/lib/loopforge/preparing/gerrit-artifacts-bundle.txt' "$calls"; then
   printf 'prepare-artifacts must not export Gerrit review sibling\n' >&2
   exit 1
 fi
@@ -207,8 +216,8 @@ fi
   exit 1
 }
 [ ! -e "$run_dir/host/runtime-inputs/helper-envs" ]
-[ ! -e "$run_dir/target/product-homes/bundle-factory" ] || {
-  printf 'bundle-factory runtime state must not be created under target/product-homes\n' >&2
+[ ! -e "$repo_root/generated/simulation/docker/sets/$run_id/runtime/product-homes/bundle-factory" ] || {
+  printf 'bundle-factory runtime state must not be created under set product homes\n' >&2
   exit 1
 }
 tar -tzf "$export_archive" | grep -Fq 'gerrit/manifest.txt'
@@ -238,8 +247,8 @@ fi
 grep -Fq 'Docker cp simulation-only waiver' "$stage_evidence"
 grep -Fq -- 'cp ' "$calls"
 grep -Fq -- 'prepare-target-workspace' "$calls"
-grep -Fq -- 'gerrit-artifacts-bundle.tar.gz container-id:/tmp/loopforge-docker-cp-' "$calls"
-grep -Fq -- 'gerrit-artifacts-bundle.tar.gz.sha256 container-id:/tmp/loopforge-docker-cp-' "$calls"
+grep -Fq -- 'gerrit-artifacts-bundle.tar.gz cid-3:/tmp/loopforge-docker-cp-' "$calls"
+grep -Fq -- 'gerrit-artifacts-bundle.tar.gz.sha256 cid-3:/tmp/loopforge-docker-cp-' "$calls"
 grep -Fq -- 'test -d /var/lib/loopforge/staging' "$calls"
 if grep -Fq -- 'install -d -m 0750 -o ci-operator -g ci-operator /var/lib/loopforge/staging' "$calls"; then
   printf 'stage-artifacts must not create helper-owned staging dirs from the harness\n' >&2
@@ -255,7 +264,7 @@ if grep -Fq -- 'chown -R ci-operator:ci-operator "$target_bundle_dir"' "$calls" 
   exit 1
 fi
 
-[ ! -d "$run_dir/target/artifacts/staging/gerrit/gerrit-artifacts-bundle" ] || {
+[ ! -d "$repo_root/generated/simulation/docker/sets/$run_id/runtime/artifacts/staging/gerrit/gerrit-artifacts-bundle" ] || {
   printf 'stage-artifacts must not extract target bundles on the host\n' >&2
   exit 1
 }

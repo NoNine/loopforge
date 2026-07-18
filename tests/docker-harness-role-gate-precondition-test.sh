@@ -32,6 +32,8 @@ cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   *"compose version --short"*) printf '2.0.0\n' ;;
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
@@ -106,6 +108,9 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
@@ -144,6 +149,10 @@ env \
   PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \
   "$repo_root/simulation/docker/simulate.sh" init-run --env "$tmp_dir/harness.env" >/dev/null
+env \
+  PATH="$fake_bin:$PATH" \
+  DOCKER_CALLS_LOG="$calls" \
+  "$repo_root/simulation/docker/simulate.sh" create --env "$tmp_dir/harness.env" >/dev/null
 env \
   PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$calls" \

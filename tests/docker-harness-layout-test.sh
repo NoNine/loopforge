@@ -227,8 +227,8 @@ if grep -Fq -- 'prepare_product_home_ownership' "${docker_harness_sources[@]}" |
   printf 'Docker harness must not own container-visible Loopforge/product ownership prep\n' >&2
   exit 1
 fi
-grep -Fq -- '.runtime-identity-pending' "$repo_root/simulation/docker/lib/config.sh" || {
-  printf 'Fresh Docker runs must mark product homes for one-time identity initialization\n' >&2
+grep -Fq -- '.runtime-identity-pending' "$repo_root/simulation/docker/lib/docker-set.sh" || {
+  printf 'Docker create must mark product homes for one-time identity initialization\n' >&2
   exit 1
 }
 grep -Fq -- '__docker_set_initialize_or_validate_product_homes' "$repo_root/simulation/docker/lib/docker-set.sh" || {

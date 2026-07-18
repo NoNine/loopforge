@@ -217,7 +217,7 @@ sha256sum -c checksums.sha256
 docker_artifacts_prepare() {
   local role helper_path service log rc evidence artifact_dir host_env_file role_env_file export_archive
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
   role="${1:?role required}"
   helper_path="$(role_helper_path_for_operator ci-operator "$role")"
@@ -318,7 +318,7 @@ docker_artifacts_stage() {
   local role service archive checksum target_bundle_dir target_payload_dir log evidence
   local staging_root archive_name checksum_name container_archive container_checksum extract_script
   bootstrap_harness_env
-  docker_set_require_runtime
+  docker_set_require_runtime || return $?
   require_docker_effective_inputs
   role="${1:?role required}"
   service="$(docker_compose_service_for_role "$role")"

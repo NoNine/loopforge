@@ -32,6 +32,8 @@ cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$DOCKER_CALLS_LOG"
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
   ps\ -a\ --format*)
@@ -73,8 +75,8 @@ case "$*" in
           "stat -Lc %d:%i "*)
             case "$service:$*" in
               bundle-factory:*"/workspace") stat -Lc '%d:%i' "$REPO_ROOT" ;;
-              ldap:*"/var/lib/ldap") stat -Lc '%d:%i' "$RUN_DIR/target/ldap/data" ;;
-              ldap:*"/etc/ldap/slapd.d") stat -Lc '%d:%i' "$RUN_DIR/target/ldap/config" ;;
+              ldap:*"/var/lib/ldap") stat -Lc '%d:%i' "$SET_RUNTIME_DIR/ldap/data" ;;
+              ldap:*"/etc/ldap/slapd.d") stat -Lc '%d:%i' "$SET_RUNTIME_DIR/ldap/config" ;;
               gerrit-target:*"/workspace"|jenkins-controller-target:*"/workspace"|jenkins-agent-target:*"/workspace") stat -Lc '%d:%i' "$REPO_ROOT" ;;
               gerrit-target:*"/srv/gerrit")
                 if [ "${STALE_IDENTITY:-0}" = "1" ]; then
@@ -83,9 +85,9 @@ case "$*" in
                   stat -Lc '%d:%i' "$STALE_SOURCE"
                 fi
                 ;;
-              jenkins-controller-target:*"/var/lib/jenkins") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/jenkins-controller" ;;
-              jenkins-controller-target:*"/data/jenkins-shared"|jenkins-agent-target:*"/data/jenkins-shared") stat -Lc '%d:%i' "$RUN_DIR/target/shared-jenkins-storage" ;;
-              jenkins-agent-target:*"/var/lib/jenkins-agent") stat -Lc '%d:%i' "$RUN_DIR/target/product-homes/jenkins-agent" ;;
+              jenkins-controller-target:*"/var/lib/jenkins") stat -Lc '%d:%i' "$SET_RUNTIME_DIR/product-homes/jenkins-controller" ;;
+              jenkins-controller-target:*"/data/jenkins-shared"|jenkins-agent-target:*"/data/jenkins-shared") stat -Lc '%d:%i' "$SET_RUNTIME_DIR/shared-jenkins-storage" ;;
+              jenkins-agent-target:*"/var/lib/jenkins-agent") stat -Lc '%d:%i' "$SET_RUNTIME_DIR/product-homes/jenkins-agent" ;;
               *)
                 printf 'unexpected stat target service=%s command=%s\n' "$service" "$*" >&2
                 exit 99
@@ -120,8 +122,8 @@ case "$*" in
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
         ;;
       *-ldap)
-        printf '%s\t%s\n' "$RUN_DIR/target/ldap/data" /var/lib/ldap
-        printf '%s\t%s\n' "$RUN_DIR/target/ldap/config" /etc/ldap/slapd.d
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/ldap/data" /var/lib/ldap
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/ldap/config" /etc/ldap/slapd.d
         ;;
       *-gerrit-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
@@ -129,13 +131,13 @@ case "$*" in
         ;;
       *-jenkins-controller-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/target/product-homes/jenkins-controller" /var/lib/jenkins
-        printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /data/jenkins-shared
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/product-homes/jenkins-controller" /var/lib/jenkins
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/shared-jenkins-storage" /data/jenkins-shared
         ;;
       *-jenkins-agent-target)
         printf '%s\t%s\n' "$REPO_ROOT" /workspace
-        printf '%s\t%s\n' "$RUN_DIR/target/product-homes/jenkins-agent" /var/lib/jenkins-agent
-        printf '%s\t%s\n' "$RUN_DIR/target/shared-jenkins-storage" /data/jenkins-shared
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/product-homes/jenkins-agent" /var/lib/jenkins-agent
+        printf '%s\t%s\n' "$SET_RUNTIME_DIR/shared-jenkins-storage" /data/jenkins-shared
         ;;
     esac
     ;;
@@ -148,6 +150,11 @@ case "$*" in
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export DOCKER_SET_FAKE_DELEGATE_MOUNTS=1
+export REPO_ROOT="$repo_root"
+export SET_RUNTIME_DIR="$repo_root/generated/simulation/docker/sets/$set_id/runtime"
 
 cat >"$tmp_dir/harness.env" <<EOF
 HARNESS_MODE=docker-simulation
@@ -166,6 +173,10 @@ REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
 STALE_SOURCE="$tmp_dir/unused" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" init-run >/dev/null
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$calls" STALE_SOURCE="$SET_RUNTIME_DIR/product-homes/gerrit" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" create >/dev/null
+PATH="$fake_bin:$PATH" DOCKER_CALLS_LOG="$calls" STALE_SOURCE="$SET_RUNTIME_DIR/product-homes/gerrit" \
+  "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" start >/dev/null
 
 mkdir -p "$tmp_dir/stale-source"
 chmod 0500 "$tmp_dir/stale-source"
@@ -177,7 +188,7 @@ DOCKER_CALLS_LOG="$calls" \
 DOCKER_CONTAINERS_FILE="$tmp_dir/containers" \
 REPO_ROOT="$repo_root" \
 RUN_DIR="$run_dir" \
-STALE_SOURCE="$run_dir/target/product-homes/gerrit" \
+STALE_SOURCE="$SET_RUNTIME_DIR/product-homes/gerrit" \
 STALE_IDENTITY=0 \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" status \
   >"$tmp_dir/status-ok.out" 2>&1

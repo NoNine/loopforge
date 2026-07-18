@@ -43,7 +43,6 @@ run_lifecycle_without_render() {
   set +e
   PATH="$fake_bin:$PATH" \
   DOCKER_CALLS_LOG="$docker_calls" \
-  HARNESS_TEST_STUB_ROLE_COMMANDS="$role_calls" \
   HARNESS_RUN_ID="$run_id" \
   HARNESS_SET_ID="$set_id" \
     "$repo_root/simulation/docker/simulate.sh" "$@" \
@@ -53,6 +52,7 @@ run_lifecycle_without_render() {
 
   [ "$rc" -ne 0 ] || {
     printf 'Expected %s to fail before init-run\n' "$*" >&2
+    sed -n '1,80p' "$output" >&2
     exit 1
   }
   grep -Fq 'run init-run first' "$output"
@@ -76,6 +76,7 @@ run_lifecycle_without_render() {
 }
 
 run_lifecycle_without_render start start
+run_lifecycle_without_render stop stop
 run_lifecycle_without_render create create
 run_lifecycle_without_render prepare prepare-artifacts
 run_lifecycle_without_render stage stage-artifacts
@@ -118,5 +119,4 @@ run_recovery_without_render() {
   }
 }
 
-run_recovery_without_render stop stop
 run_recovery_without_render clean clean

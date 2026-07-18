@@ -14,6 +14,8 @@ mkdir -p "$fake_bin"
 cat >"$fake_bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+. "$DOCKER_SET_FAKE_LIB"
+if fake_docker_set_handle "$@"; then exit 0; else rc=$?; [ "$rc" -eq 125 ] || exit "$rc"; fi
 case "$*" in
   *"compose version"*) printf 'Docker Compose version v2.0.0\n' ;;
   *"compose build"*) exit 0 ;;
@@ -24,13 +26,16 @@ case "$*" in
   *" ps -q "*) printf 'container-id\n' ;;
   *"/etc/os-release"*) printf 'release=24.04 codename=noble pretty=Ubuntu 24.04\n' ;;
   *"inspect -f {{.State.Running}}"*) printf 'true\n' ;;
-  *"inspect -f "*"gerrit-container"*) printf '18081\n' ;;
-  *"inspect -f "*"jenkins-container"*) printf '18082\n' ;;
+  *"inspect -f "*"cid-3"*) printf '18081\n' ;;
+  *"inspect -f "*"cid-4"*) printf '18082\n' ;;
   *"inspect -f "*) printf 'true\n' ;;
   *) exit 0 ;;
 esac
 SH
 chmod +x "$fake_bin/docker"
+export DOCKER_SET_FAKE_LIB="$repo_root/tests/fixtures/docker-set-state.sh"
+export DOCKER_SET_FAKE_STATE_DIR="$tmp_dir/docker-state"
+export REPO_ROOT="$repo_root"
 cat >"$fake_bin/ssh-keyscan" <<'SH'
 #!/usr/bin/env bash
 printf '[127.0.0.1]:%s ssh-ed25519 test-key\n' "${4:-22}"
@@ -59,11 +64,11 @@ grep -Fq "init-run: ok set-id=$set_id run-id=$run_id" "$tmp_dir/init-run.out"
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" create >"$tmp_dir/create.out"
-grep -Fq "create: ok images=project-built" "$tmp_dir/create.out"
+grep -Fq "create: ok state=created resources=stopped" "$tmp_dir/create.out"
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" start >"$tmp_dir/start.out"
-grep -Fq "start: ok resources=running target-access=ready inputs=ready" "$tmp_dir/start.out"
+grep -Fq "start: ok state=started durable=baseline resources=running target-access=ready inputs=ready" "$tmp_dir/start.out"
 ! grep -Fq "gerrit_url=" "$tmp_dir/start.out"
 ! grep -Fq "jenkins_url=" "$tmp_dir/start.out"
 
@@ -86,4 +91,4 @@ tail -1 "$tmp_dir/status.out" | grep -Fq -- "------------------  -------------- 
 
 PATH="$fake_bin:$PATH" \
   "$repo_root/simulation/docker/simulate.sh" --env "$tmp_dir/harness.env" stop >"$tmp_dir/stop.out"
-grep -Fq "stop: stopped harness containers" "$tmp_dir/stop.out"
+grep -Fq "stop: ok state=stopped durable=baseline reset-gate=normal" "$tmp_dir/stop.out"

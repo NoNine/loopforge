@@ -402,7 +402,7 @@ In Docker simulation, Gerrit repositories are stored by Gerrit under:
 That path is backed on the host by:
 
 ```text
-generated/simulation/docker/<run-id>/target/product-homes/gerrit/git
+generated/simulation/docker/sets/<set-id>/runtime/product-homes/gerrit/git
 ```
 
 Treat this as Gerrit runtime state, similar to a database directory. Manage
