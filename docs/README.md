@@ -38,7 +38,7 @@ Use this order when deciding where a product or process fact belongs:
    not the documentation index.
 3. `docs/contracts/lifecycle-contract.md` owns temporal behavior: phase order,
    checkpoint semantics, mutation boundaries, stop/review/resume points,
-   rerun rules, lifecycle command mapping, and lifecycle evidence obligations.
+   rerun rules, product workflow order, and lifecycle evidence obligations.
 4. Topic authority docs own detailed cross-cutting contracts:
    `docs/contracts/account-model.md` for accounts and credential custody,
    `docs/contracts/directory-model.md` for path ownership and generated state,

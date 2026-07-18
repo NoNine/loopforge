@@ -204,9 +204,9 @@ proof, `Verified` voting, and integration evidence belong to
 ## Lifecycle Boundary
 
 `docs/contracts/lifecycle-contract.md` owns phase behavior rules, checkpoint semantics,
-mutation boundaries, operator sequencing, Docker command mapping, and
-resume/rerun behavior. This system model defines the conceptual architecture
-used by that lifecycle contract.
+mutation boundaries, product workflow sequencing, and resume/rerun behavior.
+Simulation documents own shared and backend command semantics. This system
+model defines the conceptual architecture used by that lifecycle contract.
 
 Lifecycle implementations must preserve these system invariants:
 

@@ -287,7 +287,7 @@ When a layer uses these command names, the shared simulation semantics are:
 | --- | --- |
 | `run` | State-aware normal workflow composite. It initializes fresh state, resumes the exact active run at its next phase, or returns `already-complete`; it leaves the set running and never runs cleanup, restoration, destruction, or audit commands. |
 | `preflight` | Read-only prerequisite check before service mutation. |
-| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate `HARNESS_RUN_ID` when omitted, snapshot selected source templates, write the source-bound run marker, and claim the selected set's active-run pointer with effective inputs pending. It rejects an active set or existing run root. |
+| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accept only an unused explicit value, snapshot selected source templates, write the source-bound run marker, and claim the selected set's active-run pointer with effective inputs pending. It rejects an active set or existing run root. |
 | `create` | Create an absent claimed set and clean baseline, or verify an exact stopped existing set with non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, or mismatched state blocks. |
 | `start` | Start the selected simulation set without setup mutation, verify owned target access, refresh ephemeral transport values, and atomically publish stable effective inputs on the first successful start. Repeated start verifies rather than rewrites effective inputs; an exact running set returns `state=already-running`, and other state blocks. |
 | `status` | Read-only inspection of coherent absent, unclaimed, stopped, or running state; contradictory state reports `conflicting` and exits nonzero. |
@@ -300,7 +300,7 @@ When a layer uses these command names, the shared simulation semantics are:
 | `validate-integration` | Passive cross-role readiness validation. |
 | `prove-integration` | Active end-to-end trigger proof after matching validation passed. |
 | `audit-state` | Explicit read-only generated-state and simulation-set consistency inspection. |
-| `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state and review output; an ownership-valid stopped set returns `state=already-stopped`. |
+| `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state, source/effective input custody, and review output; live target access becomes unavailable. An ownership-valid stopped set returns `state=already-stopped`. |
 | `restore-baseline` | Require a stopped simulation set and reset its durable runtime to the selected clean pre-setup baseline without cleaning generated state. |
 | `clean` | After matching baseline restoration, clear mutable workflow/run state and remove the selected set's active-run pointer last while preserving the immutable run marker, checkpoint records, artifacts, evidence, logs, and baseline resources. |
 | `destroy` | Ownership-validated backend resource deletion; a fully absent unclaimed set returns `state=already-absent`, while missing resources contradicted by metadata block. |
@@ -347,7 +347,13 @@ simulation integration only, a harness may create a private temporary copy of
 the effective `integration.env`, overlay only the three current target SSH host
 fields, invoke `scripts/integration-setup.sh` through its existing env-file
 interface, and delete the temporary file. That invocation adapter is not
-retained input state or evidence.
+retained input state or evidence and does not apply to target deployment.
+
+Input rendering and publication change host-side generated state only. They do
+not authorize role or integration target mutation or complete a product
+checkpoint. `stop` preserves source and effective input custody while making
+live target access unavailable; a later `start` re-establishes and verifies
+that access without rewriting the stable inputs.
 
 Docker and VM simulation may use simulation-owned fake LDAP bind passwords for
 their own LDAP environments. The default example values are not real

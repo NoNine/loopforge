@@ -69,38 +69,49 @@ require_text "$prd" \
   'Both simulation backends use `HARNESS_SET_ID` for the reusable simulation' \
   'PRD must define shared simulation-set identity'
 require_text "$lifecycle" \
-  '`up` and `down` are not Loopforge simulation commands.' \
-  'Lifecycle contract must remove up/down commands'
+  '# Loopforge Product Lifecycle Contract' \
+  'Lifecycle contract must be explicitly product-level'
 require_text "$lifecycle" \
-  '`HARNESS_RUN_ID` identifies exactly one setup and validation attempt.' \
-  'Lifecycle contract must define immutable run identity'
+  'This contract does not define concrete command syntax, backend resource' \
+  'Lifecycle contract must delegate realization details'
 require_text "$lifecycle" \
-  'operator omits it, `init-run` generates a collision-resistant immutable value;' \
-  'Lifecycle contract must generate a run ID when omitted'
-require_text "$lifecycle" \
-  'an explicitly supplied value must not already exist.' \
-  'Lifecycle contract must reject reused explicit run IDs'
-require_text "$lifecycle" \
-  '`stop` and `start` preserve that pointer and run ID.' \
-  'Lifecycle contract must preserve run identity across restart'
-require_text "$lifecycle" \
+  'Environment provisioning, power control, baseline restoration, generated-state' \
+  'Lifecycle contract must keep environment lifecycle outside product progress'
+require_text "$shared" \
+  '`up` and `down` are removed command names.' \
+  'Shared simulation contract must reject removed commands'
+require_text "$shared" \
+  'generate a collision-resistant immutable `HARNESS_RUN_ID` when omitted' \
+  'Shared simulation contract must own automatic run identity'
+require_text "$shared" \
+  'It rejects an active set or existing run root.' \
+  'Shared simulation contract must reject active or reused run state'
+require_text "$shared" \
+  'through its existing env-file' \
+  'Shared simulation contract must preserve the helper input interface'
+require_text "$shared" \
+  'That invocation adapter is not' \
+  'Shared simulation contract must exclude the adapter from retained state'
+require_text "$shared" \
+  'source/effective input custody, and review output; live target access' \
+  'Shared simulation stop must preserve bound inputs and drop live access'
+require_text "$shared" \
+  'Input rendering and publication change host-side generated state only.' \
+  'Shared simulation input publication must not claim product progress'
+require_text "$state_model" \
+  'Backend resource namespaces are derived from the backend and set ID and never' \
+  'Lifecycle state model must keep resource namespaces independent of run ID'
+for realization_term in \
+  'HARNESS_RUN_ID' \
+  'HARNESS_SET_ID' \
   '## Simulation Input Rendering Contract' \
-  'Lifecycle contract must separate simulation rendering from target review'
-require_text "$lifecycle" \
-  'The temporary file is not retained input state, evidence, or a' \
-  'Lifecycle contract must keep ephemeral integration transport outside input authority'
-require_text "$lifecycle" \
-  'The harness owns this invocation adapter; the shared helper' \
-  'Lifecycle contract must keep the simulation adapter outside the shared helper'
-require_text "$lifecycle" \
-  'continues to consume its existing env-file interface without adapter-specific' \
-  'Lifecycle contract must preserve the shared helper env-file interface'
-require_text "$lifecycle" \
-  '`HARNESS_SET_ID` selects one simulation' \
-  'Lifecycle contract must define shared simulation-set identity'
-require_text "$lifecycle" \
-  'Both values are stable across runs of the same simulation set and must not' \
-  'Lifecycle contract must keep backend namespaces independent of run identity'
+  '## Simulation Command Relationship' \
+  'restored-pending-clean' \
+  'active-run.env' \
+  'restore-baseline'; do
+  reject_text "$lifecycle" "$realization_term" \
+    "Product lifecycle contract must not own simulation realization: $realization_term"
+done
 require_text "$directory" \
   '## Simulation Baselines And Run Identity' \
   'Directory contract must define baseline and run identity custody'

@@ -3,7 +3,8 @@
 Durable lifecycle behavior now lives in `docs/contracts/lifecycle-contract.md`. Keep
 this implementation step as historical context only. Future changes to phase
 order, checkpoint semantics, mutation boundaries, resume/rerun behavior, or
-Docker command mapping belong in the lifecycle contract, not in this plan.
+product workflow sequencing belong in the lifecycle contract, not in this plan.
+Shared and backend simulation command semantics belong under `simulation/`.
 
 The cross-role command sequence belongs in `docs/operations/setup/integration.md`.
 Gerrit Trigger, ACL, label, vote, and failure-classification behavior belongs

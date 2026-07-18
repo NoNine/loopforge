@@ -128,14 +128,17 @@ require_text "$coordination" \
   'Checkpoint coordination design must retire duplicate pass markers'
 
 require_text "$lifecycle" \
-  '`simulation/docs/lifecycle-state-model.md` owns the exact simulation state' \
+  '`simulation/docs/lifecycle-state-model.md` owns exact simulation state' \
   'Lifecycle authority must delegate exact simulation state realization'
 require_text "$lifecycle" \
-  '`simulation/docs/checkpoint-coordination.md` owns the implementation design' \
+  '`simulation/docs/checkpoint-coordination.md` owns coordination among' \
   'Lifecycle authority must delegate checkpoint coordination design'
-require_text "$lifecycle" \
-  'restored-pending-clean -> clean -> baseline-stopped + unclaimed' \
-  'Lifecycle authority must include the cleanup release transition'
+reject_text "$lifecycle" \
+  'restored-pending-clean' \
+  'Product lifecycle authority must not define a simulation reset gate'
+require_text "$state_model" \
+  'RestoredPendingClean --> BaselineStoppedUnclaimed: clean' \
+  'Lifecycle state model must own the cleanup release transition'
 
 require_text "$vm_design" \
   '# VM Simulation Harness Implementation Design' \

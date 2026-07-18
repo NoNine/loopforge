@@ -135,8 +135,9 @@ details.
 
 `integration.sh` owns calls to `scripts/integration-setup.sh` for
 `configure-integration`, `validate-integration`, and `prove-integration`. It
-must enforce matching validation markers before active proof and must fail or
-report blocked rather than creating synthetic success markers.
+must require the matching helper-owned validation result and exact workflow
+predecessor before active proof, and it must fail or report blocked rather than
+creating synthetic success.
 
 ## Initial Folded Module Relationships
 

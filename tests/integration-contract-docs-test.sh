@@ -59,19 +59,19 @@ for checkpoint in \
     "Lifecycle contract is missing integration checkpoint: $checkpoint"
 done
 require_text "$lifecycle" \
-  'Treat `validate-integration` as observational cross-role validation.' \
+  'Observe effective access, SSH paths, key custody, storage, node state,' \
   'Lifecycle must keep integration validation observational'
 require_text "$lifecycle" \
-  'marker existence alone is not a valid prerequisite.' \
-  'Lifecycle must bind integration markers to reviewed state'
+  'record existence alone is not a valid prerequisite.' \
+  'Lifecycle must bind integration completion state to reviewed state'
 require_text "$lifecycle" \
   'the only resumable mutation boundary.' \
   'Lifecycle must limit mutation resume to Gerrit external review'
 require_text "$lifecycle" \
-  'returns non-mutating `already-complete`.' \
+  'state returns `already-complete` without mutation.' \
   'Lifecycle must define exact completed-state no-op behavior'
 require_text "$lifecycle" \
-  'v1 role helpers do not reinstall or reconfigure it.' \
+  'role helpers do not reinstall or reconfigure it.' \
   'Lifecycle must reject role reinstall and reconfiguration'
 
 for non_goal in \

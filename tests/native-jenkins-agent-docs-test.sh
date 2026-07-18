@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 manual="$repo_root/docs/operations/native/jenkins-agent.md"
+setup_manual="$repo_root/docs/operations/setup/jenkins-agent.md"
 integration="$repo_root/docs/operations/native/integration.md"
 prd="$repo_root/docs/product/prd.md"
 system_model="$repo_root/docs/architecture/system-model.md"
@@ -340,13 +341,13 @@ require_text "$system_model" \
   'This prerequisite provisioning may occur before application' \
   'System model must allow dependency-first provisioning'
 require_text "$lifecycle" \
-  'must not replay their setup or verification commands' \
+  'not replay their setup or verification operations' \
   'Lifecycle contract must preserve completed checkpoint ownership'
+require_text "$setup_manual" \
+  'completed artifact, identity,' \
+  'Jenkins agent manual must compose readiness from owned checkpoints'
 require_text "$lifecycle" \
-  'Readiness combines successful dependency, identity, filesystem, artifact,' \
-  'Lifecycle contract must compose Jenkins agent readiness from checkpoints'
-require_text "$lifecycle" \
-  'This checkpoint changes staging state only; role-local setup owns' \
+  'This checkpoint changes staging only; role setup owns' \
   'Lifecycle contract must separate staging from role-local runtime mutation'
 require_text "$operator_contract" \
   'OS dependency provisioning' \

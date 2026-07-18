@@ -26,33 +26,24 @@ reject_doc_text() {
   fi
 }
 
-require_doc_text docs/contracts/lifecycle-contract.md \
+require_doc_text simulation/README.md \
+  '## Shared Command Semantics' \
+  'Shared simulation docs must own command semantics'
+require_doc_text simulation/vm/README.md \
+  'removes the active-run pointer last.' \
+  'VM README must own clean review-state behavior'
+require_doc_text simulation/vm/README.md \
+  'The ownership-checked `destroy` command removes the transient domain, bake' \
+  'VM README must own failed-bake state cleanup'
+reject_doc_text docs/contracts/lifecycle-contract.md \
   '## Simulation Command Relationship' \
-  'Lifecycle contract must describe simulation command relationship'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  '`simulation/README.md` owns shared simulation command semantics.' \
-  'Lifecycle contract must point to shared simulation command semantics'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  '`simulation/docker/README.md` and `simulation/vm/README.md` own the concrete' \
-  'Lifecycle contract must point concrete command references to layer docs'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  'outside the checkpoint progression' \
-  'Lifecycle contract must keep utility commands outside checkpoint progression'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  "clears the selected set's active-run" \
-  'Lifecycle contract must preserve VM clean review artifacts'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  'preserves the reusable simulation set. Only `destroy` removes VM resources' \
-  'Lifecycle contract must separate VM clean from destroy'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  'Only `destroy` removes VM resources' \
-  'Lifecycle contract must define VM destroy as resource deletion'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  'Only `destroy` removes VM resources' \
-  'Lifecycle contract must identify deleted VM resources'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  'selected simulation-set state;' \
-  'Lifecycle contract must preserve failed VM bake debug state until destroy'
+  'Product lifecycle contract must not own simulation commands'
+reject_doc_text docs/contracts/lifecycle-contract.md \
+  'HARNESS_RUN_ID' \
+  'Product lifecycle contract must not own simulation run identity'
+reject_doc_text docs/contracts/lifecycle-contract.md \
+  'restore-baseline' \
+  'Product lifecycle contract must not own backend restoration commands'
 reject_doc_text docs/contracts/lifecycle-contract.md \
   '| VM command | Lifecycle checkpoint |' \
   'Lifecycle contract must not duplicate the VM command reference table'
@@ -425,9 +416,6 @@ require_doc_text simulation/vm/README.md \
 require_doc_text simulation/vm/README.md \
   'set-local base image' \
   'VM README must document destroy removes local base image'
-require_doc_text docs/contracts/lifecycle-contract.md \
-  'including the set-local' \
-  'Lifecycle contract must define local VM base-image destruction'
 require_doc_text docs/contracts/directory-model.md \
   'set-local base image' \
   'Directory model must define simulation-set-local base-image ownership'

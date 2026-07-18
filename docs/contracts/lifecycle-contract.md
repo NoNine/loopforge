@@ -1,386 +1,246 @@
-# Loopforge Lifecycle Contract
+# Loopforge Product Lifecycle Contract
 
 ## Purpose And Authority
 
-This document defines how Loopforge setup moves through time. It owns phase
-behavior, checkpoint order, mutation boundaries, stop/review/resume points,
-rerun rules, and lifecycle command mapping.
+This document owns the product-level temporal contract for Loopforge setup in
+every supported execution mode. It defines phase behavior, checkpoint order,
+ownership and mutation boundaries, review and resume points, rerun behavior,
+and the conditions under which later product work may begin.
 
-`docs/architecture/system-model.md` owns the conceptual architecture: environments, actors,
-utilities, services, interfaces, deployment modes, and cross-cutting system
-invariants. This contract applies those concepts to operator workflow and
-verification sequencing.
+This contract does not define concrete command syntax, backend resource
+lifecycle, simulation run/set schemas, generated paths, transport adapters,
+terminal output, or detailed role procedures. Those facts belong to the
+operator, simulation, state-model, and implementation documents named under
+Realization Boundaries below.
 
-Operator manuals and simulation docs provide concrete procedures inside this
-contract. They may add role-specific or layer-specific detail, but they must
-not redefine checkpoint semantics or imply success without real proof for the
-claimed checkpoint.
+`docs/architecture/system-model.md` owns the conceptual environments, actors,
+utilities, services, interfaces, deployment modes, and system invariants. This
+contract applies that model to product workflow sequencing. Consumer documents
+may add role- or mode-specific realization detail, but they must not redefine
+checkpoint semantics or claim success without proof for the owned checkpoint.
 
-## Phase Behavior Rules
+## Phase Behavior
 
-Lifecycle phases are strict, single-purpose operations:
+Product phases are strict, single-purpose operations:
 
-- Each phase checks its prerequisites before doing work.
-- Missing inputs, artifacts, services, or checkpoints fail clearly and stop.
-- Each phase owns only its own work and does not rerun or repair another
+- Each phase validates its prerequisites before doing work.
+- Missing inputs, artifacts, services, or prerequisite checkpoints fail
+  clearly and stop.
+- Each phase owns only its declared work and does not rerun or repair another
   phase.
 - Later phases do not silently trigger earlier phases.
-- Repeated operator invocation is treated as an intentional rerun of that
-  same phase.
+- Repeated invocation is an intentional rerun of that same phase.
 - Phase logs and evidence stay bounded and identify the producing phase.
-- Phase success means the phase completed its own job, not that another phase
-  was replayed or repaired implicitly.
+- Phase success means that phase completed its own contract, not that another
+  phase was replayed or repaired implicitly.
 - An exact input-bound completion record may return `already-complete` without
   target mutation. This is the only completed-state rerun supported by v1,
-  except for the target-deployment Gerrit review wait described below.
+  except for the reviewed Gerrit access wait defined below.
 
-Role preflight and role installation divide runtime identity work as follows:
+Environment provisioning, power control, baseline restoration, generated-state
+cleanup, and backend destruction do not advance a product checkpoint merely
+because they succeeded. A realization may advance a checkpoint only by
+performing the checkpoint owner's work and retaining its required proof.
 
-- `preflight` is non-mutating. It validates the reviewed runtime account name,
+## Role State And Identity
+
+Role preflight and role setup divide runtime identity work as follows:
+
+- Preflight is non-mutating. It validates the reviewed runtime account name,
   primary group name, UID, GID, and canonical product home. Fully absent
   account/group/home state is ready for creation, and fully matching state is
   ready for reuse.
-- Partial or conflicting runtime identity state blocks. Examples include an
+- Partial or conflicting runtime identity state blocks. This includes an
   account without its complete group/home state, a numeric identity collision,
-  a mismatched passwd home or primary group, and a product home with the wrong
+  a mismatched account home or primary group, and a product home with the wrong
   type or ownership.
-- Role-local `install` creates a fully absent runtime group, runtime account,
-  and product home from the reviewed values after staged artifacts have been
-  verified. It may adopt a fully matching identity with an empty product home
-  but never repairs mismatched identity or existing application state.
+- Role setup creates a fully absent runtime group, account, and product home
+  from reviewed values after staged artifacts have been verified. It may adopt
+  a fully matching identity with an empty product home but never repairs
+  mismatched identity or existing application state.
 - OS dependency provisioning is a separate prerequisite checkpoint. It may run
   before application artifact preparation or staging, but it does not authorize
   runtime identity, product-home, application, or service mutation.
-- The operator account is a target-provisioning prerequisite because it runs
-  the helpers. Jenkins shared identity and storage remain later shared
-  integration work.
+- The operator account is a target-provisioning prerequisite. Jenkins shared
+  identity and storage remain later shared integration work.
 
-Runtime identity state and installed application state are separate
-classifications. A fully matching runtime group, account, and empty canonical
-product home may be adopted for initial setup. The presence of role application
-files, configuration, service definitions, runtime data, or an unbound
-completion marker is existing application state, not reusable identity state.
-Initial setup must stop before mutation when that state exists unless an exact
-completion record binds it to the same mode-appropriate inputs, artifacts,
-target identity, mode, and selected run/state. In that exact case the phase returns
-`already-complete` without starting, stopping, restarting, rewriting, or
-deleting target state. Changed, partial, conflicting, or unbound state requires
-explicit cleanup, migration, or site-owned administration before a fresh
-initial setup; v1 role helpers do not reinstall or reconfigure it.
+Runtime identity and installed application state are separate classifications.
+A fully matching runtime identity with an empty canonical product home may be
+adopted for initial setup. Role application files, configuration, service
+definitions, runtime data, or an unbound completion record are existing
+application state, not reusable identity state.
 
-Target-environment operations run as the operator account whenever practical.
-The operator account is the default target control-plane identity for helper
-commands, staging, validation, and evidence collection. Direct root login or
-root as a workflow identity is not supported. Delegated privilege from the
-operator account is used only for narrow OS operations that require it, such
-as package installation, protected path creation, service management, or
-ownership changes. Runtime accounts own and run their services; they are not
-the default orchestration identity.
+Initial setup stops before mutation when application state exists unless an
+exact completion record binds it to the same mode-appropriate inputs,
+artifacts, target identity, mode, and selected execution state. Exact completed
+state returns `already-complete` without starting, stopping, restarting,
+rewriting, or deleting target state. Changed, partial, conflicting, or unbound
+state requires explicit cleanup, migration, or site-owned administration; v1
+role helpers do not reinstall or reconfigure it.
 
-## Service Lifecycle Contract
+Target operations run as the operator account whenever practical. Direct root
+login or root as a workflow identity is unsupported. Delegated privilege from
+the operator account is limited to narrow OS operations such as package
+installation, protected path creation, service management, or ownership
+changes. Runtime accounts own and run their services; they are not the default
+orchestration identity.
 
-Role configuration and role validation have separate responsibilities.
+## Service Lifecycle
 
-- Role configuration installs role-local runtime state during initial setup
-  and establishes the role runtime. For Gerrit and the Jenkins controller this
-  includes the initial service start after configuration is complete.
+Role setup and role validation have separate responsibilities:
+
+- Role setup installs fresh role-local state, configures the service, and
+  establishes the initial runtime when the role requires one.
 - Role validation is observational. It may collect evidence, but it must not
-  start, restart, enable, or repair a role process or service.
-- Role validation may consume the successful results of earlier owning
-  checkpoints. It must not replay their setup or verification commands merely
-  to restate identity, filesystem, artifact, or configuration readiness.
-- In `vm-simulation` and `target-deployment`, Gerrit and the Jenkins
-  controller are guest-OS systemd services. The Jenkins SSH build agent is an
-  outbound SSH node, so its durable guest service is `ssh.service` or
-  `sshd.service`; no separate Jenkins agent daemon is implied.
-- In `docker-simulation`, the existing container/direct-process model remains
-  the lifecycle implementation. Docker does not claim guest-OS reboot
-  persistence or provide systemd units.
-- Simulation `start` is service lifecycle, not setup. From clean baseline state
-  it starts only environment prerequisites. From exact input-bound completed
-  state it may start the already-configured Gerrit, Jenkins, and SSH runtimes
-  without rewriting configuration. Partial, changed, conflicting, or unbound
-  state blocks before service mutation.
-- Simulation `stop` gracefully stops configured services before stopping the
-  selected environment. It preserves durable runtime and generated review
-  state and does not turn completed state into fresh setup state.
-- After a VM or target-host reboot, a role is ready only when its expected
-  service has recovered before validation begins. A later validation failure
-  must remain a failure; it must not repair the service and then report a
-  passing reboot result.
+  start, restart, enable, reconfigure, or repair a role process or service.
+- Role validation may consume successful earlier checkpoint results. It must
+  not replay their setup or verification operations to restate identity,
+  filesystem, artifact, or configuration readiness.
+- When an execution mode claims service persistence across an environment
+  restart or host reboot, the service must recover before validation begins.
+  Validation must report a recovery failure rather than repair the service and
+  then claim a passing persistence result.
 
-### Service Lifecycle By Simulation Backend
+The architecture and mode-specific realization documents own the concrete
+runtime mechanism. That mechanism does not change the setup/validation
+ownership boundary.
 
-| Concern | Docker simulation | VM simulation |
-| --- | --- | --- |
-| Environment lifecycle | Docker Compose creates, starts, and stops retained containers; explicit baseline restore recreates them. | The VM harness creates, starts, stops, restores, and reboots guest machines. |
-| Gerrit and Jenkins controller | Existing direct role processes inside the target container. | Guest systemd services. |
-| Jenkins SSH agent | Container entrypoint starts the direct `sshd` daemon. | Guest `ssh.service` or `sshd.service`. |
-| Role validation | Observes an existing process and endpoint. | Observes enabled/active units, runtime ownership, and endpoints. |
-| Reboot persistence | Not claimed. | Required: guest services recover before post-reboot validation. |
+## Input Authority And Binding
 
-## Simulation Input Rendering Contract
+Every mutating product checkpoint requires one reviewed and bound input source:
 
-Target-deployment env files remain reviewed operator inputs under the input
-review checkpoint below. Simulation uses a separate realization because the
-harness is a utility that must resolve backend facts after the selected
-environment becomes accessible.
+- target deployment uses reviewed operator inputs; and
+- simulation uses actor-selected source inputs followed by one published,
+  immutable effective input set.
 
-For simulation, committed env examples are source templates. The invoking
-human or machine runner selects those templates and any supported overrides.
-`init-run` snapshots the selected source inputs, records their fingerprint, and
-claims the run, but it does not publish final helper inputs. The first
-successful `start` must:
+Later product phases consume the same bound values and must not rewrite or
+reinterpret them. Mode-assigned transport observations may be supplied through
+a realization-owned invocation boundary, but they must not silently change the
+stable product inputs or target identities.
 
-- start or verify the selected owned resources;
-- resolve current target access and verify SSH identity;
-- render stable role and integration values into one private effective-input
-  bundle;
-- validate and atomically publish that bundle plus its fingerprint before
-  reporting success; and
-- leave every later role and integration phase read-only against the published
-  effective inputs.
-
-Repeated `start` verifies the byte-identical effective bundle and refreshes
-only live target access. It must not rewrite stable effective inputs. `stop`
-preserves source and effective input custody while making live target access
-unavailable.
-
-DHCP addresses and equivalent backend-assigned transport hosts are ephemeral
-target access, not effective simulation inputs. Each `start` resolves them and
-proves the selected resources are reachable. A simulation integration
-invocation may copy the immutable effective `integration.env` to a private
-temporary file and overlay only the current Gerrit, Jenkins controller, and
-Jenkins agent target SSH host fields. The harness deletes that file after the
-helper returns. The harness owns this invocation adapter; the shared helper
-continues to consume its existing env-file interface without adapter-specific
-behavior. The temporary file is not retained input state, evidence, or a
-fingerprint source. This adapter does not apply to target deployment.
-
-Simulation input rendering changes host-side generated state only. It does not
-authorize role or integration target mutation, complete a Loopforge workflow
-checkpoint, or make `start` a setup or repair command. Workflow phases remain
-blocked until effective-input publication is complete and bound to the active
-run.
+Input selection, rendering, publication, or transport adaptation does not by
+itself authorize target mutation or complete a product checkpoint. The
+realization must prove that the bound inputs belong to the selected execution
+state before checkpoint work begins.
 
 ## Lifecycle Checkpoints
 
-The setup system moves through checkpoints. Each checkpoint has an owner, a
-mutation boundary, and evidence obligations.
+Loopforge setup advances through the following product checkpoints. Each has
+one semantic owner, one mutation boundary, and evidence obligations.
 
-Simulation docs provide layer-specific realizations of this lifecycle
-contract. They may split, collapse, or add simulation-only command phases, but
-they must preserve the checkpoint semantics defined here.
-
-| Checkpoint | Owner | Boundary |
+| Checkpoint | Owner | Product boundary |
 | --- | --- | --- |
-| Input review or source selection | Human operator or machine runner | Prepare reviewed target-deployment env files, or select simulation source templates and supported overrides. No target mutation. |
-| OS dependency provisioning | Role helper or native operator procedure | Install required OS packages from approved sources. This prerequisite may precede application artifact preparation and staging, but does not create runtime identities, product homes, application state, or service state. |
-| Artifact preparation | Bundle factory through role helpers or the native operator procedure | Prepare application artifacts and checksums. Helper preparation also produces manifests and source-boundary labels. Target hosts are not mutated. |
-| Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target staging and verify target-side checksums plus any interface-required manifest. This checkpoint changes staging state only; role-local setup owns runtime identity, product-home, application, and service mutation. |
-| Role-local setup | Role helpers or native operator procedure | Create the reviewed role runtime group, account, and product home, or adopt a fully matching identity with an empty product home; install/configure fresh role-local target state; and establish its runtime. Exact input-bound completed state returns non-mutating `already-complete`; other existing application state blocks. |
-| Role-local validation | Role helpers or native operator procedure | Combine successful earlier checkpoint outcomes with current observational service, endpoint, and application checks, without replaying completed setup checks, making cross-role integration claims, or repairing state. |
-| Integration preflight | `scripts/integration-setup.sh` or native operator procedure | Observe the three role-readiness handoffs, mode-appropriate bound inputs, target inventory, administrator access, selected state, and mode support. No target mutation. |
-| Reviewed integration access | `scripts/integration-setup.sh` or native operator procedure | From fresh integration state, create the integration account and group plus the reviewed `All-Projects` and target-project changes. Target deployment stops with `blocked` until both changes are externally submitted and effective; only that exact bound wait may validate and resume the created state. |
-| Shared integration setup | `scripts/integration-setup.sh` or native operator procedure | After reviewed access is effective, require absent shared credential/configuration state, then create controller-held keys, public-key authorization, token and credentials, shared storage, node registration, and Gerrit Trigger. Exact completed state exits before this checkpoint as `already-complete`; any other existing state blocks. A bounded storage write/read check is setup-owned mutation. |
-| Cross-role validation | `scripts/integration-setup.sh` or native operator procedure | Observe effective label/access state, read-only Jenkins-to-Gerrit and Jenkins-to-agent SSH, key custody, shared storage configuration, node configuration and online state, and Gerrit Trigger connection without creating, repairing, or replacing state. |
-| End-to-end trigger verification | `scripts/integration-setup.sh` or native operator procedure | Create the disposable verification job and change, observe SSH event delivery, schedule and run the build on the selected agent, post the REST vote, and verify Gerrit review state. |
-| Evidence audit | Global evidence collector and actor review | Validate evidence completeness, redaction, manifests, checksums, mode labels, and bounded log references. |
+| Input review or source selection | Human operator or machine runner | Review target-deployment inputs or select simulation source inputs and supported overrides. No target mutation. |
+| OS dependency provisioning | Role helper or native operator procedure | Install approved OS prerequisites without creating product runtime identities, product homes, application state, or service state. |
+| Artifact preparation | Bundle factory through role helpers or native procedure | Prepare application artifacts, manifests, checksums, and source-boundary labels without mutating target hosts. |
+| Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target staging and verify target-side checksums and required manifests. This checkpoint changes staging only; role setup owns runtime and application mutation. |
+| Role-local setup | Role helper or native operator procedure | Create or adopt the exact reviewed runtime identity, install and configure fresh role-local state, and establish its runtime. Exact completed state is a non-mutating no-op; other existing application state blocks. |
+| Role-local validation | Role helper or native operator procedure | Combine prior checkpoint outcomes with current observational service, endpoint, and application checks without replay, cross-role claims, or repair. |
+| Integration preflight | Shared integration helper or native operator procedure | Observe all three role-readiness handoffs, bound inputs, target inventory, administrator access, selected execution state, and mode support. No target mutation. |
+| Reviewed integration access | Shared integration helper or native operator procedure | From fresh integration state, create the integration account/group and the reviewed global and project Gerrit changes. Target deployment waits until both changes are externally submitted and effective. |
+| Shared integration setup | Shared integration helper or native operator procedure | After reviewed access is effective, create the initial keys, public-key authorization, token, credentials, shared storage, node registration, and Gerrit Trigger state. Exact completed state is a non-mutating no-op; other existing state blocks. |
+| Cross-role validation | Shared integration helper or native operator procedure | Observe effective access, SSH paths, key custody, storage, node state, and Gerrit Trigger connection without creating, repairing, or replacing state. |
+| End-to-end trigger verification | Shared integration helper or native operator procedure | Create only the declared disposable job and change, observe event delivery and agent execution, post the vote, and verify final Gerrit review state. |
+| Evidence audit | Global evidence collector and actor review | Validate evidence completeness, redaction, artifact references, input binding, mode labels, and bounded logs without creating runtime success. |
 
-Each mutating checkpoint must have a reviewed target-deployment input source or
-a published effective simulation input source, a bounded log reference, and a
-resumable status or evidence boundary. Passing evidence must
-represent real runtime checks for the claimed checkpoint. Unsupported,
-unimplemented, unavailable, or modeled behavior must be reported as
-`blocked`, `unsupported`, or `not-applicable`, not as `pass`.
+Each mutating checkpoint requires bound inputs, a bounded log reference, and a
+resumable status or evidence boundary. Passing evidence represents real checks
+for the claimed checkpoint. Unsupported, unimplemented, unavailable, or
+modeled behavior is `blocked`, `unsupported`, or `not-applicable`, never
+`pass`.
 
-Integration preflight must reject an unsupported ACL mode or unavailable
-review workflow before any account, token, key, credential, node, storage, or
-trigger mutation. A target-deployment approval stop is an expected resumable
-boundary, but it is not shared integration setup success.
+Integration preflight rejects unsupported access-control or review behavior
+before account, token, key, credential, node, storage, or trigger mutation. An
+external approval stop is an expected resumable boundary, not shared setup
+success.
 
-## Operator Workflow Contract
+## Product Workflow Order
 
-The default operator workflow is a phase contract, not a full runnable command
-transcript. Operator manuals own exact commands and role-specific procedure.
+The normal product workflow is:
 
-| Phase | Machine/environment | Helper commands | Inputs/outputs | Side effects | Required checkpoint |
-| --- | --- | --- | --- | --- | --- |
-| Inputs | Operator workstation | `print-env-template`, `preflight` | Copies env examples into reviewed target-deployment files, or selects simulation source templates and supported overrides; removes unsupported placeholders and keeps secrets out of committed examples. | None beyond local input selection or env-file creation. | Reviewed target-deployment files or selected simulation source templates exist for Gerrit, Jenkins controller, Jenkins agent, and shared integration values; preflight failures are resolved before mutation. |
-| OS dependencies | Target hosts | Role helper or native package procedure | Consumes the reviewed package baseline and approved package sources. | Installs required OS packages without creating product runtime identities, product homes, application state, or service state. | Required commands and runtime prerequisites are available; this phase may precede application artifact preparation and staging. |
-| Artifacts | Bundle factory | `prepare-artifacts` | Consumes mode-appropriate bound role env files and produces role artifact directories, manifests, checksums, and source-boundary records. | Downloads or copies curated application artifacts and plugins; any public internet use is labeled `simulation-only` when it occurs in simulation. | Role artifact manifests and checksums are produced and retained as evidence inputs. |
-| Artifact staging | Bundle factory and target hosts | Operator-managed file transfer or simulation utility; target-side checksum verification | Stages prepared role artifacts from the bundle factory to the Gerrit host, Jenkins controller, and Jenkins agent host. | Copies files onto target hosts but does not install services until checksums pass. | Staged artifact paths exist on each target host, and target-side checksum plus any interface-required manifest verification passes before installation. |
-| Gerrit readiness | Gerrit host | Gerrit role helper or native procedure | Consumes Gerrit env values and staged Gerrit artifacts; produces Gerrit service config and readiness evidence. | Creates or adopts the bound runtime identity and empty product home, installs fresh local runtime files, and starts Gerrit once. Exact completed state is a no-op; other existing application state blocks. | Validation observes a running Gerrit service, LDAP, HTTP/SSH, and bounded logs before Jenkins integration mutation. |
-| Jenkins controller readiness | Jenkins controller | Jenkins controller role helper or native procedure | Consumes Jenkins controller env values and staged Jenkins artifacts; produces service, plugin, JCasC, and readiness evidence. | Creates or adopts the bound runtime identity and empty product home, installs fresh Jenkins runtime files and plugins, and starts Jenkins once. Exact completed state is a no-op; other existing application state blocks. | Validation observes a running Jenkins service, LDAP/JCasC, required plugins, and bounded logs before Gerrit Trigger, credential transfer, node registration, scheduling, or vote proof. |
-| Jenkins agent readiness | Jenkins agent | Jenkins agent role helper or native procedure | Consumes Jenkins agent env values and staged Jenkins agent artifacts; produces SSH daemon, runtime account, filesystem, bounded log, and evidence records. | Creates or adopts the bound runtime identity and empty product home and installs fresh agent-host runtime files and SSH policy. Exact completed state is a no-op; other existing application state blocks. | Readiness combines successful dependency, identity, filesystem, artifact, and SSH-policy checkpoint outcomes with validation that observes Java, the enabled/active SSH service, the bound endpoint, and bounded status before credential transfer, controller node registration, or scheduling proof. |
-| Integration preflight | Operator workstation and three role targets | `configure-integration --dry-run` or native input/readiness procedure | Consumes the three role-readiness handoffs plus reviewed target-deployment or effective simulation role and integration inputs. | None. | Mode support, target inventory, administrator access, selected state, and mode-appropriate bound inputs pass before mutation. |
-| Reviewed integration access | Gerrit host | `configure-integration` or native reviewed Gerrit procedure | Produces the integration account/group and two Gerrit config reviews. | Creates Gerrit account/group state and reviewable `All-Projects` and target-project changes. | In target deployment, report `blocked` without a setup-success marker until both reviews are externally submitted and effective. |
-| Shared integration setup | Jenkins controller, Gerrit host, and Jenkins agent | Resumed `configure-integration` or native setup procedure | Consumes effective reviewed access and produces keys, public-key authorization, token, credentials, shared storage, node, trigger server, and a bounded storage proof. | Mutates only shared integration state after all preconditions pass. | Setup state is complete and bound to the mode-appropriate inputs; no cross-role validation or end-to-end success is claimed. |
-| Cross-role validation | Jenkins controller, Gerrit host, and Jenkins agent | `validate-integration` or native validation procedure | Observes effective ACLs, both SSH paths, key custody, storage, node, and trigger connection. | Writes only bounded local logs, evidence, and status; target and application state remain unchanged. | All observations pass for the same input and run/state identity as setup. |
-| End-to-end trigger proof | Gerrit and Jenkins | `prove-integration` or native proof procedure | Creates a labeled disposable job and change and records event, build, agent, vote, and review-state outcomes. | Creates only declared disposable proof artifacts and their runtime records. | Requires the matching validation result and does not replay or repair setup or validation. |
-| Evidence | All role environments | `collect-evidence` | Consumes role validation outputs, manifests, checksums, sanitized config manifests, and bounded log references. | Writes local evidence summaries only; it must not expose secrets or private keys. | Mode-labeled evidence, manifests, checksums, fingerprints, and bounded log references are retained for each checkpoint. |
+1. Review or select inputs and complete non-mutating preflight.
+2. Provision required OS dependencies.
+3. Prepare artifacts in the bundle factory.
+4. Stage and verify artifacts on each role target.
+5. Complete role setup and observational validation for Gerrit, the Jenkins
+   controller, and the Jenkins agent.
+6. Complete non-mutating integration preflight.
+7. Establish reviewed Gerrit access, waiting for external approval when the
+   selected mode requires it.
+8. Complete shared integration setup.
+9. Perform observational cross-role validation.
+10. Perform the active end-to-end trigger proof.
+11. Audit and aggregate evidence.
 
-## Sequencing Rules
+OS dependency provisioning may precede artifact preparation, but both
+dependency and staged-artifact checkpoints must pass before role setup. All
+three role-readiness handoffs must pass before integration mutation. A
+validation or proof phase never supplies missing setup work or replays a
+successful owning checkpoint.
 
-- For the helper interface, run `prepare-artifacts` from the bundle factory
-  environment for each role. For the native interface, follow the role's
-  native bundle-factory procedure.
-- OS dependency provisioning may run before application artifact preparation
-  and staging. It must remain separate from product runtime and service setup.
-- Stage prepared artifacts from the bundle factory to each target host, then
-  verify checksums and any interface-required manifest before runtime identity,
-  product-home, application, or service mutation.
-- Application artifact bundles for Gerrit, Jenkins controller, and Jenkins
-  agent are key-free. They must not contain SSH private keys, public keys,
-  `authorized_keys`, or generated key/public-key handoff files.
-- Keypair generation and public-key handoff between Gerrit, Jenkins
-  controller, and agent are integration-step work.
-- Target-host OS dependencies come from approved internal Ubuntu/OS package
-  repositories. Public internet fallback for target-host OS dependency
-  installation is simulation-only and must be labeled in docs, logs,
-  manifests, and verification summaries.
-- Complete Gerrit, Jenkins controller, and Jenkins agent role-only bringup
-  before running the shared cross-role integration helper.
-- Use `docs/operations/setup/integration.md` for the approved cross-role helper
-  command workflow. Role manuals must hand off to that document instead of
-  duplicating the full integration command sequence.
-- Treat role-local `validate` as role-only readiness validation.
-- Treat `validate-integration` as observational cross-role validation. It may
-  execute read-only SSH and application queries, but it must not create target
-  directories, credentials, nodes, jobs, builds, changes, storage proof files,
-  events, or votes, and it must not repair shared setup.
-- Treat `prove-integration` as the active end-to-end proof for Gerrit event
-  streaming, Jenkins agent scheduling and execution, REST vote posting, and
-  Gerrit review state. It requires matching validation state and must not invoke
-  validation implicitly.
-- Treat a service started by configuration as a prerequisite for role
-  validation. Validation does not supply missing lifecycle work or replay
-  successful owning-checkpoint operations.
+Role application artifact bundles remain separate from later integration key
+and public-key handoff state. The artifact bundle contract owns their contents;
+this contract owns only that integration-owned credentials and handoffs occur
+after role readiness and reviewed integration access.
 
-## Integration Resume And Existing State
+## Review Wait, Resume, And Existing State
 
-Integration status and evidence boundaries must bind to the same reviewed
-input set, target identities, mode, run or selected state, and Gerrit review
-identifiers. A later phase must reject a marker from different inputs or state;
-marker existence alone is not a valid prerequisite.
+Integration status, completion state, and evidence boundaries bind to the same
+reviewed inputs, target identities, mode, selected execution state, and Gerrit
+review identifiers. A later phase rejects state from different inputs or a
+different execution; record existence alone is not a valid prerequisite.
 
 An interrupted target-deployment review wait may resume only with the same
 bound inputs and the same two review changes. This external-approval wait is
 the only resumable mutation boundary. Exact input-bound completed integration
-state returns non-mutating `already-complete`. Stale, partial, conflicting,
-changed, or unbound state fails clearly and requires explicit operator cleanup,
-migration, site-owned credential administration, or a fresh selected state.
+state returns `already-complete` without mutation. Stale, partial, conflicting,
+changed, or unbound state requires explicit cleanup, migration, site-owned
+credential administration, or a fresh selected execution state.
 
-Normal configuration must not rotate existing tokens or keys, truncate
+Normal setup does not rotate existing tokens or keys, truncate
 `authorized_keys`, remove a working Jenkins credential or node, or delete
 role-owned agent runtime state. Loopforge v1 does not provide credential
-rotation. A site may rotate credentials through its own separately controlled
-administration, but normal setup treats any state requiring rotation as a
-conflict and stops.
-
-## Simulation Command Relationship
-
-`simulation/README.md` owns shared simulation command semantics.
-`simulation/docker/README.md` and `simulation/vm/README.md` own the concrete
-command references for their layers.
-`simulation/docs/lifecycle-state-model.md` owns the exact simulation state
-dimensions, command guards, and transitions that realize this contract.
-`simulation/docs/checkpoint-coordination.md` owns the implementation design for
-coordinating helper completion records, evidence, and the simulation workflow
-ledger without redefining the checkpoint semantics in this contract.
-
-Commands that perform checkpoint work must preserve the checkpoint semantics
-defined here: input review, artifact preparation, artifact staging,
-role-local setup, role-local validation, shared integration setup, cross-role
-validation, end-to-end trigger verification, and evidence audit.
-
-Simulation lifecycle and convenience commands such as `create`, `start`,
-`status`, `ssh`, `audit-state`, `reboot`, `stop`, `restore-baseline`, `clean`,
-and `destroy` are outside the checkpoint progression unless a layer README
-explicitly ties one to a checkpoint. These commands must not silently rerun
-setup phases or claim checkpoint success without checkpoint evidence.
-
-Both simulation backends expose the same condensed resource-state transitions:
-
-```text
-unclaimed -> init-run -> claimed
-claimed + absent -> create -> baseline-stopped
-claimed + stopped -> start -> running
-running -> stop -> stopped
-claimed + stopped -> restore-baseline -> restored-pending-clean
-restored-pending-clean -> clean -> baseline-stopped + unclaimed
-stopped -> destroy -> absent + unclaimed
-```
-
-`create` establishes or verifies the selected reusable simulation set and its
-clean pre-setup baseline. `start` and `stop` preserve the selected durable
-runtime. `restore-baseline` requires the simulation set to be stopped and resets
-durable runtime state without cleaning generated run state. `clean` requires
-matching successful baseline restoration, clears the selected set's active-run
-pointer, and removes mutable run state while retaining review artifacts. It
-does not reset durable runtime or delete reusable resources.
-`destroy` removes only ownership-validated reusable backend resources and their
-baseline, not retained review output.
-
-`HARNESS_RUN_ID` identifies exactly one setup and validation attempt. When the
-operator omits it, `init-run` generates a collision-resistant immutable value;
-an explicitly supplied value must not already exist. Checkpoints, completion
-markers, runtime inputs, evidence, and status bind to that run ID.
-
-Reusable backend identity is separate: `HARNESS_SET_ID` selects one simulation
-set in either backend and defaults to `default` when omitted. Each set owns one
-non-secret active-run pointer.
-`init-run` rejects a set with an active run.
-`stop` and `start` preserve that pointer and run ID. Only successful
-`stop -> restore-baseline -> clean` clears it, after which `init-run` creates a
-new run ID automatically. Retained evidence from the old run remains under its
-immutable run root and cannot satisfy the new run.
-
-Backend resource namespaces are derived implementation details, not additional
-operator identities. Docker derives a Compose project name from
-`HARNESS_SET_ID`; VM simulation derives a libvirt resource prefix from it.
-Both values are stable across runs of the same simulation set and must not
-include `HARNESS_RUN_ID`.
-
-For Docker simulation, baseline restoration recreates stopped containers from
-the exact pinned project images and Compose definition, restores the clean
-checksummed bind-mounted baseline, and verifies target SSH identity. Ordinary
-`stop` preserves containers and their writable layers. Stale or recreated
-containers outside `restore-baseline` block. Docker `destroy` removes selected
-containers, network, project-built images, and baseline state.
-
-For VM simulation, `restore-baseline` resets guest disks to the selected
-simulation set's clean baseline snapshot after the set is stopped. `clean`
-preserves the reusable simulation set. Only `destroy` removes VM resources,
-including the set-local baked image. Preserved failed-bake debug state remains
-selected simulation-set state; later `create` attempts fail, and only
-ownership-checked `destroy` removes it.
-
-`up` and `down` are not Loopforge simulation commands. Do not retain aliases or
-compatibility dispatch for them.
+rotation. State requiring rotation is conflicting existing state and blocks
+normal setup.
 
 ## Evidence Obligations
 
-Evidence obligations are detailed in
-`docs/contracts/validation-and-evidence.md`. Machine-generated helper and
-simulation checkpoints preserve enough proof for review without replaying
-verbose runtime logs:
+`docs/contracts/validation-and-evidence.md` owns evidence schemas, statuses,
+redaction, aggregation, and mode-specific fields. This lifecycle contract
+requires only that:
 
-- Evidence must identify mode, timestamp, environment or role, checkpoint,
-  command, status, the mode-appropriate input fingerprints, relevant
-  endpoints, manifest references, checksum results, bounded logs, and
-  redaction status.
-- Integration evidence must distinguish role-local readiness from cross-role
-  readiness and end-to-end trigger proof.
-- Simulation evidence must be labeled as `docker-simulation` or
-  `vm-simulation` and must not imply target-deployment acceptance.
-- VM and helper-based target-deployment evidence for Gerrit, Jenkins
-  controller, or SSH agent readiness must identify the expected systemd unit
-  state. Docker evidence identifies its direct process state instead.
-- Evidence records must never include private keys, passwords, tokens, LDAP
-  bind secrets, or full secret-bearing env values.
+- every claimed checkpoint has mode-appropriate proof bound to the same inputs
+  and execution state;
+- role readiness, cross-role validation, and end-to-end proof remain distinct
+  claims;
+- evidence and summaries do not expose private keys, passwords, tokens, LDAP
+  bind secrets, or secret-bearing input values; and
+- evidence audit validates existing proof without manufacturing missing
+  success.
 
 Native `target-deployment` records the corresponding role, reboot,
 integration, scheduling, trigger, and vote outcomes in
 `docs/operations/native/acceptance-checklist.md`. Routine service logs remain
-in their normal target locations and are inspected when a check fails.
+in their normal target locations and are inspected only through bounded reads.
+
+## Realization Boundaries
+
+Concrete procedures and implementation facts live below this contract:
+
+- `docs/README.md` maps account, directory, artifact, endpoint, integration,
+  and evidence details to their topic authority documents;
+- setup and native manuals own role- and interface-specific operator steps;
+- `simulation/README.md` owns shared simulation command semantics, input
+  realization, and resource lifecycle;
+- Docker and VM README files own their concrete backend command behavior;
+- `simulation/docs/harness-design.md` owns shared harness architecture;
+- `simulation/docs/lifecycle-state-model.md` owns exact simulation state
+  schemas, guards, classification, and transitions;
+- `simulation/docs/checkpoint-coordination.md` owns coordination among
+  helper-owned completion state, producer-owned evidence, and the simulation
+  workflow ledger;
+- `simulation/docs/terminal-output.md` owns shared terminal presentation; and
+- backend implementation designs own module boundaries and mechanisms.
+
+Every realization must preserve this product phase order, checkpoint
+ownership, mutation boundaries, resume rules, and evidence obligations.

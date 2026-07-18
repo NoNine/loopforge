@@ -24,8 +24,8 @@ this digest is subordinate to the current authorities.
 
 `docs/contracts/lifecycle-contract.md` owns durable lifecycle behavior. This digest may
 provide historical workflow context, but it must not define phase order,
-checkpoint semantics, mutation boundaries, resume/rerun behavior, or Docker
-command mapping.
+checkpoint semantics, mutation boundaries, or resume/rerun behavior. It also
+must not override simulation command semantics owned under `simulation/`.
 
 For Docker simulation, stale draft lab docs may describe fewer runtime
 containers. v1 uses the five-environment model from the implementation plan:
