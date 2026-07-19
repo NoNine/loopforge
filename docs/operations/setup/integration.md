@@ -4,7 +4,8 @@
 
 This manual is the operator guide for `scripts/integration-setup.sh`. Use it
 after the Gerrit, Jenkins controller, and Jenkins agent role setup manuals have
-completed and each role has passing role-local readiness evidence.
+completed and the human operator has accepted each applicable role-local
+checkpoint in `setup/acceptance-checklist.md`.
 
 This manual owns the shared integration helper workflow for mode-appropriate
 bound inputs. The native reference at
@@ -316,6 +317,13 @@ review IDs and URLs, public key fingerprints, credential IDs where safe,
 endpoints, disposable artifact IDs, observed checks, bounded log references,
 redaction status, and final status. Partial collection must not promote a
 blocked or incomplete checkpoint to pass.
+
+These are producer evidence outcomes, not human acceptance decisions. For
+helper-assisted `target-deployment`, record the corresponding decision in
+`docs/operations/setup/acceptance-checklist.md`. For Docker and VM simulation,
+the harness verifies the record before committing the corresponding workflow
+checkpoint. The global `scripts/collect-evidence.sh` audit runs only after
+end-to-end proof and is handled as the final Evidence audit checkpoint.
 
 Classify failures at the point where proof breaks:
 

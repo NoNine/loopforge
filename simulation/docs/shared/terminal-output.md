@@ -15,6 +15,12 @@ Routine command success should use compact summary lines such as
 `prepare-artifacts[gerrit]: ok bundle=...`. Role-scoped commands should put
 the role in brackets after the command name.
 
+`ok` reports the command result. For a product workflow phase, the command may
+report checkpoint acceptance only after the corresponding workflow checkpoint
+record has been committed. Evidence `pass`, an owning utility exit status, or a
+pre-commit summary is not an accepted checkpoint. Any output that presents
+accepted progress must derive it from and identify the workflow head.
+
 Commands must not claim success when proof is missing. Use honest states such
 as `blocked`, `unsupported`, `not-applicable`, `failed`, or `ok` instead of
 synthetic readiness. Failure summaries should start with a compact reason and
@@ -52,8 +58,9 @@ supports coherent absent, unclaimed, stopped, and running states and starts
 with a compact state line such as `status: absent`, `status: stopped`, or
 `status: running`. It prints selected set identity, run identity when claimed,
 durable classification, reset gate, and only the access information available
-in that power state. Contradictory state reports `status: conflicting` and
-exits nonzero.
+in that power state. When a run is claimed, it also reports the committed
+workflow head or `none`; it never derives progress from evidence files.
+Contradictory state reports `status: conflicting` and exits nonzero.
 
 Both backends show the shared set and run IDs. Docker may additionally show
 the derived Compose project name and loopback browser URLs. VM simulation may

@@ -16,7 +16,8 @@ and redaction remain in `docs/contracts/validation-and-evidence.md`.
 
 Native and helper-based `target-deployment` do not use the simulation ledger.
 Their owning utilities still produce completion state and evidence, while the
-actor and native acceptance checklist coordinate progression.
+human operator or reviewer coordinates progression through the native or
+helper-assisted target-deployment acceptance checklist.
 
 ## Accepted Records
 
@@ -82,6 +83,30 @@ product checkpoint instance, under the selected set lock:
 
 A utility exit code, owned result, evidence file, or terminal summary produced
 before step 7 does not advance the workflow.
+
+## Final Evidence Audit
+
+Producer evidence is created and checked within each product checkpoint
+attempt. The global collector is different: it runs once at the end of the
+normal workflow, after end-to-end trigger verification, to audit the complete
+reached evidence set.
+
+The final simulation order is:
+
+1. Run the global collector against records bound to the selected mode, set,
+   run, targets, and effective inputs.
+2. Require the collector to reject a stale, mixed, incomplete, malformed,
+   secret-bearing, or contradictory evidence set.
+3. Treat the collector result as the owning result for Evidence audit.
+4. Revalidate that result and the exact `prove-integration` predecessor under
+   the selected set lock.
+5. Commit the `evidence-audit` workflow checkpoint record.
+6. Only after that commit may a workflow presentation report the run as
+   complete.
+
+An operator may run the collector earlier for partial diagnosis, but that
+output is not an Evidence audit result and cannot enter the successful workflow
+checkpoint chain.
 
 ## Failure Protocol
 

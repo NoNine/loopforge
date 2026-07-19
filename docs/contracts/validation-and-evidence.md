@@ -32,6 +32,19 @@ authoring, or an evidence package. The completed checklist remains in the
 organization's approved change-management system and must not contain private
 keys, passwords, tokens, LDAP bind secrets, or secret-bearing configuration.
 
+## Helper-Assisted Target-Deployment Acceptance
+
+Helper-assisted `target-deployment` produces machine-generated completion state
+and evidence, but a human operator or reviewer remains the acceptance
+authority. The operator records checkpoint decisions in
+`docs/operations/setup/acceptance-checklist.md` and retains the completed
+checklist in the approved change-management system.
+
+A helper evidence `pass`, completion record, zero exit status, evidence
+package, or terminal summary does not accept a target-deployment checkpoint or
+authorize later target work. Those artifacts support the human decision. The
+checklist is the durable acceptance record.
+
 ## Machine-Generated Evidence Contract
 
 The following contract applies to evidence produced by helpers and simulation
@@ -279,6 +292,20 @@ mutation success, submission, or a real Gerrit review when none occurred.
 Global aggregation applies to machine-generated records.
 It is not required for the native `target-deployment` acceptance checklist.
 
+The global collector runs as the final Evidence audit after the required
+product checkpoint instances and end-to-end proof have produced their records.
+It validates and packages the reached evidence set; it does not accept its own
+Evidence audit checkpoint or authorize later work. In simulation, the active
+harness separately accepts the collector result and commits `evidence-audit`.
+In helper-assisted target deployment, the final package is required supporting
+material and the human reviewer separately accepts or blocks Evidence audit in
+the helper acceptance checklist.
+
+Operators may run the collector earlier to inspect partial diagnostic evidence.
+An early or incomplete package must identify itself as partial and cannot claim
+Evidence audit success, checkpoint acceptance, workflow completion, or target
+acceptance.
+
 The helper writes a final evidence package containing:
 
 - A machine-readable summary JSON.
@@ -290,7 +317,10 @@ The helper writes a final evidence package containing:
   helper version fields.
 
 The helper must fail on malformed JSON, missing required fields, invalid
-status values, or secret-looking values in evidence records.
+status values, secret-looking values, stale or mixed execution binding,
+contradictory success and failure signals, or a missing required record for the
+checkpoint set being audited. These are evidence-audit checks, not acceptance
+decisions.
 
 ## Default Output
 
@@ -305,14 +335,20 @@ Generated evidence should not be committed.
 
 Use the summaries to confirm:
 
-- Which product checkpoint instances were accepted, or had `fail`, `blocked`,
-  `unsupported`, or `not-applicable` evidence outcomes.
+- Which product checkpoint claims had `pass`, `fail`, `blocked`, `unsupported`,
+  or `not-applicable` evidence outcomes.
 - Which hostnames and endpoints were exercised.
 - Which manifests and checksums were verified.
 - Which shared integration group, GID, and storage path were verified.
 - Which logs support the result.
 - Whether the run was simulation-only or target-deployment.
 - Whether any sensitive data was redacted.
+
+Use the simulation workflow ledger or the applicable target-deployment
+acceptance checklist to confirm which product checkpoint instances were
+accepted. A summary may present that state only when it reads and identifies
+the authoritative acceptance record; evidence counts alone never establish
+acceptance.
 
 ## Verification
 

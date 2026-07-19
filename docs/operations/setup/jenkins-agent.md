@@ -370,3 +370,9 @@ scripts/jenkins-agent-setup.sh --env <reviewed-agent.env> collect-evidence
 
 The evidence must not include private keys, tokens, passwords, LDAP bind
 secrets, or full secret-bearing env values.
+
+The resulting evidence status is a producer outcome. In helper-assisted
+`target-deployment`, a human must accept Jenkins agent role-local setup before
+role-local validation and accept validation before integration in
+`setup/acceptance-checklist.md`. In simulation, the harness accepts each
+corresponding workflow checkpoint only after validating the record.

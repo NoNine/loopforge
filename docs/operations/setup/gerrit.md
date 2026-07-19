@@ -407,11 +407,17 @@ Evidence Contract fields:
 
 `collect-evidence` is fail-closed. It verifies staged artifacts, checksums,
 the real Gerrit daemon process, HTTP endpoint, SSH banner, and LDAP
-bind/search access before it writes passing evidence. Passing evidence
+bind/search access before it writes evidence with `status=pass`. That evidence
 references concrete bounded log files that exist and records that Jenkins
 integration prerequisites are deferred. Because it can start Gerrit and writes
 new evidence files, it is a mutating helper command and requires `--yes` after
 reviewed env confirmation.
+
+The resulting evidence status is a producer outcome. In helper-assisted
+`target-deployment`, a human must accept Gerrit role-local setup before
+role-local validation and accept validation before integration in
+`setup/acceptance-checklist.md`. In simulation, the harness accepts each
+corresponding workflow checkpoint only after validating the record.
 
 Helper:
 

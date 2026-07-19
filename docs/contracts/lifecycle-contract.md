@@ -36,10 +36,18 @@ documents:
   but is not itself a checkpoint.
 - An **evidence record** is redacted proof of an operation or observation. It
   reports an outcome but does not itself complete or authorize a checkpoint.
+- An **acceptance authority** evaluates the owned result, evidence, binding, and
+  predecessor for one product checkpoint instance.
+- An **acceptance record** is the authority's durable decision to accept or
+  block one product checkpoint instance. Only an affirmative acceptance
+  authorizes the next product checkpoint.
 - A **workflow checkpoint record** is the simulation ledger's immutable
   acceptance of one product checkpoint instance for the selected run. Product
   checkpoint instances also exist in target deployment, which has no simulation
   ledger.
+- A **presentation summary** is a projection of producer outcomes or accepted
+  state for an operator. It is not an acceptance record and must identify the
+  authoritative record when it reports acceptance.
 - A **prerequisite** is a required condition and a **boundary** is a stop,
   review, or mutation limit. Neither should be called a checkpoint unless it is
   one of the product checkpoint families below.
@@ -49,6 +57,43 @@ means a product checkpoint. Simulation documents must use "workflow
 checkpoint" when referring to ledger progression and "workflow checkpoint
 record" when referring to its persisted record. Do not use "checkpoint
 marker" as a generic name for completion, evidence, or workflow records.
+
+## Acceptance And Authorization
+
+Every execution mode preserves four semantic layers even when one
+operator-facing document presents more than one of them:
+
+1. The owning utility or procedure produces its result and mode-appropriate
+   evidence.
+2. The mode-specific acceptance authority evaluates that result, evidence,
+   binding, and predecessor.
+3. The authority writes a durable acceptance record. Only an affirmative
+   acceptance authorizes later product work.
+4. Terminal output, evidence summaries, and final reports present producer
+   outcomes or projected accepted state without creating either one.
+
+The three execution modes map those layers as follows:
+
+| Execution mode | Producer result and evidence | Acceptance authority | Acceptance record | Presentation |
+| --- | --- | --- | --- | --- |
+| Docker simulation | Mode-owned results and producer evidence | Automated simulation acceptance authority | Durable simulation workflow acceptance record | Projection of producer outcomes and accepted workflow state |
+| VM simulation | Mode-owned results and producer evidence | Automated simulation acceptance authority | Durable simulation workflow acceptance record | Projection of producer outcomes and accepted workflow state |
+| Target deployment | Native observed outcomes, or helper-owned results and producer evidence | Human operator or reviewer | Durable human acceptance record | Human-readable acceptance result and its supporting references |
+
+Simulation uses an automated acceptance authority to preserve the product
+checkpoint order and proof boundaries that a human operator coordinates in
+target deployment. It does not replace external approval, organizational risk
+acceptance, waivers, or deployment signoff.
+
+A favorable evidence outcome, phase success, checkpoint acceptance, and final
+run acceptance are distinct claims. Producer evidence may be favorable before
+the acceptance authority rejects its binding or cannot publish the acceptance
+record. A run is accepted only after every required checkpoint instance,
+including Evidence audit, has an accepted record.
+
+Concrete coordination, record schemas and storage, checklist layout, status
+vocabulary, and presentation belong to the evidence, operator, and simulation
+realization documents named under Realization Boundaries.
 
 ## Phase Behavior
 
@@ -177,13 +222,12 @@ new checkpoint family name.
 | Shared integration setup | Shared integration helper or native operator procedure | For target deployment, require effective reviewed access. For simulation, apply and validate ACLs as `simulation-only direct Gerrit REST apply` within this checkpoint. Then create the initial keys, public-key authorization, token, credentials, shared storage, node registration, and Gerrit Trigger state. Exact completed state is a non-mutating no-op; other existing state blocks. |
 | Cross-role validation | Shared integration helper or native operator procedure | Observe effective access, SSH paths, key custody, storage, node state, and Gerrit Trigger connection without creating, repairing, or replacing state. |
 | End-to-end trigger verification | Shared integration helper or native operator procedure | Create only the declared disposable job and change, observe event delivery and agent execution, post the vote, and verify final Gerrit review state. |
-| Evidence audit | Global evidence collector and actor review | Validate evidence completeness, redaction, artifact references, input binding, mode labels, and bounded logs without creating runtime success. |
+| Evidence audit | Evidence auditor and mode-specific acceptance authority | Confirm that required proof is complete, coherent, safely reviewable, and bound to the claimed execution without creating missing success. |
 
 Each mutating checkpoint requires bound inputs, a bounded log reference, and a
-resumable status or evidence boundary. Passing evidence represents real checks
-for the claimed checkpoint. Unsupported, unimplemented, unavailable, or
-modeled behavior is `blocked`, `unsupported`, or `not-applicable`, never
-`pass`.
+resumable result or evidence boundary. Favorable evidence must represent real
+checks for the claimed checkpoint. Unsupported, unimplemented, unavailable, or
+modeled behavior cannot satisfy the checkpoint's proof obligation.
 
 Integration preflight rejects unsupported access-control or review behavior
 before account, token, key, credential, node, storage, or trigger mutation. An
@@ -262,6 +306,9 @@ Native `target-deployment` records the corresponding role, reboot,
 integration, scheduling, trigger, and vote outcomes in
 `docs/operations/native/acceptance-checklist.md`. Routine service logs remain
 in their normal target locations and are inspected only through bounded reads.
+Helper-assisted `target-deployment` records human checkpoint decisions in
+`docs/operations/setup/acceptance-checklist.md`; helper completion records and
+evidence are inputs to those decisions, not acceptance records.
 
 ## Realization Boundaries
 

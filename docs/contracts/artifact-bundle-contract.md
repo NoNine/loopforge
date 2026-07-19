@@ -134,9 +134,8 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 
 ## Evidence And Failure Semantics
 
-- Passing machine-generated evidence must show mode, role, archive checksum
-  verification, payload checksum verification, source-boundary metadata where
-  applicable, and bounded log references.
+- Favorable machine-generated evidence must prove the applicable archive and
+  payload checksums, source boundary, and reviewable supporting results.
 - Missing or mismatched checksums block readiness for both operator interfaces.
   Missing, stale, mismatched, or drifted manifests also block helper readiness,
   and block native readiness when a native operation reference requires one.

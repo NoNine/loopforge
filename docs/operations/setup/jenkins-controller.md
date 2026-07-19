@@ -441,12 +441,18 @@ Evidence Contract fields:
 - Bounded log references.
 - Redaction status.
 
-`collect-evidence` is fail-closed. In Step 8 it emits passing evidence only
-when real controller runtime proof records are present and explicitly tied to
-the reviewed run ID, staged artifacts, and bounded logs. The evidence must
-state that real Jenkins/Gerrit/agent end-to-end execution is deferred to the
-later integration step and records no private keys, tokens, passwords, or LDAP
-bind secrets.
+`collect-evidence` is fail-closed. In Step 8 it emits evidence with
+`status=pass` only when real controller runtime proof records are present and
+explicitly tied to the reviewed run ID, staged artifacts, and bounded logs. The
+evidence must state that real Jenkins/Gerrit/agent end-to-end execution is
+deferred to the later integration step and records no private keys, tokens,
+passwords, or LDAP bind secrets.
+
+The resulting evidence status is a producer outcome. In helper-assisted
+`target-deployment`, a human must accept Jenkins controller role-local setup
+before role-local validation and accept validation before integration in
+`setup/acceptance-checklist.md`. In simulation, the harness accepts each
+corresponding workflow checkpoint only after validating the record.
 
 Helper:
 

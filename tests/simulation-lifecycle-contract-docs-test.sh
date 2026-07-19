@@ -88,6 +88,12 @@ require_text "$lifecycle" \
   'A **workflow checkpoint record** is the simulation ledger' \
   'Lifecycle contract must distinguish simulation workflow records'
 require_text "$lifecycle" \
+  '## Acceptance And Authorization' \
+  'Lifecycle contract must define the four acceptance layers'
+require_text "$lifecycle" \
+  'Simulation uses an automated acceptance authority' \
+  'Lifecycle contract must define harness/operator correspondence'
+require_text "$lifecycle" \
   '## Product Checkpoint Families' \
   'Lifecycle contract must own the canonical checkpoint family vocabulary'
 require_text "$lifecycle" \
@@ -318,11 +324,23 @@ require_text "$protocol" \
   '| Evidence audit | Collector result that validates, but does not create,' \
   'Checkpoint protocol must keep aggregation separate from runtime truth'
 require_text "$protocol" \
+  '## Final Evidence Audit' \
+  'Checkpoint protocol must define final collector timing'
+require_text "$protocol" \
+  'An operator may run the collector earlier for partial diagnosis' \
+  'Checkpoint protocol must distinguish diagnostic collection from acceptance'
+require_text "$protocol" \
   'Their owning utilities still produce completion state and evidence' \
   'Checkpoint protocol must preserve target-deployment utility ownership'
 require_text "$evidence" \
   '`simulation/docs/shared/checkpoint-acceptance-protocol.md` defines how producer-owned' \
   'Evidence authority must delegate checkpoint acceptance'
+require_text "$evidence" \
+  'The global collector runs as the final Evidence audit' \
+  'Evidence authority must define final global collector timing'
+require_text "$evidence" \
+  'evidence counts alone never establish' \
+  'Evidence summaries must not claim checkpoint acceptance'
 require_text "$step" \
   '`simulation/docs/shared/checkpoint-acceptance-protocol.md` for accepting the' \
   'Step 13a must read checkpoint acceptance protocol'

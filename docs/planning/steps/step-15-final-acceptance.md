@@ -6,7 +6,9 @@ Run final acceptance in this order:
 2. Helper `--help`, `print-env-template`, and `--dry-run preflight` checks.
 3. Docker simulation preflight and setup phases through `simulate.sh`.
 4. Docker full verification through `simulate.sh`.
-5. Global evidence aggregation.
+5. Global evidence aggregation after the completed simulation proof phases; the
+   collector result is accepted only through the final simulation
+   `evidence-audit` workflow checkpoint.
 6. Shared simulation library checks from Step 12.
 7. Reusable simulation lifecycle checks from Step 13a.
 8. Fresh-state role lifecycle checks from Step 13b.
@@ -15,6 +17,9 @@ Run final acceptance in this order:
 11. Native `target-deployment` acceptance through
    `docs/operations/native/acceptance-checklist.md` when the release claims
    native target readiness.
+12. Helper-assisted `target-deployment` acceptance through
+   `docs/operations/setup/acceptance-checklist.md` when the release claims
+   helper target readiness.
 
 Retained rendered inputs, prepared artifacts, staged artifacts, and harness
 state may be reused only when manifests and checksums verify against the current
@@ -67,6 +72,11 @@ freshly provisioned targets and records outcomes in the acceptance checklist. Th
 checklist does not require machine-generated evidence, global aggregation, or
 copied service logs. Retain the completed checklist in the approved
 change-management system, not in the repository.
+
+Helper-assisted `target-deployment` is also human-accepted. Retain the
+completed setup acceptance checklist in the approved change-management system;
+helper completion records, evidence packages, and summaries support the review
+but do not authorize later target work by themselves.
 
 If any required checklist item fails or requires an undocumented operation,
 mark the run `BLOCKED`. Correct the owning procedure or environment explicitly,

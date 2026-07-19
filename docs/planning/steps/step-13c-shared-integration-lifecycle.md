@@ -53,6 +53,14 @@ Required behavior changes:
   validation implicitly.
 - `collect-evidence` may collect partial diagnostic records but must not promote
   an incomplete checkpoint set to pass.
+- Producer `collect-evidence` commands emit evidence outcomes for their owning
+  phase. The global `scripts/collect-evidence.sh` collector runs only after
+  end-to-end proof as the final Evidence audit input; it does not authorize
+  target work or accept its own checkpoint.
+- Helper-assisted `target-deployment` uses the human
+  `docs/operations/setup/acceptance-checklist.md` for checkpoint decisions.
+  Helper completion and evidence records support those decisions but do not
+  replace them.
 
 Loopforge v1 does not provide credential rotation. Normal configuration must
 fail clearly when existing credential state requires replacement. Cleanup,
@@ -250,6 +258,10 @@ Implementation:
   and redaction state.
 - Make `collect-evidence` validate the checkpoint set reached and reject
   contradictory success/failure signals without manufacturing missing success.
+- Keep producer evidence collection distinct from the final global Evidence
+  audit. In simulation, commit `evidence-audit` only after the collector result
+  has been revalidated by the harness; in helper-assisted target deployment,
+  record the human decision in the acceptance checklist.
 - Make both harnesses accept integration results through `open-checkpoint` and
   `commit-checkpoint` for integration preflight, setup, validation, proof, and
   evidence audit.
@@ -280,6 +292,8 @@ Acceptance:
 
 - Evidence audit rejects stale, incomplete, unbound, or contradictory state.
 - Only the workflow checkpoint chain authorizes integration progression.
+- Evidence summaries report producer outcomes and do not claim checkpoint
+  acceptance without the workflow record or target acceptance checklist.
 - No harness validation or proof-prerequisite marker remains in either backend.
 - Docker and VM accept the same helper-owned results with the same predecessor
   and evidence rules.

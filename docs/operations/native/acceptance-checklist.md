@@ -47,6 +47,50 @@ Loopforge revision:
 - [ ] Reviewed artifact inventories and checksums match the artifacts staged on
   each target.
 
+## Checkpoint Decisions
+
+The checklist items below are observations. The operator records an acceptance
+decision for each applicable product checkpoint instance only after its
+required observations and procedure result are complete. A passing observation
+does not authorize the next checkpoint until the decision is recorded.
+Complete these decisions progressively during the run; do not reconstruct them
+only at final signoff.
+
+```text
+Input review or source selection: ACCEPTED / BLOCKED
+
+OS dependency provisioning
+  Gerrit:             ACCEPTED / BLOCKED
+  Jenkins controller: ACCEPTED / BLOCKED
+  Jenkins agent:      ACCEPTED / BLOCKED
+
+Artifact preparation
+  Gerrit:             ACCEPTED / BLOCKED
+  Jenkins controller: ACCEPTED / BLOCKED
+  Jenkins agent:      ACCEPTED / BLOCKED
+
+Artifact staging
+  Gerrit:             ACCEPTED / BLOCKED
+  Jenkins controller: ACCEPTED / BLOCKED
+  Jenkins agent:      ACCEPTED / BLOCKED
+
+Role-local setup - Gerrit:         ACCEPTED / BLOCKED
+Role-local setup - Jenkins controller: ACCEPTED / BLOCKED
+Role-local setup - Jenkins agent:  ACCEPTED / BLOCKED
+Role-local validation - Gerrit:    ACCEPTED / BLOCKED
+Role-local validation - Jenkins controller: ACCEPTED / BLOCKED
+Role-local validation - Jenkins agent: ACCEPTED / BLOCKED
+Integration preflight:             ACCEPTED / BLOCKED
+Reviewed integration access:       ACCEPTED / BLOCKED
+Shared integration setup:          ACCEPTED / BLOCKED
+Cross-role validation:              ACCEPTED / BLOCKED
+End-to-end trigger verification:   ACCEPTED / BLOCKED
+Evidence audit:                    ACCEPTED / BLOCKED
+```
+
+Decision reviewer:
+Decision date:
+
 ## Gerrit
 
 - [ ] The native Gerrit installation and configuration procedure completed.

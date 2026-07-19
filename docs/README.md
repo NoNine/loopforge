@@ -75,7 +75,9 @@ Use this order when deciding where a product or process fact belongs:
    `docs/operations/setup/jenkins-agent.md`, and
    `docs/operations/setup/integration.md`. They must remain aligned with the
    native procedural baseline and produce equivalent product state and
-   validation outcomes.
+   validation outcomes. `docs/operations/setup/acceptance-checklist.md` records
+   human acceptance of helper-assisted `target-deployment` checkpoints without
+   making helper evidence an authorization record.
 8. Simulation docs own simulation realization details:
    `simulation/docs/README.md` routes readers without owning behavior;
    `simulation/docs/shared/simulation-model.md` owns the shared public model;

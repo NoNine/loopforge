@@ -225,10 +225,9 @@ Lifecycle implementations must preserve these system invariants:
   Jenkins agent registration from the controller side, scheduling proof,
   `Verified` voting, and integration evidence belong to
   `scripts/integration-setup.sh`.
-- Passing evidence must represent real runtime checks for the claimed product
+- Favorable evidence must represent real runtime checks for the claimed product
   checkpoint instance. Unsupported, unimplemented, unavailable, or modeled
-  behavior must be reported as `blocked`, `unsupported`, or `not-applicable`,
-  not as `pass`.
+  behavior must not be represented as successful proof.
 
 ## Standard Interfaces
 
@@ -298,24 +297,26 @@ that review must match the trigger and verification-job inputs.
 
 ## Evidence Relationship
 
-`docs/contracts/validation-and-evidence.md` owns the detailed evidence schema and
-redaction rules. Machine-generated helper and simulation evidence must record
-mode, timestamp, environment or role, checkpoint, command, status, reviewed
-input fingerprint, relevant endpoints, manifest references, checksum results,
-bounded logs, and redaction status.
+`docs/contracts/validation-and-evidence.md` owns the detailed evidence schema,
+outcome vocabulary, binding fields, supporting references, and redaction rules.
+This model requires evidence to bind an observed outcome to its claimed product
+scope and execution context without becoming an acceptance decision.
 
 - Integration evidence must distinguish role-local readiness from cross-role
   readiness and end-to-end trigger proof.
-- Gerrit ACL evidence must record ACL mode, mode-appropriate review fields,
-  effective global and project/ref permission checks, integration actor or
-  group, bounded log references, and redaction status. Simulation records
-  Reviewed Access as `not-applicable` and must not claim review activity.
+- Gerrit ACL evidence must prove the mode-appropriate access realization and
+  effective permission state. Simulation must identify Reviewed Access as
+  outside its workflow and must not claim review activity.
 - Simulation evidence must be labeled as `docker-simulation` or
   `vm-simulation` and must not imply target-deployment acceptance.
 - Native `target-deployment` acceptance uses
   `docs/operations/native/acceptance-checklist.md`. It records observed
   outcomes and only the approved deployment/change ticket, Gerrit verification
   change, and Jenkins verification build references.
+- Helper-assisted `target-deployment` acceptance uses
+  `docs/operations/setup/acceptance-checklist.md`. A human reviewer accepts or
+  blocks each checkpoint from helper completion state and evidence; the helper
+  artifacts do not authorize progression by themselves.
 
 Machine-generated records and the native checklist must never include private
 keys, passwords, tokens, LDAP bind secrets, or full secret-bearing env values.

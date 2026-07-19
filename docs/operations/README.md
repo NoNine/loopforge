@@ -6,7 +6,9 @@ the repository helpers after reviewing their inputs and stop points.
 
 Both paths are for initial setup. They must produce the same product state and
 reach the same validation outcomes. They differ in who performs each operation
-and how the result is recorded.
+and how proof is produced. A human operator or reviewer accepts checkpoints for
+both target-deployment paths and records those decisions in the applicable
+checklist.
 
 ## Native Operation References
 
@@ -28,8 +30,9 @@ the state you established without starting, repairing, or reconfiguring it.
 The operator records the result in the native acceptance checklist; detailed
 logs remain on the target hosts.
 
-After completing all four procedures, use
-`native/acceptance-checklist.md` for the single end-to-end native
+Open `native/acceptance-checklist.md` when beginning the fresh native run and
+record checkpoint decisions progressively. After completing all four
+procedures, use its final result for the single end-to-end native
 `target-deployment` signoff. The checklist records outcomes without duplicating
 commands or requiring helper-generated evidence.
 
@@ -54,6 +57,12 @@ Each setup manual identifies its inputs, commands, stop points, effects, and
 handoff. Review those details before invoking a helper. Helpers perform the
 same initial setup scope as the native path and collect the redacted evidence
 required for the selected mode.
+
+For helper-assisted `target-deployment`, record each human checkpoint decision
+in `setup/acceptance-checklist.md`. Helper completion records and passing
+evidence support that decision but do not authorize the next target phase by
+themselves. Docker and VM simulation use their workflow checkpoint ledgers
+instead of a human target checklist.
 
 ## Before You Begin
 
@@ -88,6 +97,8 @@ agree on:
 - credential-custody boundaries;
 - role-local and integration ownership;
 - validation results and secret redaction.
+- human checkpoint acceptance and final deployment signoff for target
+  deployment.
 
 Gerrit and the Jenkins controller use systemd in VM simulation and target
 deployment. The outbound Jenkins agent uses the target's SSH service and does

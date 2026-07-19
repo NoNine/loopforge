@@ -76,6 +76,15 @@ require_text docs/operations/native/acceptance-checklist.md \
   'repair service state during validation.' \
   'Checklist must keep validation non-repairing'
 require_text docs/operations/native/acceptance-checklist.md \
+  '## Checkpoint Decisions' \
+  'Checklist must expose canonical checkpoint decisions'
+require_text docs/operations/native/acceptance-checklist.md \
+  'Complete these decisions progressively during the run' \
+  'Checklist must record decisions before final signoff'
+require_text docs/operations/native/acceptance-checklist.md \
+  'Evidence audit:                    ACCEPTED / BLOCKED' \
+  'Checklist must record the final evidence-audit decision'
+require_text docs/operations/native/acceptance-checklist.md \
   'Reboot checks are optional and may be left unchecked when not' \
   'Checklist must allow reboot checks to be skipped'
 require_text docs/operations/native/acceptance-checklist.md \
@@ -110,6 +119,9 @@ require_text docs/contracts/validation-and-evidence.md \
 require_text docs/operations/README.md \
   'records the result in the native acceptance checklist' \
   'Operator contract must define checklist-based native acceptance'
+require_text docs/operations/README.md \
+  'setup/acceptance-checklist.md' \
+  'Operations authority must link helper-assisted target acceptance'
 require_text docs/contracts/lifecycle-contract.md \
   'Native `target-deployment` records the corresponding role, reboot,' \
   'Lifecycle contract must route native outcomes to the checklist'
