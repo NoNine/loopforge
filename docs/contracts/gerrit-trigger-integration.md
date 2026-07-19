@@ -9,7 +9,7 @@ The contract covers the integration account, SSH key custody, the
 target-deployment reviewed ACL workflow, the simulation-only direct ACL
 realization, the `Verified` label, Gerrit Trigger controller settings, default
 REST vote posting, disposable verification artifacts, failure classification,
-and the simulation acceptance contract. It is a policy and validation
+and the simulation verification contract. It is a policy and validation
 contract, not the command manual. Operators should use
 `docs/operations/setup/integration.md` for the shared helper command workflow.
 
@@ -93,7 +93,8 @@ controller-write/agent-read proof.
     disposable Gerrit change. The change emits `patchset-created`, Gerrit
     Trigger schedules the job on the reviewed agent, and the successful build
     posts `Verified +1` through Gerrit REST.
-12. Evidence records the mode-appropriate input and selected-state binding,
+12. The producer record includes the mode-appropriate input and selected-state
+    binding,
     ACL realization and effective checks, public key fingerprints, shared
     storage result, change, build, event delivery, vote, bounded logs, and
     verification mode.
@@ -221,8 +222,8 @@ revisions, and submit actors when applicable. Simulation records use
 activity. A blocked target review wait records real review identifiers without
 claiming submission, effective access, or shared setup success.
 
-Shared storage evidence records the shared group name, GID, storage path, the
-controller runtime account as writer, the agent runtime account as reader, and
+The shared-storage producer record includes the shared group name, GID, storage
+path, the controller runtime account as writer, the agent runtime account as reader, and
 bounded log references. It must not include private keys, passwords, tokens,
 or LDAP bind secrets.
 
@@ -276,9 +277,9 @@ Failed `Verified` voting must not be collapsed into event-stream or
 job-scheduling failures. It is a distinct label-definition or access-control
 problem.
 
-## Docker Simulation Acceptance Contract
+## Docker Simulation Verification Contract
 
-The Docker simulation acceptance contract for this integration is:
+The Docker simulation verification contract for this integration is:
 
 - A disposable Gerrit change emits a `patchset-created` event.
 - The shared Jenkins storage path is mounted into both Jenkins controller and
@@ -287,8 +288,8 @@ The Docker simulation acceptance contract for this integration is:
 - The job runs on the Jenkins agent.
 - Jenkins posts `Verified +1` to the Gerrit change through the Gerrit REST
   review API.
-- Evidence records the change, build, vote, bounded log references, and
+- The producer record includes the change, build, vote, bounded log references, and
   verification mode.
 
-This document defines the acceptance contract only. It does not claim that the
+This document defines the verification contract only. It does not claim that the
 Docker simulation has been executed.

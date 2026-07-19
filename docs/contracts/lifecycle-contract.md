@@ -30,66 +30,73 @@ documents:
   canonical table below.
 - A **product checkpoint instance** applies one family to a concrete owner and
   scope, such as role-local setup for Gerrit. A product checkpoint instance is
-  complete only when its required postcondition and proof have been accepted.
-- A **completion record** is an owning utility's durable statement that its
-  exact output or postcondition is complete. It supports checkpoint acceptance
-  but is not itself a checkpoint.
-- An **evidence record** is redacted proof of an operation or observation. It
-  reports an outcome but does not itself complete or authorize a checkpoint.
-- An **acceptance authority** evaluates the owned result, evidence, binding, and
-  predecessor for one product checkpoint instance.
-- An **acceptance record** is the authority's durable decision to accept or
-  block one product checkpoint instance. Only an affirmative acceptance
-  authorizes the next product checkpoint.
-- A **workflow checkpoint record** is the simulation ledger's immutable
-  acceptance of one product checkpoint instance for the selected run. Product
-  checkpoint instances also exist in target deployment, which has no simulation
-  ledger.
+  complete only when its required postcondition and proof have passed the
+  mode-specific coordination boundary.
+- A **producer record** is an owning utility's durable, redacted statement of
+  its outcome and supporting proof. It binds the claimed postcondition or
+  observation to the product inputs, target identity, safe result references,
+  checks, and bounded logs needed by the mode coordinator. The product
+  checkpoint owner writes it as part of the same checkpoint attempt.
+- A **human acceptance authority** evaluates the producer outcome and proof for
+  target deployment and records an organizational accept or block decision.
+- A **human acceptance record** is that authority's durable target-deployment
+  decision. Only an affirmative decision authorizes later target work.
+- A **simulation run plan** is the ordered realization of applicable product
+  checkpoint instances for one selected simulation run.
+- A **run-step record** is the simulation harness's immutable record that it
+  verified one producer record and committed the corresponding run-plan
+  transition under the selected set lock. It documents the transition; the
+  record alone does not cause or authorize one.
+- A **simulation operation record** is the simulation operation owner's
+  retained outcome and proof for resource lifecycle work such as `create`,
+  `start`, `stop`, restoration, cleanup, or destruction. It is not a product
+  producer, run-step, or human acceptance record.
 - A **presentation summary** is a projection of producer outcomes or accepted
-  state for an operator. It is not an acceptance record and must identify the
-  authoritative record when it reports acceptance.
+  target state or committed simulation state for an operator. It creates no
+  record and must identify the authoritative record when it reports either.
 - A **prerequisite** is a required condition and a **boundary** is a stop,
   review, or mutation limit. Neither should be called a checkpoint unless it is
   one of the product checkpoint families below.
 
 Unless explicitly qualified, "checkpoint" in product and operator documents
-means a product checkpoint. Simulation documents must use "workflow
-checkpoint" when referring to ledger progression and "workflow checkpoint
-record" when referring to its persisted record. Do not use "checkpoint
-marker" as a generic name for completion, evidence, or workflow records.
+means a product checkpoint. Simulation documents use "run step" for one
+product-checkpoint realization in the simulation run plan and "run-step
+record" for its persisted transition record. Do not use "checkpoint marker" as
+a generic name for producer, run-step, operation, or human acceptance records.
 
 ## Acceptance And Authorization
 
-Every execution mode preserves four semantic layers even when one
-operator-facing document presents more than one of them:
+Every execution mode preserves the product owner separately from its mode
+coordinator even when one operator-facing document presents both:
 
-1. The owning utility or procedure produces its result and mode-appropriate
-   evidence.
-2. The mode-specific acceptance authority evaluates that result, evidence,
-   binding, and predecessor.
-3. The authority writes a durable acceptance record. Only an affirmative
-   acceptance authorizes later product work.
-4. Terminal output, evidence summaries, and final reports present producer
-   outcomes or projected accepted state without creating either one.
+1. The owning utility or procedure writes one mode-appropriate producer record
+   containing its outcome, binding, and supporting proof.
+2. In target deployment, the human acceptance authority evaluates that outcome
+   and proof and writes the human acceptance record.
+3. In simulation, the harness verifies the producer record and run-plan guards,
+   atomically advances the run-plan head, and retains the resulting run-step
+   record.
+4. Terminal output, evidence summaries, and final reports project producer,
+   target-acceptance, operation, or run-plan state without creating it.
 
 The three execution modes map those layers as follows:
 
-| Execution mode | Producer result and evidence | Acceptance authority | Acceptance record | Presentation |
+| Execution mode | Product owner output | Mode coordination | Durable coordination record | Presentation |
 | --- | --- | --- | --- | --- |
-| Docker simulation | Mode-owned results and producer evidence | Automated simulation acceptance authority | Durable simulation workflow acceptance record | Projection of producer outcomes and accepted workflow state |
-| VM simulation | Mode-owned results and producer evidence | Automated simulation acceptance authority | Durable simulation workflow acceptance record | Projection of producer outcomes and accepted workflow state |
-| Target deployment | Native observed outcomes, or helper-owned results and producer evidence | Human operator or reviewer | Durable human acceptance record | Human-readable acceptance result and its supporting references |
+| Docker simulation | Product-owner producer record | Harness verifies guards and commits the next run-plan transition | Hash-linked run-step record | Projection of producer outcomes, operation state, and run-plan head |
+| VM simulation | Product-owner producer record | Harness verifies guards and commits the next run-plan transition | Hash-linked run-step record | Projection of producer outcomes, operation state, and run-plan head |
+| Target deployment | Native observed outcome, or helper-owned producer record | Human operator or reviewer accepts or blocks | Human acceptance record | Human-readable acceptance result and its supporting references |
 
-Simulation uses an automated acceptance authority to preserve the product
-checkpoint order and proof boundaries that a human operator coordinates in
-target deployment. It does not replace external approval, organizational risk
-acceptance, waivers, or deployment signoff.
+Simulation run-plan coordination preserves product checkpoint order and proof
+boundaries but is not product, organizational, risk, waiver, or deployment
+acceptance.
 
-A favorable evidence outcome, phase success, checkpoint acceptance, and final
-run acceptance are distinct claims. Producer evidence may be favorable before
-the acceptance authority rejects its binding or cannot publish the acceptance
-record. A run is accepted only after every required checkpoint instance,
-including Evidence audit, has an accepted record.
+A favorable producer outcome, phase success, target acceptance, committed
+simulation run-plan progress, and final run completion are distinct claims. A
+producer record may report `pass` before a target reviewer blocks it or a
+simulation harness rejects its binding or cannot commit the run-plan
+transition. A simulation run is complete only after every required run step,
+including Evidence audit, has a committed run-step record.
 
 Concrete coordination, record schemas and storage, checklist layout, status
 vocabulary, and presentation belong to the evidence, operator, and simulation
@@ -109,7 +116,7 @@ Product phases are strict, single-purpose operations:
 - Phase logs and evidence stay bounded and identify the producing phase.
 - Phase success means that phase completed its own contract, not that another
   phase was replayed or repaired implicitly.
-- An exact input-bound completion record may return `already-complete` without
+- An exact input-bound producer record may return `already-complete` without
   target mutation. This is the only completed-state rerun supported by v1,
   except for the target-deployment review wait defined below.
 
@@ -144,11 +151,11 @@ Role preflight and role setup divide runtime identity work as follows:
 Runtime identity and installed application state are separate classifications.
 A fully matching runtime identity with an empty canonical product home may be
 adopted for initial setup. Role application files, configuration, service
-definitions, runtime data, or an unbound completion record are existing
+definitions, runtime data, or an unbound producer record are existing
 application state, not reusable identity state.
 
 Initial setup stops before mutation when application state exists unless an
-exact completion record binds it to the same mode-appropriate inputs,
+exact producer record binds it to the same mode-appropriate inputs,
 artifacts, target identity, mode, and selected execution state. Exact completed
 state returns `already-complete` without starting, stopping, restarting,
 rewriting, or deleting target state. Changed, partial, conflicting, or unbound
@@ -211,8 +218,8 @@ new checkpoint family name.
 
 | Product checkpoint family | Owner | Product boundary |
 | --- | --- | --- |
-| Input review or source selection | Human operator or machine runner | Review target-deployment inputs or select simulation source inputs and supported overrides. No target mutation. |
-| OS dependency provisioning | Role helper or native operator procedure | Install approved OS prerequisites without creating product runtime identities, product homes, application state, or service state. |
+| Input review or source selection | Human operator or machine runner | Review target-deployment inputs and supported overrides. No target mutation. |
+| OS dependency provisioning | OS provisioner or native operator procedure | Install approved OS prerequisites without creating product runtime identities, product homes, application state, or service state. |
 | Artifact preparation | Bundle factory through role helpers or native procedure | Prepare application artifacts, manifests, checksums, and source-boundary labels without mutating target hosts. |
 | Artifact staging | Actor or simulation utility | Transfer prepared artifacts to target staging and verify target-side checksums and required manifests. This checkpoint changes staging only; role setup owns runtime and application mutation. |
 | Role-local setup | Role helper or native operator procedure | Create or adopt the exact reviewed runtime identity, install and configure fresh role-local state, and establish its runtime. Exact completed state is a non-mutating no-op; other existing application state blocks. |
@@ -222,7 +229,24 @@ new checkpoint family name.
 | Shared integration setup | Shared integration helper or native operator procedure | For target deployment, require effective reviewed access. For simulation, apply and validate ACLs as `simulation-only direct Gerrit REST apply` within this checkpoint. Then create the initial keys, public-key authorization, token, credentials, shared storage, node registration, and Gerrit Trigger state. Exact completed state is a non-mutating no-op; other existing state blocks. |
 | Cross-role validation | Shared integration helper or native operator procedure | Observe effective access, SSH paths, key custody, storage, node state, and Gerrit Trigger connection without creating, repairing, or replacing state. |
 | End-to-end trigger verification | Shared integration helper or native operator procedure | Create only the declared disposable job and change, observe event delivery and agent execution, post the vote, and verify final Gerrit review state. |
-| Evidence audit | Evidence auditor and mode-specific acceptance authority | Confirm that required proof is complete, coherent, safely reviewable, and bound to the claimed execution without creating missing success. |
+| Evidence audit | Evidence auditor and mode coordinator | Confirm that required proof is complete, coherent, safely reviewable, and bound to the claimed execution without creating missing success. |
+
+### Simulation Waivers
+
+Docker and VM simulation waive `Input review or source selection` and `OS
+dependency provisioning` from their product run plans. The harness still
+establishes equivalent simulation prerequisites, but they remain
+simulation-only implementation work:
+
+- `init-run` selects and snapshots simulation source templates and supported
+  overrides, then records that work in its simulation operation record.
+- Initial `create` provisions or verifies the simulation-owned OS dependency
+  baseline and records that work in its simulation operation record.
+
+Neither operation writes a product producer record or commits a run step.
+Target deployment retains both product checkpoints and their normal human
+coordination. The waiver does not make simulation inputs or dependencies valid
+target-deployment proof.
 
 Each mutating checkpoint requires bound inputs, a bounded log reference, and a
 resumable result or evidence boundary. Favorable evidence must represent real
@@ -259,6 +283,10 @@ three role-readiness handoffs must pass before integration mutation. A
 validation or proof phase never supplies missing setup work or replays a
 successful owning checkpoint.
 
+In simulation, the two waived checkpoint families above are satisfied as
+simulation prerequisites before the applicable product run plan begins at
+role-qualified Artifact preparation.
+
 Role application artifact bundles remain separate from later integration key
 and public-key handoff state. The artifact bundle contract owns their contents;
 this contract owns only that integration-owned credentials and handoffs occur
@@ -266,9 +294,9 @@ after role readiness and mode-appropriate effective integration access.
 
 ## Review Wait, Resume, And Existing State
 
-Integration status, completion state, and evidence boundaries bind to the same
+Integration producer records and external review boundaries bind to the same
 inputs, target identities, mode, and selected execution state. Target review
-wait and completion state also bind both Gerrit review identifiers. A later
+wait state also binds both Gerrit review identifiers. A later
 phase rejects state from different inputs or a different execution; record
 existence alone is not a valid prerequisite.
 
@@ -307,8 +335,8 @@ integration, scheduling, trigger, and vote outcomes in
 `docs/operations/native/acceptance-checklist.md`. Routine service logs remain
 in their normal target locations and are inspected only through bounded reads.
 Helper-assisted `target-deployment` records human checkpoint decisions in
-`docs/operations/setup/acceptance-checklist.md`; helper completion records and
-evidence are inputs to those decisions, not acceptance records.
+`docs/operations/setup/acceptance-checklist.md`; helper producer records are
+inputs to those decisions, not acceptance records.
 
 ## Realization Boundaries
 
@@ -324,8 +352,10 @@ Concrete procedures and implementation facts live below this contract:
 - `simulation/docs/shared/lifecycle-state-model.md` owns exact simulation state
   schemas, guards, classification, transitions, and the product-to-simulation
   checkpoint mapping;
-- `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns acceptance and
-  publication of owning-layer results and evidence into the simulation ledger;
+- `simulation/docs/shared/run-plan-transition-protocol.md` owns producer-record
+  verification and run-plan transition publication;
+- `simulation/docs/shared/operation-records.md` owns simulation resource
+  lifecycle operation records;
 - `simulation/docs/shared/terminal-output.md` owns shared terminal presentation; and
 - backend implementation designs own module boundaries and mechanisms.
 

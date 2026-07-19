@@ -7,7 +7,8 @@ simulation_model="$repo_root/simulation/docs/shared/simulation-model.md"
 generated_layout="$repo_root/simulation/docs/shared/generated-state-layout.md"
 harness_design="$repo_root/simulation/docs/shared/harness-design.md"
 state_model="$repo_root/simulation/docs/shared/lifecycle-state-model.md"
-protocol="$repo_root/simulation/docs/shared/checkpoint-acceptance-protocol.md"
+protocol="$repo_root/simulation/docs/shared/run-plan-transition-protocol.md"
+operations="$repo_root/simulation/docs/shared/operation-records.md"
 docker_design="$repo_root/simulation/docs/docker/implementation-design.md"
 vm_design="$repo_root/simulation/docs/vm/implementation-design.md"
 lifecycle="$repo_root/docs/contracts/lifecycle-contract.md"
@@ -44,8 +45,11 @@ require_text "$simulation_model" \
   '`simulation/docs/shared/lifecycle-state-model.md`' \
   'Simulation model must link the exact lifecycle state model'
 require_text "$simulation_model" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md`' \
-  'Simulation model must link checkpoint acceptance protocol'
+  '`simulation/docs/shared/run-plan-transition-protocol.md`' \
+  'Simulation model must link run-plan transition protocol'
+require_text "$simulation_model" \
+  '`simulation/docs/shared/operation-records.md`' \
+  'Simulation model must link operation-record authority'
 require_text "$simulation_model" \
   '`simulation/docs/shared/generated-state-layout.md`' \
   'Simulation model must link generated-state layout authority'
@@ -146,7 +150,7 @@ require_text "$harness_design" \
   '## Common Harness Structure' \
   'Shared harness design must own common module roles'
 require_text "$harness_design" \
-  '| Command orchestration | Own composite workflow sequencing' \
+  '| Command orchestration | Own composite run-plan sequencing' \
   'Shared harness design must own command orchestration responsibilities'
 require_text "$harness_design" \
   '## Public Command Shape And Run Composition' \
@@ -185,15 +189,30 @@ require_text "$harness_design" \
   '| `identity.sh`, `locking.sh` |' \
   'Shared harness design must map shared identity and locking modules'
 require_text "$harness_design" \
-  '| Persistence | Stable set lock, strict active-run and workflow records,' \
+  '| Persistence | Stable set lock, strict active-run and run-plan records,' \
   'Shared harness design must assign lifecycle persistence ownership'
 require_text "$harness_design" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md`' \
-  'Shared harness design must delegate checkpoint acceptance'
+  '`simulation/docs/shared/run-plan-transition-protocol.md`' \
+  'Shared harness design must delegate run-plan transitions'
 
 require_text "$state_model" \
-  '## State Dimensions' \
-  'Lifecycle state model must separate state dimensions'
+  '## Two Coordinated State Machines' \
+  'Lifecycle state model must explicitly separate the two state machines'
+require_text "$state_model" \
+  '| Simulation resource lifecycle (`R`) |' \
+  'Lifecycle state model must define resource lifecycle state'
+require_text "$state_model" \
+  '## Simulation Resource Lifecycle State Machine' \
+  'Lifecycle state model must give resource lifecycle its own section'
+require_text "$state_model" \
+  '| Product run plan (`P`) |' \
+  'Lifecycle state model must define product run-plan state'
+require_text "$state_model" \
+  '## Product Run-Plan State Machine' \
+  'Lifecycle state model must give product progression its own section'
+require_text "$state_model" \
+  '| Execution coordination state (`C`) |' \
+  'Lifecycle state model must keep derived guards as coordination state'
 require_text "$state_model" \
   '| Reset gate | `normal`, `restored-pending-clean` |' \
   'Lifecycle state model must define the post-restore gate'
@@ -201,8 +220,8 @@ require_text "$state_model" \
   '`exact-bound` means all durable state currently present is complete and bound' \
   'Lifecycle state model must preserve restart at exact checkpoint boundaries'
 require_text "$state_model" \
-  '## Command Guard And Effect Matrix' \
-  'Lifecycle state model must define exact command guards'
+  '## Cross-Machine Coordination Matrix' \
+  'Lifecycle state model must define exact cross-machine guards'
 require_text "$state_model" \
   '| `clean` | `restored-pending-clean`,' \
   'Clean must require successful baseline restoration'
@@ -213,38 +232,38 @@ require_text "$state_model" \
   '| `preflight`, `status`, `audit-state`, `clean`, `destroy` | `init-run`, `create`, `start`,' \
   'Restored-pending-clean must explicitly block start and workflow commands'
 require_text "$state_model" \
-  '`init-run -> create -> start`.' \
-  'Lifecycle state model must distinguish reuse from post-destroy creation'
+  'The reuse path does not call `create`' \
+  'Lifecycle state model must skip create for retained-baseline reuse'
 require_text "$state_model" \
   '## Persistence And Concurrency' \
   'Lifecycle state model must define persistence and locking'
 require_text "$state_model" \
-  '## Workflow Checkpoint State Transitions' \
-  'Lifecycle state model must define checkpoint state transitions'
+  '## Run-Plan State Transitions' \
+  'Lifecycle state model must define run-step state transitions'
 require_text "$state_model" \
-  '## Product-To-Simulation Checkpoint Mapping' \
+  '## Product Run-Plan State Machine' \
   'Lifecycle state model must define the product checkpoint realization'
 require_text "$state_model" \
-  'It answers which ledger state' \
+  'separate persisted state, transitions, records, and guards' \
   'Lifecycle state model must state its valid-state responsibility'
 require_text "$state_model" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` separately owns the' \
-  'Lifecycle state model must delegate the acceptance protocol'
+  '`simulation/docs/shared/run-plan-transition-protocol.md` separately owns the' \
+  'Lifecycle state model must delegate the transition protocol'
 require_text "$state_model" \
-  'does not define owning-layer postconditions, evidence acceptance, or transaction' \
-  'Lifecycle state model must exclude acceptance-protocol responsibilities'
+  'product-owner postconditions, producer-record content, or transaction steps.' \
+  'Lifecycle state model must exclude transition-protocol responsibilities'
 require_text "$state_model" \
-  '| `open-checkpoint(<checkpoint>, <activity>)` |' \
-  'Lifecycle state model must define the checkpoint-open transition'
+  '| `open-run-step(<step>, <activity>)` |' \
+  'Lifecycle state model must define the run-step-open transition'
 require_text "$state_model" \
-  '| `commit-checkpoint(<record>)` |' \
-  'Lifecycle state model must define the checkpoint-commit transition'
+  '| `commit-run-step(<record>)` |' \
+  'Lifecycle state model must define the run-step-commit transition'
 require_text "$state_model" \
-  '`evidence_sha256`' \
-  'Lifecycle state model must own the workflow evidence-digest field'
+  '`producer_record_sha256`' \
+  'Lifecycle state model must own the workflow producer-record digest field'
 require_text "$state_model" \
   'The concrete role expansions and five unqualified identifiers in the final' \
-  'Lifecycle state model must own the exact workflow vocabulary'
+  'Lifecycle state model must own the exact run-step vocabulary'
 require_text "$state_model" \
   'Simulation has no Reviewed Access' \
   'Lifecycle state model must exclude Reviewed Access'
@@ -271,26 +290,26 @@ require_text "$state_model" \
   'Lifecycle state model must separate observational interruption from durable corruption'
 
 require_text "$protocol" \
-  '# Simulation Checkpoint Acceptance Protocol' \
-  'Checkpoint protocol must be explicitly acceptance-scoped'
+  '# Simulation Run-Plan Transition Protocol' \
+  'Run-plan protocol must be explicitly transition-scoped'
 require_text "$protocol" \
-  '## Accepted Records' \
-  'Checkpoint protocol must distinguish accepted record types'
+  '## Record Ownership' \
+  'Run-plan protocol must distinguish record ownership'
 require_text "$protocol" \
-  '## Acceptance Requirements' \
-  'Checkpoint protocol must define owned-result acceptance'
+  '## Run-Plan Producer Requirements' \
+  'Run-plan protocol must define producer verification inputs'
 require_text "$protocol" \
-  '## Publication Protocol' \
-  'Checkpoint protocol must define publication ordering'
+  '## Transition Protocol' \
+  'Run-plan protocol must define transition ordering'
 require_text "$protocol" \
   '## Failure Protocol' \
   'Checkpoint protocol must define proof failure handling'
 require_text "$protocol" \
-  'Only the workflow head and its immutable workflow checkpoint chain authorize' \
-  'Checkpoint protocol must preserve one progression authority'
+  'Only the run-plan head and its hash-linked run-step chain determine' \
+  'Run-plan protocol must preserve one progression authority'
 require_text "$protocol" \
-  'This protocol invokes `open-checkpoint` and `commit-checkpoint`' \
-  'Checkpoint protocol must consume state-model transitions'
+  'This protocol invokes `open-run-step` and' \
+  'Run-plan protocol must consume state-model transitions'
 require_text "$protocol" \
   '`simulation-only direct Gerrit REST apply`' \
   'Checkpoint protocol must bind the simulation ACL realization'
@@ -310,6 +329,16 @@ reject_text "$protocol" \
   'activity=waiting' \
   'Checkpoint protocol must not define simulation waiting state'
 
+require_text "$operations" \
+  '# Simulation Operation Records' \
+  'Operation-record contract must be present'
+require_text "$operations" \
+  'It cannot supply' \
+  'Operation records must not satisfy product run steps'
+require_text "$operations" \
+  '`producer_record_sha256` for a run-step record.' \
+  'Operation records must not supply producer digests'
+
 require_text "$lifecycle" \
   '`simulation/docs/shared/lifecycle-state-model.md` owns exact simulation state' \
   'Lifecycle authority must delegate exact simulation state realization'
@@ -317,13 +346,13 @@ require_text "$lifecycle" \
   'checkpoint mapping;' \
   'Lifecycle authority must delegate the simulation checkpoint mapping'
 require_text "$lifecycle" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns acceptance and' \
-  'Lifecycle authority must delegate checkpoint acceptance'
+  '`simulation/docs/shared/run-plan-transition-protocol.md` owns producer-record' \
+  'Lifecycle authority must delegate run-plan transitions'
 reject_text "$lifecycle" \
   'restored-pending-clean' \
   'Product lifecycle authority must not define a simulation reset gate'
 require_text "$state_model" \
-  'RestoredPendingClean --> BaselineStoppedUnclaimed: clean' \
+  'RestoredPendingClean --> BaselineStopped: clean' \
   'Lifecycle state model must own the cleanup release transition'
 
 require_text "$vm_design" \
@@ -342,11 +371,11 @@ require_text "$vm_design" \
   '`simulation/docs/shared/lifecycle-state-model.md` owns simulation-set state' \
   'VM implementation design must delegate shared lifecycle state'
 require_text "$vm_design" \
-  'result and evidence acceptance plus workflow checkpoint publication.' \
-  'VM implementation design must delegate checkpoint acceptance'
+  'producer-record verification plus run-step commitment.' \
+  'VM implementation design must delegate run-plan transitions'
 require_text "$docker_design" \
-  'result and evidence acceptance plus workflow checkpoint publication.' \
-  'Docker implementation design must delegate checkpoint acceptance'
+  'producer-record verification plus run-step commitment.' \
+  'Docker implementation design must delegate run-plan transitions'
 require_text "$docker_design" \
   '`simulation/docs/shared/harness-design.md` owns' \
   'Docker implementation design must delegate common harness structure'
@@ -372,8 +401,8 @@ reject_text "$vm_design" \
   'BaselineRestored --> Running' \
   'VM implementation design must not permit start directly after restoration'
 require_text "$step13c" \
-  '## M5: Workflow-Ledger Cutover, Composite Completion, And Evidence Alignment' \
-  'Step 13c must schedule the executable workflow-ledger cutover'
+  '## M5: Run-Plan Ledger Cutover, Composite Completion, And Evidence Alignment' \
+  'Step 13c must schedule the executable run-plan-ledger cutover'
 require_text "$step13c" \
   'M1-M4 bound outputs, accepted Step 13a run planner, and Step 13b role tail' \
   'Step 13c run completion must depend on accepted upstream handoffs'

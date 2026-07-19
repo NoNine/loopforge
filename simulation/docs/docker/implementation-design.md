@@ -7,8 +7,8 @@ contract, while `simulation/docs/docker/docker-simulation.md` owns Docker
 syntax and realization deltas. `simulation/docs/shared/harness-design.md` owns
 the common harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns
-result and evidence acceptance plus workflow checkpoint publication.
+command guards. `simulation/docs/shared/run-plan-transition-protocol.md` owns
+producer-record verification plus run-step commitment.
 
 Docker realizes the shared module roles with Docker-local capability APIs.
 Compose, containers, bind data, loopback ports, baseline archives, transport
@@ -46,9 +46,9 @@ bind-runtime, and baseline paths defined by
 `config.sh` owns Docker defaults, env selection, selected identities, stable
 loopback endpoint values, and rendered Docker configuration. `inputs.sh` owns
 effective Docker input rendering and publication. Neither owns live container
-queries or workflow checkpoint progression.
+queries or run step progression.
 
-`state.sh` adapts shared run, active-run, and workflow checkpoint mechanics to
+`state.sh` adapts shared run, active-run, and run step mechanics to
 Docker generated state. It does not query live Docker resources or define role
 and integration postconditions.
 
@@ -81,10 +81,10 @@ container lifecycle, or integration setup.
 `integration.sh` owns the private invocation adapter and calls to
 `scripts/integration-setup.sh` for configuration, validation, and proof. The
 integration helper owns those postconditions; this module verifies them for
-workflow publication.
+run-plan commitment.
 
 `evidence.sh` owns the Docker evidence schema, Docker collection waivers, and
-role evidence normalization. It remains backend-local.
+producer-record normalization. It remains backend-local.
 
 `lifecycle.sh` maps the shared command-orchestration role onto Docker
 capabilities. It remains the only Docker command-shaped implementation layer.

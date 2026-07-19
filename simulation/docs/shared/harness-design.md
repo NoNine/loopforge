@@ -9,8 +9,8 @@ modules and mechanisms.
 
 The exact simulation state dimensions, command guards, and transitions are
 defined in `simulation/docs/shared/lifecycle-state-model.md`. Acceptance and
-publication of owning-layer results and evidence are defined in
-`simulation/docs/shared/checkpoint-acceptance-protocol.md`.
+publication of producer records are defined in
+`simulation/docs/shared/run-plan-transition-protocol.md`.
 Generated set, lock, and run storage is defined in
 `simulation/docs/shared/generated-state-layout.md`.
 
@@ -50,9 +50,9 @@ roles and document backend-only splits.
 | Module role | Shared responsibility |
 | --- | --- |
 | Backend entrypoint | Parse the public CLI, load shared and backend-local modules, and dispatch command-shaped functions. It remains thin and contains no lifecycle implementation bodies. |
-| Command orchestration | Own composite workflow sequencing, set-lock selection, command summaries, and delegation. It is the only command-shaped implementation layer. |
-| Simulation-set capabilities | Coordinate create, start, stop, restore, status, audit, clean, and destroy against ownership-validated backend resources without completing product checkpoints. |
-| Lifecycle capabilities | Prepare and stage artifacts, invoke role helpers, invoke the integration owner, and verify owning-layer results for orchestration acceptance. They do not redefine role or integration postconditions. |
+| Command orchestration | Own composite run-plan sequencing, set-lock selection, command summaries, and delegation. It is the only command-shaped implementation layer. |
+| Simulation-set capabilities | Coordinate create, start, stop, restore, status, audit, clean, and destroy against ownership-validated backend resources; publish simulation operation records without completing product checkpoints. |
+| Lifecycle capabilities | Prepare and stage artifacts, invoke role helpers, invoke the integration owner, and verify producer records before run-step commitment. They do not redefine role or integration postconditions. |
 | Target control plane | Provide current target access, bounded command execution, input and artifact transfer, and interactive operator SSH through backend-approved mechanisms. |
 | Backend infrastructure | Implement Compose/container or libvirt/VM resource primitives without calling lifecycle capabilities or command orchestration. |
 | Backend foundation | Realize canonical paths, backend configuration, shared-state adapters, and backend evidence metadata. State adapters do not query live backend resources. |
@@ -112,7 +112,7 @@ The common command shape is:
 
 | Public command scope | Conceptual command handler | Delegated responsibility |
 | --- | --- | --- |
-| Composite workflow | `<backend>_cmd_run` | Classify selected state, construct the allowed plan, and invoke command handlers from its first required step |
+| Composite run plan | `<backend>_cmd_run` | Classify selected state, construct the allowed plan, and invoke command handlers from its first required step |
 | Run initialization | `<backend>_cmd_preflight`, `<backend>_cmd_init_run` | Validate prerequisites and claim immutable run state |
 | Simulation-set lifecycle | `<backend>_cmd_create`, `<backend>_cmd_start`, `<backend>_cmd_stop`, `<backend>_cmd_restore_baseline`, `<backend>_cmd_clean`, `<backend>_cmd_destroy` | Delegate to ownership-checked backend set and baseline capabilities |
 | Observation and access | `<backend>_cmd_status`, `<backend>_cmd_audit_state`, `<backend>_cmd_ssh` | Delegate to read-only inspection or current target access capabilities |
@@ -161,25 +161,25 @@ and transitions. Command orchestration applies them as follows:
 
 | Selected state | Command plan |
 | --- | --- |
-| Fresh absent set | `preflight -> init-run -> create -> start -> status`, then workflow handlers from the first checkpoint |
-| Unclaimed retained baseline | `init-run -> create -> start -> status`, then workflow handlers from the first checkpoint; `create` verifies the retained set without mutation |
-| Exact resumable run, stopped | `start -> status`, then workflow handlers from the next required checkpoint |
-| Exact resumable run, running | `status`, then workflow handlers from the next required checkpoint |
-| Exact completed run, stopped | `start -> status`, then report `already-complete` without repeating a workflow checkpoint |
-| Exact completed run, running | `status`, then report `already-complete` without repeating a workflow checkpoint |
+| Fresh absent set | `preflight -> init-run -> create -> start -> status`, then product phase handlers from the first uncommitted run step |
+| Unclaimed retained baseline | `init-run -> start -> status`, then product phase handlers from the first uncommitted run step; `start` verifies the retained baseline |
+| Exact resumable run, stopped | `start -> status`, then product phase handlers from the next required run step |
+| Exact resumable run, running | `status`, then product phase handlers from the next required run step |
+| Exact completed run, stopped | `start -> status`, then report `already-complete` without repeating a run step |
+| Exact completed run, running | `status`, then report `already-complete` without repeating a run step |
 | Unsupported or conflicting state | Fail before invoking a mutating phase |
 
 `status` is an intentional user-facing observation in each executable plan. It
 shows the selected set after `start`, or confirms an already-running set before
-resume or completion output. It neither advances the workflow ledger nor owns
-a workflow prerequisite.
+resume or completion output. It neither advances the run-plan ledger nor owns
+a product prerequisite.
 
 `run` does not hold the set lock across the whole composite. Each selected
 command uses the same shared or exclusive lock mode as its direct invocation,
 so every successful command boundary is durable and independently resumable.
 The run handler stops at the first nonzero command result and does not invoke a
-later handler. Checkpoint families and role expansion follow the exact order in
-the lifecycle state model and checkpoint acceptance protocol.
+later handler. Product checkpoint families and role expansion follow the exact
+run-step order in the lifecycle state model and run-plan transition protocol.
 
 No run plan contains `stop`, `restore-baseline`, `clean`, `destroy`,
 `audit-state`, or a backend-only command such as VM `reboot`. Recovery remains
@@ -192,9 +192,10 @@ an explicit operator action outside the composite.
 | Identity | Canonical `HARNESS_SET_ID`, immutable `HARNESS_RUN_ID`, active-run binding, and namespace derivation rules | Compose project `loopforge-docker-<set-id>` or libvirt prefix `loopforge-vm-<set-id>` plus ownership-checked short names |
 | Generated paths | Set root, run root, retained review output, and mutable cleanup classes | Concrete Docker or VM subdirectories and ownership mechanisms |
 | Lifecycle | Command names, state meanings, guards, preservation rules, and failure behavior | Compose/container operations or libvirt/domain operations |
-| Persistence | Stable set lock, strict active-run and workflow records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
+| Persistence | Stable set lock, strict active-run and run-plan records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
 | Inputs | Source-template custody, first-start effective publication, immutable helper inputs, and ephemeral access separation | Stable endpoint rendering plus Docker published ports or VM DHCP/SSH readiness |
-| Checkpoint acceptance | Shared proof and publication protocol | Backend acceptance of owning-layer results under the selected set lock |
+| Product run-plan transition | Shared producer verification and run-step commitment protocol | Backend harness commits verified producer results under the selected set lock |
+| Resource operation records | Shared simulation operation-record contract | Backend lifecycle owner records resource transition outcomes and proof |
 | Evidence | Required identities, statuses, redaction, and bounded references | Backend resource metadata and collector mechanics |
 | Terminal output | Compact command summaries and shared set/run fields | Compose project, libvirt prefix, URLs, SSH rows, and other backend fields |
 
@@ -244,7 +245,7 @@ Both harnesses source the implemented foundation under `simulation/lib/`:
 | `roles.sh`, `artifacts.sh` | Shared role vocabulary and iteration plus artifact names, manifest parsing, baseline validation, and checksum verification. |
 | `env.sh` | Env loading, base-relative path resolution, env record updates, and atomic simulation input-bundle custody. |
 | `identity.sh`, `locking.sh` | Canonical set/run identity, resource namespace derivation, stable set locks, and lock-scoped execution. |
-| `state.sh` | Strict records, active-run and workflow binding, input publication, baseline/reset binding, checkpoint chains, and selected-state classification. |
+| `state.sh` | Strict records, active-run and run-plan binding, input publication, baseline/reset binding, run-step chains, and selected-state classification. |
 | `permissions.sh`, `logs.sh`, `evidence.sh` | Shared permission classes plus bounded-log and evidence-record path construction. |
 
 Backend modules consume these mechanics rather than defining alternate shared
@@ -271,8 +272,10 @@ failure semantics, and ownership boundary without backend conditionals.
 
 Reviewers of either harness should confirm that:
 
-- public behavior delegates state and workflow checkpoint publication to the
-  shared state model and acceptance protocol;
+- public behavior delegates state and run-step commitment to the shared state
+  model and transition protocol;
+- simulation resource commands retain operation records without using them as
+  product producer or run-step records;
 - module dependencies follow the architectural planes and do not call upward;
 - backend lifecycle operations do not complete Loopforge product checkpoints;
 - role and integration work uses the owning helpers and target-like interfaces;

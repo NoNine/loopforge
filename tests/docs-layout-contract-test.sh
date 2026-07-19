@@ -56,7 +56,8 @@ for path in \
   simulation/docs/README.md \
   simulation/docs/shared/simulation-model.md \
   simulation/docs/shared/generated-state-layout.md \
-  simulation/docs/shared/checkpoint-acceptance-protocol.md \
+  simulation/docs/shared/run-plan-transition-protocol.md \
+  simulation/docs/shared/operation-records.md \
   simulation/docs/shared/harness-design.md \
   simulation/docs/shared/lifecycle-state-model.md \
   simulation/docs/shared/terminal-output.md \
@@ -86,6 +87,7 @@ for path in \
   simulation/docs/checkpoint-coordination.md \
   simulation/docs/simulation-model.md \
   simulation/docs/checkpoint-acceptance-protocol.md \
+  simulation/docs/shared/checkpoint-acceptance-protocol.md \
   simulation/docs/harness-design.md \
   simulation/docs/lifecycle-state-model.md \
   simulation/docs/terminal-output.md \

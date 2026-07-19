@@ -8,7 +8,7 @@ folded VM modules.
 
 Shared guards, checkpoint opening/commit, predecessor order, and failure effects
 are intentionally omitted. `simulation/docs/shared/lifecycle-state-model.md` and
-`simulation/docs/shared/checkpoint-acceptance-protocol.md` wrap each applicable phase;
+`simulation/docs/shared/run-plan-transition-protocol.md` wrap each applicable phase;
 the diagrams show only VM-specific module flow.
 
 The diagrams use capability-shaped APIs below `lifecycle.sh`. Command-shaped
@@ -209,7 +209,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>ROLE: vm_roles_configure(role)
   ROLE->>SSH: vm_ssh_run(role target, helper configure-role)
-  ROLE-->>LC: role evidence summary
+  ROLE-->>LC: role producer record
   LC-->>CLI: compact configure-role summary
 ```
 
@@ -229,7 +229,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>ROLE: vm_roles_validate(role)
   ROLE->>SSH: vm_ssh_run(role target, helper validate-role)
-  ROLE-->>LC: role evidence summary
+  ROLE-->>LC: role producer record
   LC-->>CLI: compact validate-role summary
 ```
 
@@ -269,7 +269,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>INT: vm_integration_validate()
   INT->>SSH: vm_ssh_run(controller and targets, integration validation)
-  INT-->>LC: validation result and evidence
+  INT-->>LC: bound validation producer record
   LC-->>CLI: compact validate-integration summary
 ```
 
@@ -424,7 +424,7 @@ sequenceDiagram
 ## run
 
 `vm_cmd_run` applies the shared composite order through VM command entrypoints.
-It adds no VM-only workflow phase; `reboot` remains an explicit command outside
+It adds no VM-only run-plan phase; `reboot` remains an explicit command outside
 the composite.
 
 The shared harness design owns plan selection. This VM binding classifies the
@@ -469,5 +469,5 @@ sequenceDiagram
 The selected plan includes the intentional `status` observation described by
 the shared harness design. A stopped resumable or completed run therefore uses
 `start -> status`; an already-running completed run uses `status` before its
-`already-complete` summary. Neither path repeats a completed workflow
+`already-complete` summary. Neither path repeats a completed run-plan
 checkpoint.

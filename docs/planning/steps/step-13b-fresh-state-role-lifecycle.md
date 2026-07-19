@@ -1,7 +1,7 @@
 # Step 13b: Align Fresh-State Role Lifecycle
 
 Align the Gerrit, Jenkins controller, and Jenkins agent helpers, native and
-helper procedures, role evidence, and simulation role gates with the v1
+helper procedures, role producer records, and simulation role gates with the v1
 fresh-state lifecycle contract.
 
 This step follows accepted Step 13a reusable simulation lifecycle behavior and
@@ -9,7 +9,11 @@ repairs the role-local contract before shared integration consumes
 role-readiness handoffs. Implement the common state contract first; each role
 implementation then consumes that contract independently. Step 13c shared
 integration, Step 14 boundary checks, and Step 15 final acceptance depend on
-the accepted role handoffs.
+the completed role handoffs.
+
+This docs-first revision defines the intended producer-verification and
+run-step contract. Runtime migration to the new run-plan record names and
+transitions remains pending in M5.
 
 ## Authorities And Required Reading
 
@@ -25,14 +29,14 @@ Read these before implementation:
 - `docs/contracts/artifact-bundle-contract.md` and
   `docs/contracts/validation-and-evidence.md` for staged inputs and evidence
   binding.
-- `simulation/docs/shared/checkpoint-acceptance-protocol.md` for role-result acceptance
-  and harness publication.
+- `simulation/docs/shared/run-plan-transition-protocol.md` for role producer
+  verification and run-step commitment.
 - `docs/operations/native/review-guide.md` for the role-manual review profile.
 
 The authorities own product behavior. This step owns implementation sequence,
 milestone boundaries, focused verification, and acceptance criteria only. It
-defines the role completion postconditions consumed by the acceptance protocol;
-it does not define or publish the simulation workflow head.
+defines the role completion postconditions consumed by the transition protocol;
+it does not define or publish the simulation run-plan head.
 
 ## Public Lifecycle Contract
 
@@ -43,7 +47,7 @@ Apply the same state classification to all three role helpers:
 - Fully absent identity and application state is ready for initial setup.
 - A fully matching runtime group, account, and empty canonical product home may
   be adopted for initial setup.
-- An exact completion record bound to reviewed inputs, artifact digests,
+- An exact producer record bound to reviewed inputs, artifact digests,
   target identity, mode, selected run/state, and implementation revision
   returns `already-complete` without target mutation.
 - Partial, conflicting, changed, or unbound state fails clearly before
@@ -70,19 +74,19 @@ handoffs.
 | M2 | Gerrit role lifecycle | M1 shared semantics |
 | M3 | Jenkins controller role lifecycle | M1 shared semantics |
 | M4 | Jenkins agent role lifecycle | M1 shared semantics |
-| M5 | Role gates, workflow tail, evidence, and Docker/VM acceptance | M2-M4 role implementations and accepted Step 13a run foundation |
+| M5 | Role gates, run-plan tail, evidence, and Docker/VM milestone acceptance | M2-M4 role implementations and accepted Step 13a run foundation |
 
 ## Role Correlation And Consumers
 
-No role helper consumes another role helper's completion record. Correlation
+No role helper consumes another role helper's producer record. Correlation
 begins in the harness role tail and shared integration:
 
-| Producer | Independent result | First consumers |
+| Producer | Independent producer record | First consumers |
 | --- | --- | --- |
-| M2 Gerrit | Bound Gerrit role completion and observational readiness evidence | M5 role workflow checkpoint publication; Step 13c M1 ACL preflight and realization |
-| M3 Jenkins controller | Bound controller completion and observational readiness evidence | M5 role workflow checkpoint publication; Step 13c M2 SSH custody and M3 trigger/node setup |
-| M4 Jenkins agent | Bound agent completion and observational readiness evidence | M5 role workflow checkpoint publication; Step 13c M2 authorization and M3 storage/node setup |
-| M5 role tail | Workflow head through every accepted role checkpoint plus three role-readiness handoffs | Step 13c M1 integration preflight and Step 13c M5 composite continuation |
+| M2 Gerrit | Bound Gerrit role outcome and observational readiness proof | M5 role run step publication; Step 13c M1 ACL preflight and realization |
+| M3 Jenkins controller | Bound controller outcome and observational readiness proof | M5 role run step publication; Step 13c M2 SSH custody and M3 trigger/node setup |
+| M4 Jenkins agent | Bound agent outcome and observational readiness proof | M5 role run step publication; Step 13c M2 authorization and M3 storage/node setup |
+| M5 role tail | Run-plan head through every committed role run step plus three role-readiness handoffs | Step 13c M1 integration preflight and Step 13c M5 composite continuation |
 
 The fixed simulation checkpoint order still expands each checkpoint family as
 Gerrit, Jenkins controller, then Jenkins agent. That execution order does not
@@ -95,9 +99,9 @@ Implementation:
 - Define one shared state classifier or equivalent common contract used by the
   three helpers without merging role-owned setup logic.
 - Inspect account, group, canonical home, role-owned application paths,
-  configuration, service definitions, runtime data, and completion records
+  configuration, service definitions, runtime data, and producer records
   before mutation.
-- Define the completion binding schema for reviewed env values, staged
+- Define the producer-record binding schema for reviewed env values, staged
   artifact manifest and payload digests, target identity, verification mode,
   selected run/state identity, helper revision, and completed checkpoint.
 - Make `already-complete` a distinct successful no-op result and prove that it
@@ -134,7 +138,7 @@ Implementation:
 - Return `already-complete` without stopping, starting, or rewriting Gerrit
   when the exact role handoff is complete.
 - Keep Gerrit validation observational and update native/helper procedures and
-  role evidence with the implemented behavior.
+  role producer records with the implemented behavior.
 
 Focused tests:
 
@@ -163,7 +167,7 @@ Implementation:
 - Return `already-complete` without stopping, starting, or rewriting Jenkins
   when the exact role handoff is complete.
 - Keep controller validation observational and update native/helper procedures
-  and role evidence with the implemented behavior.
+  and role producer records with the implemented behavior.
 
 Focused tests:
 
@@ -193,7 +197,7 @@ Implementation:
 - Return `already-complete` without rewriting the SSH policy, reloading SSH,
   or changing the runtime filesystem when the exact handoff is complete.
 - Keep agent validation observational and update native/helper procedures and
-  role evidence with the implemented behavior.
+  role producer records with the implemented behavior.
 
 Focused tests:
 
@@ -208,7 +212,7 @@ Acceptance:
 - Fresh initial setup and exact no-op rerun produce an agent-readiness handoff
   bound to the same reviewed state.
 
-## M5: Role Gates, Workflow Tail, Evidence, And Runtime Acceptance
+## M5: Role Gates, Run-Plan Tail, Evidence, And Runtime Acceptance
 
 Implementation:
 
@@ -218,7 +222,8 @@ Implementation:
   family. Direct and composite invocation must use the same role command
   handlers and per-command lock modes; `run` must not call a role capability
   directly.
-- Publish accepted role results through the shared workflow ledger and remove
+- Verify role producer records and commit their run steps through the shared
+  run-plan ledger; remove
   harness-only role progression markers without dual old/new readers.
 - Record state classification, completion binding, `already-complete`, and
   blocked conflicts without storing secrets or manufacturing success.
@@ -233,7 +238,7 @@ Verification order:
    `git diff --check` after its milestone.
 2. Run role phases individually in Docker from a newly generated run ID, then
    use focused orchestration fixtures to prove fresh and resumed plan selection
-   through the role tail without accepting the integration tail.
+   through the role tail without committing the integration tail.
 3. Run role phases individually in VM simulation from a fresh
    `HARNESS_RUN_ID`; apply the same focused role-tail orchestration checks and,
    when needed, use a fresh `HARNESS_SET_ID`. Remote VM mutation requires
@@ -249,9 +254,9 @@ Acceptance:
   cleanup.
 - Exact role reruns are proven non-mutating, and changed bindings fail closed.
 - Both run planners resume at the exact next role checkpoint and select
-  integration preflight after the final accepted role result, without claiming
+  integration preflight after the final committed role run step, without claiming
   integration success.
-- The three accepted role-readiness handoffs are suitable inputs to Step 13c.
+- The three completed role-readiness handoffs are suitable inputs to Step 13c.
 
 ## State And Recovery Rules
 

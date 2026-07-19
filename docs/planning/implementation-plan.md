@@ -80,10 +80,12 @@ Step 13 is the active implementation area. Its detailed plan is
 `docs/planning/steps/step-13-vm-simulation-harness.md`; follow that file plus
 its named companion docs for VM harness implementation work. Step 13a first
 aligns reusable simulation lifecycle behavior and the backend-local `run`
-planning foundation. Step 13b attaches the three role checkpoint families, and
-Step 13c attaches the integration/evidence tail and owns full composite runtime
-acceptance. All three are required before Step 13 integration acceptance can
-close and before Steps 14 and 15 begin.
+planning foundation. Its M1-M4 implementation baseline feeds the shared and
+Docker cutover in M5, VM parity in M6, cross-backend recovery alignment in M7,
+run-plan selection in M8, and lifecycle handoff in M9. Step 13b attaches the
+three role checkpoint families, and Step 13c attaches the integration/evidence
+tail and owns full composite runtime acceptance. All three are required before
+Step 13 integration acceptance can close and before Steps 14 and 15 begin.
 
 ## Commit Strategy
 

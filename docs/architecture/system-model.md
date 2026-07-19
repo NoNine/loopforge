@@ -104,7 +104,7 @@ state.
 
 Actors invoke utilities. Utilities use accounts and service APIs to inspect or
 mutate environments. Services authenticate accounts and produce runtime state.
-Evidence records prove product checkpoint instances without exposing secrets.
+Producer records state checkpoint outcomes and proof without exposing secrets.
 
 ## Logical Environments
 
@@ -193,8 +193,8 @@ not actors.
 | --- | --- |
 | Role helpers: `scripts/gerrit-setup.sh`, `scripts/jenkins-controller-setup.sh`, `scripts/jenkins-agent-setup.sh` | Own role-local lifecycle work only: preflight, artifact preparation, target-local install/configuration, role-local validation, role-local evidence, and role-local helper-generated state. They should be self-contained where practical and manage their own role-local helper paths. |
 | Shared integration helper: `scripts/integration-setup.sh` | Owns cross-role work: Jenkins-held keys, Gerrit public-key registration, Gerrit integration ACL/label workflow, Jenkins credentials, Jenkins node registration, Jenkins-agent-hosted shared storage, Gerrit Trigger configuration, cross-role validation, trigger verification, integration evidence, and shared helper-generated state. |
-| Docker simulation utility: `simulation/docker/simulate.sh` | Realizes the logical environments in containers and orchestrates Docker workflow checkpoints. It prepares only simulation infrastructure it must provide and does not replace role helper lifecycle work. Docker APIs are simulation lifecycle internals, not the product communication surface. |
-| VM simulation utility: `simulation/vm/simulate.sh` | Realizes the logical environments in libvirt/KVM VMs and orchestrates VM workflow checkpoints when VM support exists. |
+| Docker simulation utility: `simulation/docker/simulate.sh` | Realizes the logical environments in containers and orchestrates Docker run steps. It prepares only simulation infrastructure it must provide and does not replace role helper lifecycle work. Docker APIs are simulation lifecycle internals, not the product communication surface. |
+| VM simulation utility: `simulation/vm/simulate.sh` | Realizes the logical environments in libvirt/KVM VMs and orchestrates VM run steps when VM support exists. |
 | Global evidence collector: `scripts/collect-evidence.sh` | Validates and aggregates generated evidence. It must not create runtime success or replace lifecycle proof. |
 
 Role helpers must not expose cross-role commands. Cross-role SSH, Gerrit
@@ -315,7 +315,7 @@ scope and execution context without becoming an acceptance decision.
   change, and Jenkins verification build references.
 - Helper-assisted `target-deployment` acceptance uses
   `docs/operations/setup/acceptance-checklist.md`. A human reviewer accepts or
-  blocks each checkpoint from helper completion state and evidence; the helper
+  blocks each checkpoint from the helper producer record; the helper
   artifacts do not authorize progression by themselves.
 
 Machine-generated records and the native checklist must never include private

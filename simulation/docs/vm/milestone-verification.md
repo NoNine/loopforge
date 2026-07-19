@@ -23,7 +23,7 @@ log shows failed commands.
   proven.
 - Backend readiness records such as `baseline-prereqs=ready`, `os-baseline`,
   and `ldap-service=ready` summarize completed checks and are not independent
-  proof or workflow progression.
+  proof or run-plan progression.
 - Bounded logs invalidate matching readiness markers when they contain
   relevant failure evidence such as apt errors, missing commands, missing
   service units, failed bind/search, checksum mismatch, ownership mismatch,
@@ -137,7 +137,7 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
   connect to its LDAP port, and bind/search the LDAP endpoint over the VM
   network.
 
-The M4 LDAP evidence record names the simulation endpoint, seeded accounts and
+The M4 LDAP producer record names the simulation endpoint, seeded accounts and
 groups, local and consumer bind/search results, bounded log, simulation-only
 label, and redaction status. It never contains the bind password.
 

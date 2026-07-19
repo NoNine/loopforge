@@ -676,8 +676,8 @@ Credential custody remains fixed:
 - The Jenkins controller owns the Jenkins-to-Gerrit private key.
 - The Jenkins controller owns the Jenkins-to-agent private key.
 - Gerrit and the Jenkins agent consume only matching public keys.
-- Do not create a separate controller evidence record. Record the required role
-  outcomes only in `docs/operations/native/acceptance-checklist.md`.
+- Do not create a machine-generated controller producer record. Record the
+  required role outcomes only in `docs/operations/native/acceptance-checklist.md`.
 - Do not place private keys, passwords, tokens, LDAP bind secrets, or
   secret-bearing configuration in the checklist or referenced native manuals.
 

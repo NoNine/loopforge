@@ -640,7 +640,8 @@ workflow_state_publish_activity() {
 write_immutable_checkpoint_record() {
   local file backend set_id run_id baseline source_inputs effective_inputs
   local checkpoint predecessor
-  local mutation_kind status evidence started completed evidence_sha
+  local mutation_kind status producer_record started completed
+  local producer_record_sha
   file="${1:?checkpoint record file required}"
   [ ! -e "$file" ] || die "Checkpoint record already exists: $file"
   backend="${2:?backend required}"
@@ -653,14 +654,14 @@ write_immutable_checkpoint_record() {
   predecessor="${9:?predecessor fingerprint required}"
   mutation_kind="${10:?mutation kind required}"
   status="${11:?checkpoint status required}"
-  evidence="${12:?evidence file required}"
+  producer_record="${12:?producer record file required}"
   started="${13:?start timestamp required}"
   completed="${14:?completion timestamp required}"
   simulation_checkpoint_name_is_known "$checkpoint" ||
     die "Unknown simulation checkpoint: $checkpoint"
   case "$mutation_kind" in mutating|observational) ;; *) die "Invalid checkpoint mutation kind" ;; esac
   case "$status" in complete|waiting) ;; *) die "Invalid checkpoint status" ;; esac
-  evidence_sha="$(sha256_file "$evidence")" || return $?
+  producer_record_sha="$(sha256_file "$producer_record")" || return $?
   atomic_write_record "$file" "${LF_MODE_REVIEW_FILE:-0640}" \
     "schema_version=1" \
     "backend=$backend" \
@@ -673,7 +674,7 @@ write_immutable_checkpoint_record() {
     "predecessor_sha256=$predecessor" \
     "mutation_kind=$mutation_kind" \
     "status=$status" \
-    "evidence_sha256=$evidence_sha" \
+    "producer_record_sha256=$producer_record_sha" \
     "started_at=$started" \
     "completed_at=$completed"
 }
@@ -682,7 +683,7 @@ checkpoint_record_is_strict() {
   strict_record_keys "${1:?checkpoint record required}" schema_version backend \
     set_id run_id baseline_fingerprint source_inputs_fingerprint \
     effective_inputs_fingerprint checkpoint predecessor_sha256 mutation_kind \
-    status evidence_sha256 started_at completed_at
+    status producer_record_sha256 started_at completed_at
 }
 
 simulation_checkpoint_name_is_known() {

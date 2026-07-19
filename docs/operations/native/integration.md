@@ -410,7 +410,7 @@ sudo -u jenkins-agent \
 Observe the shared group and GID, export path, controller mount source, export
 options, and runtime-account read/write result during this check. Record only
 the required shared-storage outcome in the acceptance checklist; do not create
-a separate evidence record. Do not store integration keys, scripts,
+a machine-generated producer record. Do not store integration keys, scripts,
 credentials, or helper status under shared storage.
 
 ## 7. Jenkins Agent Node Registration
@@ -481,7 +481,7 @@ prompt for or update host keys during validation.
 
 Stop and classify any failure at its owning boundary. Record only the required
 outcomes in `docs/operations/native/acceptance-checklist.md`; this checkpoint
-does not create a helper-style evidence record.
+does not create a helper-style producer record.
 
 ## 9. End-To-End Proof
 
@@ -539,7 +539,7 @@ expected `Verified +1` vote from the Jenkins Gerrit integration account.
 
 Record the final result in
 `docs/operations/native/acceptance-checklist.md`. Do not create a separate
-integration evidence record or copy routine service and command output. The
+integration producer record or copy routine service and command output. The
 checklist retains only the deployment/change ticket, disposable Gerrit
 verification change, and Jenkins verification build references.
 

@@ -10,11 +10,13 @@ modes.
 Shared internal architecture is defined in
 `simulation/docs/shared/harness-design.md`. Exact simulation state dimensions,
 command guards, and transitions are defined in
-`simulation/docs/shared/lifecycle-state-model.md`. Acceptance and publication of
-owning-layer results and evidence are defined in
-`simulation/docs/shared/checkpoint-acceptance-protocol.md`. Terminal presentation is
+`simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
+and run-step commitment are defined in
+`simulation/docs/shared/run-plan-transition-protocol.md`. Terminal presentation is
 defined in `simulation/docs/shared/terminal-output.md`. Host-side generated
-storage is defined in `simulation/docs/shared/generated-state-layout.md`.
+storage is defined in `simulation/docs/shared/generated-state-layout.md`, and
+simulation resource-lifecycle records are defined in
+`simulation/docs/shared/operation-records.md`.
 
 ## Lifecycle Documentation Boundary
 
@@ -22,10 +24,11 @@ Shared lifecycle contracts do not live in backend documents:
 
 | Document | Lifecycle responsibility |
 | --- | --- |
-| `simulation/docs/shared/simulation-model.md` | Shared public command semantics and operator workflow |
+| `simulation/docs/shared/simulation-model.md` | Shared public command semantics and operator run sequence |
 | `simulation/docs/shared/generated-state-layout.md` | Host-side generated roots, path custody, sensitivity, and cleanup classes |
-| `simulation/docs/shared/lifecycle-state-model.md` | Exact state, workflow checkpoint order, guards, transitions, and recovery rights |
-| `simulation/docs/shared/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus workflow checkpoint publication |
+| `simulation/docs/shared/lifecycle-state-model.md` | Exact state, run step order, guards, transitions, and recovery rights |
+| `simulation/docs/shared/run-plan-transition-protocol.md` | Producer-record verification and run-step commitment |
+| `simulation/docs/shared/operation-records.md` | Resource-lifecycle operation-record content and ownership |
 | `simulation/docs/shared/harness-design.md` | Shared architectural and dependency boundaries |
 | `simulation/docs/shared/terminal-output.md` | Shared terminal presentation conventions |
 | `simulation/docs/docker/docker-simulation.md` | Accepted Docker syntax, resource mechanisms, transport, and cleanup tools |
@@ -68,12 +71,12 @@ concrete backend mechanism.
 | Run | One immutable setup and validation attempt selected by `HARNESS_RUN_ID`. |
 | Active run | The run referenced by the simulation set's non-secret `active-run.env` pointer. |
 | Set root | Backend-local generated storage for reusable resources, durable runtime, baseline metadata, and the active-run pointer. |
-| Run root | Backend-local generated storage for one run's inputs, checkpoints, evidence, logs, and exported artifacts. |
-| Workflow state | The selected run's mutable checkpoint head in `workflow-state.env`; it cannot claim a set without a matching active-run pointer. |
+| Run root | Backend-local generated storage for one run's inputs, run steps, evidence, logs, and exported artifacts. |
+| Run-plan state | The selected run's mutable run-step head in `run-plan-state.env`; it cannot claim a set without a matching active-run pointer. |
 | Source inputs | Actor-selected simulation env templates and supported overrides snapshotted by `init-run`. |
 | Effective inputs | Stable helper env files rendered and atomically published by the first successful `start`. |
 | Live target access | Backend-assigned transport addresses and verified SSH access refreshed by every `start`; not persistent input authority. |
-| Exact bound | Durable state whose ownership, baseline, source and effective inputs, and completed checkpoint chain all agree with no open target mutation. |
+| Exact bound | Durable state whose ownership, baseline, source and effective inputs, and committed run-step chain all agree with no open target mutation. |
 | Durable runtime | State preserved by `stop` and reset only by `restore-baseline`. |
 | Baseline | The set-owned clean pre-setup state used by `restore-baseline`. |
 
@@ -197,6 +200,13 @@ dependencies. Application artifacts are prepared only in the bundle factory,
 then staged to Gerrit, Jenkins controller, and Jenkins agent target/service
 environments and verified by manifest and checksum before mutation.
 
+Simulation waives product Input review or source selection and OS dependency
+provisioning checkpoints. `init-run` records selected simulation source
+templates as an operation, and initial `create` records simulation-owned OS
+dependency preparation with resource and baseline creation. Neither operation
+enters the product run plan, which begins at role-qualified Artifact
+preparation after `start` publishes effective inputs.
+
 Public internet fallback for target-host Ubuntu/OS dependency installation is
 simulation-only and must be labeled `simulation-only` in docs, logs, and
 verification summaries. Target hosts must not download Gerrit/Jenkins
@@ -220,7 +230,7 @@ deltas, but they do not redefine shared generated storage.
 
 Simulation cleanup is manual and conservative. Cleanup commands remove
 mutable generated runtime state for the selected run while preserving
-the immutable run marker, checkpoint records, exported artifact archives,
+the immutable run marker, run-step records, exported artifact archives,
 evidence, and logs. Lifecycle commands that stop, reset, or destroy backend
 resources are explicit and layer-owned; they must not silently discard review
 evidence.
@@ -321,10 +331,10 @@ mapping and composite `run` orchestration design.
 
 | Command | Shared meaning |
 | --- | --- |
-| `run` | State-aware normal workflow composite. It initializes fresh state, resumes the exact active run at its next phase, or returns `already-complete`; it leaves the set running and never runs cleanup, restoration, destruction, or audit commands. |
+| `run` | State-aware normal run-plan composite. It initializes fresh state, resumes the exact active run at its next phase, or returns `already-complete`; it leaves the set running and never runs cleanup, restoration, destruction, or audit commands. |
 | `preflight` | Read-only prerequisite check before service mutation. |
-| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accept only an unused explicit value, snapshot selected source templates, write the source-bound run marker, and claim the selected set's active-run pointer with effective inputs pending. It rejects an active set or existing run root. |
-| `create` | Create an absent claimed set and clean baseline, or verify an exact stopped existing set with non-mutating `state=existing`; running, unclaimed, restored, partial, drifted, or mismatched state blocks. |
+| `init-run` | Resolve `HARNESS_SET_ID` to `default` when omitted, generate a collision-resistant immutable `HARNESS_RUN_ID` when omitted or accept only an unused explicit value, snapshot selected source templates, write the source-bound run marker and operation record, and claim the selected set's active-run pointer with effective inputs pending and an empty run-plan head. It rejects an active set or existing run root. |
+| `create` | Create an absent claimed set, prepare simulation-owned OS dependencies, capture the clean baseline, and write the operation record; or verify an exact stopped existing set when invoked directly. Running, unclaimed, restored, partial, drifted, or mismatched state blocks. A retained-baseline run does not require this command. |
 | `start` | Start the selected simulation set without setup mutation, verify owned target access, refresh ephemeral transport values, and atomically publish stable effective inputs on the first successful start. Repeated start verifies rather than rewrites effective inputs; an exact running set returns `state=already-running`, and other state blocks. |
 | `status` | Read-only inspection of coherent absent, unclaimed, stopped, or running state; contradictory state reports `conflicting` and exits nonzero. |
 | `ssh` | Operator-account target OS control-plane SSH, not Gerrit service SSH. |
@@ -338,7 +348,7 @@ mapping and composite `run` orchestration design.
 | `audit-state` | Explicit read-only generated-state and simulation-set consistency inspection. |
 | `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state, source/effective input custody, and review output; live target access becomes unavailable. An ownership-valid stopped set returns `state=already-stopped`. |
 | `restore-baseline` | Require a stopped simulation set and reset its durable runtime to the selected clean pre-setup baseline without cleaning generated state. |
-| `clean` | After matching baseline restoration, clear mutable workflow/run state and remove the selected set's active-run pointer last while preserving the immutable run marker, checkpoint records, artifacts, evidence, logs, and baseline resources. |
+| `clean` | After matching baseline restoration, clear mutable run-plan/run state and remove the selected set's active-run pointer last while preserving the immutable run marker, run-step records, operation records, artifacts, producer records, logs, and baseline resources. |
 | `destroy` | Ownership-validated backend resource deletion; a fully absent unclaimed set returns `state=already-absent`, while missing resources contradicted by metadata block. |
 
 Layers may add simulation-specific lifecycle commands, such as VM `reboot`,
@@ -357,14 +367,14 @@ path.
 Set mutations use the stable nonblocking lock at
 `generated/simulation/<backend>/locks/<set-id>.lock`; contention reports
 `set busy`. The set-scoped `active-run.env` owns claim and reset gating. The
-run-scoped `workflow-state.env` owns only workflow checkpoint activity and
+run-scoped `run-plan-state.env` owns only run-step activity and
 progression.
 Strict readers cross-check both records with the immutable run marker,
 baseline, source/effective-input fingerprints, backend ownership, and
-hash-linked workflow checkpoint records. Details and exact transitions are
-authoritative in `simulation/docs/shared/lifecycle-state-model.md`. Result and evidence acceptance
+hash-linked run-step records. Details and exact transitions are
+authoritative in `simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
 plus publication order are defined in
-`simulation/docs/shared/checkpoint-acceptance-protocol.md`.
+`simulation/docs/shared/run-plan-transition-protocol.md`.
 
 ## Terminal Output Convention
 
@@ -449,7 +459,7 @@ and VM documents add only the backend resource probes used to apply that model.
 
 `docs/contracts/lifecycle-contract.md` defines product checkpoint semantics and
 mutation boundaries. The state model maps those product checkpoint instances
-into the simulation workflow, and the acceptance protocol defines how owning
-results enter it.
+into the simulation run plan, and the transition protocol defines how owning
+producer records enter it.
 Backend orchestration invokes the same role and integration owners through its
 documented transport; it does not create another lifecycle contract.

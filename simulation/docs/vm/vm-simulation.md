@@ -18,9 +18,9 @@ a second VM simulation CLI.
 
 Shared architecture and exact state behavior are documented in
 `simulation/docs/shared/harness-design.md` and
-`simulation/docs/shared/lifecycle-state-model.md`. Cross-layer result acceptance and
-workflow checkpoint publication is documented in
-`simulation/docs/shared/checkpoint-acceptance-protocol.md`. VM module structure and
+`simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
+and run-step commitment are documented in
+`simulation/docs/shared/run-plan-transition-protocol.md`. VM module structure and
 implementation contracts are documented in
 `simulation/docs/vm/implementation-design.md`. Milestone verification gates
 are documented in `simulation/docs/vm/milestone-verification.md`. Shared
@@ -133,7 +133,7 @@ baked image and enabling only role-owned services on each VM.
 contracts to VM milestones. Its VM-specific gates cover real libvirt resources,
 guest SSH, dependency-prepared images, LDAP runtime proof, target-side artifact
 transfer, snapshots, and guest service recovery after reboot. It does not define
-shared workflow checkpoint success or progression.
+shared run step success or progression.
 
 ## Command Reference
 
@@ -416,5 +416,5 @@ host-level cleanup procedure.
 ## Integration Boundary
 
 VM invokes the shared integration owner over target OS SSH through its private
-transport adapter. Integration product checkpoint semantics, workflow
-predecessors, evidence acceptance, and failure behavior remain shared.
+transport adapter. Integration product checkpoint semantics, run-step
+predecessors, producer verification, and failure behavior remain shared.

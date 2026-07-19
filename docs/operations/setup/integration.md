@@ -318,7 +318,7 @@ endpoints, disposable artifact IDs, observed checks, bounded log references,
 redaction status, and final status. Partial collection must not promote a
 blocked or incomplete checkpoint to pass.
 
-These are producer evidence outcomes, not human acceptance decisions. For
+These are producer-record outcomes, not human acceptance decisions. For
 helper-assisted `target-deployment`, record the corresponding decision in
 `docs/operations/setup/acceptance-checklist.md`. For Docker and VM simulation,
 the harness verifies the record before committing the corresponding workflow

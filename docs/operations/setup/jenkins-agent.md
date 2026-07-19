@@ -93,7 +93,7 @@ Produced outputs:
   accepted for creation by `install`; a fully matching identity with an empty
   product home is accepted for adoption. Other existing application state,
   partial state, or conflicting state blocks unless an exact input-bound
-  completion record returns non-mutating `already-complete`.
+  producer record returns non-mutating `already-complete`.
 
 Side effects:
 
@@ -375,4 +375,4 @@ The resulting evidence status is a producer outcome. In helper-assisted
 `target-deployment`, a human must accept Jenkins agent role-local setup before
 role-local validation and accept validation before integration in
 `setup/acceptance-checklist.md`. In simulation, the harness accepts each
-corresponding workflow checkpoint only after validating the record.
+corresponding run step only after validating the record.

@@ -179,29 +179,26 @@ require_doc_text docs/baselines/package-requirements.md \
   'Package requirements must keep role helpers out of OS dependency installation'
 
 require_doc_text docs/contracts/validation-and-evidence.md \
-  'Docker and VM harness product-checkpoint evidence must identify the immutable' \
-  'Evidence contract must require immutable run identity'
+  'an opaque execution-binding fingerprint supplied by the mode coordinator.' \
+  'Evidence contract must require opaque execution binding'
 require_doc_text docs/contracts/validation-and-evidence.md \
-  'Docker and VM harness product-checkpoint evidence must identify the selected' \
-  'Evidence contract must require shared simulation-set identity'
-require_doc_text docs/contracts/validation-and-evidence.md \
-  'baseline snapshot' \
-  'Evidence contract must require VM baseline snapshot evidence'
-require_doc_text docs/contracts/validation-and-evidence.md \
-  '`reboot` evidence' \
-  'Evidence contract must require VM reboot evidence'
+  'Workflow predecessors, run-plan' \
+  'Evidence contract must keep orchestration identity out of producer records'
+require_doc_text simulation/docs/shared/operation-records.md \
+  'Safe resource, baseline, and input fingerprints' \
+  'Operation-record contract must bind baseline operations'
+require_doc_text simulation/docs/shared/operation-records.md \
+  '| `reboot` | `reboot` operation record |' \
+  'Operation-record contract must classify reboot as simulation lifecycle'
 require_doc_text docs/contracts/validation-and-evidence.md \
   'agent VM hosts the NFS-backed `/data/jenkins-shared` export' \
   'Evidence contract must require VM shared storage proof'
-require_doc_text docs/contracts/validation-and-evidence.md \
-  'VM LDAP evidence must record LDAP service readiness' \
-  'Evidence contract must require VM LDAP service readiness evidence'
-require_doc_text docs/contracts/validation-and-evidence.md \
-  'seeded account/group' \
-  'Evidence contract must require VM LDAP seeded account and group evidence'
-require_doc_text docs/contracts/validation-and-evidence.md \
-  'bind/search proof' \
-  'Evidence contract must require VM LDAP bind/search evidence'
+require_doc_text simulation/docs/vm/vm-simulation.md \
+  'The harness must prove LDAP' \
+  'VM contract must require LDAP service readiness proof'
+require_doc_text simulation/docs/vm/vm-simulation.md \
+  'service readiness, seeded entry presence, and LDAP bind/search behavior' \
+  'VM contract must require seeded LDAP entries and bind/search proof'
 require_doc_text docs/contracts/validation-and-evidence.md \
   'must not imply `target-deployment` acceptance' \
   'Evidence contract must keep VM evidence separate from target deployment'

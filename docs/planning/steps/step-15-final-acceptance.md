@@ -8,7 +8,7 @@ Run final acceptance in this order:
 4. Docker full verification through `simulate.sh`.
 5. Global evidence aggregation after the completed simulation proof phases; the
    collector result is accepted only through the final simulation
-   `evidence-audit` workflow checkpoint.
+   `evidence-audit` run step.
 6. Shared simulation library checks from Step 12.
 7. Reusable simulation lifecycle checks from Step 13a.
 8. Fresh-state role lifecycle checks from Step 13b.
@@ -75,7 +75,7 @@ change-management system, not in the repository.
 
 Helper-assisted `target-deployment` is also human-accepted. Retain the
 completed setup acceptance checklist in the approved change-management system;
-helper completion records, evidence packages, and summaries support the review
+helper producer records, evidence packages, and summaries support the review
 but do not authorize later target work by themselves.
 
 If any required checklist item fails or requires an undocumented operation,

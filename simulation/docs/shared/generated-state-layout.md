@@ -36,7 +36,7 @@ generated/simulation/<backend>/<run-id>/
 The lock is stable and remains outside the deletable set root. The set root
 owns reusable resources, durable runtime, baseline metadata, and at most one
 active-run pointer. The run root owns one immutable attempt's inputs,
-workflow checkpoint state, evidence, logs, and exported artifacts. Lifecycle
+run step state, evidence, logs, and exported artifacts. Lifecycle
 commands do not support arbitrary generated roots in v1.
 
 The local account running the harness owns ordinary host-side generated paths
@@ -58,13 +58,13 @@ Paths without a `sets/<set-id>/` prefix are relative to the run root.
 | `host/source-inputs/` | Host-dominated | Private actor-selected templates and supported overrides copied by `init-run`; mode `0700` directory with `0600` files | Mutable run custody removed by `clean` |
 | `host/runtime-inputs/` | Host-dominated | Private effective helper inputs atomically published by the first successful `start`; mode `0700` directory with `0600` files | Mutable run custody removed by `clean` |
 | `host/state/effective-inputs.env` | Host-dominated | Binding from source and effective fingerprints to backend, set, run, and run marker | Mutable run custody removed by `clean` |
-| `host/state/workflow-state.env` | Host-dominated | Strict checkpoint activity and current hash-chain head | Mutable run custody removed by `clean` |
-| `host/state/checkpoints/` | Host-dominated | Hash-linked immutable checkpoint completion records | Retained review output |
-| `host/evidence/harness/` | Host-dominated | Redacted, review-sensitive harness evidence | Retained review output |
+| `host/state/run-plan-state.env` | Host-dominated | Strict run-step activity and current run-plan hash-chain head | Mutable run custody removed by `clean` |
+| `host/state/run-steps/` | Host-dominated | Hash-linked immutable run-step records | Retained review output |
+| `host/evidence/harness/operations/` | Host-dominated | Redacted, review-sensitive simulation operation records | Retained review output |
 | `host/logs/harness/` | Host-dominated | Review-sensitive bounded harness logs | Retained review output |
-| `host/evidence/integration/` | Host-dominated | Redacted, review-sensitive host-orchestrated integration evidence | Retained review output |
+| `host/evidence/integration/` | Host-dominated | Redacted, review-sensitive host-orchestrated integration producer records | Retained review output |
 | `host/logs/integration/` | Host-dominated | Review-sensitive bounded integration logs | Retained review output |
-| `target/evidence/<role>/` | Target-dominated | Retained copy corresponding to `/var/lib/loopforge/evidence` on one target | Retained review output |
+| `target/evidence/<role>/` | Target-dominated | Retained producer-record copy corresponding to `/var/lib/loopforge/evidence` on one target | Retained review output |
 | `target/logs/<role>/` | Target-dominated | Retained copy corresponding to `/var/log/loopforge` on one target | Retained review output |
 
 The immutable backend run marker at the run root and exported artifact review
@@ -91,9 +91,10 @@ retained state or evidence.
 
 `stop` preserves the complete set and run roots. `restore-baseline` changes
 durable backend state but does not clean generated run state. After matching
-restoration, `clean` removes mutable inputs, rendered state, the workflow head,
+restoration, `clean` removes mutable inputs, rendered state, the run-plan head,
 and backend-specific run scratch while preserving the immutable run marker,
-checkpoint records, exported artifact archives, evidence, and bounded logs.
+run-step records, operation records, exported artifact archives, producer
+records, and bounded logs.
 It removes `active-run.env` last. `destroy` removes the ownership-validated set
 root and backend resources without deleting retained run roots.
 

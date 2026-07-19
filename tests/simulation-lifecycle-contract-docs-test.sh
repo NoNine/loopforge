@@ -11,7 +11,8 @@ evidence="$repo_root/docs/contracts/validation-and-evidence.md"
 endpoint="$repo_root/docs/contracts/endpoint-identity.md"
 shared="$repo_root/simulation/docs/shared/simulation-model.md"
 state_model="$repo_root/simulation/docs/shared/lifecycle-state-model.md"
-protocol="$repo_root/simulation/docs/shared/checkpoint-acceptance-protocol.md"
+protocol="$repo_root/simulation/docs/shared/run-plan-transition-protocol.md"
+operations="$repo_root/simulation/docs/shared/operation-records.md"
 docker="$repo_root/simulation/docs/docker/docker-simulation.md"
 vm="$repo_root/simulation/docs/vm/vm-simulation.md"
 plan="$repo_root/docs/planning/implementation-plan.md"
@@ -85,14 +86,26 @@ require_text "$lifecycle" \
   'A **product checkpoint family** is one semantic milestone category' \
   'Lifecycle contract must define product checkpoint families'
 require_text "$lifecycle" \
-  'A **workflow checkpoint record** is the simulation ledger' \
-  'Lifecycle contract must distinguish simulation workflow records'
+  'A **run-step record** is the simulation harness' \
+  'Lifecycle contract must distinguish simulation run-step records'
+require_text "$lifecycle" \
+  'A **producer record** is an owning utility' \
+  'Lifecycle contract must define one producer-owned outcome and proof record'
 require_text "$lifecycle" \
   '## Acceptance And Authorization' \
-  'Lifecycle contract must define the four acceptance layers'
+  'Lifecycle contract must define mode coordination'
 require_text "$lifecycle" \
-  'Simulation uses an automated acceptance authority' \
-  'Lifecycle contract must define harness/operator correspondence'
+  'Simulation run-plan coordination preserves product checkpoint order' \
+  'Lifecycle contract must separate simulation coordination from acceptance'
+require_text "$lifecycle" \
+  'Docker and VM simulation waive `Input review or source selection` and `OS' \
+  'Lifecycle contract must define the two simulation checkpoint waivers'
+require_text "$lifecycle" \
+  'Neither operation writes a product producer record or commits a run step.' \
+  'Waived simulation prerequisites must stay outside the product run plan'
+reject_text "$lifecycle" \
+  'automated simulation acceptance' \
+  'Lifecycle contract must reserve acceptance for target deployment'
 require_text "$lifecycle" \
   '## Product Checkpoint Families' \
   'Lifecycle contract must own the canonical checkpoint family vocabulary'
@@ -130,6 +143,15 @@ require_text "$shared" 'simulation-only direct Gerrit REST apply' \
   'Shared simulation contract must define direct ACL apply'
 require_text "$protocol" 'simulation-only direct Gerrit REST apply' \
   'Checkpoint protocol must bind direct ACL apply evidence'
+require_text "$protocol" \
+  '| Producer record | Product checkpoint owner |' \
+  'Checkpoint protocol must define producer-record ownership'
+reject_text "$protocol" \
+  '| Evidence record |' \
+  'Checkpoint protocol must not split evidence into a second producer artifact'
+require_text "$state_model" \
+  '`producer_record_sha256`' \
+  'Run-step records must hash the verified producer record'
 for file in "$docker" "$vm"; do
   reject_text "$file" 'simulation-only direct Gerrit REST apply' \
     "Backend docs must not redefine direct ACL apply: $file"
@@ -138,14 +160,11 @@ require_text "$state_model" \
   'Backend resource namespaces are derived from the backend and set ID and never' \
   'Lifecycle state model must keep resource namespaces independent of run ID'
 require_text "$state_model" \
-  '## Product-To-Simulation Checkpoint Mapping' \
+  '## Product Run-Plan State Machine' \
   'Lifecycle state model must map product checkpoints to simulation state'
 require_text "$state_model" \
-  '| Product checkpoint family | Workflow checkpoint identifier |' \
-  'Lifecycle state model must distinguish families from workflow identifiers'
-require_text "$state_model" \
-  'These operations are workflow prerequisites, not workflow' \
-  'Lifecycle state model must keep run and baseline readiness outside the chain'
+  '| Product checkpoint family | Run step identifier |' \
+  'Lifecycle state model must distinguish families from run-step identifiers'
 require_text "$state_model" \
   'commands never advance this chain.' \
   'Lifecycle state model must separate backend lifecycle from workflow progress'
@@ -155,6 +174,13 @@ require_text "$state_model" \
 require_text "$state_model" \
   '`jenkins-controller`, then `jenkins-agent`.' \
   'Lifecycle state model must preserve the final role expansion order'
+for early_step in \
+  prepare-artifacts-gerrit \
+  prepare-artifacts-jenkins-controller \
+  prepare-artifacts-jenkins-agent; do
+  require_text "$state_model" "$early_step" \
+    "Lifecycle state model is missing early run step: $early_step"
+done
 require_text "$state_model" \
   'A family is fully expanded before' \
   'Lifecycle state model must define checkpoint family ordering'
@@ -163,7 +189,7 @@ require_text "$state_model" \
   'Lifecycle state model must define independent family expansion'
 
 actual_checkpoint_families="$(awk -F'`' '
-  /^## Product-To-Simulation Checkpoint Mapping$/ { mapping = 1; next }
+  /^## Product Run-Plan State Machine$/ { mapping = 1; next }
   mapping && /^## / { exit }
   mapping && /^\|/ && NF >= 5 { print $4; next }
   mapping && /^\|/ && NF >= 3 { print $2 }
@@ -216,8 +242,14 @@ require_occurrences "$layout" \
   '| `host/source-inputs/` |' 1 \
   'Generated-state layout must not duplicate the shared source-input row'
 require_occurrences "$layout" \
-  '| `host/state/workflow-state.env` |' 1 \
-  'Generated-state layout must not duplicate the shared workflow-state row'
+  '| `host/state/run-plan-state.env` |' 1 \
+  'Generated-state layout must not duplicate the shared run-plan-state row'
+require_occurrences "$layout" \
+  '| `host/state/run-steps/` |' 1 \
+  'Generated-state layout must locate immutable run-step records once'
+require_occurrences "$layout" \
+  '| `host/evidence/harness/operations/` |' 1 \
+  'Generated-state layout must locate harness operation records once'
 require_occurrences "$layout" \
   '| `host/evidence/integration/` |' 1 \
   'Generated-state layout must not duplicate shared integration evidence'
@@ -231,16 +263,16 @@ for simulation_heading in \
     "Target directory contract must not own simulation layout: $simulation_heading"
 done
 require_text "$evidence" \
-  'Docker and VM harness product-checkpoint evidence must identify the immutable' \
-  'Evidence contract must bind checkpoint evidence to immutable run ID'
+  'an opaque execution-binding fingerprint supplied by the mode coordinator.' \
+  'Evidence contract must bind producer records without simulation internals'
 require_text "$evidence" \
-  'Docker and VM harness product-checkpoint evidence must identify the selected' \
-  'Evidence contract must bind checkpoints to shared simulation-set identity'
+  'Workflow predecessors, run-plan' \
+  'Product producer records must exclude orchestration state'
 require_text "$evidence" \
-  'simulation source and effective input fingerprints.' \
-  'Evidence contract must bind both simulation input layers'
+  'One record carries both the producer' \
+  'Evidence contract must unify producer outcome and supporting proof'
 require_text "$evidence" \
-  '## Product Checkpoint Evidence' \
+  '## Product Checkpoint Producer Records' \
   'Evidence contract must apply the canonical product checkpoint vocabulary'
 require_text "$evidence" \
   'Do not create evidence-only checkpoint names:' \
@@ -282,8 +314,8 @@ require_text "$state_model" \
   'The set-scoped `active-run.env` is the authoritative ownership and reset-gate' \
   'Lifecycle state model must define active-run pointer ownership'
 require_text "$state_model" \
-  'The run-scoped `workflow-state.env` is authoritative only for progression' \
-  'Lifecycle state model must keep workflow state run-scoped'
+  'The run-scoped `run-plan-state.env` is authoritative only for progression' \
+  'Lifecycle state model must keep run-plan state run-scoped'
 require_text "$state_model" \
   'input_state=pending' \
   'Lifecycle state model must represent pending effective inputs'
@@ -294,19 +326,19 @@ require_text "$state_model" \
   'A repeated `start` verifies' \
   'Lifecycle state model must forbid stable input rewrites on restart'
 require_text "$state_model" \
-  'Unknown, duplicate, missing, malformed, or' \
+  'Unknown, duplicate,' \
   'Lifecycle records must use strict fail-closed parsing'
 require_text "$state_model" \
   'before pointer publication consumes the run ID but does not claim the set.' \
   'Initialization must publish the active pointer last'
 require_text "$state_model" \
-  'the immutable run marker, workflow checkpoint records, evidence, artifacts, and logs,' \
-  'Clean must retain immutable workflow evidence'
+  'the immutable run marker, run-step records, evidence, artifacts, and logs,' \
+  'Clean must retain immutable run-step evidence'
 require_text "$state_model" \
   'A retry may find any known mutable cleanup target' \
   'Interrupted cleanup must be explicitly retryable'
 require_text "$state_model" \
-  'returns `state=existing` without mutation' \
+  'Creates or verifies resources, prepares or verifies simulation OS dependencies' \
   'Create must verify an exact existing set without mutation'
 require_text "$state_model" \
   'reports `mode=resume`' \
@@ -321,29 +353,47 @@ require_text "$state_model" \
   '`state=already-absent`' \
   'Destroy must define idempotent already-absent success'
 require_text "$protocol" \
-  '| Evidence audit | Collector result that validates, but does not create,' \
-  'Checkpoint protocol must keep aggregation separate from runtime truth'
+  '| Evidence audit | Collector producer record that validates, but does not create,' \
+  'Run-plan protocol must keep aggregation separate from runtime truth'
 require_text "$protocol" \
   '## Final Evidence Audit' \
-  'Checkpoint protocol must define final collector timing'
+  'Run-plan protocol must define final collector timing'
 require_text "$protocol" \
   'An operator may run the collector earlier for partial diagnosis' \
-  'Checkpoint protocol must distinguish diagnostic collection from acceptance'
+  'Run-plan protocol must distinguish diagnostic collection from completion'
 require_text "$protocol" \
-  'Their owning utilities still produce completion state and evidence' \
-  'Checkpoint protocol must preserve target-deployment utility ownership'
+  'Their product owners may still write producer records' \
+  'Run-plan protocol must preserve target-deployment product ownership'
+require_text "$protocol" \
+  'Simulation does not create producer or run-step records for Input review or' \
+  'Waived simulation prerequisites must not create product records'
+require_text "$protocol" \
+  'without modifying the old run-plan chain.' \
+  'Restore must preserve the old run-plan chain'
+require_text "$protocol" \
+  'Artifact preparation without another `create`.' \
+  'Retained-baseline reuse must not require create'
+require_text "$operations" \
+  '`producer_record_sha256` for a run-step record.' \
+  'Operation records must not supply producer digests'
+require_text "$operations" \
+  'simulation-owned OS dependency preparation and proof under the simulation' \
+  'Create operation records must own waived OS dependency proof'
+require_text "$operations" \
+  '| `restore-baseline` | `restore-baseline` operation record' \
+  'Restore must create a simulation operation record'
 require_text "$evidence" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` defines how producer-owned' \
-  'Evidence authority must delegate checkpoint acceptance'
+  '`simulation/docs/shared/run-plan-transition-protocol.md`' \
+  'Evidence authority must delegate run-plan transitions'
 require_text "$evidence" \
   'The global collector runs as the final Evidence audit' \
   'Evidence authority must define final global collector timing'
 require_text "$evidence" \
-  'evidence counts alone never establish' \
-  'Evidence summaries must not claim checkpoint acceptance'
+  'evidence counts alone never' \
+  'Evidence summaries must not claim lifecycle progression'
 require_text "$step" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` for accepting the' \
-  'Step 13a must read checkpoint acceptance protocol'
+  '`simulation/docs/shared/run-plan-transition-protocol.md` for verifying the' \
+  'Step 13a must read run-plan transition protocol'
 
 require_text "$shared" '`up` and `down` are' \
   'Shared simulation contract must reject removed commands'
@@ -381,10 +431,11 @@ for milestone in \
   '## M2: Simulation Input Lifecycle And Start-Owned Access' \
   '## M3: Docker Create, Start, And Stop' \
   '## M4: Docker Baseline Capture And Restore' \
-  '## M5: VM Reusable-Set Lifecycle And Effective-Input Parity' \
-  '## M6: Cross-Backend Reset, Cleanup, Status, And Lifecycle Evidence' \
-  '## M7: First-Class Command Convergence And State-Aware Run Planning' \
-  '## M8: Reusable Lifecycle Acceptance And Downstream Handoff'; do
+  '## M5: Shared State And Docker Reference Cutover' \
+  '## M6: VM Reusable-Set And Input Parity' \
+  '## M7: Cross-Backend Reset, Cleanup, Status, And Operation Records' \
+  '## M8: First-Class Command Convergence And State-Aware Run Planning' \
+  '## M9: Reusable Lifecycle Acceptance And Downstream Handoff'; do
   require_text "$step" "$milestone" \
     "Step 13a is missing milestone: $milestone"
 done
@@ -392,8 +443,35 @@ require_text "$step" \
   '## Downstream Correlation And Handoff' \
   'Step 13a must correlate reusable lifecycle work with downstream tails'
 require_text "$step" \
-  'can accept end-to-end `run`' \
-  'Step 13a must defer full composite acceptance until all tails exist'
+  '## Accepted M1-M4 Baseline And Post-M4 Contract Delta' \
+  'Step 13a must distinguish accepted history from the refined cutover'
+require_text "$step" \
+  'The accepted M1-M4 contract produced the current runtime baseline:' \
+  'Step 13a must preserve the accepted M1-M4 baseline'
+require_text "$step" \
+  '## M5: Shared State And Docker Reference Cutover' \
+  'Step 13a M5 must cut shared and Docker state before VM parity'
+require_text "$step" \
+  '## M6: VM Reusable-Set And Input Parity' \
+  'Step 13a M6 must apply the refined contract to VM after Docker'
+reject_text "$step" \
+  'M5a' \
+  'Step 13a must use whole renumbered milestones, not M5a'
+reject_text "$step" \
+  'M5b' \
+  'Step 13a must use whole renumbered milestones, not M5b'
+require_text "$step" \
+  'retained-baseline planning never invokes `create`' \
+  'Step 13a must test retained-baseline planning without create'
+reject_text "$step" \
+  '| Status |' \
+  'Step 13a companion must not add mutable milestone status'
+reject_text "$step" \
+  'Status:' \
+  'Step 13a companion must not add per-milestone status lines'
+require_text "$step" \
+  'can complete end-to-end `run`' \
+  'Step 13a must defer full composite completion until all tails exist'
 require_text "$step" \
   'Keep the `run` handler state-passive:' \
   'Step 13a must keep composite-owned state out of run orchestration'

@@ -188,13 +188,13 @@ for milestone in \
   '## M2: Gerrit Role Lifecycle' \
   '## M3: Jenkins Controller Role Lifecycle' \
   '## M4: Jenkins Agent Role Lifecycle' \
-  '## M5: Role Gates, Workflow Tail, Evidence, And Runtime Acceptance'; do
+  '## M5: Role Gates, Run-Plan Tail, Evidence, And Runtime Acceptance'; do
   require_text "$role_step_plan" "$milestone" \
     "Step 13b is missing milestone: $milestone"
 done
 require_text "$role_step_plan" \
-  'through the role tail without accepting the integration tail.' \
-  'Step 13b must not claim full composite integration acceptance'
+  'through the role tail without committing the integration tail.' \
+  'Step 13b must not claim full composite integration completion'
 require_text "$role_step_plan" \
   '## Role Correlation And Consumers' \
   'Step 13b must map independent role results to cross-role consumers'
@@ -209,7 +209,7 @@ for milestone in \
   '## M2: Jenkins Controller And Agent SSH Custody' \
   '## M3: Shared Storage, Node, And Gerrit Trigger Setup' \
   '## M4: Observational Validation And Active Proof' \
-  '## M5: Workflow-Ledger Cutover, Composite Completion, And Evidence Alignment' \
+  '## M5: Run-Plan Ledger Cutover, Composite Completion, And Evidence Alignment' \
   '## M6: Docker, VM, And Native Runtime Acceptance'; do
   require_text "$integration_step_plan" "$milestone" \
     "Step 13c is missing milestone: $milestone"
@@ -221,8 +221,8 @@ require_text "$integration_step_plan" \
   'M1-M4 bound outputs, accepted Step 13a run planner, and Step 13b role tail' \
   'Step 13c composite completion must depend on earlier planner and role work'
 require_text "$integration_step_plan" \
-  'never publish composite-owned workflow state.' \
-  'Step 13c must preserve phase-owned workflow publication'
+  'never publish composite-owned run-plan state.' \
+  'Step 13c must preserve harness-owned run-plan commitment'
 require_text "$integration_step_plan" \
   '`tests/vm-harness-run-workflow-test.sh`' \
   'Step 13c must add focused VM composite run coverage'

@@ -173,13 +173,17 @@ workflow_state_publish_activity "$workflow" mutating prepare-artifacts-gerrit
 [ "$(simulation_classify_claimed_state "$active" "$marker" "$workflow" \
   docker default run-a loopforge-docker-default exact "$checkpoint_dir")" = active-incomplete ]
 
-evidence="$tmp_dir/evidence.json"
-printf '{}\n' >"$evidence"
+producer_record="$tmp_dir/producer-record.json"
+printf '{}\n' >"$producer_record"
 record="$checkpoint_dir/prepare-artifacts-gerrit.env"
 write_immutable_checkpoint_record "$record" docker default run-a none \
   "$source_inputs" "$effective_inputs" prepare-artifacts-gerrit none mutating \
-  complete "$evidence" \
+  complete "$producer_record" \
   2026-07-17T00:00:00Z 2026-07-17T00:00:01Z
+grep -Fxq "producer_record_sha256=$(sha256_file "$producer_record")" "$record"
+if grep -q '^evidence_sha256=' "$record"; then
+  fail "Workflow checkpoint retained the superseded evidence digest field"
+fi
 workflow_state_publish_checkpoint "$workflow" "$record" complete
 [ "$(simulation_classify_claimed_state "$active" "$marker" "$workflow" \
   docker default run-a loopforge-docker-default exact "$checkpoint_dir")" = exact-bound ]
@@ -191,7 +195,7 @@ workflow_state_publish_activity "$cross_workflow" mutating prepare-artifacts-jen
 write_immutable_checkpoint_record "$cross_record" docker default run-b none \
   "$source_inputs" "$effective_inputs" prepare-artifacts-jenkins-controller \
   "$(sha256_file "$record")" mutating complete \
-  "$evidence" 2026-07-17T00:00:02Z 2026-07-17T00:00:03Z
+  "$producer_record" 2026-07-17T00:00:02Z 2026-07-17T00:00:03Z
 if (workflow_state_publish_checkpoint "$cross_workflow" "$cross_record" complete) \
   >/dev/null 2>&1; then
   fail "Cross-run checkpoint record was published"
@@ -203,7 +207,7 @@ cp "$workflow" "$order_workflow"
 workflow_state_publish_activity "$order_workflow" mutating stage-artifacts-gerrit
 write_immutable_checkpoint_record "$order_record" docker default run-a none \
   "$source_inputs" "$effective_inputs" stage-artifacts-gerrit \
-  "$(sha256_file "$record")" mutating complete "$evidence" \
+  "$(sha256_file "$record")" mutating complete "$producer_record" \
   2026-07-17T00:00:04Z 2026-07-17T00:00:05Z
 if (workflow_state_publish_checkpoint "$order_workflow" "$order_record" complete) \
   >/dev/null 2>&1; then

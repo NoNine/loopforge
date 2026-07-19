@@ -83,7 +83,8 @@ Use this order when deciding where a product or process fact belongs:
    `simulation/docs/shared/simulation-model.md` owns the shared public model;
    `simulation/docs/shared/generated-state-layout.md` owns host-side generated
    storage; the other documents under `simulation/docs/shared/` own shared
-   architecture, lifecycle state, checkpoint acceptance, and presentation; and
+   architecture, lifecycle state, run-plan transitions, operation records, and
+   presentation; and
    `simulation/docs/docker/` and `simulation/docs/vm/` own concrete backend
    guides and realization details.
 9. Helper scripts, templates, examples, tests, and verifiers implement or

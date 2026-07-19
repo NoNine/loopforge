@@ -22,9 +22,9 @@ responsibilities rather than generic backend hooks.
 Product checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
 Shared harness architecture and exact state guards are defined in
 `simulation/docs/shared/harness-design.md` and
-`simulation/docs/shared/lifecycle-state-model.md`. Cross-layer result acceptance and
-workflow checkpoint publication is defined in
-`simulation/docs/shared/checkpoint-acceptance-protocol.md`. Docker generated-state and
+`simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
+and run-step commitment are defined in
+`simulation/docs/shared/run-plan-transition-protocol.md`. Docker generated-state and
 stale-container behavior is defined in this document.
 Docker-local module boundaries and dependency direction are defined in
 `simulation/docs/docker/implementation-design.md`.
@@ -233,7 +233,7 @@ review.
 
 Docker invokes the shared integration owner through the Docker target SSH
 inventory and private invocation adapter. Integration product checkpoint
-semantics, workflow predecessors, evidence acceptance, and failure behavior
+semantics, run-step predecessors, producer verification, and failure behavior
 remain shared.
 
 Source-boundary rules, including simulation-only public internet fallback for
