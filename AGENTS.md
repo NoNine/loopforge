@@ -10,6 +10,8 @@ changing product, process, or implementation facts. Use
 
 ## Interaction Rules
 
+- Treat "discuss" or "discussion" as discussion-only; do not change code or
+  documentation without explicit user approval.
 - Do not use question countdowns or timed auto-resolution prompts when asking
   the user for input; ask directly and wait, unless higher-priority system or
   developer instructions require otherwise.
