@@ -228,10 +228,10 @@ require_text "$integration_step_plan" \
   'Step 13c must add focused VM composite run coverage'
 require_text "$integration_step_plan" \
   '## Integration Correlation And Cutover' \
-  'Step 13c must map producer outputs to sequential integration consumers'
+  'Step 13c must map checkpoint results to sequential integration consumers'
 require_text "$integration_step_plan" \
-  'M5 is one fail-closed harness cutover after every producer contract exists' \
-  'Step 13c must defer ledger cutover until producer contracts exist'
+  'M5 is one fail-closed harness cutover after every result contract exists' \
+  'Step 13c must defer ledger cutover until result contracts exist'
 reject_text "$integration_step_plan" \
   'native rotation procedure' \
   'Step 13c must not depend on a Loopforge rotation procedure'

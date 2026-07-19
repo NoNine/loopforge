@@ -34,27 +34,29 @@ keys, passwords, tokens, LDAP bind secrets, or secret-bearing configuration.
 
 ## Helper-Assisted Target-Deployment Acceptance
 
-Helper-assisted `target-deployment` produces machine-generated producer
-records, but a human operator or reviewer remains the acceptance authority.
+Helper-assisted `target-deployment` produces machine-generated structured
+checkpoint results, but a human operator or reviewer remains the acceptance
+authority.
 The operator records checkpoint decisions in
 `docs/operations/setup/acceptance-checklist.md` and retains the completed
 checklist in the approved change-management system.
 
-A helper producer record with `status=pass`, zero exit status, evidence package,
-or terminal summary does not accept a target-deployment checkpoint or authorize
-later target work. Those artifacts support the human decision. The checklist
-is the durable acceptance record.
+A structured helper result with `status=pass`, zero exit status, evidence
+package, or terminal summary does not accept a target-deployment checkpoint or
+authorize later target work. Those artifacts support the human decision. The
+checklist is the durable acceptance record.
 
-## Product Producer Record Contract
+## Structured Checkpoint Result Contract
 
-The following contract applies to producer records written by the utility that
-owns one product checkpoint instance. One record carries both the producer
-outcome and the evidence supporting it; the owner does not write a separate
-completion record for the same attempt. A simulation harness may invoke, copy,
-and verify that record but must not manufacture a passing producer record from
-an exit status, log, or presentation summary.
+The product lifecycle contract defines a checkpoint result without requiring a
+file representation. This section defines the structured result emitted by a
+helper or other machine utility that owns one product checkpoint instance. One
+result carries both the outcome and its supporting evidence; the owner does not
+write a separate completion record for the same attempt. A simulation harness
+may invoke the owner, capture the exact result, and verify it, but must not
+manufacture a passing result from an exit status, log, or presentation summary.
 
-Every machine-generated producer record must include:
+Every structured checkpoint result must include:
 
 - Verification mode.
 - Timestamp.
@@ -93,7 +95,7 @@ Every machine-generated producer record must include:
 - Bounded log references.
 - Redaction status.
 
-Records must not include private keys, passwords, tokens, LDAP bind secrets,
+Structured results must not include private keys, passwords, tokens, LDAP bind secrets,
 or full secret-bearing env values. Secret-looking values should be omitted or
 redacted.
 
@@ -101,10 +103,10 @@ The execution-binding fingerprint lets the mode coordinator reject replay
 without exposing simulation set/run internals or target-deployment change
 management details to the product helper. Workflow predecessors, run-plan
 heads, acceptance decisions, Docker identities, and libvirt identities do not
-belong in a product producer record.
+belong in a structured checkpoint result.
 
-Integration-scoped producer records from `scripts/integration-setup.sh` are
-distinct from role-local readiness records and from the final global
+Integration-scoped results from `scripts/integration-setup.sh` are distinct
+from role-qualified checkpoint results and from the final global
 aggregation. They may record public key fingerprints, Jenkins credential IDs,
 account names, service endpoints, helper-owned `/var/lib/loopforge/` and
 `/var/log/loopforge/` references, the shared integration group name and GID,
@@ -115,10 +117,10 @@ trigger/build/change identifiers, and redaction status. They must not record
 private keys, tokens, passwords, LDAP bind secrets, or full secret-bearing env
 values.
 
-The global collector accepts legacy Step 7-9 records that do not yet carry
+The global collector accepts legacy role-readiness results that do not yet carry
 explicit `package_version` or `helper_command_version` fields. It enriches
-those records in the final package with collector metadata and marks the source
-metadata as `legacy-inferred`. New records should include both fields when
+those results in the final package with collector metadata and marks the source
+metadata as `legacy-inferred`. New results should include both fields when
 possible.
 
 ## Evidence Modes
@@ -134,19 +136,19 @@ Use mode labels consistently:
 Summaries must clearly distinguish simulation-only runs from target-deployment
 runs. A `pass` status must be backed by real runtime checks for the claimed
 product checkpoint instance. Use `blocked`, `unsupported`, or `not-applicable`
-for lifecycle work that did not run; do not use modeled records as passing
+for lifecycle work that did not run; do not use modeled results as passing
 service
 readiness, Jenkins scheduling, Gerrit Trigger delivery, or `Verified` voting
 proof.
 
-Producer records must reject contradictory success and failure signals. A
-success marker, terminal summary, or producer `pass` is invalid for the
+Structured checkpoint results must reject contradictory success and failure
+signals. A success marker, terminal summary, or result `pass` is invalid for the
 claimed product checkpoint instance when the referenced bounded logs contain
 matching runtime failures such as package-manager errors, missing commands,
 missing service
 units, failed LDAP bind/search, checksum mismatch, ownership mismatch,
 permission denial, timeout, traceback, exception, or explicit failure markers.
-In that case the producer outcome must be recorded as `fail` or `blocked`, not
+In that case the checkpoint outcome must be recorded as `fail` or `blocked`, not
 accepted as a pass with caveats or used to complete the product checkpoint
 instance.
 
@@ -155,31 +157,31 @@ instance.
 Simulation lifecycle owners write simulation operation records for retained
 proof of resource creation, startup, shutdown, restoration, cleanup, and
 destruction. These records use `record_kind=simulation-operation`, contain no
-product checkpoint claim, cannot supply a run-step producer digest, and never
-advance the product run plan. Read-only `preflight`, `status`, `audit-state`,
-and `ssh` commands create no durable record by default.
+product checkpoint claim, cannot supply a run-step checkpoint-result digest,
+and never advance the product run plan. Read-only `preflight`, `status`,
+`audit-state`, and `ssh` commands create no durable record by default.
 
 `simulation/docs/shared/operation-records.md` owns their exact simulation
 schema, operation mapping, state-transition relationship, storage, and
 retention. This document continues to own their shared status vocabulary,
 redaction, bounded-log, contradiction, and aggregation requirements.
 
-## Product Checkpoint Producer Records
+## Product Checkpoint Results
 
-Helpers and simulation utilities write a machine-generated producer record at
-every applicable product checkpoint instance so failed runs can be reviewed
-from the last completed boundary. Native `target-deployment` uses the
-acceptance checklist to track the corresponding outcomes without producing
-run-step records.
+Every applicable product checkpoint instance has one checkpoint result from its
+owner. Helpers and machine utilities emit structured results so their outcomes
+and proof can be reviewed and consumed by a mode coordinator. Native
+`target-deployment` presents observed results directly to the human acceptance
+authority and does not require structured result files or run-step records.
 
-A producer record states an outcome and its proof but does not itself advance
-the simulation run plan or authorize later target work.
+A structured checkpoint result states an outcome and its proof but does not
+itself advance the simulation run plan or authorize later target work.
 `simulation/docs/shared/run-plan-transition-protocol.md` defines how the
-simulation harness verifies producer records before committing run-plan
-transitions. This document continues to own their evidence content, status,
+simulation harness captures and verifies structured results before committing
+run-plan transitions. This document continues to own their content, status,
 redaction, and aggregation rules.
 
-Producer records must use the canonical product checkpoint family names from
+Structured results must use the canonical product checkpoint family names from
 `docs/contracts/lifecycle-contract.md` and add the role or target qualifier
 needed to identify the instance. Do not create evidence-only checkpoint names:
 service installation and startup evidence belongs to `Role-local setup`, role
@@ -191,67 +193,80 @@ review or source selection` and `OS dependency provisioning` through the
 applicable procedure and acceptance checklist. Simulation waives those two
 families from its product run plan: `init-run` records source selection and
 `create` records dependency-baseline preparation as simulation operations.
-Neither operation creates a product producer record. Effective-input rendering
-and publication are also simulation operation boundaries, not another product
-producer record.
+Neither operation emits a structured checkpoint result. Effective-input
+rendering and publication are also simulation operation boundaries, not
+another product checkpoint result.
 
-## Role-Local Producer Records
+## Role-Qualified Checkpoint Results
 
-Role helpers from Steps 7, 8, and 9 emit producer records for role-qualified
-product checkpoint instances in their own scope.
+Artifact preparation, Artifact staging, Role-local setup, and Role-local
+validation each expand into separate Gerrit, Jenkins controller, and Jenkins
+agent checkpoint instances. Each instance has its own result from the utility
+that owns that checkpoint; a result for one family or role does not satisfy
+another instance.
 
-- Gerrit records cover startup, HTTP, SSH, LDAP, and plugin readiness.
-- Jenkins controller records cover startup, HTTP, LDAP, plugins, JCasC, and
+| Product checkpoint family | Structured-result owner | Required proof focus |
+| --- | --- | --- |
+| Artifact preparation | Corresponding role helper in the bundle factory | Bound manifest, checksums, payload digests, source boundary, and verification outcome |
+| Artifact staging | Staging actor or simulation utility | Bound target-side manifest and checksum-verification outcome |
+| Role-local setup | Corresponding role helper | Bound identity, installation, configuration, initial runtime, and applicable service-manager outcome |
+| Role-local validation | Corresponding role helper | Observations against the completed setup result and current live role state without mutation |
+
+Role-local validation has role-specific proof obligations:
+
+- Gerrit results cover startup, HTTP, SSH, LDAP, and plugin readiness.
+- Jenkins controller results cover startup, HTTP, LDAP, plugins, JCasC, and
   controller runtime readiness.
-- Jenkins agent records cover SSH readiness, runtime-account ownership, and
+- Jenkins agent results cover SSH readiness, runtime-account ownership, and
   remote filesystem readiness.
 
 For `vm-simulation` and helper-based `target-deployment`, Gerrit and Jenkins
-controller producer records include the guest systemd unit state in addition
-to application checks. Jenkins agent records include the enabled and active
-guest
-`ssh.service` or `sshd.service` state. `docker-simulation` records its direct
-process and endpoint checks instead, because it has no guest systemd manager
-and does not claim reboot persistence. Native `target-deployment` tracks the
-corresponding role and reboot outcomes in the acceptance checklist.
+controller setup and validation results include the applicable guest systemd
+unit state in addition to application checks. Jenkins agent results include the
+enabled and active guest `ssh.service` or `sshd.service` state.
+`docker-simulation` records its direct process and endpoint checks instead,
+because it has no guest systemd manager and does not claim reboot persistence.
+Native `target-deployment` tracks the corresponding role and reboot outcomes in
+the acceptance checklist.
 
-Machine-generated role records are the primary inputs to global aggregation.
+Machine-generated role-qualified results are primary inputs to global
+aggregation.
 
-## Integration-Local Producer Records
+## Integration Checkpoint Results
 
-The shared integration helper owns producer records for mode-appropriate
-access, shared setup, observational cross-role validation, and active
-end-to-end proof. These records are not substitutes for role-local readiness
-records or the final evidence package. They are inputs to simulation utilities
-and global aggregation.
+The shared integration helper owns structured checkpoint results for
+Integration preflight, mode-appropriate access, Shared integration setup,
+Cross-role validation, and End-to-end trigger verification. These results are
+not substitutes for role-qualified results or the final evidence package. They
+are inputs to simulation coordination and global aggregation.
 
-- The target-deployment Reviewed Access producer record includes both Gerrit
+- The target-deployment Reviewed Access result includes both Gerrit
   reviews and a non-success `blocked` state while approval or submission is
   pending.
-- The simulation shared-setup producer record sets `reviewed_access.status` to
+- The simulation shared-setup result sets `reviewed_access.status` to
   `not-applicable`, `reviewed_access.reason=unsupported-in-simulation`,
   `acl_realization=simulation-only-direct-rest-apply`, and real effective ACL
   validation. It must not claim review creation, approval, or submission.
-- The shared-setup producer record also includes public key fingerprints,
+- The shared-setup result also includes public key fingerprints,
   credential and node identifiers, trigger configuration, shared storage
   state, and its
   bounded controller-write/agent-read result without claiming validation.
-- The cross-role validation producer record includes effective ACL
+- The cross-role validation result includes effective ACL
   observations, read-only SSH results, key custody, storage configuration, node
   configuration and online
   state, and Gerrit Trigger connection state. It must not result from target or
   application mutation performed by validation.
-- The end-to-end proof producer record includes the disposable job and change,
+- The end-to-end proof result includes the disposable job and change,
   SSH event delivery, agent scheduling and execution, REST vote, and Gerrit
   review state.
 
-Every integration phase record and prerequisite marker must bind to the same
+Every integration checkpoint result and private prerequisite marker must bind to the same
 target-deployment reviewed input set or published simulation effective input
 set, target identities, mode, and run or selected state. Target-deployment
 review state also binds both Gerrit review identifiers. A constant label or
 marker existence alone is not an input fingerprint and must not authorize a
-later phase. Public producer records contain only the redacted binding; private
-state may retain the protected detail needed to verify it. Ephemeral simulation
+later phase. Public structured results contain only the redacted binding;
+private state may retain the protected detail needed to verify it. Ephemeral simulation
 transport hosts may be recorded as observations but are not part of the stable
 effective-input fingerprint.
 
@@ -262,15 +277,15 @@ stable values are published in the effective input bundle. Helper-generated
 shared state and helper logs live under
 `/var/lib/loopforge/` and `/var/log/loopforge/` on target environments.
 
-Docker simulation producer records must prove the shared path is mounted into
-both Jenkins containers by writing a file as the controller runtime account and
+Docker simulation results must prove the shared path is mounted into both
+Jenkins containers by writing a file as the controller runtime account and
 reading it as the agent runtime account.
 
-VM shared-storage producer records must prove the Jenkins
-agent VM hosts the NFS-backed `/data/jenkins-shared` export, the Jenkins
+VM shared-storage results must prove the Jenkins agent VM hosts the NFS-backed
+`/data/jenkins-shared` export, the Jenkins
 controller VM mounts that export at the same path, the shared group/GID and
 export options were validated, and controller and agent runtime accounts can
-perform the required read/write proof. VM records must use `vm-simulation` and
+perform the required read/write proof. VM results must use `vm-simulation` and
 `simulation-only` labels and must not imply `target-deployment` acceptance.
 
 ACL planning records must include:
@@ -293,7 +308,7 @@ ACL planning records must include:
 - target SSH alias or reviewed host identifier for each target involved
 - validation result summaries
 
-Simulation records must set review fields to `not-created`, Reviewed Access to
+Simulation results must set review fields to `not-created`, Reviewed Access to
 `not-applicable`, and ACL realization to
 `simulation-only-direct-rest-apply`. Blocked or dry-run records must not claim
 mutation success, submission, or a real Gerrit review when none occurred.
@@ -302,18 +317,18 @@ mutation success, submission, or a real Gerrit review when none occurred.
 
 `scripts/collect-evidence.sh` validates and aggregates:
 
-- Required product producer records from role and integration owners.
-- The Evidence audit producer record when collection is final.
+- Required structured checkpoint results from role and integration owners.
+- The Evidence audit structured result when collection is final.
 - Supplemental Docker and VM simulation operation records when present.
 
-Global aggregation applies to machine-generated records.
+Global aggregation applies to machine-generated results.
 It is not required for the native `target-deployment` acceptance checklist.
 
 The global collector runs as the final Evidence audit after the required
-product checkpoint instances and end-to-end proof have produced their records.
+product checkpoint instances and end-to-end proof have produced their results.
 It validates and packages the reached evidence set; it does not advance its own
 run step or authorize later target work. In simulation, the active harness
-verifies the collector producer record and separately commits the
+captures and verifies the collector result and separately commits the
 `evidence-audit` run-plan transition. In helper-assisted target deployment, the
 final package is required supporting material and the human reviewer separately
 accepts or blocks Evidence audit in the helper acceptance checklist.
@@ -326,7 +341,7 @@ The helper writes a final evidence package containing:
 
 - A machine-readable summary JSON.
 - A human-readable summary text file.
-- Sanitized per-record manifests and status counts.
+- Sanitized per-result manifests and status counts.
 - Checksum references.
 - Bounded log references.
 - Enriched package metadata for legacy records that lacked explicit package or

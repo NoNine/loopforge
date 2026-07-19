@@ -17,7 +17,7 @@ the role in brackets after the command name.
 
 `ok` reports the command result. For a product run-plan phase, the command may
 report committed progress only after the corresponding run-step record has
-been committed. A producer-record `pass`, an owning utility exit status, or a
+been committed. A structured-result `pass`, an owning utility exit status, or a
 pre-commit summary is not committed progress. Any output that presents
 run-plan progress must derive it from and identify the run-plan head.
 
@@ -75,7 +75,7 @@ users documented in `simulation/docs/shared/simulation-model.md`. It must not pr
 integration service accounts as password-backed login accounts.
 
 Use layer-specific `audit-state`, bounded logs, and simulation operation
-records for backend state. Use producer records for product-step outcomes and
+records for backend state. Use structured checkpoint results for product-step outcomes and
 proof.
 
 ## Docker Preview
@@ -148,5 +148,5 @@ Normal simulation terminal output should not include:
   simulation-only seeded login previews, tokens, or LDAP bind secrets.
 
 If an operator needs backend state or retained proof, use `audit-state`,
-bounded logs, operation records, and product producer records instead of
+bounded logs, operation records, and captured checkpoint results instead of
 expanding routine terminal summaries.

@@ -93,7 +93,7 @@ controller-write/agent-read proof.
     disposable Gerrit change. The change emits `patchset-created`, Gerrit
     Trigger schedules the job on the reviewed agent, and the successful build
     posts `Verified +1` through Gerrit REST.
-12. The producer record includes the mode-appropriate input and selected-state
+12. The structured checkpoint result includes the mode-appropriate input and selected-state
     binding,
     ACL realization and effective checks, public key fingerprints, shared
     storage result, change, build, event delivery, vote, bounded logs, and
@@ -222,7 +222,7 @@ revisions, and submit actors when applicable. Simulation records use
 activity. A blocked target review wait records real review identifiers without
 claiming submission, effective access, or shared setup success.
 
-The shared-storage producer record includes the shared group name, GID, storage
+The shared-storage checkpoint result includes the shared group name, GID, storage
 path, the controller runtime account as writer, the agent runtime account as reader, and
 bounded log references. It must not include private keys, passwords, tokens,
 or LDAP bind secrets.
@@ -288,7 +288,7 @@ The Docker simulation verification contract for this integration is:
 - The job runs on the Jenkins agent.
 - Jenkins posts `Verified +1` to the Gerrit change through the Gerrit REST
   review API.
-- The producer record includes the change, build, vote, bounded log references, and
+- The structured checkpoint result includes the change, build, vote, bounded log references, and
   verification mode.
 
 This document defines the verification contract only. It does not claim that the

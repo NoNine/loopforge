@@ -30,13 +30,13 @@ preparation.
 - `docs/contracts/directory-model.md` for baseline and retained-output custody.
 - `docs/contracts/validation-and-evidence.md` for immutable run binding.
 - `simulation/docs/shared/simulation-model.md` for shared command semantics.
-- `simulation/docs/docker/docker-simulation.md` and `simulation/docs/vm/vm-simulation.md` for backend
-  realization.
+- `simulation/docs/docker/docker-simulation.md` and
+  `simulation/docs/vm/vm-simulation.md` for backend realization.
 - `simulation/docs/shared/harness-design.md` and
   `simulation/docs/shared/lifecycle-state-model.md` for shared architecture and exact
   state guards.
-- `simulation/docs/shared/run-plan-transition-protocol.md` for verifying the
-  role/integration producer records and committing their run steps.
+- `simulation/docs/shared/run-plan-transition-protocol.md` for capturing and
+  verifying role/integration checkpoint results and committing their run steps.
 - `simulation/docs/shared/operation-records.md` for resource-lifecycle records.
 - `simulation/docs/docker/implementation-design.md` for Docker-local module
   boundaries and dependency direction.
@@ -89,9 +89,9 @@ without compatibility aliases.
 For M5-M9, implement the exact schemas, classifiers, and guards from
 `simulation/docs/shared/lifecycle-state-model.md`; this plan records dependency order
 rather than redefining them. Implement the generic run-step transitions plus
-the harness-side producer-verification boundary from
+the harness-side checkpoint-result capture and verification boundary from
 `simulation/docs/shared/run-plan-transition-protocol.md`; do not synthesize the
-producer records delivered by Steps 13b and 13c.
+structured results delivered by Steps 13b and 13c.
 
 - Validate the canonical 1-24 character `HARNESS_SET_ID` before path or backend
   mutation. Derive `loopforge-docker-<set-id>` and
@@ -176,12 +176,12 @@ clean, destroy, or fresh-set procedures.
 The remaining milestones separate reusable lifecycle completion from the
 run-plan tails that depend on later owning-layer postconditions:
 
-| Producer | Handoff | Consumer |
+| Source milestone | Handoff | Consumer |
 | --- | --- | --- |
 | Step 13a M7 | Complete Docker/VM lifecycle, reset, status, and operation-record semantics | Step 13a M8 command planning and Step 13b runtime fixtures |
 | Step 13a M8 | Backend-local `run` planners that reuse first-class handlers and select the next run step without publishing one directly | Step 13b M5 role run-plan tail and Step 13c M5 integration/evidence tail |
 | Step 13a M9 | Accepted reusable lifecycle and immutable run isolation | Step 13b role implementation |
-| Step 13b M5 | Verified role producer records and run-plan head through the role checkpoint families | Step 13c integration preflight and composite completion |
+| Step 13b M5 | Captured and verified role checkpoint results and run-plan head through the role checkpoint families | Step 13c integration preflight and composite completion |
 | Step 13c M5 | Integration and evidence-audit tail attached to the accepted planner | Step 13c M6 full composite runtime acceptance |
 
 Step 13a does not complete a full product run plan. Step 13b proves individual
@@ -226,7 +226,7 @@ Accepted implementation baseline:
   prefix from `HARNESS_SET_ID`; neither namespace may depend on the run ID.
 - Preserve the active-run pointer across `stop` and `start`; allow another
   `init-run` only after matching baseline restoration and `clean` clear it.
-- Include the run ID in bounded log metadata and all producer records.
+- Include the run ID in bounded log metadata and all structured checkpoint results.
 
 Focused tests:
 
@@ -422,7 +422,7 @@ Focused tests:
 
 - Extend `tests/simulation-lifecycle-state-library-test.sh` for separate
   `R`/`P`/`C` ownership, strict new schemas, artifact-first ordering, and
-  operation records that cannot supply a run-step producer digest.
+  operation records that cannot supply a run-step checkpoint-result digest.
 - Update init-run, Docker bootstrap, input-publication, create, start/stop,
   baseline, restore, clean, audit, and generated-layout tests to use only the
   new paths and fields.
@@ -435,7 +435,7 @@ Acceptance:
 
 - Docker exposes separate `R` and `P` progression with `C` used only for
   cross-machine guards.
-- Resource operation records and product producer/run-step records cannot
+- Resource operation records and product checkpoint results/run-step records cannot
   substitute for one another.
 - Existing M1-M4 identity, locking, input, retained-container, start/stop, and
   baseline behavior remains valid under fresh refined state.
@@ -555,8 +555,8 @@ Implementation:
   `restore-baseline`, `clean`, `destroy`, `audit-state`, or VM `reboot` from a
   run plan, and never perform rollback or repair.
 - Dispatch checkpoint families in the shared order, but defer harness
-  verification and run-step commitment for role producer records to Step 13b
-  M5 and integration producer records to Step
+  capture, verification, and run-step commitment for role checkpoint results to Step 13b
+  M5 and integration checkpoint results to Step
   13c M5. Step 13a tests orchestration with focused handlers and fixtures; it
   does not claim the downstream product run plan passes.
 
@@ -607,7 +607,7 @@ Acceptance:
 - Focused orchestration evidence proves both backends are ready for the Step
   13b role run-plan tail.
 - Full Docker and VM composite runtime acceptance remains deferred to Step 13c
-  M6 after role, integration, proof, and evidence-audit producer records are
+  M6 after role, integration, proof, and evidence-audit checkpoint results are
   verified and their run steps committed.
 
 ## State And Recovery Rules

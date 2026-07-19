@@ -2,7 +2,7 @@
 
 Use this checklist for one fresh helper-assisted `target-deployment` acceptance
 run. The human operator or reviewer is the checkpoint acceptance authority.
-Helper producer records, exit statuses, evidence packages, and summaries are
+Structured helper results, exit statuses, evidence packages, and summaries are
 inputs to the decisions below; none is an acceptance record by itself.
 
 This checklist defines the acceptance surface when helper-assisted target
@@ -35,7 +35,7 @@ Reviewed input-set reference:
 
 ## Decision Rules
 
-Mark a product checkpoint instance `ACCEPTED` only after reviewing its producer
+Mark a product checkpoint instance `ACCEPTED` only after reviewing its checkpoint
 outcome and proof, input and target binding, and required accepted predecessor.
 Mark it `BLOCKED` when any required result or proof is missing,
 failed, stale, contradictory, or bound to different state. Do not proceed to a

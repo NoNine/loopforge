@@ -8,7 +8,7 @@ realization deltas. `simulation/docs/shared/harness-design.md` owns the common
 harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
 command guards. `simulation/docs/shared/run-plan-transition-protocol.md` owns
-producer-record verification plus run-step commitment.
+structured checkpoint-result capture and verification plus run-step commitment.
 
 VM simulation stays near target deployment after the clean baseline snapshot.
 Libvirt/KVM resources, snapshots, seed media, guest SSH readiness, and VM
@@ -33,7 +33,7 @@ implement the shared architectural planes with VM-specific mechanisms:
 | --- | --- |
 | Backend infrastructure | Libvirt/KVM domains, networks, storage, seed media, snapshots, set ownership, power lifecycle, restoration, and destruction |
 | Target control plane | Target OS SSH as the operator account, known-hosts verification, bounded remote execution, file transfer, and narrow delegated privilege |
-| Loopforge lifecycle | Artifact flow, helper-owned producer records, validation, proof, evidence aggregation, and run step publication |
+| Loopforge lifecycle | Artifact flow, helper-owned structured checkpoint results, validation, proof, evidence aggregation, and run step publication |
 
 After the clean baseline snapshot is captured, product checkpoint work must
 use target-like interfaces and helper-visible paths. Host-side VM
@@ -52,7 +52,7 @@ layout:
 | Backend foundation | `paths.sh`, `config.sh`, `state.sh` | VM set/run paths, VM defaults and rendered inventory, and adapters around shared lifecycle state; `state.sh` does not query libvirt |
 | Target control plane | `ssh.sh` | Domain-address discovery through the logical libvirt API, host-key custody, SSH readiness, bounded guest commands, transfer, and interactive SSH |
 | Simulation-set capabilities | `vm-set.sh`, `baseline.sh`, `snapshots.sh` | Ownership coordination, guest baseline proof, snapshot capture and restore, audit, and destruction |
-| Lifecycle capabilities | `artifacts.sh`, `roles.sh`, `integration.sh` | VM artifact transfer, role-helper invocation, integration-helper invocation, and producer-record verification over target OS SSH |
+| Lifecycle capabilities | `artifacts.sh`, `roles.sh`, `integration.sh` | VM artifact transfer, role-helper invocation, integration-helper invocation, and structured-result capture and verification over target OS SSH |
 | Backend infrastructure | `libvirt.sh`, `libvirt-core.sh`, `libvirt-storage.sh`, `libvirt-domain.sh`, `libvirt-image.sh` | Libvirt resource primitives, storage, domain and network definitions, seed media, and baked-image publication |
 
 `simulate.sh` and these VM modules consume the backend-neutral implementation
@@ -361,7 +361,7 @@ side effects.
 
 Milestone completion requires fail-closed runtime proof as defined in
 `simulation/docs/vm/milestone-verification.md`. Marker files, terminal summaries, and
-producer records summarize outcomes and checks; they do not satisfy a milestone
+structured checkpoint results summarize outcomes and checks; they do not satisfy a milestone
 when bounded logs contain contradictory failure evidence.
 
 Composite `run` followed the individual lifecycle commands so early failures
@@ -375,7 +375,7 @@ exposed the exact boundary that was not ready.
 | M4 Baseline prerequisites: role OS dependencies and LDAP proof | `create`, `start`, `status`, `audit-state` | `libvirt.sh`, `ssh.sh`, `lifecycle.sh`, folded LDAP logic | VM provisioning proves role OS dependency installation, command availability, real LDAP service readiness, seed entries, local bind/search, and Gerrit/Jenkins controller LDAP reachability before baseline readiness is written. |
 | M5 Baseline snapshot, restore, clean, and destroy | `create`, `restore-baseline`, `clean`, `destroy`, `audit-state` | `libvirt.sh`, `state.sh`, `lifecycle.sh` | The baseline snapshot is captured after M4 prerequisites and before Loopforge mutation, `restore-baseline` rolls back only the stopped selected owned VM set, `clean` removes generated run state only, and `destroy` deletes only validated simulation-owned resources. |
 | M6 Artifact prepare/stage over target-like paths | `prepare-artifacts`, `stage-artifacts` | `artifacts.sh`, `ssh.sh`, `paths.sh` | The bundle factory runs helper artifact preparation, host review copies are retained, service VMs receive artifacts through SSH, and target-side manifests and checksums verify under `/var/lib/loopforge/staging/<role>`. |
-| M7 Role configure/validate phases | `configure-role`, `validate-role`, `reboot` | `roles.sh`, `ssh.sh`, `lifecycle.sh` | Role helpers run over target OS SSH, role producer records are captured, real service/runtime readiness is proven, and any readiness claim after reboot is re-established by validation. |
+| M7 Role configure/validate phases | `configure-role`, `validate-role`, `reboot` | `roles.sh`, `ssh.sh`, `lifecycle.sh` | Role helpers run over target OS SSH, structured role results are captured, real service/runtime readiness is proven, and any readiness claim after reboot is re-established by validation. |
 | M8 Integration validate/prove and composite run | `configure-integration`, `validate-integration`, `prove-integration`, `run` | `integration.sh`, `lifecycle.sh`, `ssh.sh` | Shared integration setup runs through `scripts/integration-setup.sh`; validation/proof require real cross-role SSH, Jenkins node readiness, trigger/build behavior, and Gerrit `Verified` proof. |
 
 M1 was the first implementation unit. It created the VM CLI skeleton, initial

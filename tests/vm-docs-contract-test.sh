@@ -183,7 +183,7 @@ require_doc_text docs/contracts/validation-and-evidence.md \
   'Evidence contract must require opaque execution binding'
 require_doc_text docs/contracts/validation-and-evidence.md \
   'Workflow predecessors, run-plan' \
-  'Evidence contract must keep orchestration identity out of producer records'
+  'Evidence contract must keep orchestration identity out of structured results'
 require_doc_text simulation/docs/shared/operation-records.md \
   'Safe resource, baseline, and input fingerprints' \
   'Operation-record contract must bind baseline operations'
@@ -191,7 +191,7 @@ require_doc_text simulation/docs/shared/operation-records.md \
   '| `reboot` | `reboot` operation record |' \
   'Operation-record contract must classify reboot as simulation lifecycle'
 require_doc_text docs/contracts/validation-and-evidence.md \
-  'agent VM hosts the NFS-backed `/data/jenkins-shared` export' \
+  'Jenkins agent VM hosts the NFS-backed' \
   'Evidence contract must require VM shared storage proof'
 require_doc_text simulation/docs/vm/vm-simulation.md \
   'The harness must prove LDAP' \

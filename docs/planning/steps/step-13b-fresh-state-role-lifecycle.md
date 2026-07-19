@@ -1,8 +1,8 @@
 # Step 13b: Align Fresh-State Role Lifecycle
 
 Align the Gerrit, Jenkins controller, and Jenkins agent helpers, native and
-helper procedures, role producer records, and simulation role gates with the v1
-fresh-state lifecycle contract.
+helper procedures, role-qualified checkpoint results, and simulation role gates
+with the v1 fresh-state lifecycle contract.
 
 This step follows accepted Step 13a reusable simulation lifecycle behavior and
 repairs the role-local contract before shared integration consumes
@@ -11,8 +11,8 @@ implementation then consumes that contract independently. Step 13c shared
 integration, Step 14 boundary checks, and Step 15 final acceptance depend on
 the completed role handoffs.
 
-This docs-first revision defines the intended producer-verification and
-run-step contract. Runtime migration to the new run-plan record names and
+This docs-first revision defines the intended checkpoint-result capture,
+verification, and run-step contract. Runtime migration to the new run-plan record names and
 transitions remains pending in M5.
 
 ## Authorities And Required Reading
@@ -29,8 +29,8 @@ Read these before implementation:
 - `docs/contracts/artifact-bundle-contract.md` and
   `docs/contracts/validation-and-evidence.md` for staged inputs and evidence
   binding.
-- `simulation/docs/shared/run-plan-transition-protocol.md` for role producer
-  verification and run-step commitment.
+- `simulation/docs/shared/run-plan-transition-protocol.md` for role-result
+  capture, verification, and run-step commitment.
 - `docs/operations/native/review-guide.md` for the role-manual review profile.
 
 The authorities own product behavior. This step owns implementation sequence,
@@ -47,8 +47,8 @@ Apply the same state classification to all three role helpers:
 - Fully absent identity and application state is ready for initial setup.
 - A fully matching runtime group, account, and empty canonical product home may
   be adopted for initial setup.
-- An exact producer record bound to reviewed inputs, artifact digests,
-  target identity, mode, selected run/state, and implementation revision
+- An exact structured Role-local setup result bound to reviewed inputs,
+  artifact digests, target identity, mode, selected run/state, and implementation revision
   returns `already-complete` without target mutation.
 - Partial, conflicting, changed, or unbound state fails clearly before
   mutation. Helpers do not delete or reset it and do not reinstall,
@@ -78,14 +78,14 @@ handoffs.
 
 ## Role Correlation And Consumers
 
-No role helper consumes another role helper's producer record. Correlation
+No role helper consumes another role helper's structured result. Correlation
 begins in the harness role tail and shared integration:
 
-| Producer | Independent producer record | First consumers |
+| Role | Independent checkpoint results | First consumers |
 | --- | --- | --- |
-| M2 Gerrit | Bound Gerrit role outcome and observational readiness proof | M5 role run step publication; Step 13c M1 ACL preflight and realization |
-| M3 Jenkins controller | Bound controller outcome and observational readiness proof | M5 role run step publication; Step 13c M2 SSH custody and M3 trigger/node setup |
-| M4 Jenkins agent | Bound agent outcome and observational readiness proof | M5 role run step publication; Step 13c M2 authorization and M3 storage/node setup |
+| Gerrit | Gerrit-qualified Artifact preparation, Artifact staging, Role-local setup, and Role-local validation results | M5 run-step publication; Step 13c M1 ACL preflight and realization |
+| Jenkins controller | Controller-qualified Artifact preparation, Artifact staging, Role-local setup, and Role-local validation results | M5 run-step publication; Step 13c M2 SSH custody and M3 trigger/node setup |
+| Jenkins agent | Agent-qualified Artifact preparation, Artifact staging, Role-local setup, and Role-local validation results | M5 run-step publication; Step 13c M2 authorization and M3 storage/node setup |
 | M5 role tail | Run-plan head through every committed role run step plus three role-readiness handoffs | Step 13c M1 integration preflight and Step 13c M5 composite continuation |
 
 The fixed simulation checkpoint order still expands each checkpoint family as
@@ -99,9 +99,10 @@ Implementation:
 - Define one shared state classifier or equivalent common contract used by the
   three helpers without merging role-owned setup logic.
 - Inspect account, group, canonical home, role-owned application paths,
-  configuration, service definitions, runtime data, and producer records
+  configuration, service definitions, runtime data, and structured checkpoint
+  results
   before mutation.
-- Define the producer-record binding schema for reviewed env values, staged
+- Define the structured-result binding schema for reviewed env values, staged
   artifact manifest and payload digests, target identity, verification mode,
   selected run/state identity, helper revision, and completed checkpoint.
 - Make `already-complete` a distinct successful no-op result and prove that it
@@ -138,7 +139,7 @@ Implementation:
 - Return `already-complete` without stopping, starting, or rewriting Gerrit
   when the exact role handoff is complete.
 - Keep Gerrit validation observational and update native/helper procedures and
-  role producer records with the implemented behavior.
+  role-qualified checkpoint results with the implemented behavior.
 
 Focused tests:
 
@@ -167,7 +168,7 @@ Implementation:
 - Return `already-complete` without stopping, starting, or rewriting Jenkins
   when the exact role handoff is complete.
 - Keep controller validation observational and update native/helper procedures
-  and role producer records with the implemented behavior.
+  and role-qualified checkpoint results with the implemented behavior.
 
 Focused tests:
 
@@ -197,7 +198,7 @@ Implementation:
 - Return `already-complete` without rewriting the SSH policy, reloading SSH,
   or changing the runtime filesystem when the exact handoff is complete.
 - Keep agent validation observational and update native/helper procedures and
-  role producer records with the implemented behavior.
+  role-qualified checkpoint results with the implemented behavior.
 
 Focused tests:
 
@@ -222,7 +223,7 @@ Implementation:
   family. Direct and composite invocation must use the same role command
   handlers and per-command lock modes; `run` must not call a role capability
   directly.
-- Verify role producer records and commit their run steps through the shared
+- Capture and verify role-qualified checkpoint results and commit their run steps through the shared
   run-plan ledger; remove
   harness-only role progression markers without dual old/new readers.
 - Record state classification, completion binding, `already-complete`, and

@@ -10,7 +10,8 @@ modes.
 Shared internal architecture is defined in
 `simulation/docs/shared/harness-design.md`. Exact simulation state dimensions,
 command guards, and transitions are defined in
-`simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
+`simulation/docs/shared/lifecycle-state-model.md`. Structured checkpoint-result
+capture and verification
 and run-step commitment are defined in
 `simulation/docs/shared/run-plan-transition-protocol.md`. Terminal presentation is
 defined in `simulation/docs/shared/terminal-output.md`. Host-side generated
@@ -27,7 +28,7 @@ Shared lifecycle contracts do not live in backend documents:
 | `simulation/docs/shared/simulation-model.md` | Shared public command semantics and operator run sequence |
 | `simulation/docs/shared/generated-state-layout.md` | Host-side generated roots, path custody, sensitivity, and cleanup classes |
 | `simulation/docs/shared/lifecycle-state-model.md` | Exact state, run step order, guards, transitions, and recovery rights |
-| `simulation/docs/shared/run-plan-transition-protocol.md` | Producer-record verification and run-step commitment |
+| `simulation/docs/shared/run-plan-transition-protocol.md` | Structured checkpoint-result capture, verification, and run-step commitment |
 | `simulation/docs/shared/operation-records.md` | Resource-lifecycle operation-record content and ownership |
 | `simulation/docs/shared/harness-design.md` | Shared architectural and dependency boundaries |
 | `simulation/docs/shared/terminal-output.md` | Shared terminal presentation conventions |
@@ -348,7 +349,7 @@ mapping and composite `run` orchestration design.
 | `audit-state` | Explicit read-only generated-state and simulation-set consistency inspection. |
 | `stop` | Gracefully stop configured services and the selected simulation set while preserving durable state, source/effective input custody, and review output; live target access becomes unavailable. An ownership-valid stopped set returns `state=already-stopped`. |
 | `restore-baseline` | Require a stopped simulation set and reset its durable runtime to the selected clean pre-setup baseline without cleaning generated state. |
-| `clean` | After matching baseline restoration, clear mutable run-plan/run state and remove the selected set's active-run pointer last while preserving the immutable run marker, run-step records, operation records, artifacts, producer records, logs, and baseline resources. |
+| `clean` | After matching baseline restoration, clear mutable run-plan/run state and remove the selected set's active-run pointer last while preserving the immutable run marker, run-step records, operation records, artifacts, captured checkpoint results, logs, and baseline resources. |
 | `destroy` | Ownership-validated backend resource deletion; a fully absent unclaimed set returns `state=already-absent`, while missing resources contradicted by metadata block. |
 
 Layers may add simulation-specific lifecycle commands, such as VM `reboot`,
@@ -372,7 +373,8 @@ progression.
 Strict readers cross-check both records with the immutable run marker,
 baseline, source/effective-input fingerprints, backend ownership, and
 hash-linked run-step records. Details and exact transitions are
-authoritative in `simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
+authoritative in `simulation/docs/shared/lifecycle-state-model.md`. Structured
+checkpoint-result capture and verification
 plus publication order are defined in
 `simulation/docs/shared/run-plan-transition-protocol.md`.
 
@@ -459,7 +461,7 @@ and VM documents add only the backend resource probes used to apply that model.
 
 `docs/contracts/lifecycle-contract.md` defines product checkpoint semantics and
 mutation boundaries. The state model maps those product checkpoint instances
-into the simulation run plan, and the transition protocol defines how owning
-producer records enter it.
+into the simulation run plan, and the transition protocol defines how
+owner-originated structured checkpoint results are captured and verified.
 Backend orchestration invokes the same role and integration owners through its
 documented transport; it does not create another lifecycle contract.

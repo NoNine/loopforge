@@ -137,7 +137,7 @@ Before writing `baseline-prereqs=ready`, the harness must prove:
   connect to its LDAP port, and bind/search the LDAP endpoint over the VM
   network.
 
-The M4 LDAP producer record names the simulation endpoint, seeded accounts and
+The M4 LDAP operation record names the simulation endpoint, seeded accounts and
 groups, local and consumer bind/search results, bounded log, simulation-only
 label, and redaction status. It never contains the bind password.
 

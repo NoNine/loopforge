@@ -1,14 +1,14 @@
 ## Step 10: Standardize Validation And Evidence Collection
 
 Create `docs/contracts/validation-and-evidence.md` and `scripts/collect-evidence.sh`.
-The topic doc owns evidence schema, mode labels, redaction rules, producer
-responsibilities, review guidance, and aggregation behavior.
+The topic doc owns structured checkpoint-result schemas, mode labels,
+redaction rules, review guidance, and aggregation behavior.
 
 Implementation notes:
 
-- Role-local `collect-evidence` commands from Steps 7, 8, and 9 must emit
-  records that conform to `docs/contracts/validation-and-evidence.md`.
-- `scripts/collect-evidence.sh` validates and aggregates role-local records,
+- Role-local `collect-evidence` commands must emit structured results that
+  conform to `docs/contracts/validation-and-evidence.md`.
+- `scripts/collect-evidence.sh` validates and aggregates role-qualified results,
   Docker/VM simulation utility records, and end-to-end integration records into
   the final evidence package.
 - Do not store secrets in evidence.
@@ -32,4 +32,3 @@ Acceptance criteria:
   evidence when present.
 - Evidence summaries follow `docs/contracts/validation-and-evidence.md` and omit or
   redact secret-looking values.
-

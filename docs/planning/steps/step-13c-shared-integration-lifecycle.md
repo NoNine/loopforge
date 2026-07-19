@@ -9,8 +9,8 @@ fresh-state role handoffs and the Step 13 M8 discovery work, but it is not
 VM-specific. Step 13 integration acceptance, Step 14 boundary checks, and Step
 15 final acceptance depend on this step.
 
-This docs-first revision defines the intended producer-verification and
-run-step contract. Runtime migration to `run-plan-state.env`, `run-steps/`,
+This docs-first revision defines the intended checkpoint-result capture,
+verification, and run-step contract. Runtime migration to `run-plan-state.env`, `run-steps/`,
 `open-run-step`, and `commit-run-step` remains pending in M5.
 
 ## Authorities And Required Reading
@@ -23,7 +23,7 @@ Read these before implementation:
 - `docs/contracts/validation-and-evidence.md` for checkpoint evidence and
   reviewed-input binding.
 - `simulation/docs/shared/run-plan-transition-protocol.md` for integration
-  producer verification and run-step commitment.
+  result capture, verification, and run-step commitment.
 - `docs/contracts/account-model.md` and `docs/contracts/directory-model.md` for
   accounts, shared storage, protected paths, ownership, and file modes.
 - `docs/architecture/system-model.md` for interfaces and cross-role ownership.
@@ -57,13 +57,13 @@ Required behavior changes:
   validation implicitly.
 - `collect-evidence` may collect partial diagnostic records but must not promote
   an incomplete checkpoint set to pass.
-- Producer `collect-evidence` commands emit evidence outcomes for their owning
+- Owning `collect-evidence` commands emit structured results for their
   phase. The global `scripts/collect-evidence.sh` collector runs only after
   end-to-end proof as the final Evidence audit input; it does not authorize
   target work or accept its own checkpoint.
 - Helper-assisted `target-deployment` uses the human
   `docs/operations/setup/acceptance-checklist.md` for checkpoint decisions.
-  Helper producer records support those decisions but do not
+  Structured helper results support those decisions but do not
   replace them.
 
 Loopforge v1 does not provide credential rotation. Normal configuration must
@@ -90,7 +90,7 @@ repair an earlier milestone failure.
 Step 13c is intentionally sequential because each milestone creates state that
 the next milestone consumes:
 
-| Producer | Required output | Consumer |
+| Source milestone | Required output | Consumer |
 | --- | --- | --- |
 | Step 13b M5 | Three bound role handoffs and run-plan head at the end of the role tail | M1 preflight and M5 composite continuation |
 | M1 | Bound integration state and mode-appropriate effective Gerrit ACLs | M2 credential/SSH custody and M3 Gerrit Trigger setup |
@@ -99,8 +99,8 @@ the next milestone consumes:
 | M4 | Bound validation evidence followed by active proof evidence | M5 harness verification and evidence audit |
 | M5 | Run-plan head through evidence audit and completed backend-local run plans | M6 Docker/VM composite runtime acceptance |
 
-M1-M4 create producer records without publishing composite-owned state.
-M5 is one fail-closed harness cutover after every producer contract exists; it
+M1-M4 create structured checkpoint results without publishing composite-owned
+state. M5 is one fail-closed harness cutover after every result contract exists; it
 removes old progression markers instead of maintaining dual readers.
 
 ## M1: State, Preflight, And Gerrit ACL Realization
@@ -196,7 +196,7 @@ Implementation:
   effective, then configure the Jenkins Gerrit credential and Gerrit Trigger.
 - Fail instead of deleting and recreating an existing token ID during normal
   setup.
-- Write the shared-setup producer record only after keys, public-key authorization,
+- Write the shared-setup structured result only after keys, public-key authorization,
   credentials, shared storage, node, and trigger configuration all succeed for
   the same bound inputs.
 
@@ -213,7 +213,7 @@ Acceptance:
   cleanup, implicit rotation, validation claims, or disposable proof artifacts.
 - Shared storage source, mount, ownership, GID, mode, export options, and setup
   proof match the reviewed inputs.
-- A passing setup producer record is absent after any partial failure.
+- A passing setup result is absent after any partial failure.
 
 ## M4: Observational Validation And Active Proof
 
@@ -227,7 +227,7 @@ Implementation:
 - Consume the M3 storage proof without writing another validation file.
 - Do not create or replace credentials, nodes, jobs, builds, changes, events,
   votes, directories, or service state during validation.
-- Bind validation output to the matching M3 producer record and reviewed inputs.
+- Bind validation output to the matching M3 structured result and reviewed inputs.
 - Make `prove-integration` create one labeled disposable Jenkins job and one
   disposable Gerrit change. Use that change to prove SSH event delivery, agent
   scheduling and execution, REST `Verified +1`, and final Gerrit review state.
@@ -262,16 +262,16 @@ Implementation:
   and redaction state.
 - Make `collect-evidence` validate the checkpoint set reached and reject
   contradictory success/failure signals without manufacturing missing success.
-- Keep per-checkpoint producer records distinct from the final global Evidence
+- Keep per-checkpoint structured results distinct from the final global Evidence
   audit. In simulation, commit `evidence-audit` only after the collector result
   has been revalidated by the harness; in helper-assisted target deployment,
   record the human decision in the acceptance checklist.
-- Make both harnesses verify integration producer records and use
+- Make both harnesses capture and verify integration checkpoint results and use
   `open-run-step` and `commit-run-step` for integration preflight, setup,
   validation, proof, and evidence audit.
 - Remove the Docker validate marker and VM integration status markers plus
   every old reader. Exact run-step predecessors replace their progression role;
-  producer records remain distinct inputs to harness verification.
+  structured checkpoint results remain distinct inputs to harness verification.
 - Extend the backend-local run plans from the Step 13b role tail
   through integration preflight, setup, validation, proof, and evidence audit.
   Align summaries, exact resume, and `already-complete` with the run-plan head
@@ -296,11 +296,11 @@ Acceptance:
 
 - Evidence audit rejects stale, incomplete, unbound, or contradictory state.
 - Only the run step chain authorizes integration progression.
-- Evidence summaries report producer outcomes and do not claim committed
+- Evidence summaries report checkpoint outcomes and do not claim committed
   run-plan progress without a run-step record or target acceptance without the
   target acceptance checklist.
 - No harness validation or proof-prerequisite marker remains in either backend.
-- Docker and VM verify the same helper-owned producer records with the same
+- Docker and VM capture and verify the same helper-owned structured results with the same
   predecessor and proof rules.
 - Both backend planners reach `already-complete` only after the evidence-audit
   checkpoint and never publish composite-owned run-plan state.
@@ -328,7 +328,7 @@ Acceptance:
 ## State And Recovery Rules
 
 - Do not add compatibility fallbacks for old generated integration state.
-- Replace marker-only integration state with bound producer records, remove
+- Replace marker-only integration state with bound structured checkpoint results, remove
   harness-only validation/proof progression markers when the
   run-plan ledger lands, and do not read old and new progression state together.
 - Inspect stale state read-only, then use documented explicit cleanup and a

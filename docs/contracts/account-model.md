@@ -71,7 +71,7 @@ values without mutation. A role's `install` phase creates its fully absent
 runtime group and account immediately before creating the role product home,
 or adopts a fully matching account/group/empty-home set for initial setup.
 Partial state, numeric collisions, mismatches, and a non-empty home without the
-exact input-bound producer record block and require explicit operator cleanup
+exact input-bound structured checkpoint result block and require explicit operator cleanup
 or correction; helpers do not reconfigure existing identities or application
 state.
 

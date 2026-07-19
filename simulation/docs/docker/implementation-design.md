@@ -8,7 +8,7 @@ syntax and realization deltas. `simulation/docs/shared/harness-design.md` owns
 the common harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
 command guards. `simulation/docs/shared/run-plan-transition-protocol.md` owns
-producer-record verification plus run-step commitment.
+structured checkpoint-result capture and verification plus run-step commitment.
 
 Docker realizes the shared module roles with Docker-local capability APIs.
 Compose, containers, bind data, loopback ports, baseline archives, transport
@@ -83,8 +83,8 @@ container lifecycle, or integration setup.
 integration helper owns those postconditions; this module verifies them for
 run-plan commitment.
 
-`evidence.sh` owns the Docker evidence schema, Docker collection waivers, and
-producer-record normalization. It remains backend-local.
+`evidence.sh` owns Docker evidence collection and capture normalization. It
+remains backend-local and does not manufacture checkpoint outcomes.
 
 `lifecycle.sh` maps the shared command-orchestration role onto Docker
 capabilities. It remains the only Docker command-shaped implementation layer.

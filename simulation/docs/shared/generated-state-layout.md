@@ -62,9 +62,9 @@ Paths without a `sets/<set-id>/` prefix are relative to the run root.
 | `host/state/run-steps/` | Host-dominated | Hash-linked immutable run-step records | Retained review output |
 | `host/evidence/harness/operations/` | Host-dominated | Redacted, review-sensitive simulation operation records | Retained review output |
 | `host/logs/harness/` | Host-dominated | Review-sensitive bounded harness logs | Retained review output |
-| `host/evidence/integration/` | Host-dominated | Redacted, review-sensitive host-orchestrated integration producer records | Retained review output |
+| `host/evidence/integration/` | Host-dominated | Redacted, review-sensitive captured integration checkpoint results | Retained review output |
 | `host/logs/integration/` | Host-dominated | Review-sensitive bounded integration logs | Retained review output |
-| `target/evidence/<role>/` | Target-dominated | Retained producer-record copy corresponding to `/var/lib/loopforge/evidence` on one target | Retained review output |
+| `target/evidence/<role>/` | Target-dominated | Captured structured checkpoint results corresponding to `/var/lib/loopforge/evidence` on one target | Retained review output |
 | `target/logs/<role>/` | Target-dominated | Retained copy corresponding to `/var/log/loopforge` on one target | Retained review output |
 
 The immutable backend run marker at the run root and exported artifact review
@@ -93,8 +93,8 @@ retained state or evidence.
 durable backend state but does not clean generated run state. After matching
 restoration, `clean` removes mutable inputs, rendered state, the run-plan head,
 and backend-specific run scratch while preserving the immutable run marker,
-run-step records, operation records, exported artifact archives, producer
-records, and bounded logs.
+run-step records, operation records, exported artifact archives, captured
+checkpoint results, and bounded logs.
 It removes `active-run.env` last. `destroy` removes the ownership-validated set
 root and backend resources without deleting retained run roots.
 

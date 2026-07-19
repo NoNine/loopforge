@@ -59,7 +59,7 @@ same initial setup scope as the native path and collect the redacted evidence
 required for the selected mode.
 
 For helper-assisted `target-deployment`, record each human checkpoint decision
-in `setup/acceptance-checklist.md`. Passing helper producer records and
+in `setup/acceptance-checklist.md`. Passing structured helper results and
 evidence support that decision but do not authorize the next target phase by
 themselves. Docker and VM simulation use their run step ledgers
 instead of a human target checklist.

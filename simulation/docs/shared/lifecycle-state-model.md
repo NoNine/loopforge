@@ -12,11 +12,11 @@ custody classes of the records described here. A path named in this document
 locates a state record; it does not transfer directory-layout authority here.
 
 `simulation/docs/shared/run-plan-transition-protocol.md` separately owns the
-cross-layer verification and publication protocol: which producer records the
-harness must verify and when it may invoke a transition defined here. The
-protocol does not add state dimensions, run-step identifiers,
+cross-layer capture, verification, and publication protocol: which structured
+checkpoint result the harness must verify and when it may invoke a transition
+defined here. The protocol does not add state dimensions, run-step identifiers,
 classifications, or transition effects. This state model does not define
-product-owner postconditions, producer-record content, or transaction steps.
+product-owner postconditions, structured-result content, or transaction steps.
 
 ## Two Coordinated State Machines
 
@@ -26,7 +26,7 @@ separate authorities even though some public commands coordinate both:
 | Model | State tuple | Purpose | Durable history |
 | --- | --- | --- | --- |
 | Simulation resource lifecycle (`R`) | Presence, power, reset gate | Create, power, restore, clean, and destroy the reusable environment | Simulation operation records and set/baseline metadata |
-| Product run plan (`P`) | Committed run-step head, open activity | Order and resume applicable product checkpoint execution inside that environment | Product producer records and hash-linked run-step records |
+| Product run plan (`P`) | Committed run-step head, open activity | Order and resume applicable product checkpoint execution inside that environment | Captured checkpoint results and hash-linked run-step records |
 | Execution coordination state (`C`) | Active-run claim, input readiness, derived durable-content classification | Bind one immutable run plan to one simulation set and guard cross-machine commands | `active-run.env`, effective-input binding, and classification result |
 
 The separation rules are:
@@ -53,7 +53,7 @@ The product checkpoint semantics and boundaries come from
 source selection and OS dependency provisioning from its product run plan.
 `init-run` owns simulation run-state and source-selection publication;
 `create` owns resource, OS dependency, and baseline lifecycle. Both write
-simulation operation records, not product producer or run-step records. The
+simulation operation records, not structured checkpoint results or run-step records. The
 first successful `start` publishes effective inputs before any product run
 step.
 
@@ -99,7 +99,7 @@ stateDiagram-v2
   [*] --> EmptyPlan: init-run creates P
   EmptyPlan --> OpenStep: open prepare-artifacts-gerrit
   CommittedHead --> OpenStep: open exact next step
-  OpenStep --> CommittedHead: commit verified producer
+  OpenStep --> CommittedHead: commit verified checkpoint result
   CommittedHead --> Complete: commit evidence-audit as exact final step
 ```
 
@@ -275,14 +275,14 @@ Every run step requires `input_state=ready` and an exact baseline fingerprint.
 Run-step records are immutable and hash-linked through
 `last_run_step_sha256`. Each record identifies the backend, set, run, baseline,
 source and effective inputs available at commit time, step, predecessor,
-activity kind, `status=complete`, `producer_record_sha256`, and timestamps.
+activity kind, `status=complete`, `checkpoint_result_sha256`, and timestamps.
 Unknown run-step identifiers or invalid predecessor ordering fail closed.
 
 Only successfully verified product checkpoint attempts produce run-step
 records. Other outcomes do not add a run-step record or advance the chain. The
-transition protocol owns which producer record may supply
-`producer_record_sha256`; the mapping above owns every run-step identifier and
-its strict predecessor order.
+transition protocol owns which captured checkpoint result may supply
+`checkpoint_result_sha256`; the mapping above owns every run-step identifier
+and its strict predecessor order.
 
 ## Run-Plan State Transitions
 
@@ -406,11 +406,11 @@ or commit a product run step.
 | `start` | Claimed run, reset gate `normal`, durable content `baseline` or `exact-bound`; resources stopped or already running | Starts or verifies resources, refreshes live target access, publishes stable effective inputs once when pending, or returns `state=already-running` | Run ID, run steps, durable content, resource identity, ready effective inputs |
 | `stop` | Claimed ownership-valid set with resources running or already stopped | Gracefully stops running services and backend runtime, or returns `state=already-stopped` | Run ID, run steps, durable content, resources, evidence |
 | `restore-baseline` | Claimed run, resources stopped, ownership-valid matching baseline, reset gate `normal` | Resets durable content to baseline, writes the restore operation record, and sets `restored-pending-clean` | Active run, mutable run state, retained review output, reusable resources |
-| `clean` | `restored-pending-clean`, matching successful restore operation record, claimed run, resources stopped | Removes mutable run state and active-run pointer; returns to baseline stopped and unclaimed | Baseline, reusable resources, retained artifacts, producer and operation records, and logs |
+| `clean` | `restored-pending-clean`, matching successful restore operation record, claimed run, resources stopped | Removes mutable run state and active-run pointer; returns to baseline stopped and unclaimed | Baseline, reusable resources, retained artifacts, captured results, operation records, and logs |
 | `destroy` | Resources absent or stopped and selected ownership validated | Removes owned set state, or returns `state=already-absent` for a fully absent unclaimed set | Retained run roots and review output |
 | `status` | Selected state resolvable, including absent or unclaimed; read-only | Reports set, run, power, durable classification, reset gate, and available access state | All simulation state |
 | `audit-state` | None beyond selected identity inputs; read-only | Reports generated/backend consistency | All simulation state |
-| Product run-plan phases | Claimed run, resources running, reset gate `normal`, effective inputs ready, exact baseline, exact preceding run step and state classification | Invokes only the product owner and commits the corresponding run step after verification | Set/run/input binding and prior producer records |
+| Product run-plan phases | Claimed run, resources running, reset gate `normal`, effective inputs ready, exact baseline, exact preceding run step and state classification | Invokes only the product owner and commits the corresponding run step after verification | Set/run/input binding and prior captured checkpoint results |
 | `run` | State matches one supported fresh, resume, or complete case | Runs the normal run plan from the first required command and leaves the set running | Never performs cleanup, restoration, destruction, or audit |
 
 Running resources block `create`; callers use `stop` first. `create` also

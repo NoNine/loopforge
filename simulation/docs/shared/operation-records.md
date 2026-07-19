@@ -25,9 +25,9 @@ Every simulation operation record includes:
 - Bounded log references.
 - Redaction status.
 
-It contains no product checkpoint family, product producer outcome, run-plan
+It contains no product checkpoint family, product checkpoint outcome, run-plan
 predecessor, or human acceptance decision. It cannot supply
-`producer_record_sha256` for a run-step record. The global evidence package may
+`checkpoint_result_sha256` for a run-step record. The global evidence package may
 include operation records as supplemental diagnostics, but they never satisfy
 a required product checkpoint.
 

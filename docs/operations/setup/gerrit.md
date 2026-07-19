@@ -94,7 +94,7 @@ Produced outputs:
   accepted for creation by `install`; a fully matching identity with an empty
   product home is accepted for adoption. Other existing application state,
   partial state, or conflicting state blocks unless an exact input-bound
-  producer record returns non-mutating `already-complete`.
+  structured checkpoint result supports non-mutating `already-complete`.
 - Jenkins Gerrit integration account, group, and public-key handoff values are
   not Step 7 prerequisites. They are reviewed and applied in the later
   integration step.
@@ -299,7 +299,7 @@ Validation evidence:
 - LDAP config exists.
 - The Gerrit target can bind and search the configured LDAP user and group
   bases with `ldapsearch`.
-- The producer record includes the LDAP endpoint and input fingerprint, not
+- The structured checkpoint result includes the LDAP endpoint and input fingerprint, not
   bind secrets.
 - If `ldapsearch` or reviewed LDAP bind/search credentials are unavailable,
   validation blocks. TCP reachability alone is not LDAP access proof.
@@ -414,7 +414,7 @@ integration prerequisites are deferred. Because it can start Gerrit and writes
 new evidence files, it is a mutating helper command and requires `--yes` after
 reviewed env confirmation.
 
-The resulting evidence status is a producer outcome. In helper-assisted
+The resulting evidence status is a structured checkpoint outcome. In helper-assisted
 `target-deployment`, a human must accept Gerrit role-local setup before
 role-local validation and accept validation before integration in
 `setup/acceptance-checklist.md`. In simulation, the harness accepts each

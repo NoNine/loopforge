@@ -104,7 +104,8 @@ state.
 
 Actors invoke utilities. Utilities use accounts and service APIs to inspect or
 mutate environments. Services authenticate accounts and produce runtime state.
-Producer records state checkpoint outcomes and proof without exposing secrets.
+Structured checkpoint results state machine-produced outcomes and proof without
+exposing secrets.
 
 ## Logical Environments
 
@@ -315,7 +316,7 @@ scope and execution context without becoming an acceptance decision.
   change, and Jenkins verification build references.
 - Helper-assisted `target-deployment` acceptance uses
   `docs/operations/setup/acceptance-checklist.md`. A human reviewer accepts or
-  blocks each checkpoint from the helper producer record; the helper
+  blocks each checkpoint from the structured helper result; the helper
   artifacts do not authorize progression by themselves.
 
 Machine-generated records and the native checklist must never include private

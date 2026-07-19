@@ -8,8 +8,8 @@ realization; backend implementation design files own Docker- or VM-specific
 modules and mechanisms.
 
 The exact simulation state dimensions, command guards, and transitions are
-defined in `simulation/docs/shared/lifecycle-state-model.md`. Acceptance and
-publication of producer records are defined in
+defined in `simulation/docs/shared/lifecycle-state-model.md`. Capture and
+verification of structured checkpoint results are defined in
 `simulation/docs/shared/run-plan-transition-protocol.md`.
 Generated set, lock, and run storage is defined in
 `simulation/docs/shared/generated-state-layout.md`.
@@ -52,7 +52,7 @@ roles and document backend-only splits.
 | Backend entrypoint | Parse the public CLI, load shared and backend-local modules, and dispatch command-shaped functions. It remains thin and contains no lifecycle implementation bodies. |
 | Command orchestration | Own composite run-plan sequencing, set-lock selection, command summaries, and delegation. It is the only command-shaped implementation layer. |
 | Simulation-set capabilities | Coordinate create, start, stop, restore, status, audit, clean, and destroy against ownership-validated backend resources; publish simulation operation records without completing product checkpoints. |
-| Lifecycle capabilities | Prepare and stage artifacts, invoke role helpers, invoke the integration owner, and verify producer records before run-step commitment. They do not redefine role or integration postconditions. |
+| Lifecycle capabilities | Prepare and stage artifacts, invoke role helpers, invoke the integration owner, and capture and verify structured checkpoint results before run-step commitment. They do not redefine role or integration postconditions. |
 | Target control plane | Provide current target access, bounded command execution, input and artifact transfer, and interactive operator SSH through backend-approved mechanisms. |
 | Backend infrastructure | Implement Compose/container or libvirt/VM resource primitives without calling lifecycle capabilities or command orchestration. |
 | Backend foundation | Realize canonical paths, backend configuration, shared-state adapters, and backend evidence metadata. State adapters do not query live backend resources. |
@@ -194,7 +194,7 @@ an explicit operator action outside the composite.
 | Lifecycle | Command names, state meanings, guards, preservation rules, and failure behavior | Compose/container operations or libvirt/domain operations |
 | Persistence | Stable set lock, strict active-run and run-plan records, atomic publication, and fail-closed parsing | Backend-local path realization and resource ownership probes |
 | Inputs | Source-template custody, first-start effective publication, immutable helper inputs, and ephemeral access separation | Stable endpoint rendering plus Docker published ports or VM DHCP/SSH readiness |
-| Product run-plan transition | Shared producer verification and run-step commitment protocol | Backend harness commits verified producer results under the selected set lock |
+| Product run-plan transition | Shared checkpoint-result capture, verification, and run-step commitment protocol | Backend harness commits verified results under the selected set lock |
 | Resource operation records | Shared simulation operation-record contract | Backend lifecycle owner records resource transition outcomes and proof |
 | Evidence | Required identities, statuses, redaction, and bounded references | Backend resource metadata and collector mechanics |
 | Terminal output | Compact command summaries and shared set/run fields | Compose project, libvirt prefix, URLs, SSH rows, and other backend fields |
@@ -202,38 +202,62 @@ an explicit operator action outside the composite.
 The shared contract does not require identical module names, function names,
 resource APIs, or transport implementations.
 
-## Post-Baseline Boundary
+## Target-Like And Backend Infrastructure Operations
 
-After the clean baseline is captured, Loopforge role and integration
-checkpoints must pass through target-like interfaces and helper-visible paths.
-Backend infrastructure remains valid for simulation-set lifecycle commands but
-must not complete application checkpoints.
+Once a selected simulation set has a clean baseline, two operation classes
+remain available. Backend infrastructure operations manage the simulation
+resource lifecycle, clean baseline capture and restoration, and target
+availability. Product checkpoint work must use target-like interfaces
+and helper-visible paths. That operation path includes the target control
+plane, transport of published effective inputs and artifacts, owning role or
+integration helpers, target OS operations, services, and product APIs. Backend
+infrastructure operations must not replace that path or manufacture product
+checkpoint success.
 
 ```mermaid
-flowchart LR
-  BACKEND[Backend infrastructure]
-  BASELINE[Set-owned clean baseline]
-  TARGET[Target control plane]
-  INPUTS[Effective inputs and staged artifacts]
-  HELPERS[Role and integration helpers]
-  APIS[Services and product APIs]
-  EVIDENCE[Bounded evidence]
+flowchart TB
+  subgraph INFRA[Backend infrastructure operations]
+    PROVISION[Pre-baseline OS dependency provisioning]
+    BASELINE[Clean baseline capture]
+    RESOURCES[Simulation resource lifecycle]
+    AVAILABILITY[Running owned target resources]
 
-  BACKEND --> BASELINE
-  BASELINE --> TARGET
-  TARGET --> INPUTS
-  INPUTS --> HELPERS
-  HELPERS --> APIS
-  APIS --> EVIDENCE
+    PROVISION --> BASELINE
+    RESOURCES --> AVAILABILITY
+  end
 
-  BACKEND -. forbidden checkpoint completion .-> HELPERS
-  BACKEND -. forbidden success synthesis .-> EVIDENCE
+  GATE{{Clean baseline exists}}
+
+  subgraph TARGET[Product checkpoint work using target-like interfaces]
+    ACCESS[Target control plane]
+    TRANSFER[Transfer published effective inputs and artifacts]
+    INPUTS[Helper-visible paths and target-side staging]
+    HELPERS[Invoke owning role or integration helper]
+    RUNTIME[Target OS, services, and product APIs]
+    EVIDENCE[Owner-originated structured checkpoint result]
+
+    ACCESS --> TRANSFER
+    ACCESS --> HELPERS
+    TRANSFER --> INPUTS
+    INPUTS --> HELPERS
+    HELPERS --> RUNTIME
+    RUNTIME --> EVIDENCE
+  end
+
+  BASELINE --> GATE
+  GATE --> ACCESS
+  AVAILABILITY -->|make targets reachable| ACCESS
+  RESOURCES -. must not bypass target-like interfaces .-> HELPERS
+  RESOURCES -. must not manufacture product success .-> EVIDENCE
 ```
 
-Docker-only transfer, collection, and direct-process waivers must remain
-explicitly labeled and evidenced. VM infrastructure operations such as seed
-media, cloud-init bootstrap, snapshot restore, and guest power control remain
-below the baseline or simulation-set lifecycle boundary.
+Where Docker cannot realize a target-like interface naturally, Docker-only
+transfer, collection, and direct-process waivers must remain explicitly
+labeled and evidenced; they do not authorize backend infrastructure to
+complete product checkpoints. VM operations such as seed media, cloud-init
+bootstrap, snapshot restore, and guest power control remain backend
+infrastructure operations and cannot substitute for target-like interfaces in
+product checkpoint work.
 
 ## Shared Helper Boundary
 
@@ -275,7 +299,7 @@ Reviewers of either harness should confirm that:
 - public behavior delegates state and run-step commitment to the shared state
   model and transition protocol;
 - simulation resource commands retain operation records without using them as
-  product producer or run-step records;
+  checkpoint results or run-step records;
 - module dependencies follow the architectural planes and do not call upward;
 - backend lifecycle operations do not complete Loopforge product checkpoints;
 - role and integration work uses the owning helpers and target-like interfaces;

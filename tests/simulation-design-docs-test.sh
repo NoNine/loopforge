@@ -250,7 +250,7 @@ require_text "$state_model" \
   '`simulation/docs/shared/run-plan-transition-protocol.md` separately owns the' \
   'Lifecycle state model must delegate the transition protocol'
 require_text "$state_model" \
-  'product-owner postconditions, producer-record content, or transaction steps.' \
+  'product-owner postconditions, structured-result content, or transaction steps.' \
   'Lifecycle state model must exclude transition-protocol responsibilities'
 require_text "$state_model" \
   '| `open-run-step(<step>, <activity>)` |' \
@@ -259,8 +259,8 @@ require_text "$state_model" \
   '| `commit-run-step(<record>)` |' \
   'Lifecycle state model must define the run-step-commit transition'
 require_text "$state_model" \
-  '`producer_record_sha256`' \
-  'Lifecycle state model must own the workflow producer-record digest field'
+  '`checkpoint_result_sha256`' \
+  'Lifecycle state model must own the checkpoint-result digest field'
 require_text "$state_model" \
   'The concrete role expansions and five unqualified identifiers in the final' \
   'Lifecycle state model must own the exact run-step vocabulary'
@@ -293,11 +293,11 @@ require_text "$protocol" \
   '# Simulation Run-Plan Transition Protocol' \
   'Run-plan protocol must be explicitly transition-scoped'
 require_text "$protocol" \
-  '## Record Ownership' \
+  '## Result And Record Ownership' \
   'Run-plan protocol must distinguish record ownership'
 require_text "$protocol" \
-  '## Run-Plan Producer Requirements' \
-  'Run-plan protocol must define producer verification inputs'
+  '## Run-Plan Result Requirements' \
+  'Run-plan protocol must define checkpoint-result verification inputs'
 require_text "$protocol" \
   '## Transition Protocol' \
   'Run-plan protocol must define transition ordering'
@@ -336,8 +336,8 @@ require_text "$operations" \
   'It cannot supply' \
   'Operation records must not satisfy product run steps'
 require_text "$operations" \
-  '`producer_record_sha256` for a run-step record.' \
-  'Operation records must not supply producer digests'
+  '`checkpoint_result_sha256` for a run-step record.' \
+  'Operation records must not supply checkpoint-result digests'
 
 require_text "$lifecycle" \
   '`simulation/docs/shared/lifecycle-state-model.md` owns exact simulation state' \
@@ -346,7 +346,7 @@ require_text "$lifecycle" \
   'checkpoint mapping;' \
   'Lifecycle authority must delegate the simulation checkpoint mapping'
 require_text "$lifecycle" \
-  '`simulation/docs/shared/run-plan-transition-protocol.md` owns producer-record' \
+  '`simulation/docs/shared/run-plan-transition-protocol.md` owns structured' \
   'Lifecycle authority must delegate run-plan transitions'
 reject_text "$lifecycle" \
   'restored-pending-clean' \
@@ -371,10 +371,10 @@ require_text "$vm_design" \
   '`simulation/docs/shared/lifecycle-state-model.md` owns simulation-set state' \
   'VM implementation design must delegate shared lifecycle state'
 require_text "$vm_design" \
-  'producer-record verification plus run-step commitment.' \
+  'structured checkpoint-result capture and verification plus run-step commitment.' \
   'VM implementation design must delegate run-plan transitions'
 require_text "$docker_design" \
-  'producer-record verification plus run-step commitment.' \
+  'structured checkpoint-result capture and verification plus run-step commitment.' \
   'Docker implementation design must delegate run-plan transitions'
 require_text "$docker_design" \
   '`simulation/docs/shared/harness-design.md` owns' \

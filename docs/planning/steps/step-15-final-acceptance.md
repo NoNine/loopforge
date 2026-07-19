@@ -75,7 +75,7 @@ change-management system, not in the repository.
 
 Helper-assisted `target-deployment` is also human-accepted. Retain the
 completed setup acceptance checklist in the approved change-management system;
-helper producer records, evidence packages, and summaries support the review
+structured helper results, evidence packages, and summaries support the review
 but do not authorize later target work by themselves.
 
 If any required checklist item fails or requires an undocumented operation,

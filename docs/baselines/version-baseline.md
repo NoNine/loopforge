@@ -54,7 +54,7 @@ verifiers, tests, examples, templates, and evidence expectations in one
 logical change. Do not change a role manual, helper default, Docker harness,
 VM scaffold, or evidence expectation independently from this document.
 
-Producer records and verifier summaries must record the baseline values used
+Structured checkpoint results and verifier summaries must record the baseline values used
 by the run. Docker and VM verification must fail or report blocked rather than
 claim comparable verification when the environment does not match the reviewed
 baseline for that run.

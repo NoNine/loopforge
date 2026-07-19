@@ -89,8 +89,8 @@ require_text "$lifecycle" \
   'A **run-step record** is the simulation harness' \
   'Lifecycle contract must distinguish simulation run-step records'
 require_text "$lifecycle" \
-  'A **producer record** is an owning utility' \
-  'Lifecycle contract must define one producer-owned outcome and proof record'
+  'A **checkpoint result** is the product checkpoint owner' \
+  'Lifecycle contract must define the abstract owner-originated result'
 require_text "$lifecycle" \
   '## Acceptance And Authorization' \
   'Lifecycle contract must define mode coordination'
@@ -101,7 +101,7 @@ require_text "$lifecycle" \
   'Docker and VM simulation waive `Input review or source selection` and `OS' \
   'Lifecycle contract must define the two simulation checkpoint waivers'
 require_text "$lifecycle" \
-  'Neither operation writes a product producer record or commits a run step.' \
+  'Neither operation emits a structured checkpoint result or commits a run step.' \
   'Waived simulation prerequisites must stay outside the product run plan'
 reject_text "$lifecycle" \
   'automated simulation acceptance' \
@@ -144,14 +144,17 @@ require_text "$shared" 'simulation-only direct Gerrit REST apply' \
 require_text "$protocol" 'simulation-only direct Gerrit REST apply' \
   'Checkpoint protocol must bind direct ACL apply evidence'
 require_text "$protocol" \
-  '| Producer record | Product checkpoint owner |' \
-  'Checkpoint protocol must define producer-record ownership'
+  '| Structured checkpoint result | Product checkpoint owner |' \
+  'Checkpoint protocol must preserve product result ownership'
+require_text "$protocol" \
+  '| Captured checkpoint result | Active backend harness under the set lock |' \
+  'Checkpoint protocol must define harness-owned result capture'
 reject_text "$protocol" \
   '| Evidence record |' \
-  'Checkpoint protocol must not split evidence into a second producer artifact'
+  'Checkpoint protocol must not split evidence into a second owner artifact'
 require_text "$state_model" \
-  '`producer_record_sha256`' \
-  'Run-step records must hash the verified producer record'
+  '`checkpoint_result_sha256`' \
+  'Run-step records must hash the captured checkpoint result'
 for file in "$docker" "$vm"; do
   reject_text "$file" 'simulation-only direct Gerrit REST apply' \
     "Backend docs must not redefine direct ACL apply: $file"
@@ -264,15 +267,15 @@ for simulation_heading in \
 done
 require_text "$evidence" \
   'an opaque execution-binding fingerprint supplied by the mode coordinator.' \
-  'Evidence contract must bind producer records without simulation internals'
+  'Evidence contract must bind structured results without simulation internals'
 require_text "$evidence" \
   'Workflow predecessors, run-plan' \
-  'Product producer records must exclude orchestration state'
+  'Structured checkpoint results must exclude orchestration state'
 require_text "$evidence" \
-  'One record carries both the producer' \
-  'Evidence contract must unify producer outcome and supporting proof'
+  'result carries both the outcome and its supporting evidence' \
+  'Evidence contract must unify checkpoint outcome and supporting proof'
 require_text "$evidence" \
-  '## Product Checkpoint Producer Records' \
+  '## Product Checkpoint Results' \
   'Evidence contract must apply the canonical product checkpoint vocabulary'
 require_text "$evidence" \
   'Do not create evidence-only checkpoint names:' \
@@ -353,7 +356,7 @@ require_text "$state_model" \
   '`state=already-absent`' \
   'Destroy must define idempotent already-absent success'
 require_text "$protocol" \
-  '| Evidence audit | Collector producer record that validates, but does not create,' \
+  '| Evidence audit | Collector result that validates, but does not create,' \
   'Run-plan protocol must keep aggregation separate from runtime truth'
 require_text "$protocol" \
   '## Final Evidence Audit' \
@@ -362,10 +365,10 @@ require_text "$protocol" \
   'An operator may run the collector earlier for partial diagnosis' \
   'Run-plan protocol must distinguish diagnostic collection from completion'
 require_text "$protocol" \
-  'Their product owners may still write producer records' \
+  'Their machine utilities may still emit structured checkpoint results' \
   'Run-plan protocol must preserve target-deployment product ownership'
 require_text "$protocol" \
-  'Simulation does not create producer or run-step records for Input review or' \
+  'Simulation does not create structured checkpoint results or run-step records' \
   'Waived simulation prerequisites must not create product records'
 require_text "$protocol" \
   'without modifying the old run-plan chain.' \
@@ -374,8 +377,8 @@ require_text "$protocol" \
   'Artifact preparation without another `create`.' \
   'Retained-baseline reuse must not require create'
 require_text "$operations" \
-  '`producer_record_sha256` for a run-step record.' \
-  'Operation records must not supply producer digests'
+  '`checkpoint_result_sha256` for a run-step record.' \
+  'Operation records must not supply checkpoint-result digests'
 require_text "$operations" \
   'simulation-owned OS dependency preparation and proof under the simulation' \
   'Create operation records must own waived OS dependency proof'
@@ -392,7 +395,7 @@ require_text "$evidence" \
   'evidence counts alone never' \
   'Evidence summaries must not claim lifecycle progression'
 require_text "$step" \
-  '`simulation/docs/shared/run-plan-transition-protocol.md` for verifying the' \
+  '`simulation/docs/shared/run-plan-transition-protocol.md` for capturing and' \
   'Step 13a must read run-plan transition protocol'
 
 require_text "$shared" '`up` and `down` are' \

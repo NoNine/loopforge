@@ -18,7 +18,8 @@ a second VM simulation CLI.
 
 Shared architecture and exact state behavior are documented in
 `simulation/docs/shared/harness-design.md` and
-`simulation/docs/shared/lifecycle-state-model.md`. Producer-record verification
+`simulation/docs/shared/lifecycle-state-model.md`. Structured checkpoint-result
+capture and verification
 and run-step commitment are documented in
 `simulation/docs/shared/run-plan-transition-protocol.md`. VM module structure and
 implementation contracts are documented in
@@ -138,7 +139,8 @@ shared run step success or progression.
 ## Command Reference
 
 Shared command meanings and state outcomes are authoritative in
-`simulation/docs/shared/simulation-model.md` and `simulation/docs/shared/lifecycle-state-model.md`. VM
+`simulation/docs/shared/simulation-model.md` and
+`simulation/docs/shared/lifecycle-state-model.md`. VM
 accepts that command surface through `simulation/vm/simulate.sh`; this section
 lists only VM syntax and realization deltas.
 
@@ -417,4 +419,4 @@ host-level cleanup procedure.
 
 VM invokes the shared integration owner over target OS SSH through its private
 transport adapter. Integration product checkpoint semantics, run-step
-predecessors, producer verification, and failure behavior remain shared.
+predecessors, checkpoint-result verification, and failure behavior remain shared.

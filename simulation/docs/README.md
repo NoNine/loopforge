@@ -17,7 +17,7 @@ Use `docs/README.md` to resolve repository-wide documentation authority and
 | Shared | `shared/generated-state-layout.md` | Host-side generated roots, path custody, sensitivity, and cleanup classes |
 | Shared | `shared/harness-design.md` | Backend-neutral harness architecture and dependency boundaries |
 | Shared | `shared/lifecycle-state-model.md` | Exact simulation state, guards, transitions, and recovery rights |
-| Shared | `shared/run-plan-transition-protocol.md` | Producer-record verification and run-step commitment |
+| Shared | `shared/run-plan-transition-protocol.md` | Structured checkpoint-result capture, verification, and run-step commitment |
 | Shared | `shared/operation-records.md` | Simulation resource-lifecycle operation records |
 | Shared | `shared/terminal-output.md` | Cross-backend terminal presentation conventions |
 | Docker | `docker/docker-simulation.md` | Docker command syntax and backend realization |

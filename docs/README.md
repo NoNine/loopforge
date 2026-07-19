@@ -41,8 +41,9 @@ Use this order when deciding where a product or process fact belongs:
    and cross-cutting system invariants. It must remain substantive, but it is
    not the documentation index.
 3. `docs/contracts/lifecycle-contract.md` owns temporal behavior: phase order,
-   product checkpoint semantics, mutation boundaries, stop/review/resume points,
-   rerun rules, product workflow order, and lifecycle evidence obligations.
+   product checkpoint and checkpoint-result semantics, result ownership,
+   mutation boundaries, stop/review/resume points, rerun rules, product workflow
+   order, and lifecycle evidence obligations.
 4. Topic authority docs own detailed cross-cutting contracts:
    `docs/contracts/account-model.md` for accounts and credential custody,
    `docs/contracts/directory-model.md` for target-visible runtime path
@@ -52,7 +53,8 @@ Use this order when deciding where a product or process fact belongs:
    `docs/contracts/artifact-bundle-contract.md` for artifact contents and source
    boundaries, `docs/contracts/endpoint-identity.md` for hostnames, URLs, SSH
    host strings, and LDAP endpoint identity,
-   `docs/contracts/validation-and-evidence.md` for evidence and redaction,
+   `docs/contracts/validation-and-evidence.md` for structured checkpoint-result
+   content, evidence, and redaction,
    `docs/contracts/gerrit-trigger-integration.md` for Gerrit Trigger and
    `Verified` behavior, and `docs/contracts/ci-model.md` for external product
    CI configuration ownership and generated Jenkins job modeling.

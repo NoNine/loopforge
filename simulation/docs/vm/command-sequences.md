@@ -209,7 +209,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>ROLE: vm_roles_configure(role)
   ROLE->>SSH: vm_ssh_run(role target, helper configure-role)
-  ROLE-->>LC: role producer record
+  ROLE-->>LC: structured role checkpoint result
   LC-->>CLI: compact configure-role summary
 ```
 
@@ -229,7 +229,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>ROLE: vm_roles_validate(role)
   ROLE->>SSH: vm_ssh_run(role target, helper validate-role)
-  ROLE-->>LC: role producer record
+  ROLE-->>LC: structured role checkpoint result
   LC-->>CLI: compact validate-role summary
 ```
 
@@ -269,7 +269,7 @@ sequenceDiagram
   LC->>ST: vm_state_verify_run_marker()
   LC->>INT: vm_integration_validate()
   INT->>SSH: vm_ssh_run(controller and targets, integration validation)
-  INT-->>LC: bound validation producer record
+  INT-->>LC: bound structured validation result
   LC-->>CLI: compact validate-integration summary
 ```
 
