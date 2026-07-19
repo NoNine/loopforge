@@ -59,7 +59,7 @@ The product must help engineers and operators install and validate:
   `target-deployment` behavior before or alongside implementation.
 - Simulation realization should model the normal product behavior as early as
   practical and as much as practical, including ownership boundaries,
-  interfaces, lifecycle checkpoints, and evidence limits.
+  interfaces, product checkpoints, and evidence limits.
 - Simulation-specific mechanisms must not bypass normal product operation to
   create success. Any explicit simulation-only waiver must be labeled,
   evidenced, and fail closed outside simulation modes.

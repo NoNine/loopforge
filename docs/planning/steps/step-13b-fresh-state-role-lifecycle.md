@@ -79,9 +79,9 @@ begins in the harness role tail and shared integration:
 
 | Producer | Independent result | First consumers |
 | --- | --- | --- |
-| M2 Gerrit | Bound Gerrit role completion and observational readiness evidence | M5 role checkpoint publication; Step 13c M1 ACL preflight and realization |
-| M3 Jenkins controller | Bound controller completion and observational readiness evidence | M5 role checkpoint publication; Step 13c M2 SSH custody and M3 trigger/node setup |
-| M4 Jenkins agent | Bound agent completion and observational readiness evidence | M5 role checkpoint publication; Step 13c M2 authorization and M3 storage/node setup |
+| M2 Gerrit | Bound Gerrit role completion and observational readiness evidence | M5 role workflow checkpoint publication; Step 13c M1 ACL preflight and realization |
+| M3 Jenkins controller | Bound controller completion and observational readiness evidence | M5 role workflow checkpoint publication; Step 13c M2 SSH custody and M3 trigger/node setup |
+| M4 Jenkins agent | Bound agent completion and observational readiness evidence | M5 role workflow checkpoint publication; Step 13c M2 authorization and M3 storage/node setup |
 | M5 role tail | Workflow head through every accepted role checkpoint plus three role-readiness handoffs | Step 13c M1 integration preflight and Step 13c M5 composite continuation |
 
 The fixed simulation checkpoint order still expands each checkpoint family as

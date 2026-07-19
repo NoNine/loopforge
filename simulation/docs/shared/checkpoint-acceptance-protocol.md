@@ -6,12 +6,13 @@ This document owns how Docker and VM harnesses accept owning-layer results and
 producer evidence before publishing simulation workflow progress. It defines
 proof ownership, binding, verification, and publication order.
 
-`simulation/docs/shared/lifecycle-state-model.md` owns the ledger schemas, checkpoint
-vocabulary and order, command guards, classifications, and transition effects.
+`simulation/docs/shared/lifecycle-state-model.md` owns the ledger schemas,
+workflow checkpoint vocabulary and order, command guards, classifications, and
+transition effects.
 This protocol invokes `open-checkpoint` and `commit-checkpoint`; it does not add
-states, transitions, or checkpoint names. Product checkpoint semantics remain
-in `docs/contracts/lifecycle-contract.md`, and evidence schemas and redaction
-remain in `docs/contracts/validation-and-evidence.md`.
+states, transitions, or workflow checkpoint identifiers. Product checkpoint
+semantics remain in `docs/contracts/lifecycle-contract.md`, and evidence schemas
+and redaction remain in `docs/contracts/validation-and-evidence.md`.
 
 Native and helper-based `target-deployment` do not use the simulation ledger.
 Their owning utilities still produce completion state and evidence, while the
@@ -23,31 +24,35 @@ Do not use "checkpoint marker" as a generic name for these distinct records.
 
 | Record | Semantic owner | Meaning |
 | --- | --- | --- |
-| Owning-layer result or completion record | Utility that owns the output or durable postcondition | The exact owned state satisfies its checkpoint contract |
+| Owning-layer result or completion record | Utility that owns the output or durable postcondition | The exact owned state satisfies its product checkpoint instance postcondition |
 | Evidence record | Utility that performed the operation or observation | Redacted proof of what was checked, with a bounded log reference |
 | Workflow checkpoint record | Active backend harness under the set lock | The selected simulation run accepted the owned result and evidence in order |
 
-Only the workflow head and its immutable checkpoint chain authorize simulation
-progression. They do not replace owning-layer truth: before a later checkpoint
-or exact restart, the harness revalidates the owned result required by the
-current head. Evidence alone authorizes neither state nor progression.
+Only the workflow head and its immutable workflow checkpoint chain authorize
+simulation progression. They do not replace owning-layer truth: before
+accepting a later product checkpoint instance or performing an exact restart,
+the harness revalidates the owned result required by the current head. Evidence
+alone authorizes neither state nor progression.
 
 ## Acceptance Requirements
 
 Simulation acceptance requires the selected mode, set, run, target identity,
-effective inputs, producing utility revision, and completed checkpoint.
+effective inputs, producing utility revision, and product checkpoint instance
+being accepted.
 Applicable results also bind staged artifact digests, configuration
 fingerprints, or ACL realization and effective permissions.
 
-| Checkpoint scope | Required owned result |
+| Product checkpoint family | Required owned result |
 | --- | --- |
 | Artifact preparation | Manifest, checksums, payload digests, and source-boundary record from the corresponding role helper |
 | Artifact staging | Target-side manifest and checksum result from the simulation artifact module |
-| Role setup | Bound role completion record from the corresponding role helper |
-| Role or integration observation | Producer evidence against the required prior owned results and current live state |
+| Role-local setup | Bound role completion record from the corresponding role helper |
+| Role-local validation | Producer evidence against the required prior owned results and current live role state |
+| Integration preflight | Producer evidence against the three role-readiness handoffs, bound inputs, inventory, access, selected run, and mode support |
 | Shared integration setup | Bound integration completion record, including effective `simulation-only direct Gerrit REST apply` results |
-| End-to-end proof | Producer evidence for the declared disposable workflow and final Gerrit result |
-| Evidence audit | Collector result that validates, but does not create, the required checkpoint set |
+| Cross-role validation | Producer evidence against the required prior owned results and current live integration state |
+| End-to-end trigger verification | Producer evidence for the declared disposable workflow and final Gerrit result |
+| Evidence audit | Collector result that validates, but does not create, the required product checkpoint instance set |
 
 Producer evidence carries the same safe binding or a redacted fingerprint of
 protected state. The harness verifies it and places its digest in the workflow
@@ -56,8 +61,8 @@ summary, or unbound `status=pass` is never sufficient.
 
 ## Publication Protocol
 
-The active backend harness performs one checkpoint attempt under the selected
-set lock:
+The active backend harness performs one workflow checkpoint attempt, for one
+product checkpoint instance, under the selected set lock:
 
 1. Verify the active run, effective inputs, exact predecessor, state
    classification, and phase prerequisites.
@@ -65,9 +70,9 @@ set lock:
 3. Invoke `open-checkpoint` with the declared activity. For target mutation,
    publish it immediately before the first mutation; for observation, publish
    it immediately before invoking the validator.
-4. Invoke only the checkpoint-owning utility. A mutating utility writes its
-   bound completion record last when the checkpoint creates durable owned
-   state.
+4. Invoke only the utility that owns the product checkpoint instance. A
+   mutating utility writes its bound completion record last when the instance
+   creates durable owned state.
 5. Require producer evidence with the owned-result binding and bounded log,
    preserving the producer record digest in any normalized harness copy.
 6. Revalidate the owned result, evidence, identities, and input bindings without
@@ -89,12 +94,14 @@ before step 7 does not advance the workflow.
 | Evidence write or validation failure | Treat evidence as missing or invalid | Do not commit; the open activity remains |
 | Workflow record or head publication failure | Retain any owned result and evidence for diagnosis | The incomplete publication cannot authorize later work; audit reports the state-model result |
 
-Failure evidence never enters the successful checkpoint chain. Read-only audit
-may diagnose disagreement but cannot manufacture a missing commit.
+Failure evidence never enters the successful workflow checkpoint chain.
+Read-only audit may diagnose disagreement but cannot manufacture a missing
+commit.
 
 ## Simulation Integration
 
-Simulation has no Reviewed Access checkpoint, activity, wait, or resume path.
+Simulation has no Reviewed Access product checkpoint, activity, wait, or resume
+path.
 The integration helper directly applies and validates the selected ACL
 realization, writes one bound shared-setup completion record and producer
 evidence, and records Reviewed Access as `not-applicable`. The harness accepts

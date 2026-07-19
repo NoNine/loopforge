@@ -103,7 +103,7 @@ bundle-factory, target-host, helper-script, and simulation-only requirements.
 ## Mode Parity
 
 - Docker and VM simulation must follow the same helper-visible artifact bundle
-  paths and lifecycle checkpoints as target-deployment.
+  paths and product checkpoints as target-deployment.
 - Generated host directories, bind mounts, container copies, or VM transfer
   paths may support the lifecycle, but they may not replace checksum
   verification or role helper ownership.

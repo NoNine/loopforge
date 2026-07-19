@@ -253,7 +253,7 @@ Implementation:
 - Make both harnesses accept integration results through `open-checkpoint` and
   `commit-checkpoint` for integration preflight, setup, validation, proof, and
   evidence audit.
-- Remove the Docker validate marker and VM integration checkpoint markers plus
+- Remove the Docker validate marker and VM integration status markers plus
   every old reader. Exact workflow predecessors replace their progression role;
   owning-layer completion records remain distinct inputs to acceptance.
 - Extend the accepted backend-local run plans from the Step 13b role tail

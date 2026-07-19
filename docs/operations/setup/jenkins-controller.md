@@ -5,9 +5,9 @@ helper `scripts/jenkins-controller-setup.sh` is a repeatable accelerator for
 reviewed env files; it does not replace operator review or the direct
 procedure in `docs/operations/native/jenkins-controller.md`.
 
-`docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
-mutation boundaries, and resume/rerun rules. This manual owns only the Jenkins
-controller-specific application of that contract.
+`docs/contracts/lifecycle-contract.md` owns shared phase behavior, product
+checkpoint semantics, mutation boundaries, and resume/rerun rules. This manual
+owns only the Jenkins controller-specific application of that contract.
 
 The native reference is the procedural baseline for direct OS and Jenkins
 controller operations. Keep this helper workflow aligned with that baseline
@@ -431,7 +431,7 @@ Evidence Contract fields:
 - Verification mode.
 - Timestamp.
 - Role or environment name.
-- Checkpoint name.
+- Product checkpoint family and Jenkins controller role qualifier.
 - Command name.
 - Status.
 - Reviewed input fingerprint.

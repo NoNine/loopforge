@@ -48,7 +48,7 @@ private keys, full reviewed env inputs, or payloads that include those values.
 | Review-sensitive directory | `0750` | Evidence, bounded logs, inventories, and status directories intended for operator or reviewer access but not public sharing. |
 | Review-sensitive file | `0640` | Bounded logs, evidence records, inventories, status markers, and rendered non-secret config snapshots. |
 | Public/read-only directory | `0755` | Non-secret helper trees, artifact review directories, and published bundle directories. |
-| Public/read-only file | `0644` | Archives, checksums, public keys, manifest contracts, non-secret run/checkpoint markers, helper libraries, and templates. |
+| Public/read-only file | `0644` | Archives, checksums, public keys, manifest contracts, non-secret run markers and workflow checkpoint records, helper libraries, and templates. |
 | Executable helper file | `0755` | Role helper scripts staged as non-secret control-plane input. |
 | Shared setgid directory | `2775` | Jenkins controller/agent shared integration storage. |
 

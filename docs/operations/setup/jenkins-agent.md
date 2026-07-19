@@ -5,9 +5,9 @@ workflow. The helper `scripts/jenkins-agent-setup.sh` is a repeatable
 accelerator for reviewed env files; it does not replace operator review or the
 direct procedure in `docs/operations/native/jenkins-agent.md`.
 
-`docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
-mutation boundaries, and resume/rerun rules. This manual owns only the Jenkins
-agent-specific application of that contract.
+`docs/contracts/lifecycle-contract.md` owns shared phase behavior, product
+checkpoint semantics, mutation boundaries, and resume/rerun rules. This manual
+owns only the Jenkins agent-specific application of that contract.
 
 The native reference is the procedural baseline for direct OS, OpenSSH, and
 Jenkins agent operations. Keep this helper workflow aligned with that baseline
@@ -284,13 +284,13 @@ Jenkins controller scheduling, build execution, Gerrit Trigger events, or a
 Consumed inputs:
 
 - Reviewed Jenkins agent env file.
-- Successful install and runtime checkpoint markers.
+- Successful install and runtime status records.
 - Current Java, SSH service, and reviewed endpoint state.
 
 Produced outputs:
 
 - Validation result for OpenJDK 21, SSH service or Docker daemon state, SSH
-  endpoint reachability, prior setup checkpoints, and bounded logs.
+  endpoint reachability, prior setup results, and bounded logs.
 - Role-local evidence from `collect-evidence`.
 
 Validation checks:
@@ -300,9 +300,9 @@ Validation checks:
 - The OpenSSH banner is reachable at
   `JENKINS_AGENT_HOST:JENKINS_AGENT_SSH_PORT` in the selected harness.
 - Java reports OpenJDK 21.
-- The install checkpoint records successful staged-artifact verification.
-- The runtime checkpoint records the canonical effective public-key-only SSH
-  policy and successful service configuration.
+- The install status record captures successful staged-artifact verification.
+- The runtime status record captures the canonical effective public-key-only
+  SSH policy and successful service configuration.
 - Validation does not repeat artifact checksum, runtime identity, filesystem,
   account shadow, or effective-policy setup checks.
 
@@ -318,8 +318,8 @@ Jenkins controller scope:
   policy, controller-to-agent scheduling, and later integration validation
   jobs are deferred to `scripts/integration-setup.sh`.
 - Step 9 proves only agent host-side readiness: completed artifact, identity,
-  filesystem, and policy checkpoints plus current Java, SSH service, endpoint,
-  bounded-log, and evidence observations.
+  filesystem, and policy setup results plus current Java, SSH service,
+  endpoint, bounded-log, and evidence observations.
 - Real cross-role trigger execution and `Verified` voting are aggregated by
   the later shared integration step after role helpers are compliant.
 - After Gerrit, Jenkins controller, and Jenkins agent role manuals are
@@ -350,13 +350,13 @@ Observed checks recorded:
 
 - Verification mode.
 - Timestamp.
-- Role name and checkpoint.
+- Product checkpoint family and Jenkins agent role qualifier.
 - Command name.
 - Pass/fail status.
 - Reviewed input fingerprint.
-- Prior staged-artifact verification checkpoint and its manifest/checksum
+- Prior staged-artifact verification result and its manifest/checksum
   references.
-- Prior effective account-policy and service-configuration checkpoint.
+- Prior effective account-policy and service-configuration result.
 - OpenJDK 21, SSH service state, and SSH endpoint reachability.
 - Jenkins agent label and executor context as controller-owned metadata only.
 - Bounded log references.

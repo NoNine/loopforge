@@ -76,6 +76,21 @@ require_text "$lifecycle" \
   'This contract does not define concrete command syntax, backend resource' \
   'Lifecycle contract must delegate realization details'
 require_text "$lifecycle" \
+  '## Checkpoint Terminology' \
+  'Lifecycle contract must define the shared checkpoint terminology'
+require_text "$lifecycle" \
+  'A **phase** is one invocation or activity performed by an owner.' \
+  'Lifecycle contract must distinguish phases from checkpoints'
+require_text "$lifecycle" \
+  'A **product checkpoint family** is one semantic milestone category' \
+  'Lifecycle contract must define product checkpoint families'
+require_text "$lifecycle" \
+  'A **workflow checkpoint record** is the simulation ledger' \
+  'Lifecycle contract must distinguish simulation workflow records'
+require_text "$lifecycle" \
+  '## Product Checkpoint Families' \
+  'Lifecycle contract must own the canonical checkpoint family vocabulary'
+require_text "$lifecycle" \
   'Environment provisioning, power control, baseline restoration, generated-state' \
   'Lifecycle contract must keep environment lifecycle outside product progress'
 require_text "$lifecycle" \
@@ -103,7 +118,7 @@ require_text "$shared" \
   'Input rendering and publication change host-side generated state only.' \
   'Shared simulation input publication must not claim product progress'
 require_text "$shared" \
-  'It has no Reviewed Access checkpoint, wait, or resume path.' \
+  'It has no Reviewed Access product checkpoint, wait, or resume' \
   'Shared simulation contract must exclude Reviewed Access'
 require_text "$shared" 'simulation-only direct Gerrit REST apply' \
   'Shared simulation contract must define direct ACL apply'
@@ -120,17 +135,26 @@ require_text "$state_model" \
   '## Product-To-Simulation Checkpoint Mapping' \
   'Lifecycle state model must map product checkpoints to simulation state'
 require_text "$state_model" \
+  '| Product checkpoint family | Workflow checkpoint identifier |' \
+  'Lifecycle state model must distinguish families from workflow identifiers'
+require_text "$state_model" \
   'These operations are workflow prerequisites, not workflow' \
   'Lifecycle state model must keep run and baseline readiness outside the chain'
 require_text "$state_model" \
   'commands never advance this chain.' \
   'Lifecycle state model must separate backend lifecycle from workflow progress'
 require_text "$state_model" \
-  'in order to `gerrit`, `jenkins-controller`, then `jenkins-agent`.' \
+  'each role-qualified family, `<role>` expands in order to `gerrit`,' \
   'Lifecycle state model must define the fixed role expansion order'
 require_text "$state_model" \
-  'fully expanded before the next family begins' \
+  '`jenkins-controller`, then `jenkins-agent`.' \
+  'Lifecycle state model must preserve the final role expansion order'
+require_text "$state_model" \
+  'A family is fully expanded before' \
   'Lifecycle state model must define checkpoint family ordering'
+require_text "$state_model" \
+  'the next family begins, and each expansion advances independently.' \
+  'Lifecycle state model must define independent family expansion'
 
 actual_checkpoint_families="$(awk -F'`' '
   /^## Product-To-Simulation Checkpoint Mapping$/ { mapping = 1; next }
@@ -201,14 +225,32 @@ for simulation_heading in \
     "Target directory contract must not own simulation layout: $simulation_heading"
 done
 require_text "$evidence" \
-  'Docker and VM harness checkpoint evidence must identify the immutable' \
+  'Docker and VM harness product-checkpoint evidence must identify the immutable' \
   'Evidence contract must bind checkpoint evidence to immutable run ID'
 require_text "$evidence" \
-  'Docker and VM harness checkpoint evidence must identify the selected `set_id`.' \
+  'Docker and VM harness product-checkpoint evidence must identify the selected' \
   'Evidence contract must bind checkpoints to shared simulation-set identity'
 require_text "$evidence" \
   'simulation source and effective input fingerprints.' \
   'Evidence contract must bind both simulation input layers'
+require_text "$evidence" \
+  '## Product Checkpoint Evidence' \
+  'Evidence contract must apply the canonical product checkpoint vocabulary'
+require_text "$evidence" \
+  'Do not create evidence-only checkpoint names:' \
+  'Evidence contract must reject a competing checkpoint vocabulary'
+reject_text "$evidence" \
+  'Recommended checkpoints:' \
+  'Evidence contract must not maintain a second checkpoint list'
+reject_text "$evidence" \
+  'checkpoint-level evidence' \
+  'Evidence contract must identify evidence without treating it as a checkpoint'
+reject_text "$directory" \
+  'run/checkpoint markers' \
+  'Directory contract must distinguish run markers from checkpoint records'
+reject_text "$repo_root/docs/operations/setup/jenkins-agent.md" \
+  'checkpoint markers' \
+  'Jenkins agent manual must not conflate status records with checkpoints'
 require_text "$endpoint" \
   'Current DHCP address resolved after `start`; supplied only as simulation invocation transport' \
   'Endpoint contract must keep VM DHCP as ephemeral helper transport'
@@ -252,7 +294,7 @@ require_text "$state_model" \
   'before pointer publication consumes the run ID but does not claim the set.' \
   'Initialization must publish the active pointer last'
 require_text "$state_model" \
-  'the immutable run marker, checkpoint records, evidence, artifacts, and logs,' \
+  'the immutable run marker, workflow checkpoint records, evidence, artifacts, and logs,' \
   'Clean must retain immutable workflow evidence'
 require_text "$state_model" \
   'A retry may find any known mutable cleanup target' \

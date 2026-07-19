@@ -36,8 +36,8 @@ generated/simulation/<backend>/<run-id>/
 The lock is stable and remains outside the deletable set root. The set root
 owns reusable resources, durable runtime, baseline metadata, and at most one
 active-run pointer. The run root owns one immutable attempt's inputs,
-checkpoint state, evidence, logs, and exported artifacts. Lifecycle commands
-do not support arbitrary generated roots in v1.
+workflow checkpoint state, evidence, logs, and exported artifacts. Lifecycle
+commands do not support arbitrary generated roots in v1.
 
 The local account running the harness owns ordinary host-side generated paths
 and need not be named `ci-operator`. Content dominance below identifies who

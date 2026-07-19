@@ -7,8 +7,8 @@ contract, while `simulation/docs/vm/vm-simulation.md` owns VM syntax and
 realization deltas. `simulation/docs/shared/harness-design.md` owns the common
 harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result
-and evidence acceptance plus workflow publication.
+command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns
+result and evidence acceptance plus workflow checkpoint publication.
 
 VM simulation stays near target deployment after the clean baseline snapshot.
 Libvirt/KVM resources, snapshots, seed media, guest SSH readiness, and VM
@@ -35,10 +35,10 @@ implement the shared architectural planes with VM-specific mechanisms:
 | Target control plane | Target OS SSH as the operator account, known-hosts verification, bounded remote execution, file transfer, and narrow delegated privilege |
 | Loopforge lifecycle | Artifact flow, helper-owned completion state, validation, proof, evidence, and workflow checkpoint publication |
 
-After the clean baseline snapshot is captured, lifecycle checkpoint work must
+After the clean baseline snapshot is captured, product checkpoint work must
 use target-like interfaces and helper-visible paths. Host-side VM
 infrastructure mechanisms remain available for VM lifecycle management, but
-they must not complete Loopforge role or integration checkpoints.
+they must not complete Loopforge role or integration product checkpoints.
 
 ## Current Module Mapping
 
@@ -132,7 +132,7 @@ checks. It does not define role or integration postconditions.
 `libvirt.sh` owns low-level VM infrastructure operations: domains, networks,
 storage, seed media, guest baseline preparation, baseline snapshot capture,
 rollback, graceful shutdown, and VM-set destruction primitives. It must not run
-role helpers or complete Loopforge lifecycle checkpoints through host-side
+role helpers or complete Loopforge product checkpoints through host-side
 guest mutation.
 
 `ssh.sh` owns target OS control-plane access: SSH as the target-local operator

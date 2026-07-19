@@ -19,7 +19,7 @@ a second VM simulation CLI.
 Shared architecture and exact state behavior are documented in
 `simulation/docs/shared/harness-design.md` and
 `simulation/docs/shared/lifecycle-state-model.md`. Cross-layer result acceptance and
-checkpoint publication are documented in
+workflow checkpoint publication is documented in
 `simulation/docs/shared/checkpoint-acceptance-protocol.md`. VM module structure and
 implementation contracts are documented in
 `simulation/docs/vm/implementation-design.md`. Milestone verification gates
@@ -74,8 +74,8 @@ environment, not a public API, and there is no standalone
 
 ## Near-Target Lifecycle Boundary
 
-VM simulation is expected to be near target deployment for lifecycle
-checkpoint execution. VM-specific mechanisms are allowed for VM
+VM simulation is expected to be near target deployment for product checkpoint
+execution. VM-specific mechanisms are allowed for VM
 infrastructure work: libvirt/KVM provisioning, seed media or cloud-init base
 OS bootstrap before the clean baseline snapshot, automatic baked base-image
 preparation for simulation-owned OS dependencies, baseline snapshot
@@ -88,7 +88,7 @@ simulation-owned, dependency-prepared base image inside the selected simulation 
 then creates the five role disks from that base image. Role helpers validate
 those package and command expectations later; they do not install Ubuntu/OS dependencies.
 
-After the clean baseline snapshot, checkpoint work must use target-like
+After the clean baseline snapshot, product checkpoint work must use target-like
 interfaces and paths: target OS SSH as `ci-operator`, SSH file transfer, role
 helpers, `scripts/integration-setup.sh`, product APIs, runtime accounts,
 target-side checksum verification, and `/var/lib/loopforge/staging/<role>`.
@@ -96,7 +96,7 @@ target-side checksum verification, and `/var/lib/loopforge/staging/<role>`.
 VM simulation must not use libvirt console access, direct guest disk or image
 edits, post-baseline cloud-init, host-side injection into guest helper or
 product paths, generated target sideband staging, or modeled success without
-runtime evidence to complete lifecycle checkpoints.
+runtime evidence to complete product checkpoint instances.
 
 VM guest service lifecycle follows the target-deployment contract. Gerrit and
 Jenkins controller use guest systemd units; the outbound Jenkins agent relies
@@ -133,7 +133,7 @@ baked image and enabling only role-owned services on each VM.
 contracts to VM milestones. Its VM-specific gates cover real libvirt resources,
 guest SSH, dependency-prepared images, LDAP runtime proof, target-side artifact
 transfer, snapshots, and guest service recovery after reboot. It does not define
-shared checkpoint success or progression.
+shared workflow checkpoint success or progression.
 
 ## Command Reference
 
@@ -233,7 +233,7 @@ simulation set, renders cloud-init seed media, imports the domains into libvirt,
 proves target OS SSH as the simulation operator account. The cloud image and
 baked base image are VM host infrastructure inputs, not Loopforge application
 artifacts. Cloud-init is limited to base OS bootstrap and role OS dependency
-fulfillment before the clean baseline boundary; later lifecycle checkpoints
+fulfillment before the clean baseline boundary; later product checkpoints
 must use target OS SSH and helper-visible paths.
 
 The operator owns pool and volume descriptors, markers, locks, logs, and
@@ -416,5 +416,5 @@ host-level cleanup procedure.
 ## Integration Boundary
 
 VM invokes the shared integration owner over target OS SSH through its private
-transport adapter. Integration checkpoint semantics, predecessors, evidence
-acceptance, and failure behavior remain shared.
+transport adapter. Integration product checkpoint semantics, workflow
+predecessors, evidence acceptance, and failure behavior remain shared.

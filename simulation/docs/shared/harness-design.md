@@ -271,10 +271,10 @@ failure semantics, and ownership boundary without backend conditionals.
 
 Reviewers of either harness should confirm that:
 
-- public behavior delegates state and checkpoint publication to the shared
-  state model and acceptance protocol;
+- public behavior delegates state and workflow checkpoint publication to the
+  shared state model and acceptance protocol;
 - module dependencies follow the architectural planes and do not call upward;
-- backend lifecycle operations do not complete Loopforge checkpoints;
+- backend lifecycle operations do not complete Loopforge product checkpoints;
 - role and integration work uses the owning helpers and target-like interfaces;
 - backend-local mechanisms do not create a second shared state or input model;
 - logs, evidence, terminal summaries, and generated records remain bounded and

@@ -41,7 +41,7 @@ Use this order when deciding where a product or process fact belongs:
    and cross-cutting system invariants. It must remain substantive, but it is
    not the documentation index.
 3. `docs/contracts/lifecycle-contract.md` owns temporal behavior: phase order,
-   checkpoint semantics, mutation boundaries, stop/review/resume points,
+   product checkpoint semantics, mutation boundaries, stop/review/resume points,
    rerun rules, product workflow order, and lifecycle evidence obligations.
 4. Topic authority docs own detailed cross-cutting contracts:
    `docs/contracts/account-model.md` for accounts and credential custody,
@@ -198,7 +198,7 @@ Use this checklist for documentation changes:
 - `docs/architecture/system-model.md` remains the conceptual architecture
   authority rather than a generic documentation index; new topic docs need a
   distinct contract or detail role.
-- Lifecycle phase order, checkpoint semantics, mutation boundaries, and
+- Lifecycle phase order, product checkpoint semantics, mutation boundaries, and
   resume/rerun behavior live in `docs/contracts/lifecycle-contract.md`.
 - Product boundary language remains intact: v1 is not a strict air-gapped
   installer, offline Ubuntu dependency bundles are unsupported, and public

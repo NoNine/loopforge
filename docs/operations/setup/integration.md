@@ -19,9 +19,9 @@ targets across Docker simulation, VM simulation, and `target-deployment`.
 Docker APIs are simulation lifecycle internals and are not the shared
 integration communication surface.
 
-`docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
-mutation boundaries, and resume/rerun rules. This manual applies that contract
-only to the shared integration helper workflow.
+`docs/contracts/lifecycle-contract.md` owns shared phase behavior, product
+checkpoint semantics, mutation boundaries, and resume/rerun rules. This manual
+applies that contract only to the shared integration helper workflow.
 
 The shared integration helper owns cross-role work only: Jenkins-to-Gerrit SSH,
 Jenkins-to-agent SSH, Gerrit Trigger configuration, Jenkins node readiness,

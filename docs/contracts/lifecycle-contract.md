@@ -19,6 +19,37 @@ contract applies that model to product workflow sequencing. Consumer documents
 may add role- or mode-specific realization detail, but they must not redefine
 checkpoint semantics or claim success without proof for the owned checkpoint.
 
+## Checkpoint Terminology
+
+Use these terms consistently across product, operator, evidence, and simulation
+documents:
+
+- A **phase** is one invocation or activity performed by an owner. It may
+  succeed, fail, or block without completing its intended checkpoint.
+- A **product checkpoint family** is one semantic milestone category in the
+  canonical table below.
+- A **product checkpoint instance** applies one family to a concrete owner and
+  scope, such as role-local setup for Gerrit. A product checkpoint instance is
+  complete only when its required postcondition and proof have been accepted.
+- A **completion record** is an owning utility's durable statement that its
+  exact output or postcondition is complete. It supports checkpoint acceptance
+  but is not itself a checkpoint.
+- An **evidence record** is redacted proof of an operation or observation. It
+  reports an outcome but does not itself complete or authorize a checkpoint.
+- A **workflow checkpoint record** is the simulation ledger's immutable
+  acceptance of one product checkpoint instance for the selected run. Product
+  checkpoint instances also exist in target deployment, which has no simulation
+  ledger.
+- A **prerequisite** is a required condition and a **boundary** is a stop,
+  review, or mutation limit. Neither should be called a checkpoint unless it is
+  one of the product checkpoint families below.
+
+Unless explicitly qualified, "checkpoint" in product and operator documents
+means a product checkpoint. Simulation documents must use "workflow
+checkpoint" when referring to ledger progression and "workflow checkpoint
+record" when referring to its persisted record. Do not use "checkpoint
+marker" as a generic name for completion, evidence, or workflow records.
+
 ## Phase Behavior
 
 Product phases are strict, single-purpose operations:
@@ -58,7 +89,8 @@ Role preflight and role setup divide runtime identity work as follows:
   from reviewed values after staged artifacts have been verified. It may adopt
   a fully matching identity with an empty product home but never repairs
   mismatched identity or existing application state.
-- OS dependency provisioning is a separate prerequisite checkpoint. It may run
+- OS dependency provisioning is a separate product checkpoint and a
+  prerequisite to role setup. It may run
   before application artifact preparation or staging, but it does not authorize
   runtime identity, product-home, application, or service mutation.
 - The operator account is a target-provisioning prerequisite. Jenkins shared
@@ -123,12 +155,16 @@ itself authorize target mutation or complete a product checkpoint. The
 realization must prove that the bound inputs belong to the selected execution
 state before checkpoint work begins.
 
-## Lifecycle Checkpoints
+## Product Checkpoint Families
 
-Loopforge setup advances through the following product checkpoints. Each has
-one semantic owner, one mutation boundary, and evidence obligations.
+The following table is the canonical product checkpoint family vocabulary.
+Each applicable occurrence is a product checkpoint instance with one concrete
+owner, one mutation boundary, and evidence obligations. Role-scoped families
+expand into separate Gerrit, Jenkins controller, and Jenkins agent instances;
+consumer documents must identify the applicable role instead of inventing a
+new checkpoint family name.
 
-| Checkpoint | Owner | Product boundary |
+| Product checkpoint family | Owner | Product boundary |
 | --- | --- | --- |
 | Input review or source selection | Human operator or machine runner | Review target-deployment inputs or select simulation source inputs and supported overrides. No target mutation. |
 | OS dependency provisioning | Role helper or native operator procedure | Install approved OS prerequisites without creating product runtime identities, product homes, application state, or service state. |

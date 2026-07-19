@@ -179,10 +179,10 @@ require_doc_text docs/baselines/package-requirements.md \
   'Package requirements must keep role helpers out of OS dependency installation'
 
 require_doc_text docs/contracts/validation-and-evidence.md \
-  'Docker and VM harness checkpoint evidence must identify the immutable' \
+  'Docker and VM harness product-checkpoint evidence must identify the immutable' \
   'Evidence contract must require immutable run identity'
 require_doc_text docs/contracts/validation-and-evidence.md \
-  'Docker and VM harness checkpoint evidence must identify the selected `set_id`.' \
+  'Docker and VM harness product-checkpoint evidence must identify the selected' \
   'Evidence contract must require shared simulation-set identity'
 require_doc_text docs/contracts/validation-and-evidence.md \
   'baseline snapshot' \
@@ -314,7 +314,7 @@ require_doc_text simulation/docs/vm/vm-simulation.md \
   '## Near-Target Lifecycle Boundary' \
   'VM simulation guide must define the near-target lifecycle boundary'
 require_doc_text simulation/docs/vm/vm-simulation.md \
-  'VM simulation is expected to be near target deployment for lifecycle' \
+  'VM simulation is expected to be near target deployment for product checkpoint' \
   'VM simulation guide must require near-target checkpoint execution'
 require_doc_text simulation/docs/vm/vm-simulation.md \
   '## Shared Base-Image Service Waiver' \

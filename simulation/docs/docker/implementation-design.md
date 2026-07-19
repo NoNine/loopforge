@@ -7,8 +7,8 @@ contract, while `simulation/docs/docker/docker-simulation.md` owns Docker
 syntax and realization deltas. `simulation/docs/shared/harness-design.md` owns
 the common harness structure and implemented shared foundation, and
 `simulation/docs/shared/lifecycle-state-model.md` owns exact cross-backend state and
-command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result
-and evidence acceptance plus workflow publication.
+command guards. `simulation/docs/shared/checkpoint-acceptance-protocol.md` owns
+result and evidence acceptance plus workflow checkpoint publication.
 
 Docker realizes the shared module roles with Docker-local capability APIs.
 Compose, containers, bind data, loopback ports, baseline archives, transport
@@ -46,9 +46,9 @@ bind-runtime, and baseline paths defined by
 `config.sh` owns Docker defaults, env selection, selected identities, stable
 loopback endpoint values, and rendered Docker configuration. `inputs.sh` owns
 effective Docker input rendering and publication. Neither owns live container
-queries or checkpoint progression.
+queries or workflow checkpoint progression.
 
-`state.sh` adapts shared run, active-run, workflow, and checkpoint mechanics to
+`state.sh` adapts shared run, active-run, and workflow checkpoint mechanics to
 Docker generated state. It does not query live Docker resources or define role
 and integration postconditions.
 
@@ -64,7 +64,7 @@ SSH. Docker-specific transfer waivers remain explicit.
 `docker-set.sh` owns selected simulation-set coordination: container and
 network ownership, create/start/stop/destroy/status/audit capabilities, and
 reusable resource checks. It may combine Docker infrastructure with state but
-must not complete role or integration checkpoints.
+must not complete role or integration product checkpoints.
 
 `baseline.sh` is the Step 13a M4 boundary for Docker baseline identity,
 capture, verification, and restore. It owns checksummed bind archives, numeric

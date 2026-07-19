@@ -219,7 +219,7 @@ require_text "$state_model" \
   '## Persistence And Concurrency' \
   'Lifecycle state model must define persistence and locking'
 require_text "$state_model" \
-  '## Checkpoint State Transitions' \
+  '## Workflow Checkpoint State Transitions' \
   'Lifecycle state model must define checkpoint state transitions'
 require_text "$state_model" \
   '## Product-To-Simulation Checkpoint Mapping' \
@@ -286,7 +286,7 @@ require_text "$protocol" \
   '## Failure Protocol' \
   'Checkpoint protocol must define proof failure handling'
 require_text "$protocol" \
-  'Only the workflow head and its immutable checkpoint chain authorize' \
+  'Only the workflow head and its immutable workflow checkpoint chain authorize' \
   'Checkpoint protocol must preserve one progression authority'
 require_text "$protocol" \
   'This protocol invokes `open-checkpoint` and `commit-checkpoint`' \
@@ -342,10 +342,10 @@ require_text "$vm_design" \
   '`simulation/docs/shared/lifecycle-state-model.md` owns simulation-set state' \
   'VM implementation design must delegate shared lifecycle state'
 require_text "$vm_design" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result' \
+  'result and evidence acceptance plus workflow checkpoint publication.' \
   'VM implementation design must delegate checkpoint acceptance'
 require_text "$docker_design" \
-  '`simulation/docs/shared/checkpoint-acceptance-protocol.md` owns result' \
+  'result and evidence acceptance plus workflow checkpoint publication.' \
   'Docker implementation design must delegate checkpoint acceptance'
 require_text "$docker_design" \
   '`simulation/docs/shared/harness-design.md` owns' \

@@ -5,9 +5,9 @@ This manual owns the Gerrit reviewed-input helper workflow. The helper
 it does not replace operator review or the direct procedure in
 `docs/operations/native/gerrit.md`.
 
-`docs/contracts/lifecycle-contract.md` owns shared phase behavior, checkpoint semantics,
-mutation boundaries, and resume/rerun rules. This manual owns only the
-Gerrit-specific application of that contract.
+`docs/contracts/lifecycle-contract.md` owns shared phase behavior, product
+checkpoint semantics, mutation boundaries, and resume/rerun rules. This manual
+owns only the Gerrit-specific application of that contract.
 
 The native reference is the procedural baseline for direct OS and Gerrit
 operations. Keep this helper workflow aligned with that baseline and preserve
@@ -395,7 +395,7 @@ Evidence Contract fields:
 - Verification mode.
 - Timestamp.
 - Role or environment name.
-- Checkpoint name.
+- Product checkpoint family and Gerrit role qualifier.
 - Command name.
 - Status.
 - Reviewed input fingerprint.

@@ -41,7 +41,9 @@ utilities. Every machine-generated evidence record must include:
 - Timestamp.
 - Package version and helper command version or git commit.
 - Role or environment name.
-- Checkpoint name.
+- Product checkpoint family and any role or target qualifier needed to identify
+  the product checkpoint instance, or the prerequisite/boundary type when the
+  record does not claim a product checkpoint.
 - Command name.
 - Status: `pass`, `fail`, `blocked`, `unsupported`, or `not-applicable`.
 - Hostnames and service endpoints.
@@ -107,26 +109,30 @@ Use mode labels consistently:
 
 Summaries must clearly distinguish simulation-only runs from target-deployment
 runs. A `pass` status must be backed by real runtime checks for the claimed
-checkpoint. Use `blocked`, `unsupported`, or `not-applicable` for lifecycle
-work that did not run; do not use modeled records as passing service
+product checkpoint instance. Use `blocked`, `unsupported`, or `not-applicable`
+for lifecycle work that did not run; do not use modeled records as passing
+service
 readiness, Jenkins scheduling, Gerrit Trigger delivery, or `Verified` voting
 proof.
 
 Readiness evidence must reject contradictory success and failure signals. A
 success marker, terminal summary, or evidence `pass` is invalid for the
-claimed checkpoint when the referenced bounded logs contain matching runtime
-failures such as package-manager errors, missing commands, missing service
+claimed product checkpoint instance when the referenced bounded logs contain
+matching runtime failures such as package-manager errors, missing commands,
+missing service
 units, failed LDAP bind/search, checksum mismatch, ownership mismatch,
 permission denial, timeout, traceback, exception, or explicit failure markers.
-In that case the checkpoint must be recorded as `fail` or `blocked`, not
-accepted as a pass with caveats.
+In that case the evidence outcome must be recorded as `fail` or `blocked`, not
+accepted as a pass with caveats or used to complete the product checkpoint
+instance.
 
-## Checkpoints
+## Product Checkpoint Evidence
 
 Helpers and simulation utilities collect machine-generated evidence at every
-operator workflow checkpoint so failed runs can be reviewed from the last
-completed boundary. Native `target-deployment` uses the acceptance checklist
-to track the corresponding outcomes without producing checkpoint records.
+applicable product checkpoint instance so failed runs can be reviewed from the
+last completed boundary. Native `target-deployment` uses the acceptance
+checklist to track the corresponding outcomes without producing workflow
+checkpoint records.
 
 Evidence proves an outcome but does not authorize the next simulation phase.
 `simulation/docs/shared/checkpoint-acceptance-protocol.md` defines how producer-owned
@@ -134,25 +140,22 @@ evidence is accepted into the workflow ledger and how it relates to
 owning-layer results. This document continues to own evidence content, status,
 redaction, and aggregation rules.
 
-Recommended checkpoints:
+Evidence records must use the canonical product checkpoint family names from
+`docs/contracts/lifecycle-contract.md` and add the role or target qualifier
+needed to identify the instance. Do not create evidence-only checkpoint names:
+service installation and startup evidence belongs to `Role-local setup`, role
+readiness evidence belongs to `Role-local validation`, and final aggregation
+belongs to `Evidence audit`.
 
-- Target-deployment reviewed env files, or simulation source/effective input
-  publication.
-- Artifact preparation.
-- Artifact staging and checksum verification.
-- Service installation and startup.
-- Role readiness.
-- Integration preflight.
-- Reviewed integration access (`target-deployment` only).
-- Shared integration setup.
-- Observational cross-role validation.
-- End-to-end trigger proof.
-- Final aggregation.
+Reviewed input and simulation source/effective input publication may have their
+own evidence records. Those records prove prerequisites or input-binding
+boundaries; they do not claim a product or workflow checkpoint unless they
+also prove one of the canonical product checkpoint instances.
 
 ## Role-Local Evidence
 
-Role helpers from Steps 7, 8, and 9 emit checkpoint-level evidence for their
-own scope.
+Role helpers from Steps 7, 8, and 9 emit evidence for role-qualified product
+checkpoint instances in their own scope.
 
 - Gerrit evidence covers startup, HTTP, SSH, LDAP, and plugin readiness.
 - Jenkins controller evidence covers startup, HTTP, LDAP, plugins, JCasC, and
@@ -211,7 +214,7 @@ stable values are published in the effective input bundle. Helper-generated
 shared state and helper logs live under
 `/var/lib/loopforge/` and `/var/log/loopforge/` on target environments.
 
-Docker and VM harness checkpoint evidence must identify the immutable
+Docker and VM harness product-checkpoint evidence must identify the immutable
 `run_id`. Evidence from one run must never satisfy another run using the same
 reusable simulation set.
 
@@ -219,7 +222,8 @@ Docker simulation evidence must prove the shared path is mounted into both
 Jenkins containers by writing a file as the controller runtime account and
 reading it as the agent runtime account.
 
-Docker and VM harness checkpoint evidence must identify the selected `set_id`.
+Docker and VM harness product-checkpoint evidence must identify the selected
+`set_id`.
 Harness records may additionally identify the derived Docker Compose project
 name or VM libvirt resource prefix as backend resource metadata. VM records
 should include relevant libvirt domain names, VM hostnames or reviewed aliases,
@@ -301,7 +305,8 @@ Generated evidence should not be committed.
 
 Use the summaries to confirm:
 
-- Which checkpoint passed, failed, blocked, or was not applicable.
+- Which product checkpoint instances were accepted, or had `fail`, `blocked`,
+  `unsupported`, or `not-applicable` evidence outcomes.
 - Which hostnames and endpoints were exercised.
 - Which manifests and checksums were verified.
 - Which shared integration group, GID, and storage path were verified.

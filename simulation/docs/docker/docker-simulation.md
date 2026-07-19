@@ -19,11 +19,11 @@ container lifecycle, bind-mount validation, `docker cp` waivers, loopback
 browser ports, target SSH staging, and cleanup behavior remain Docker harness
 responsibilities rather than generic backend hooks.
 
-Lifecycle checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
+Product checkpoint semantics are defined in `docs/contracts/lifecycle-contract.md`.
 Shared harness architecture and exact state guards are defined in
 `simulation/docs/shared/harness-design.md` and
 `simulation/docs/shared/lifecycle-state-model.md`. Cross-layer result acceptance and
-checkpoint publication are defined in
+workflow checkpoint publication is defined in
 `simulation/docs/shared/checkpoint-acceptance-protocol.md`. Docker generated-state and
 stale-container behavior is defined in this document.
 Docker-local module boundaries and dependency direction are defined in
@@ -232,8 +232,9 @@ review.
 ## Integration Boundary
 
 Docker invokes the shared integration owner through the Docker target SSH
-inventory and private invocation adapter. Integration checkpoint semantics,
-predecessors, evidence acceptance, and failure behavior remain shared.
+inventory and private invocation adapter. Integration product checkpoint
+semantics, workflow predecessors, evidence acceptance, and failure behavior
+remain shared.
 
 Source-boundary rules, including simulation-only public internet fallback for
 target-host Ubuntu/OS dependency installation, are shared in

@@ -156,7 +156,7 @@ Scope and model:
   criteria.
 - `docs/architecture/system-model.md` defines environments, actors, accounts, utilities,
   interfaces, deployment modes, and evidence relationships.
-- `docs/contracts/lifecycle-contract.md` defines phase order, lifecycle checkpoints,
+- `docs/contracts/lifecycle-contract.md` defines phase order, product checkpoints,
   mutation boundaries, resume/rerun behavior, and command mapping.
 
 Topic references:

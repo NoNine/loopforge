@@ -1,7 +1,8 @@
 # Simulation Lifecycle State Model
 
 This document owns the simulation ledger model shared by Docker and VM:
-persisted state, checkpoint vocabulary and order, record mechanics, command
+persisted state, workflow checkpoint vocabulary and order, record mechanics,
+command
 guards, classifications, and transition effects. It answers which ledger state
 is valid and what state effect a lifecycle event has. It realizes, but does not
 override, `docs/contracts/lifecycle-contract.md`. Public command descriptions
@@ -16,7 +17,7 @@ locates a state record; it does not transfer directory-layout authority here.
 cross-layer acceptance and publication protocol: which owning-layer outputs and
 evidence the harness must verify, who verifies them, and when the harness may
 invoke a transition defined here. The protocol does not add ledger states,
-checkpoint names, classifications, or transition effects. This state model
+workflow checkpoint identifiers, classifications, or transition effects. This state model
 does not define owning-layer postconditions, evidence acceptance, or transaction
 steps.
 
@@ -34,13 +35,14 @@ dependency readiness is established or verified as part of the clean baseline
 by `create`. These operations are workflow prerequisites, not workflow
 checkpoints, and do not claim application setup success.
 
-The following table is the complete simulation workflow checkpoint chain in
-strict predecessor order. Within each role-qualified family, `<role>` expands
-in order to `gerrit`, `jenkins-controller`, then `jenkins-agent`. A family is
-fully expanded before the next family begins, and each expansion advances
-independently.
+The following table maps product checkpoint families to the complete simulation
+workflow checkpoint identifier chain in strict predecessor order. Each
+role-qualified identifier represents one product checkpoint instance. Within
+each role-qualified family, `<role>` expands in order to `gerrit`,
+`jenkins-controller`, then `jenkins-agent`. A family is fully expanded before
+the next family begins, and each expansion advances independently.
 
-| Product checkpoint | Workflow checkpoint |
+| Product checkpoint family | Workflow checkpoint identifier |
 | --- | --- |
 | Artifact preparation | `prepare-artifacts-<role>` |
 | Artifact staging | `stage-artifacts-<role>` |
@@ -55,7 +57,7 @@ independently.
 The concrete role expansions and five unqualified identifiers in the final
 column are the only non-`none` values accepted by `active_checkpoint` and
 `last_checkpoint`. Backend lifecycle commands never advance this chain.
-Simulation has no Reviewed Access checkpoint, wait, or resume path.
+Simulation has no Reviewed Access product checkpoint, wait, or resume path.
 
 ## Identity And Namespace Derivation
 
@@ -93,14 +95,15 @@ resource.
 | Run ownership | `unclaimed`, `claimed(<run-id>)` | Whether `active-run.env` binds the set to one immutable run |
 | Reset gate | `normal`, `restored-pending-clean` | Whether successful restoration requires cleanup before further execution |
 | Input publication | `pending`, `ready` | Whether only source templates are bound or stable effective helper inputs have been atomically published |
-| Checkpoint progression | `none` or the last valid run checkpoint | Run-scoped workflow progress bound to the active run and source/effective inputs |
-| Checkpoint activity | `idle`, `observing`, `mutating` | Whether no phase is open, an observational phase is open, or target mutation is open |
+| Workflow checkpoint progression | `none` or the last valid workflow checkpoint identifier | Run-scoped workflow progress bound to the active run and source/effective inputs |
+| Workflow checkpoint activity | `idle`, `observing`, `mutating` | Whether no phase is open, an observational phase is open, or target mutation is open |
 
 `exact-bound` means all durable state currently present is complete and bound
-to the last successful checkpoint; later phases may still be absent.
-`active-incomplete` means a mutating checkpoint is in progress, interrupted,
+to the last committed workflow checkpoint identifier; later phases may still
+be absent.
+`active-incomplete` means a mutating workflow checkpoint attempt is in progress, interrupted,
 or only partially applied. Normal workflow commands may continue only when
-their exact checkpoint prerequisites hold. A stopped `active-incomplete` set
+their exact workflow checkpoint predecessors hold. A stopped `active-incomplete` set
 cannot be restarted because `start` supports only baseline or exact-bound
 durable state. `conflicting` state always blocks normal mutation.
 
@@ -113,7 +116,7 @@ durable state. `conflicting` state always blocks normal mutation.
 - A set has at most one active run.
 - The active-run pointer, run marker, workflow state, runtime config, source and
   effective input fingerprints, backend ownership, baseline identity, and
-  checkpoint record chain must agree.
+  workflow checkpoint record chain must agree.
 - `stop` preserves every state dimension except power.
 - `restore-baseline` changes durable content to `baseline` but deliberately
   preserves active-run ownership and generated run state.
@@ -207,17 +210,17 @@ Workflow phases require `input_state=ready`.
 Workflow checkpoint records are immutable and hash-linked through
 `last_record_sha256`. Each record identifies the backend, set, run, baseline,
 source and effective inputs, checkpoint, predecessor, mutation kind,
-`status=complete`, `evidence_sha256`, and timestamps. Unknown checkpoint names
+`status=complete`, `evidence_sha256`, and timestamps. Unknown workflow checkpoint identifiers
 or invalid predecessor ordering fail closed.
 
-Only completed checkpoints produce workflow checkpoint records. Other outcomes
-do not add a workflow record or advance the chain. The acceptance protocol owns
+Only accepted product checkpoint instances produce workflow checkpoint records.
+Other outcomes do not add a workflow record or advance the chain. The acceptance protocol owns
 which evidence may supply `evidence_sha256`; the mapping above owns every
-accepted checkpoint name and its strict predecessor order.
+accepted workflow checkpoint identifier and its strict predecessor order.
 
-## Checkpoint State Transitions
+## Workflow Checkpoint State Transitions
 
-The ledger exposes two checkpoint transitions. Their guards and effects are
+The ledger exposes two workflow checkpoint transitions. Their guards and effects are
 state-model facts; proof ownership and invocation order belong to
 `simulation/docs/shared/checkpoint-acceptance-protocol.md`.
 
@@ -232,11 +235,12 @@ the immutable record before atomically replacing that head. A failure before
 head replacement leaves the prior open head authoritative; an unreferenced
 record cannot advance progression.
 
-An open `mutating` checkpoint classifies durable state as `active-incomplete`.
-An open `observing` checkpoint leaves unchanged durable content exact-bound but
-blocks other checkpoint progression. Failure before `open-checkpoint` leaves
+An open `mutating` workflow checkpoint classifies durable state as
+`active-incomplete`. An open `observing` workflow checkpoint leaves unchanged
+durable content exact-bound but blocks other workflow checkpoint progression.
+Failure before `open-checkpoint` leaves
 the ledger unchanged. Failure after it leaves the activity open: mutation uses
-explicit recovery, while observation may retry only the same checkpoint against
+explicit recovery, while observation may retry only the same workflow checkpoint against
 the unchanged head and inputs. No failure path calls `commit-checkpoint`.
 
 ## Run And Reset Transitions
@@ -251,7 +255,7 @@ failure before ready publication leaves workflow phases blocked and never
 appears as effective-input success.
 Restoration writes and verifies immutable evidence before atomically changing
 the pointer gate. Cleanup removes known mutable paths idempotently, preserves
-the immutable run marker, checkpoint records, evidence, artifacts, and logs,
+the immutable run marker, workflow checkpoint records, evidence, artifacts, and logs,
 then removes the active-run pointer last.
 
 Once the pointer records `restored-pending-clean`, `clean` authorization comes
@@ -265,22 +269,22 @@ until the pointer is removed.
 ## Exact-Bound Classification
 
 The shared state layer owns classification; role and integration commands own
-their checkpoint postconditions. The classifier reads all state under the set
+their product checkpoint postconditions. The classifier reads all state under the set
 lock and returns:
 
-- `baseline` when no target-mutating checkpoint has completed, no mutation is
+- `baseline` when no target-mutating product checkpoint has completed, no mutation is
   open, and the selected clean baseline is exact;
 - `exact-bound` when the pointer, marker, ownership, baseline, source and
-  effective inputs, workflow head, and immutable checkpoint chain agree with no
+  effective inputs, workflow head, and immutable workflow checkpoint chain agree with no
   open mutation;
 - `active-incomplete` when a target mutation was published but its completion
   record and idle head were not published; or
-- `conflicting` when identities, fingerprints, ownership, hashes, checkpoint
+- `conflicting` when identities, fingerprints, ownership, hashes, workflow checkpoint
   order, or backend state disagree.
 
-`start` consumes this classification but does not rerun checkpoint validation
+`start` consumes this classification but does not rerun workflow checkpoint validation
 or infer setup success from service state. An interrupted observation may
-leave durable content `exact-bound` while checkpoint progression is blocked.
+leave durable content `exact-bound` while workflow checkpoint progression is blocked.
 
 ## Canonical State Combinations
 
@@ -308,14 +312,14 @@ the set for a new run.
 | `preflight` | None; read-only host prerequisites | Reports prerequisite state | All simulation state |
 | `init-run` | Set unclaimed, reset gate `normal`, unused run ID; resources absent or stopped at baseline | Snapshots source templates, writes the source-bound run marker and pending workflow state, then claims `active-run.env` | Existing baseline and backend resources |
 | `create` | Claimed run; resources absent, or exact stopped existing baseline | Creates resources and baseline when absent; otherwise verifies and returns `state=existing` without mutation | Run ownership, run inputs, and any exact existing baseline |
-| `start` | Claimed run, reset gate `normal`, durable content `baseline` or `exact-bound`; resources stopped or already running | Starts or verifies resources, refreshes live target access, publishes stable effective inputs once when pending, or returns `state=already-running` | Run ID, checkpoints, durable content, resource identity, ready effective inputs |
-| `stop` | Claimed ownership-valid set with resources running or already stopped | Gracefully stops running services and backend runtime, or returns `state=already-stopped` | Run ID, checkpoints, durable content, resources, evidence |
+| `start` | Claimed run, reset gate `normal`, durable content `baseline` or `exact-bound`; resources stopped or already running | Starts or verifies resources, refreshes live target access, publishes stable effective inputs once when pending, or returns `state=already-running` | Run ID, workflow checkpoints, durable content, resource identity, ready effective inputs |
+| `stop` | Claimed ownership-valid set with resources running or already stopped | Gracefully stops running services and backend runtime, or returns `state=already-stopped` | Run ID, workflow checkpoints, durable content, resources, evidence |
 | `restore-baseline` | Claimed run, resources stopped, ownership-valid matching baseline, reset gate `normal` | Resets durable content to baseline and sets `restored-pending-clean` | Active run, mutable run state, retained review output, reusable resources |
 | `clean` | `restored-pending-clean`, matching successful restore evidence, claimed run, resources stopped | Removes mutable run state and active-run pointer; returns to baseline stopped and unclaimed | Baseline, reusable resources, retained artifacts, evidence, and logs |
 | `destroy` | Resources absent or stopped and selected ownership validated | Removes owned set state, or returns `state=already-absent` for a fully absent unclaimed set | Retained run roots and review output |
 | `status` | Selected state resolvable, including absent or unclaimed; read-only | Reports set, run, power, durable classification, reset gate, and available access state | All simulation state |
 | `audit-state` | None beyond selected identity inputs; read-only | Reports generated/backend consistency | All simulation state |
-| Workflow phases | Claimed run, resources running, reset gate `normal`, effective inputs ready, exact preceding checkpoint and state classification | Advances only the owning checkpoint and may mutate its declared state | Set/run/input binding and prior evidence |
+| Workflow phases | Claimed run, resources running, reset gate `normal`, effective inputs ready, exact preceding workflow checkpoint and state classification | Advances only the owning workflow checkpoint and may mutate its declared state | Set/run/input binding and prior evidence |
 | `run` | State matches one supported fresh, resume, or complete case | Runs the normal workflow from the first required phase and leaves the set running | Never performs cleanup, restoration, destruction, or audit |
 
 Running resources block `create`; callers use `stop` first. `create` also
@@ -365,7 +369,7 @@ stateDiagram-v2
   BaselineStoppedClaimed --> BaselineRunning: start
   BaselineRunning --> BaselineStoppedClaimed: stop
   BaselineRunning --> ActiveRunRunning: workflow mutation
-  ActiveRunRunning --> ExactBoundRunning: matching checkpoint completes
+  ActiveRunRunning --> ExactBoundRunning: matching workflow checkpoint commits
   ExactBoundRunning --> ActiveRunRunning: next workflow mutation
   ActiveRunRunning --> RecoveryRequiredStopped: stop during incomplete mutation
   ExactBoundRunning --> ExactBoundStopped: stop
@@ -386,7 +390,7 @@ roots remain after destruction.
 
 Successful `restore-baseline` is a one-way boundary for the active run. Its
 configured durable state has been erased, while its mutable workflow head,
-immutable checkpoint records, and active-run pointer remain for validation,
+immutable workflow checkpoint records, and active-run pointer remain for validation,
 diagnosis, and cleanup authorization.
 The run cannot resume and the set cannot be claimed by another run.
 
@@ -396,7 +400,7 @@ While the reset gate is `restored-pending-clean`:
 | --- | --- |
 | `preflight`, `status`, `audit-state`, `clean`, `destroy` | `init-run`, `create`, `start`, `ssh`, artifact phases, role phases, integration phases, `reboot`, and another `restore-baseline` |
 
-This gate prevents old checkpoints from being combined with baseline durable
+This gate prevents old workflow checkpoints from being combined with baseline durable
 state. `clean` is the normal exit. `destroy` is the destructive exit when the
 reusable set should not be retained.
 

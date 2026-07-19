@@ -4,7 +4,8 @@ This document defines the shared simulation model for the v1 Gerrit/Jenkins
 setup package. Layer-specific command syntax and backend realization live in
 the Docker and VM simulation guides; this file owns shared command semantics,
 topology, source boundaries, and public simulation realization.
-`docs/contracts/lifecycle-contract.md` owns checkpoint semantics for all modes.
+`docs/contracts/lifecycle-contract.md` owns product checkpoint semantics for all
+modes.
 
 Shared internal architecture is defined in
 `simulation/docs/shared/harness-design.md`. Exact simulation state dimensions,
@@ -23,8 +24,8 @@ Shared lifecycle contracts do not live in backend documents:
 | --- | --- |
 | `simulation/docs/shared/simulation-model.md` | Shared public command semantics and operator workflow |
 | `simulation/docs/shared/generated-state-layout.md` | Host-side generated roots, path custody, sensitivity, and cleanup classes |
-| `simulation/docs/shared/lifecycle-state-model.md` | Exact state, checkpoint order, guards, transitions, and recovery rights |
-| `simulation/docs/shared/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus checkpoint publication |
+| `simulation/docs/shared/lifecycle-state-model.md` | Exact state, workflow checkpoint order, guards, transitions, and recovery rights |
+| `simulation/docs/shared/checkpoint-acceptance-protocol.md` | Owning-result and evidence acceptance plus workflow checkpoint publication |
 | `simulation/docs/shared/harness-design.md` | Shared architectural and dependency boundaries |
 | `simulation/docs/shared/terminal-output.md` | Shared terminal presentation conventions |
 | `simulation/docs/docker/docker-simulation.md` | Accepted Docker syntax, resource mechanisms, transport, and cleanup tools |
@@ -116,7 +117,7 @@ the VM harness.
 
 Docker simulation may use explicit simulation-only waivers where containers
 cannot naturally model target hosts. VM simulation is expected to be stricter:
-libvirt/KVM provides the lab infrastructure, but lifecycle checkpoint work
+libvirt/KVM provides the lab infrastructure, but product checkpoint work
 should remain near target deployment and use target-like interfaces rather
 than inheriting Docker shortcuts.
 
@@ -350,16 +351,18 @@ retain aliases that hide the selected resource transition.
 
 The simulation integration sequence is `integration-preflight`,
 `configure-integration`, `validate-integration`, `prove-integration`, then
-`evidence-audit`. It has no Reviewed Access checkpoint, wait, or resume path.
+`evidence-audit`. It has no Reviewed Access product checkpoint, wait, or resume
+path.
 
 Set mutations use the stable nonblocking lock at
 `generated/simulation/<backend>/locks/<set-id>.lock`; contention reports
 `set busy`. The set-scoped `active-run.env` owns claim and reset gating. The
-run-scoped `workflow-state.env` owns only checkpoint activity and progression.
+run-scoped `workflow-state.env` owns only workflow checkpoint activity and
+progression.
 Strict readers cross-check both records with the immutable run marker,
 baseline, source/effective-input fingerprints, backend ownership, and
-hash-linked checkpoint records. Details and exact transitions are authoritative
-in `simulation/docs/shared/lifecycle-state-model.md`. Result and evidence acceptance
+hash-linked workflow checkpoint records. Details and exact transitions are
+authoritative in `simulation/docs/shared/lifecycle-state-model.md`. Result and evidence acceptance
 plus publication order are defined in
 `simulation/docs/shared/checkpoint-acceptance-protocol.md`.
 
@@ -445,7 +448,8 @@ and VM documents add only the backend resource probes used to apply that model.
 ## Lifecycle Realization
 
 `docs/contracts/lifecycle-contract.md` defines product checkpoint semantics and
-mutation boundaries. The state model maps those checkpoints into the simulation
-workflow, and the acceptance protocol defines how owning results enter it.
+mutation boundaries. The state model maps those product checkpoint instances
+into the simulation workflow, and the acceptance protocol defines how owning
+results enter it.
 Backend orchestration invokes the same role and integration owners through its
 documented transport; it does not create another lifecycle contract.

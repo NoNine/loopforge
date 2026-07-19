@@ -2,8 +2,9 @@
 
 Durable lifecycle behavior now lives in `docs/contracts/lifecycle-contract.md`. Keep
 this implementation step as historical context only. Future changes to phase
-order, checkpoint semantics, mutation boundaries, resume/rerun behavior, or
-product workflow sequencing belong in the lifecycle contract, not in this plan.
+order, product checkpoint semantics, mutation boundaries, resume/rerun
+behavior, or product workflow sequencing belong in the lifecycle contract,
+not in this plan.
 Shared and backend simulation command semantics belong under `simulation/`.
 
 The cross-role command sequence belongs in `docs/operations/setup/integration.md`.
@@ -15,7 +16,7 @@ Verification:
 
 ```bash
 test -f docs/contracts/lifecycle-contract.md
-rg -n "Operator Workflow Contract|Lifecycle Checkpoints|Docker Command Mapping" docs/contracts/lifecycle-contract.md
+rg -n "Checkpoint Terminology|Product Checkpoint Families" docs/contracts/lifecycle-contract.md
 rg -n "lifecycle-contract.md" docs/README.md docs/architecture/system-model.md simulation/docs/docker/docker-simulation.md
 rg -n "^[[:space:]]*(run|configure-controller-node)$" docs/planning/implementation-plan.md
 ```
@@ -25,4 +26,4 @@ Acceptance criteria:
 - The stable workflow contract is in `docs/contracts/lifecycle-contract.md`.
 - This implementation plan does not embed the durable lifecycle authority.
 - Consumer docs link to the lifecycle contract instead of redefining shared
-  checkpoint semantics.
+  product checkpoint semantics.
