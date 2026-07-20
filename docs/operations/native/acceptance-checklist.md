@@ -110,7 +110,10 @@ Decision date:
 - [ ] The Jenkins HTTP and API endpoints respond as documented.
 - [ ] The reviewed LDAP administrator can sign in.
 - [ ] Required plugins load without errors and the active Jenkins configuration
-  matches the reviewed JCasC or UI-driven configuration.
+  matches the reviewed bootstrap inputs persisted in Jenkins-owned state.
+- [ ] Normal Jenkins startup has no active JCasC source, the rendered bootstrap
+  file is absent, and LDAP and authorization remain effective after the
+  ownership-handoff restart.
 - [ ] The built-in node has zero executors.
 - [ ] Optional reboot check: Jenkins returns to the same ready state after a
   reviewed reboot.

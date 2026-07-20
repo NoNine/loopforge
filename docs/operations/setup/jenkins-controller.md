@@ -15,12 +15,18 @@ and preserve equivalent product state and validation outcomes. The native
 reference must remain free of repository helper commands.
 
 The v1 boundary is unchanged: Jenkins application artifacts, plugin artifacts,
-JCasC templates, job templates, manifests, and checksums are prepared in the
-bundle factory, staged to the Jenkins controller target, and verified by
-manifest and checksum before target mutation. v1 does not support offline
-Ubuntu dependency bundle workflows. Any public internet fallback for
+one-time JCasC bootstrap templates, job templates, manifests, and checksums are
+prepared in the bundle factory, staged to the Jenkins controller target, and
+verified by manifest and checksum before target mutation. v1 does not support
+offline Ubuntu dependency bundle workflows. Any public internet fallback for
 target-host Ubuntu/OS dependency installation is simulation-only and must be
 labeled that way in logs and evidence.
+
+JCasC owns only secured first-start bootstrap. The controller Role-local setup
+checkpoint is incomplete until the helper removes the JCasC source from normal
+startup, removes the rendered bootstrap file from automatic discovery,
+restarts Jenkins, and proves the configuration persists. Jenkins persistent
+state then owns global configuration, including LDAP and authorization.
 
 Jenkins controller application artifact bundles are key-free. They may contain
 reviewed templates, manifests, checksums, WAR files, plugin artifacts, and job
@@ -183,7 +189,7 @@ Produced outputs:
   into Jenkins runtime state.
 - Curated Jenkins plugin artifacts, including resolved dependency plugins,
   staged from reviewed sources or resolved in the bundle factory.
-- Controller-only JCasC and service templates.
+- Controller-only JCasC bootstrap and permanent service templates.
 - No Jenkins credentials, Gerrit Trigger server, agent-node, disposable
   verification job, or trigger-verification env templates are staged by the
   controller role helper. Those cross-role artifacts belong to the later
@@ -265,21 +271,23 @@ Consumed inputs:
 
 - Reviewed Jenkins controller env file.
 - Staged service template.
-- Jenkins runtime account, runtime group, home path, HTTP port, and JCasC
-  location.
+- Jenkins runtime account, runtime group, home path, and HTTP port.
 
 Produced outputs:
 
 - Rendered service environment file.
 - Service configuration marker.
-- Real Jenkins controller runtime configuration ready to start from the staged
-  Jenkins WAR, plugin set, JCasC material, and reviewed HTTP port.
+- Permanent Jenkins controller runtime configuration ready to start from the
+  staged Jenkins WAR and plugin set on the reviewed HTTP port, with no normal
+  startup JCasC source.
 
 Mutation side effects:
 
 - Creates Jenkins role-local runtime service settings during initial setup.
-- Installs the runtime lifecycle definition; Jenkins starts only after the
-  plugin and JCasC configuration phases are complete.
+- Installs the permanent runtime lifecycle definition without
+  `CASC_JENKINS_CONFIG`, a `casc.jenkins.config` Java property, or another
+  automatic JCasC source. A temporary first-start mechanism belongs only to
+  Phase 7.
 - Uses guest systemd for VM simulation and target deployment. Docker retains
   its existing direct-process model.
 
@@ -293,11 +301,12 @@ Helper:
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes configure-service
 ```
 
-## Phase 7: LDAP/JCasC Configuration
+## Phase 7: LDAP/JCasC Bootstrap And Ownership Handoff
 
 Jenkins uses LDAP-backed human admin access. The Jenkins runtime account and
 Jenkins Gerrit integration account remain separate from the Jenkins admin
-account or group.
+account or group. JCasC establishes this security baseline only during secured
+first start. It is not the steady-state owner.
 
 Consumed inputs:
 
@@ -310,25 +319,44 @@ Consumed inputs:
 Produced outputs:
 
 - Rendered JCasC file with LDAP security realm and zero built-in executors.
-- JCasC readiness marker.
+- First-start bootstrap result proving the reviewed LDAP, authorization, URL,
+  plugin, and controller executor settings became active.
+- Ownership-handoff result proving the normal runtime has no configured JCasC
+  source, the rendered bootstrap file is absent from automatic discovery, and
+  the same settings remain active after restart from Jenkins persistent state.
 
 Mutation side effects:
 
-- Creates role-local Jenkins JCasC material during initial setup.
+- Installs curated plugins before first start.
+- Creates protected role-local JCasC material and exposes it only to the
+  secured first-start process.
+- Starts Jenkins for the initial bootstrap checks, stops it for the ownership
+  handoff, removes the temporary source and rendered secret-bearing file, and
+  starts Jenkins from the permanent runtime configuration.
 - Records non-secret LDAP metadata only. Operators must provide real bind
   secrets through reviewed secret handling outside evidence.
+- If bootstrap or handoff fails, the helper reports partial conflicting state
+  and blocks. It must not retain persistent JCasC, repair the application state,
+  or make validation complete the missing setup work.
 
-Helper:
-
-```bash
-scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes configure-jcasc
-```
-
-Plugins are installed from staged curated artifacts before JCasC validation:
+Helpers, in order:
 
 ```bash
 scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes install-plugins
+scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes configure-jcasc
+scripts/jenkins-controller-setup.sh --env <reviewed-jenkins.env> --yes handoff-configuration
 ```
+
+`configure-jcasc` alone is not a completed Role-local setup result. The
+`handoff-configuration` command is the required implementation contract for
+the ownership transition. Consult `project-state/execution-status.md` for
+current helper availability before using this docs-first interface.
+
+After a successful handoff, later global configuration changes are site-owned
+Jenkins administration through the Web UI or approved APIs. They are not
+helper reconfiguration phases. The initial-setup helper continues to return
+non-mutating `already-complete` only for its exact bound result and blocks on
+other existing state.
 
 ## Phase 8: Shared Gerrit Trigger Integration Handoff
 
@@ -360,8 +388,8 @@ REST vote failures, and Gerrit review-state failures must remain distinct.
 Validation in Step 8 proves Jenkins controller-only readiness with real runtime
 checks for controller lifecycle phases. It verifies staged artifacts, rendered
 configuration, accepted direct plugin pins and resolved plugin closure,
-LDAP/JCasC configuration, LDAP reachability, Jenkins controller startup,
-endpoint reachability, bounded logs, and evidence.
+the completed JCasC ownership handoff, LDAP reachability, Jenkins controller
+startup, endpoint reachability, bounded logs, and evidence.
 Gerrit SSH reachability, Gerrit Trigger readiness, agent scheduling, and
 trigger voting are deferred to the later shared integration step.
 
@@ -385,10 +413,11 @@ Validation evidence covers:
   `JENKINS_PLUGIN_LIST` is installed from staged artifacts at the exact
   accepted version, and Jenkins startup log checks prevent plugin-load
   failures from passing validation.
-- JCasC readiness: the LDAP realm exists, matrix authorization grants
-  `Overall/Administer` to `JENKINS_ADMIN_ACCOUNT`, the built-in
-  `authenticated` SID has read and build access, and the built-in node has
-  zero executors.
+- Configuration ownership readiness: normal startup has no active JCasC
+  source, the rendered bootstrap file is absent from automatic discovery, the
+  LDAP realm exists, matrix authorization grants `Overall/Administer` to
+  `JENKINS_ADMIN_ACCOUNT`, the built-in `authenticated` SID has read and build
+  access, and the built-in node has zero executors after restart.
 - Gerrit SSH connectivity: deferred to the later integration step.
 - Gerrit Trigger readiness: deferred to the later integration step.
 - Agent readiness: deferred to the later integration step.

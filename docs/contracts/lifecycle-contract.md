@@ -185,6 +185,11 @@ Role setup and role validation have separate responsibilities:
 
 - Role setup installs fresh role-local state, configures the service, and
   establishes the initial runtime when the role requires one.
+- Jenkins controller role setup includes the complete JCasC ownership handoff:
+  apply the protected first-start bootstrap, verify its security baseline,
+  detach and remove the automatic JCasC source, restart Jenkins, and prove the
+  configuration persists without JCasC. A controller is not ready while its
+  normal startup still loads the bootstrap source.
 - Role validation is observational. It may collect evidence, but it must not
   start, restart, enable, reconfigure, or repair a role process or service.
 - Role validation may consume successful earlier checkpoint results. It must

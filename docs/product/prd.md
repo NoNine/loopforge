@@ -79,7 +79,8 @@ The product must help engineers and operators install and validate:
   package tooling, such as Java, SSH tools, service prerequisites, and OS
   libraries.
 - Application artifacts include Gerrit WAR, Jenkins WAR, Gerrit/Jenkins
-  plugins, JCasC/config templates, job definitions, manifests, and checksums.
+  plugins, JCasC bootstrap/config templates, job definitions, manifests, and
+  checksums.
   Application artifact bundles must not include actual SSH private keys,
   public keys, `authorized_keys`, or generated key/public-key handoff files.
   Jenkins-to-Gerrit and Jenkins-to-agent keypair generation and public-key
@@ -128,6 +129,32 @@ The product must help engineers and operators install and validate:
 - Role helpers must stay role-local. Cross-role SSH, trigger setup,
   integration validation, trigger verification, and integration evidence are
   owned by `scripts/integration-setup.sh`.
+
+### 3.1. Jenkins Configuration Ownership
+
+- Fresh Jenkins controller setup may use JCasC only as a secured first-start
+  bootstrap mechanism. JCasC must establish the reviewed LDAP security realm,
+  initial administrator authorization, Jenkins URL, and built-in executor
+  policy before ordinary user access is allowed.
+- Jenkins controller role-local setup must complete an explicit ownership
+  handoff before reporting readiness. The handoff must remove JCasC from the
+  normal startup configuration, remove the rendered secret-bearing bootstrap
+  file from automatic discovery, restart Jenkins without JCasC, and prove that
+  the bootstrapped configuration remains effective.
+- After the handoff, persistent Jenkins state in `JENKINS_HOME` is authoritative
+  for global Jenkins configuration, including LDAP and authorization. Approved
+  Web UI or Jenkins API changes must remain effective across normal controller
+  restarts and must not require synchronization back to JCasC.
+- Jenkins core, plugins, service configuration, and host infrastructure remain
+  deployment-managed. Source-generated jobs remain owned by their product CI
+  repository and may overwrite UI edits only within their explicitly declared
+  generated-job scope.
+- The JCasC bootstrap input is not a steady-state configuration or recovery
+  source. Production recovery must restore the complete protected Jenkins home
+  through the reviewed backup and restore procedure.
+- Docker simulation, VM simulation, and target deployment must model the same
+  bootstrap-to-persistent-state ownership handoff. Persistent JCasC is not a
+  simulation substitute for the target-deployment behavior.
 
 ### 4. Integration Configuration
 - The package must configure LDAP-backed authentication assumptions.

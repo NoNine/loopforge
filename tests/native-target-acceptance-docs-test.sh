@@ -95,8 +95,14 @@ if [ "$(grep -Fc -- '- [ ] Optional reboot check:' "$checklist")" -ne 3 ]; then
   exit 1
 fi
 require_text docs/operations/native/acceptance-checklist.md \
+  'matches the reviewed bootstrap inputs persisted in Jenkins-owned state.' \
+  'Checklist must require the Jenkins-owned post-bootstrap configuration'
+require_text docs/operations/native/acceptance-checklist.md \
+  'Normal Jenkins startup has no active JCasC source' \
+  'Checklist must require the completed JCasC ownership handoff'
+reject_text docs/operations/native/acceptance-checklist.md \
   'reviewed JCasC or UI-driven configuration.' \
-  'Checklist must accept reviewed JCasC and UI-driven configuration'
+  'Checklist must not retain ambiguous JCasC and UI ownership'
 reject_text docs/operations/native/acceptance-checklist.md \
   'required build tools' \
   'Checklist must not require unspecified agent build tools'

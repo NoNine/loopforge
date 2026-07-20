@@ -151,7 +151,9 @@ explicit `anonuid` and `anongid` values and the resulting audit tradeoff.
 Human admin accounts are LDAP-backed human accounts or LDAP-backed groups.
 The Gerrit admin account administers Gerrit and can configure integration
 permissions. The Jenkins admin account administers Jenkins and can apply
-JCasC, trigger, credential, and node configuration. Keeping these accounts
+global configuration through the Web UI or approved Jenkins APIs after the
+one-time JCasC bootstrap handoff, including trigger, credential, and node
+configuration. Keeping these accounts
 separate from runtime accounts prevents service process ownership from also
 granting application administration.
 

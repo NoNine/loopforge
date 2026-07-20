@@ -129,14 +129,12 @@ for heading in \
   '### 3.2 Install the Jenkins WAR' \
   '### 3.3 Configure the Jenkins Service' \
   '### 3.4 Install Jenkins Plugins' \
-  '### 3.5 Configure the JCasC Baseline' \
-  '### 3.6 Start Jenkins' \
+  '### 3.5 Configure the One-Time JCasC Bootstrap' \
+  '### 3.6 Bootstrap Jenkins and Hand Off Configuration Ownership' \
   '## 4. Jenkins Controller Role-Local Validation' \
   '## 5. Add Additional Jenkins Administrators' \
   '### 5.1 Review the Additional LDAP Administrator Accounts' \
   '### 5.2 Grant Jenkins Administrator Access in the UI' \
-  '### 5.3 Synchronize the JCasC Administrator Entries' \
-  '### 5.4 Verify Administrator Access After Restart' \
   '## 6. Shared Integration Handoff' \
   '### 6.1 Outbound SSH Build Agent Inputs' \
   '## 7. Backup and Operations' \
@@ -185,7 +183,6 @@ for pattern in \
   'UI-Driven Configuration Fallback' \
   'initialAdminPassword' \
   'setup-wizard administrator' \
-  'remove the `CASC_JENKINS_CONFIG`' \
   "if grep -q '[[:space:]]'" \
   'Controller-only bringup stops before cross-role Gerrit and agent integration.' \
   'Later cross-role work belongs to' \
@@ -400,12 +397,16 @@ require_text \
 
 require_text \
   "$manual" \
-  'JCasC is the required baseline configuration path' \
-  'Native Jenkins installation must always configure the JCasC baseline'
+  'JCasC is required only for secured first-start bootstrap.' \
+  'Native Jenkins installation must limit JCasC to first-start bootstrap'
 require_text \
   "$manual" \
-  'UI-only changes to those fields are not durable.' \
-  'Native Jenkins must identify the JCasC ownership boundary'
+  'approved Web UI or Jenkins API changes' \
+  'Native Jenkins must make post-handoff global changes Jenkins-owned'
+require_text \
+  "$manual" \
+  'reload the bootstrap JCasC file during normal operation or recovery.' \
+  'Native Jenkins must prohibit steady-state JCasC reconciliation'
 
 administrator_section="$(
   sed -n \
@@ -419,18 +420,25 @@ for administrator_contract in \
   'Overall/Read' \
   'Job/Read' \
   'Job/Build' \
-  'Do not change the LDAP security realm' \
-  'sudoedit /var/lib/jenkins/jcasc/jenkins.yaml' \
-  'ADDITIONAL_LDAP_ADMIN_USER' \
-  'sudo chmod 0600 /var/lib/jenkins/jcasc/jenkins.yaml' \
-  'Check Configuration' \
-  'sudo systemctl restart jenkins' \
+  'Jenkins persistent state is authoritative' \
+  'do not create or reload JCasC' \
   'do not rerun Section 4'; do
   grep -Fq -- "$administrator_contract" <<<"$administrator_section" || {
     printf 'Native Jenkins administrator operation is missing: %s\n' \
       "$administrator_contract" >&2
     exit 1
   }
+done
+for removed_administrator_contract in \
+  'sudoedit /var/lib/jenkins/jcasc/jenkins.yaml' \
+  'ADDITIONAL_LDAP_ADMIN_USER' \
+  'Check Configuration' \
+  'sudo systemctl restart jenkins'; do
+  if grep -Fq -- "$removed_administrator_contract" <<<"$administrator_section"; then
+    printf 'Native Jenkins administrator operation retains JCasC synchronization: %s\n' \
+      "$removed_administrator_contract" >&2
+    exit 1
+  fi
 done
 
 require_text \
@@ -443,7 +451,22 @@ war_line="$(grep -n -m1 '/var/lib/loopforge/staging/jenkins/jenkins-2.555.3.war'
 enable_line="$(grep -n -m1 'sudo systemctl enable jenkins' "$manual" | cut -d: -f1)"
 plugins_line="$(grep -n -m1 '/var/lib/loopforge/staging/jenkins/plugins/\*.jpi' "$manual" | cut -d: -f1)"
 jcasc_line="$(grep -n -m1 'sudoedit /var/lib/jenkins/jcasc/jenkins.yaml' "$manual" | cut -d: -f1)"
-start_line="$(grep -n -m1 'sudo systemctl start jenkins' "$manual" | cut -d: -f1)"
+mapfile -t start_lines < <(
+  grep -n -F 'sudo systemctl start jenkins' "$manual" \
+    | cut -d: -f1 \
+    | sed -n '1,2p'
+)
+[ "${#start_lines[@]}" -eq 2 ] || {
+  printf 'Native Jenkins lifecycle must start Jenkins exactly twice\n' >&2
+  exit 1
+}
+bootstrap_start_line="${start_lines[0]}"
+steady_start_line="${start_lines[1]}"
+detach_line="$(
+  grep -n '10-loopforge-bootstrap-jcasc.conf' "$manual" \
+    | tail -1 \
+    | cut -d: -f1
+)"
 validation_line="$(heading_line '## 4. Jenkins Controller Role-Local Validation')"
 administrators_line="$(heading_line '## 5. Add Additional Jenkins Administrators')"
 handoff_line="$(heading_line '## 6. Shared Integration Handoff')"
@@ -451,8 +474,10 @@ handoff_line="$(heading_line '## 6. Shared Integration Handoff')"
   [ "$war_line" -lt "$enable_line" ] &&
   [ "$enable_line" -lt "$plugins_line" ] &&
   [ "$plugins_line" -lt "$jcasc_line" ] &&
-  [ "$jcasc_line" -lt "$start_line" ] &&
-  [ "$start_line" -lt "$validation_line" ] &&
+  [ "$jcasc_line" -lt "$bootstrap_start_line" ] &&
+  [ "$bootstrap_start_line" -lt "$detach_line" ] &&
+  [ "$detach_line" -lt "$steady_start_line" ] &&
+  [ "$steady_start_line" -lt "$validation_line" ] &&
   [ "$validation_line" -lt "$administrators_line" ] &&
   [ "$administrators_line" -lt "$handoff_line" ] || {
   printf 'Native Jenkins lifecycle operations are out of order\n' >&2
@@ -460,11 +485,40 @@ handoff_line="$(heading_line '## 6. Shared Integration Handoff')"
 }
 startup_section="$(
   sed -n \
-    '/^### 3.6 Start Jenkins$/,/^## 4. Jenkins Controller Role-Local Validation$/p' \
+    '/^### 3.6 Bootstrap Jenkins and Hand Off Configuration Ownership$/,/^## 4. Jenkins Controller Role-Local Validation$/p' \
     "$manual"
 )"
-[ "$(printf '%s\n' "$startup_section" | grep -Fc 'sudo systemctl start jenkins')" -eq 1 ] || {
-  printf 'Native Jenkins lifecycle must start Jenkins exactly once\n' >&2
+[ "$(printf '%s\n' "$startup_section" | grep -Fc 'sudo systemctl start jenkins')" -eq 2 ] || {
+  printf 'Native Jenkins handoff must contain both controlled starts\n' >&2
+  exit 1
+}
+[ "$(printf '%s\n' "$startup_section" | grep -Fc 'sudo systemctl stop jenkins')" -eq 1 ] || {
+  printf 'Native Jenkins handoff must stop Jenkins exactly once\n' >&2
+  exit 1
+}
+for handoff_contract in \
+  '10-loopforge-bootstrap-jcasc.conf' \
+  'sudo rm -- /var/lib/jenkins/jcasc/jenkins.yaml' \
+  'sudo rmdir -- /var/lib/jenkins/jcasc' \
+  'CASC_JENKINS_CONFIG|casc\.jenkins\.config' \
+  'repeat the three Web UI checks'; do
+  grep -Fq -- "$handoff_contract" <<<"$startup_section" || {
+    printf 'Native Jenkins handoff is missing: %s\n' "$handoff_contract" >&2
+    exit 1
+  }
+done
+
+service_section="$(
+  sed -n \
+    '/^### 3.3 Configure the Jenkins Service$/,/^### 3.4 Install Jenkins Plugins$/p' \
+    "$manual"
+)"
+if grep -Fq -- 'Environment=CASC_JENKINS_CONFIG=' <<<"$service_section"; then
+  printf 'Native Jenkins permanent service must not configure JCasC\n' >&2
+  exit 1
+fi
+[ "$(grep -Fc 'Environment=CASC_JENKINS_CONFIG=' "$manual")" -eq 1 ] || {
+  printf 'Native Jenkins must configure JCasC only in the temporary drop-in\n' >&2
   exit 1
 }
 

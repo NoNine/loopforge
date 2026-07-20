@@ -20,6 +20,8 @@ transitions remains pending in M5.
 Read these before implementation:
 
 - `docs/product/prd.md` for the initial-only v1 product boundary.
+- `docs/architecture/system-model.md` for the Jenkins bootstrap-to-persistent
+  configuration ownership transition.
 - `docs/contracts/lifecycle-contract.md` for identity and application-state
   classification, completion binding, and validation behavior.
 - `docs/operations/README.md` for native/helper parity.
@@ -162,9 +164,17 @@ Implementation:
   initial-only transitions.
 - Permit only absent state or a matching identity with an empty Jenkins home
   to enter initial installation.
-- Bind completion to the verified WAR and plugin closure, JCasC and service
-  configuration, reviewed identity, endpoints, LDAP inputs, mode, target, and
-  selected state.
+- Bind completion to the verified WAR and plugin closure, protected one-time
+  JCasC bootstrap, permanent JCasC-free service configuration, completed
+  configuration-ownership handoff, reviewed identity, endpoints, LDAP inputs,
+  mode, target, and selected state.
+- Implement the explicit bootstrap handoff for systemd and direct-process
+  modes: prove the initial security baseline, stop the controller, remove the
+  automatic JCasC source and rendered bootstrap file, restart without JCasC,
+  and prove the persisted configuration remains effective.
+- Make Jenkins-owned global configuration, including LDAP and authorization,
+  durable across later UI or approved API changes and normal restarts. Do not
+  add a persistent JCasC reconciliation path.
 - Return `already-complete` without stopping, starting, or rewriting Jenkins
   when the exact role handoff is complete.
 - Keep controller validation observational and update native/helper procedures
@@ -175,11 +185,18 @@ Focused tests:
 - Controller fresh-state and empty-home adoption tests.
 - Controller existing-home rejection and exact no-op rerun tests.
 - Controller service/filesystem no-mutation validation tests.
+- Controller bootstrap-handoff tests for source removal, secret-bearing file
+  removal, restart persistence, and blocked partial handoff state.
+- A focused runtime regression test that changes a harmless Jenkins-owned
+  global setting after handoff, restarts without JCasC, and proves the change
+  remains effective.
 
 Acceptance:
 
 - Controller setup never kills Jenkins or deletes a managed runtime/config
   directory to make installation succeed.
+- Controller readiness proves the one-time JCasC source is detached and
+  Jenkins-owned LDAP, authorization, URL, and executor policy survive restart.
 - Fresh initial setup and exact no-op rerun produce a controller-readiness
   handoff bound to the same reviewed state.
 
@@ -219,6 +236,9 @@ Implementation:
 
 - Align Docker and VM role gates, phase summaries, completion-record consumers,
   and reboot checks with the M1-M4 handoffs.
+- Require Docker and VM Jenkins role gates to exercise the same JCasC ownership
+  handoff as target deployment; persistent simulation JCasC cannot satisfy the
+  controller Role-local setup checkpoint.
 - Extend the Step 13a backend-local run plans through every role checkpoint
   family. Direct and composite invocation must use the same role command
   handlers and per-command lock modes; `run` must not call a role capability

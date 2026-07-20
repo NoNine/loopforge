@@ -50,6 +50,12 @@ debugging, and manually created jobs. For generated jobs, the product CI
 configuration repository is authoritative. Manual UI edits to generated jobs
 are temporary and may be overwritten by the product seed job.
 
+This generated-job ownership does not extend to Jenkins global configuration.
+After Loopforge completes the one-time JCasC bootstrap handoff, Jenkins
+persistent state is authoritative for LDAP, authorization, credentials, nodes,
+and other global settings. A product seed or reconciliation operation must not
+re-enable JCasC ownership or overwrite those settings.
+
 ## Model Versus Implementation
 
 This model records ownership boundaries and desired behavior. A later

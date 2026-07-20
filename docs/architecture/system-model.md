@@ -133,6 +133,39 @@ target-host installation even when infrastructure is co-located.
 In `target-deployment`, LDAP may be real external LDAP or an approved
 target-owned LDAP service. It is not simulation-owned LDAP.
 
+## Jenkins Configuration Ownership
+
+Jenkins controller setup has a deliberate ownership transition. Before the
+first start, Loopforge owns a protected, rendered JCasC bootstrap input. That
+input establishes the minimum reviewed security and controller baseline before
+ordinary user access. During the same Role-local setup checkpoint, Loopforge
+must detach the JCasC source, remove the rendered bootstrap file from automatic
+discovery, restart the controller, and prove that Jenkins persisted the
+configuration in its service-owned home.
+
+After that handoff, Jenkins persistent state is the source of truth for global
+application configuration. Human administrators may use the Jenkins Web UI,
+and approved automation may use Jenkins APIs, without a later JCasC load
+reverting their changes. Normal service startup must not set
+`CASC_JENKINS_CONFIG`, a `casc.jenkins.config` Java property, or another JCasC
+source. The configuration-as-code plugin may remain installed because it was
+needed for bootstrap, but no steady-state source is configured.
+
+| Configuration class | Steady-state owner |
+| --- | --- |
+| Jenkins core, Java, plugins, systemd, and external proxy or load balancer | Reviewed deployment and host operations |
+| LDAP, authorization, Jenkins URL, controller policy, nodes, credentials, and other global Jenkins settings | Jenkins service-owned persistent state, administered through the Web UI or approved Jenkins APIs |
+| Product-generated folders and jobs | Product CI configuration repository and its reviewed seed or reconciliation operation |
+| Pipeline behavior | Application repositories and their Jenkinsfiles or equivalent reviewed pipeline entrypoints |
+| Build history, runtime metadata, and Jenkins credential encryption state | Protected persistent Jenkins home and its reviewed backups |
+
+Generated jobs are the scoped exception to UI durability. Their owning product
+CI repository may deliberately reconcile or replace UI edits inside its
+declared generated-job scope. It must not claim ownership of unrelated global
+configuration or manually created jobs. A JCasC bootstrap file is neither a
+steady-state configuration source nor a substitute for a complete Jenkins-home
+backup.
+
 ## Account Placement
 
 `docs/contracts/account-model.md` is the account authority. This model uses that account

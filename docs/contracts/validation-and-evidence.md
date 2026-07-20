@@ -79,7 +79,8 @@ Every structured checkpoint result must include:
 - LDAP checks where applicable.
 - SSH checks where applicable.
 - Plugin checks where applicable.
-- JCasC checks where applicable.
+- Jenkins JCasC bootstrap and configuration-ownership handoff checks where
+  applicable.
 - Runtime-account checks where applicable.
 - Shared integration group and shared Jenkins storage checks where applicable.
 - Jenkins agent scheduling and execution results where applicable.
@@ -215,8 +216,11 @@ another instance.
 Role-local validation has role-specific proof obligations:
 
 - Gerrit results cover startup, HTTP, SSH, LDAP, and plugin readiness.
-- Jenkins controller results cover startup, HTTP, LDAP, plugins, JCasC, and
-  controller runtime readiness.
+- Jenkins controller setup results cover the one-time JCasC application and
+  ownership handoff. Controller validation results prove startup, HTTP, LDAP,
+  plugins, absence of an active JCasC source or discoverable rendered
+  bootstrap file, persisted global configuration, and controller runtime
+  readiness without mutation.
 - Jenkins agent results cover SSH readiness, runtime-account ownership, and
   remote filesystem readiness.
 
