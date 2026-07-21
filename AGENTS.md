@@ -8,6 +8,13 @@ changing product, process, or implementation facts. Use
 `docs/planning/implementation-plan.md` for implementation sequencing and
 `project-state/execution-status.md` for mutable resume state.
 
+## Documentation Refactoring
+
+When moving a fact or contract to its owning authority, remove it from the old
+document. Add a cross-reference only when that document's reader needs it to
+perform a procedure, apply a boundary, or resolve ambiguity; do not leave
+automatic ownership breadcrumbs.
+
 ## Interaction Rules
 
 - Treat "discuss" or "discussion" as discussion-only; do not change code or
