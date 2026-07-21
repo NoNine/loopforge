@@ -3,6 +3,8 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+system_model="$repo_root/docs/architecture/system-model.md"
+package_requirements="$repo_root/docs/baselines/package-requirements.md"
 simulation_model="$repo_root/simulation/docs/shared/simulation-model.md"
 generated_layout="$repo_root/simulation/docs/shared/generated-state-layout.md"
 harness_design="$repo_root/simulation/docs/shared/harness-design.md"
@@ -53,6 +55,24 @@ require_text "$simulation_model" \
 require_text "$simulation_model" \
   '`simulation/docs/shared/generated-state-layout.md`' \
   'Simulation model must link generated-state layout authority'
+require_text "$system_model" \
+  'This section is authoritative for logical-environment identity and' \
+  'System model must own logical-environment identity'
+require_text "$simulation_model" \
+  'same six logical environments: one host control node' \
+  'Simulation model must include the host control-node environment'
+require_text "$simulation_model" \
+  '| Control node | Docker harness host | VM harness host |' \
+  'Simulation model must map the control node outside containers and VMs'
+reject_text "$simulation_model" \
+  'same five-machine topology' \
+  'Simulation model must not omit the host control-node environment'
+require_text "$package_requirements" \
+  '`docs/architecture/system-model.md`. The system model owns environment identity' \
+  'Package authority must consume the system logical-environment model'
+reject_text "$package_requirements" \
+  '## Logical Environment Model' \
+  'Package authority must not duplicate the logical-environment model'
 require_text "$simulation_model" \
   '## Lifecycle Documentation Boundary' \
   'Simulation model must route lifecycle documentation ownership'

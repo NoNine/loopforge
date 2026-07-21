@@ -47,8 +47,11 @@ Consumed inputs:
   filesystem path, Jenkins node name, Jenkins scheduling labels, staged
   artifact path, artifact output path, verification mode, evidence directory,
   and bounded log directory.
-- `JENKINS_AGENT_OS_DEPENDENCIES`, whose baseline and layered package rationale
-  are defined in `docs/baselines/package-requirements.md`.
+- `JENKINS_AGENT_OS_DEPENDENCIES`, which names the commands checked by the role
+  helper. The complete native target composition, including the common
+  operations environment, direct agent role dependencies, and Jenkins agent
+  build environment, is defined in
+  `docs/baselines/package-requirements.md`.
 
 Produced outputs:
 
@@ -88,7 +91,11 @@ Produced outputs:
 - Readiness result showing required commands, reviewed values, baseline
   values, SSH endpoint values, runtime account values, remote filesystem
   path, node name, labels, and artifact paths.
-- OS dependency expectation checks for the package/tooling names above.
+- OS dependency expectation checks for the configured helper command subset.
+  The OS dependency provisioning checkpoint separately reviews the complete
+  native target package composition; the role helper does not install or
+  exhaustively validate the common operations or Jenkins agent build
+  environments.
 - Runtime identity readiness: fully absent account/group/product-home state is
   accepted for creation by `install`; a fully matching identity with an empty
   product home is accepted for adoption. Other existing application state,

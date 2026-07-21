@@ -61,8 +61,10 @@ Consumed inputs:
 - `JENKINS_PLUGIN_LIST`, with accepted direct plugin pins as `name:version`
   entries. Do not add transitive dependencies to this env value only because
   they appear in Plugin Installation Manager resolver output.
-- `JENKINS_OS_DEPENDENCIES`, whose baseline and layered package rationale are
-  defined in `docs/baselines/package-requirements.md`.
+- `JENKINS_OS_DEPENDENCIES`, which names the commands checked by the role
+  helper. The complete native target composition, including the common
+  operations environment and direct controller role dependencies, is defined
+  in `docs/baselines/package-requirements.md`.
 
 Deferred integration inputs:
 
@@ -113,7 +115,10 @@ Produced outputs:
 - Readiness result showing required commands, reviewed values, baseline
   values, controller endpoint values, LDAP assumptions, deferred integration
   inventory values, and artifact paths.
-- OS dependency expectation checks for the package/tooling names above.
+- OS dependency expectation checks for the configured helper command subset.
+  The OS dependency provisioning checkpoint separately reviews the complete
+  native target package composition; the role helper does not install or
+  exhaustively validate the common operations environment.
 - Runtime identity readiness: fully absent account/group/product-home state is
   accepted for creation by `install`; a fully matching identity with an empty
   product home is accepted for adoption. Other existing application state,

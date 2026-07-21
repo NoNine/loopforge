@@ -113,6 +113,10 @@ The setup system has these logical environments. Docker, VM, and target
 deployment modes realize them differently, but the logical responsibilities
 remain stable.
 
+This section is authoritative for logical-environment identity and
+responsibility. Package and simulation documents apply this model; they do not
+define alternate environment taxonomies.
+
 | Environment | Responsibility |
 | --- | --- |
 | Operator workstation or control node | Holds reviewed input files, invokes utilities, receives short summaries, and collects generated evidence references. It is not a Gerrit/Jenkins runtime target. |

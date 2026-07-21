@@ -154,19 +154,37 @@ Run on the Jenkins host:
 
 ```bash
 sudo apt update
+
+# Common operations environment
 sudo apt install -y \
   ca-certificates \
   curl \
-  fontconfig \
+  fd-find \
+  jq \
   ldap-utils \
-  nfs-common \
-  openjdk-21-jre \
   openssh-client \
+  ripgrep \
   rsync \
+  strace \
   tar \
-  wget
+  tree \
+  unzip \
+  vim \
+  wget \
+  xz-utils
+
+# Jenkins controller direct role dependencies
+sudo apt install -y \
+  fontconfig \
+  nfs-common \
+  openjdk-21-jre
 java -version
 ```
+
+The Java command must report OpenJDK 21. Ubuntu exposes the `fd-find` command
+as `fdfind`. The common operations environment is installed for status and
+issue diagnosis and LDAP bind/search proof; it is not a Jenkins controller
+runtime dependency.
 
 Prove that the reviewed LDAP bind account can search both configured bases.
 `LDAP_USER_PROOF_BASE_DN` and `LDAP_GROUP_PROOF_BASE_DN` are the absolute DNs

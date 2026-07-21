@@ -66,6 +66,11 @@ instead of a human target checklist.
 
 ## Before You Begin
 
+- For `target-deployment`, satisfy the control-node package baseline in
+  `docs/baselines/package-requirements.md` and provide enough capacity for
+  reviewed inputs and bounded logs. Target reachability and site-approved
+  package-repository access are operator conditions, not operator-host package
+  dependencies.
 - Start with freshly provisioned target state. Loopforge v1 does not reinstall,
   reconfigure, repair, or rotate credentials in existing product state.
 - Use the operator account for control-plane work. Direct root login is not a

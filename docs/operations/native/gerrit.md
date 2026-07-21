@@ -144,18 +144,34 @@ Run on the Gerrit host:
 
 ```bash
 sudo apt update
+
+# Common operations environment
 sudo apt install -y \
   ca-certificates \
   curl \
+  fd-find \
+  jq \
   ldap-utils \
   openssh-client \
-  openjdk-21-jre-headless \
+  ripgrep \
   rsync \
-  tar
+  strace \
+  tar \
+  tree \
+  unzip \
+  vim \
+  wget \
+  xz-utils
+
+# Gerrit direct role dependencies
+sudo apt install -y \
+  openjdk-21-jre-headless
 java -version
 ```
 
-Expected result: OpenJDK 21.
+Expected result: OpenJDK 21. Ubuntu exposes the `fd-find` command as
+`fdfind`. The common operations environment is installed for status and issue
+diagnosis and LDAP bind/search proof; it is not a Gerrit runtime dependency.
 
 Prove that the reviewed LDAP bind account can search both configured bases.
 Each command prompts for the LDAP bind password without placing it in shell

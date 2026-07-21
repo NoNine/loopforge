@@ -43,6 +43,12 @@ Loopforge revision:
 - [ ] Operator access, delegated privileges, runtime accounts, package
   sources, DNS, time, routes, storage, and target-to-target connectivity are
   ready.
+- [ ] The reviewed common operations environment is installed on the Gerrit,
+  Jenkins controller, and Jenkins agent targets.
+- [ ] Each target has its direct role dependencies without Jenkins agent build
+  packages being installed on the Gerrit or Jenkins controller targets.
+- [ ] The Jenkins agent has the reviewed amd64 general build environment, or a
+  separately reviewed build profile is recorded for a non-amd64 agent.
 - [ ] Backup, rollback, and approval owners are recorded in the change/ticket.
 - [ ] Reviewed artifact inventories and checksums match the artifacts staged on
   each target.
@@ -124,6 +130,7 @@ Decision date:
 - [ ] The target SSH service is enabled and active.
 - [ ] The reviewed runtime account and workspace ownership are correct.
 - [ ] Java is available.
+- [ ] The reviewed general build environment is available to agent jobs.
 - [ ] Optional reboot check: The agent target returns to the same ready state
   after a reviewed reboot.
 

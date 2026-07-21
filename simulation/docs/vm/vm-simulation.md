@@ -73,6 +73,14 @@ The bundle factory VM runs role helper `prepare-artifacts` commands. It is an
 environment, not a public API, and there is no standalone
 `bundle-factory-helper.sh`.
 
+## Host Conditions
+
+Run VM simulation from a Linux host with libvirt/KVM access and enough capacity
+for VM images, generated simulation state, and bounded logs.
+`flock` serializes selected VM-set base-image preparation. Host package and
+tooling dependencies are owned by `docs/baselines/package-requirements.md`;
+this guide owns VM-specific access and capacity conditions.
+
 ## Near-Target Lifecycle Boundary
 
 VM simulation is expected to be near target deployment for product checkpoint

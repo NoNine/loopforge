@@ -6,6 +6,7 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 packages="$repo_root/docs/baselines/package-requirements.md"
 gerrit_native="$repo_root/docs/operations/native/gerrit.md"
 jenkins_native="$repo_root/docs/operations/native/jenkins-controller.md"
+jenkins_agent_native="$repo_root/docs/operations/native/jenkins-agent.md"
 jenkins_setup="$repo_root/docs/operations/setup/jenkins-controller.md"
 gerrit_helper="$repo_root/scripts/gerrit-setup.sh"
 jenkins_helper="$repo_root/scripts/jenkins-controller-setup.sh"
@@ -32,14 +33,23 @@ reject_text() {
   fi
 }
 
-require_text "$packages" '| Operator/helper |' \
-  'Package authority must classify operator/helper prerequisites separately'
+require_text "$packages" '### LDAP Environment' \
+  'Package authority must define the LDAP logical environment'
+require_text "$packages" \
+  'The `common-operations` package set provides `ldap-utils`' \
+  'Package authority must assign ldap-utils to common operations'
 require_text "$packages" \
   'Do not treat `ldap-utils` as a Gerrit or Jenkins runtime dependency.' \
   'Package authority must keep ldap-utils out of the application runtime layer'
 require_text "$packages" \
-  '| Target-host `ldap-utils` layer |' \
-  'Package authority must identify the target-host LDAP proof layer'
+  'Helper-specific packages belong to the logical environment in which the helper' \
+  'Package authority must assign helper dependencies to logical environments'
+require_text "$packages" '## Requirement Consumers' \
+  'Package authority must identify requirement consumers'
+reject_text "$packages" '| Verification |' \
+  'Package authority must not embed implementation-test verification columns'
+reject_text "$packages" '## Evidence Map' \
+  'Package authority must not overload runtime evidence terminology'
 
 for manual in "$gerrit_native" "$jenkins_native"; do
   require_text "$manual" '  ldap-utils \' \
@@ -47,6 +57,9 @@ for manual in "$gerrit_native" "$jenkins_native"; do
   require_text "$manual" 'ldapsearch -x -H LDAP_URL -D LDAP_BIND_DN -W \' \
     'Native application hosts must perform LDAP bind/search proof'
 done
+
+require_text "$jenkins_agent_native" '  ldap-utils ' \
+  'Native Jenkins agent host must install the common LDAP utility'
 
 gerrit_baseline='ca-certificates,curl,ldap-utils,openssh-client,openjdk-21-jre-headless,rsync,tar'
 jenkins_baseline='ca-certificates,curl,fontconfig,ldap-utils,openjdk-21-jre,openssh-client,rsync,tar,wget'

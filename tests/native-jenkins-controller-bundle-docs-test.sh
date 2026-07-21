@@ -111,6 +111,14 @@ require_text \
   "$bundle_contract" \
   'its procedure uses them.' \
   'Artifact contract must allow procedure-owned native manifests or templates'
+reject_text \
+  "$bundle_contract" \
+  '## Bundle-Factory Ubuntu Dependencies' \
+  'Artifact contract must not duplicate package authority'
+reject_text \
+  "$bundle_contract" \
+  '| Bundle-factory dependencies |' \
+  'Artifact contract must not duplicate the bundle-factory package list'
 require_text \
   "$checklist" \
   'Reviewed artifact inventories and checksums match the artifacts staged on' \

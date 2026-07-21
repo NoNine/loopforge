@@ -1,99 +1,314 @@
 # Package Requirements
 
-This document is the consolidated requirements reference for Ubuntu 24.04.
-It has two parts: host prerequisites by mode, and layered package
-requirements. A package can be required by the product runtime, by native
-operator or helper validation, or only by Docker simulation.
+This document is the consolidated Ubuntu 24.04 package-requirements reference.
+It applies package requirements to the logical environments defined by
+`docs/architecture/system-model.md`. The system model owns environment identity
+and responsibility; `simulation/docs/shared/simulation-model.md` owns Docker
+and VM realization details.
 
-`docs/baselines/version-baseline.md` owns the default Ubuntu, Java, Gerrit, Jenkins,
-plugin-manager, and Jenkins agent/tooling versions. This document owns the
-package layer rationale for that baseline.
+`docs/baselines/version-baseline.md` owns the default Ubuntu, Java, Gerrit,
+Jenkins, plugin-manager, and Jenkins agent/tooling versions. This document owns
+the package-layer rationale for that baseline.
 
-Native target hosts install OS packages from approved internal Ubuntu/OS
-repositories. Application artifacts are separate from OS packages and are
-staged through reviewed artifact bundles. v1 does not support offline Ubuntu
-dependency bundles. Public internet fallback for target-host OS package
+Target-deployment environments install OS packages from approved internal
+Ubuntu/OS repositories. Application artifacts are separate from OS packages
+and are staged through reviewed artifact bundles. v1 does not support offline
+Ubuntu dependency bundles. Public internet fallback for target-host OS package
 installation is simulation-only.
 
-## Host Prerequisites by Mode
+## Package Ownership Rules
 
-| Mode | Minimum host prerequisites | Notes |
-| --- | --- | --- |
-| `docker-simulation` | Linux host, Python 3.9+, Docker Engine, Docker Compose, enough disk space for `generated/` and `logs/` | Runs the local harness and Docker simulation CLI. |
-| `vm-simulation` | Linux host with libvirt/KVM access, Python 3.9+, `virsh`, `flock`, VM image or install tooling, cloud-init or seed media tooling, SSH client tools, and enough disk space for VM images, `generated/`, and `logs/` | Runs the VM simulation CLI and owns simulation VM provisioning. `flock` serializes selected VM-set base-image preparation. VM provisioning satisfies role target OS dependency baselines before the clean baseline snapshot. LDAP service packages such as `slapd`, proof tools such as `ldap-utils`, and NFS packages for shared Jenkins storage are guest VM dependencies, not control-node host prerequisites. |
-| `target-deployment` | Linux operator host, Python 3.9+, SSH client tools, access to approved internal Ubuntu/OS package repositories, enough disk space for reviewed inputs, `generated/`, and `logs/` | Native operator host prerequisites; per-role package details stay in the role manuals and matrix below. |
+`common-operations` is the only reusable package set. All other packages are
+owned directly by their logical environment. A package present in a shared
+Docker image or VM base-image superset is not, by itself, a dependency of every
+environment that uses that realization.
 
-## Package Matrix
+Helper-specific packages belong to the logical environment in which the helper
+runs. `*_OS_DEPENDENCIES` identifies the narrower command subset validated by a
+helper; it is not a reusable package set or the complete environment package
+composition. Native procedures apply the complete target-deployment package
+composition.
 
-| Context | Product/runtime packages | Operator/helper packages | Simulation-only packages | Notes |
-| --- | --- | --- | --- | --- |
-| Gerrit target | `openjdk-21-jre-headless` | `ca-certificates`, `curl`, `ldap-utils`, `openssh-client`, `rsync`, `tar` | Shared Docker image also carries `git`, `procps`, `unzip`, and `wget` for helper/runtime proof paths | Gerrit needs Java; `ldap-utils` supports native and helper bind/search proof without becoming a Gerrit runtime dependency. |
-| Jenkins controller target | `fontconfig`, `nfs-common`, `openjdk-21-jre` | `ca-certificates`, `curl`, `ldap-utils`, `openssh-client`, `rsync`, `tar`, `wget`; helper artifact checks also use `unzip` | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Jenkins is staged as a reviewed application artifact; `ldap-utils` supports native and helper bind/search proof without becoming a Jenkins runtime dependency. The controller mounts the Jenkins-agent-hosted shared storage export at `JENKINS_SHARED_STORAGE_PATH`. |
-| Jenkins agent target | `nfs-kernel-server`, `openjdk-21-jre-headless`, `openssh-server` | Native install uses `ca-certificates`, `curl`, `rsync`, `tar`, and `wget`; helper defaults also expect `git` and `unzip`; OpenSSH tooling provides `ssh-keygen` for helper-owned host key generation | `sudo` through the operator account for Docker integration orchestration; default example `ci-operator` | Agent runtime exposes inbound SSH for Jenkins controller access and hosts the NFS export for shared Jenkins storage. Workload-specific build tools are out of scope. |
-| Bundle factory | None: not a target service runtime | `ca-certificates`, `openjdk-21-jre-headless`, `tar`, `unzip`, `wget` | Public internet use is simulation-only where explicitly labeled | Prepares Gerrit, Jenkins controller, and Jenkins agent artifact bundles. These are not target-host service dependencies. |
-| Docker shared target image | Union of role product packages | Union of role operator/helper packages | `sudo`, `procps`, `tree`; `net-tools` and `netcat-openbsd` currently have no evidence-backed consumer | The shared Dockerfile is a simulation superset, not authority for native target-host baselines. |
-| VM simulation host | None: not a product target runtime | `python3`, SSH client tools, checksum/archive tooling, and `flock` used by the harness | libvirt/KVM tooling such as `virsh`, image or install tooling, and cloud-init or seed media tooling | VM tooling provisions and inspects simulation-owned VMs; it is not a native target package baseline. NFS server/client packages for shared Jenkins storage are installed in the Jenkins agent and controller VMs, not on the VM control host. |
-| VM LDAP guest | `slapd` for the simulation-owned LDAP service | `ldap-utils` for LDAP bind/search readiness and seed proof | Simulation-owned LDAP seed data and test credentials | Applies only to the LDAP VM in `vm-simulation`; native target deployment uses approved target-owned LDAP instead. |
+## Target-Deployment Requirements
 
-## Layer Rules
+### Control Node
 
-| Layer | Meaning | Where it belongs |
-| --- | --- | --- |
-| Product/runtime | Packages required for the role service to run. | Native role install command and this document. |
-| Operator/helper | Packages required because native operators or Loopforge helpers validate, stage, configure, or collect evidence. | Native install commands, helper defaults, env examples, setup manuals, and this document. |
-| Simulation-only | Packages required only because Docker containers simulate target hosts and run harness orchestration. | Docker simulation guide and this document. |
+```text
+python3
+openssh-client
+```
+
+These packages support the operator or machine runner's control-plane access.
+They are not a Gerrit, Jenkins controller, or Jenkins agent service baseline.
+
+### Gerrit Target
+
+Every Gerrit target installs the shared
+[`common-operations`](#common-operations) package set and the environment's
+runtime package:
+
+```text
+openjdk-21-jre-headless
+```
+
+### Jenkins Controller Target
+
+Every Jenkins controller target installs the shared
+[`common-operations`](#common-operations) package set and the environment's
+runtime packages:
+
+```text
+fontconfig
+nfs-common
+openjdk-21-jre
+```
+
+The controller mounts the Jenkins-agent-hosted shared storage export at
+`JENKINS_SHARED_STORAGE_PATH`.
+
+### Jenkins Agent Target
+
+Every Jenkins agent target installs the shared
+[`common-operations`](#common-operations) package set and the
+environment-specific packages below.
+
+#### Runtime Packages
+
+```text
+nfs-kernel-server
+openjdk-21-jre-headless
+openssh-server
+```
+
+`openssh-server` provides the inbound SSH endpoint used by the Jenkins
+controller to launch agent sessions. `nfs-kernel-server` hosts the reviewed
+shared Jenkins storage export. The Java runtime executes the Jenkins agent
+process.
+
+#### General Build Packages
+
+```text
+build-essential
+cmake
+debhelper
+devscripts
+dpkg-dev
+fakeroot
+g++-multilib
+gcc-multilib
+gdb
+git
+git-lfs
+lintian
+ninja-build
+pkg-config
+python3
+python3-dev
+python3-venv
+shellcheck
+```
+
+These packages provide source checkout, native and multilib compilation,
+CMake and Ninja builds, Python build environments, Debian package construction
+and review, debugging, and shell validation.
+
+The multilib packages make this exact environment specific to amd64 Jenkins
+agents. A non-amd64 agent requires a separately reviewed package baseline;
+installation must not silently omit unavailable packages.
+
+Project-specific SDKs, language versions, and toolchains are outside the
+general Jenkins agent requirement and must be added as separately reviewed
+environment dependencies.
+
+### Bundle Factory
+
+```text
+ca-certificates
+openjdk-21-jre-headless
+tar
+unzip
+wget
+```
+
+These packages prepare Gerrit, Jenkins controller, and Jenkins agent artifact
+bundles. The bundle factory is logically separate from target-host installation
+even when its infrastructure is co-located with another environment.
+
+### LDAP Environment
+
+Gerrit and the Jenkins controller require an approved LDAP environment that
+provides the configured `LDAP_URL`, a read-only bind account, user and group
+search bases, and network reachability from each target. The
+`target-deployment` LDAP service is target-owned and outside Loopforge; this
+document does not define an LDAP server package baseline for it.
+
+The `common-operations` package set provides `ldap-utils` and its `ldapsearch`
+command for the Gerrit and Jenkins controller bind and search proof. It is a
+target-host validation prerequisite, not an application runtime dependency.
+Endpoint identity and bind-account custody are owned by
+`docs/contracts/endpoint-identity.md` and `docs/contracts/account-model.md`.
+
+## Docker-Simulation Requirements
+
+Docker simulation realizes the control node directly on the Docker host. The
+bundle factory, Gerrit target, Jenkins controller target, and Jenkins agent
+target use one shared Docker target image. That image is a simulation
+implementation superset, not an additional target-deployment package baseline.
+It adds `procps` and `sudo` for process inspection and the simulated operator
+account. Its `tree` package is already part of `common-operations`.
+
+### Control Node
+
+```text
+Docker Engine
+Docker Compose
+python3
+openssh-client
+tar
+diffutils
+coreutils
+an awk implementation
+```
+
+These packages run the Docker harness and its local control plane. They are not
+target-container packages.
+
+### Gerrit Target
+
+No Docker-specific package dependencies.
+
+### Jenkins Controller Target
+
+No Docker-specific package dependencies.
+
+### Jenkins Agent Target
+
+No Docker-specific package dependencies.
+
+### Bundle Factory
+
+No Docker-specific package dependencies.
+
+### LDAP Environment
+
+Uses `HARNESS_LDAP_IMAGE`; no target-deployment LDAP package baseline applies.
+
+## VM-Simulation Requirements
+
+VM simulation realizes the control node directly on the libvirt/KVM host. It
+inherits the target-deployment package requirements for the Gerrit target,
+Jenkins controller target, Jenkins agent target, and bundle factory. The
+harness may bake their union into one VM-set-local base image as an
+implementation optimization; package presence in that superset does not create
+additional logical-environment dependencies.
+
+Each VM still verifies its environment package and command expectations during
+M4. Role helpers validate those expectations later; they do not install
+Ubuntu/OS dependencies.
+
+### Control Node
+
+```text
+python3
+openssh-client
+dnsutils
+iproute2
+libvirt-clients (virsh)
+libvirt-daemon-system
+qemu-system-x86
+qemu-utils
+virtinst
+util-linux (flock)
+coreutils
+an awk implementation
+cloud-image-utils or genisoimage
+```
+
+These packages provision and inspect simulation-owned VMs, configure host DNS
+resolution, and generate seed media. The control-node requirement includes
+`dnsutils` for host DNS checks, `iproute2` for libvirt bridge inspection,
+`libvirt-clients` (`virsh`), and either `cloud-image-utils` or `genisoimage`.
+These are not guest target packages.
+
+### Gerrit Target
+
+No VM-specific package dependencies.
+
+### Jenkins Controller Target
+
+No VM-specific package dependencies.
+
+### Jenkins Agent Target
+
+No VM-specific package dependencies.
+
+### Bundle Factory
+
+No VM-specific package dependencies.
+
+### LDAP Environment
+
+```text
+ca-certificates
+ldap-utils
+slapd
+```
+
+`slapd` and `ldap-utils` support the simulation-owned LDAP service and readiness
+proof.
 
 VM simulation realizes role target OS dependency baselines during VM
-provisioning before the clean baseline snapshot. The VM harness bakes one
-VM-set-local base image that contains the VM package superset for the selected
-source image, Ubuntu baseline, apt mirror, source-boundary label, VM disk size,
-and package matrix. Each VM must still verify role package and command
-expectations during M4. Role helpers validate those expectations later; they do not install Ubuntu/OS dependencies.
+provisioning before the clean baseline snapshot. Each environment remains
+responsible only for its target-deployment requirements and the explicit
+simulation-specific additions declared here.
 
-## Native Target Install Baselines
+## Shared Package Requirements
 
-Native manuals keep the role-local install commands because operators need a
-copyable sequence on the target host. Those commands are task instructions. This
-document owns the layered rationale.
+### Common Operations
 
-| Target role | Native install packages |
+Install this package set on every target-deployment Gerrit, Jenkins controller,
+and Jenkins agent target:
+
+```text
+ca-certificates
+curl
+fd-find
+jq
+ldap-utils
+openssh-client
+ripgrep
+rsync
+strace
+tar
+tree
+unzip
+vim
+wget
+xz-utils
+```
+
+This set provides TLS, HTTP/API, LDAP proof, SSH, transfer, archive, directory
+proof, search, editing, and bounded system-call inspection tools. Ubuntu
+installs the `fd-find` executable as `fdfind`; the baseline does not create an
+additional `fd` alias. `vim` is the selected baseline editor, so `nano` is not
+also installed.
+
+## Requirement Consumers
+
+| Requirement scope | Applied by |
 | --- | --- |
-| Gerrit | `ca-certificates`, `curl`, `ldap-utils`, `openssh-client`, `openjdk-21-jre-headless`, `rsync`, `tar` |
-| Jenkins controller | `ca-certificates`, `curl`, `fontconfig`, `ldap-utils`, `nfs-common`, `openjdk-21-jre`, `openssh-client`, `rsync`, `tar`, `wget` |
-| Jenkins agent | `ca-certificates`, `curl`, `nfs-kernel-server`, `openjdk-21-jre-headless`, `openssh-server`, `rsync`, `tar`, `wget` |
-
-## Evidence Map
-
-| Requirement | Evidence |
-| --- | --- |
-| Gerrit native target baseline | `docs/operations/native/gerrit.md` keeps the role-local install command; `scripts/gerrit-setup.sh` validates the static `GERRIT_OS_DEPENDENCIES` baseline. |
-| Jenkins controller native target baseline | `docs/operations/native/jenkins-controller.md` keeps the role-local install command; `scripts/jenkins-controller-setup.sh` validates `JENKINS_OS_DEPENDENCIES`. |
-| Jenkins agent native target baseline | `docs/operations/native/jenkins-agent.md` keeps the role-local install command; `scripts/jenkins-agent-setup.sh` validates `JENKINS_AGENT_OS_DEPENDENCIES` and validates the target OS `sshd` endpoint used by Jenkins. |
-| Integration native operations | `docs/operations/native/integration.md` keeps the manual cross-role SSH, Gerrit access, Jenkins node, trigger, vote, and evidence procedures. |
-| Bundle-factory baseline | `docs/contracts/artifact-bundle-contract.md` records the shared package list used to prepare role artifact bundles. |
-| Docker shared target image | `simulation/docker/target/Dockerfile` installs the shared superset used by Gerrit, Jenkins controller, and Jenkins agent target containers. |
-| Docker `sudo` layer | `simulation/docker/target/Dockerfile` creates the default example `ci-operator` with passwordless sudo; `simulation/docs/docker/docker-simulation.md` documents the operator account; `scripts/integration-setup.sh` uses sudo for simulation orchestration. |
-| Docker `procps` layer | `simulation/docker/simulate.sh`, Gerrit helper runtime checks, and Jenkins agent SSH readiness checks use process inspection inside slim containers. |
-| Target-host `ldap-utils` layer | The Gerrit and Jenkins native procedures and role helpers use `ldapsearch` to prove bind/search readiness. |
-| Docker `tree` layer | `simulation/docker/target/Dockerfile` installs `tree` for simulation-only directory inspection and debugging. |
-| VM simulation host tooling | `simulation/docs/vm/vm-simulation.md` and the VM harness preflight must validate libvirt/KVM access, `virsh`, image or seed media tooling, and SSH client tools. |
-| VM LDAP guest service | `simulation/docs/vm/vm-simulation.md` documents the real LDAP service and seeded directory contract; VM evidence proves service readiness, seeded entries, and bind/search behavior. |
-| Docker removal candidates | No current helper, harness, or role consumer was found for `net-tools` or `netcat-openbsd`. |
-
-## Docker Removal Candidates
-
-| Package | Current status | Action |
-| --- | --- | --- |
-| `net-tools` | No current helper, harness, or role consumer found. | Candidate for Dockerfile removal. |
-| `netcat-openbsd` | No current helper, harness, or role consumer found. | Candidate for Dockerfile removal. |
+| Target environments | Native procedures and role helpers |
+| Docker simulation | Docker harness and target image |
+| VM simulation | VM harness, host tools, and guest provisioning |
 
 ## Scope Boundaries
 
-- Do not add workload-specific build tools, such as compilers, to the default
-  Jenkins agent baseline unless every general agent requires them.
-- Do not treat `sudo` as a native role dependency. It is an operator privilege
-  mechanism, and in Docker it supports the default example `ci-operator`
-  orchestration account.
+- Keep the Jenkins agent build packages off Gerrit and Jenkins controller
+  targets.
+- Keep project-specific SDKs and toolchains outside the Jenkins agent package
+  requirement. Add them as separately reviewed environment dependencies.
+- Do not treat `sudo` as a target-deployment dependency. It is an operator
+  privilege mechanism and, in Docker, supports the example `ci-operator`.
 - Do not treat `ldap-utils` as a Gerrit or Jenkins runtime dependency. It is a
   target-host operator/helper validation prerequisite.
 - Do not treat bundle-factory packages as target-host service dependencies.

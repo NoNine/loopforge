@@ -37,6 +37,13 @@ is not authority for native target-host baselines. See
 Docker-specific service names, host loopback browser URLs, and target SSH
 inventory values follow `docs/contracts/endpoint-identity.md`.
 
+## Host Conditions
+
+Run Docker simulation from a Linux Docker host with enough capacity for the
+selected generated simulation state and bounded logs. Host package and tooling
+dependencies are owned by `docs/baselines/package-requirements.md`; this guide
+owns Docker-specific capacity and runtime conditions.
+
 Docker does not run a guest init system. Its target containers retain the
 existing direct-process lifecycle: the container entrypoint starts `sshd`, and
 Gerrit and Jenkins use the existing role-process mechanism. Do not add

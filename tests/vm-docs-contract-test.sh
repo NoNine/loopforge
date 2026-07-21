@@ -141,36 +141,42 @@ reject_doc_text simulation/docs/shared/generated-state-layout.md \
   'VM-to-target transfer scratch' \
   'Generated-state layout must not model VM staging as transfer scratch'
 
-require_doc_text docs/baselines/package-requirements.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   'Linux host with libvirt/KVM access' \
-  'Package requirements must document VM libvirt/KVM host prerequisite'
+  'VM guide must document the libvirt/KVM host condition'
 require_doc_text docs/baselines/package-requirements.md \
-  '`virsh`' \
+  '`libvirt-clients` (`virsh`)' \
   'Package requirements must document virsh as VM simulation tooling'
 require_doc_text docs/baselines/package-requirements.md \
-  'cloud-init or seed media tooling' \
+  '`cloud-image-utils` or `genisoimage`' \
   'Package requirements must document VM seed media tooling'
 require_doc_text docs/baselines/package-requirements.md \
-  'NFS packages for shared Jenkins storage are guest VM dependencies' \
-  'Package requirements must place VM NFS packages in guests'
+  '`dnsutils` for host DNS checks' \
+  'Package requirements must place DNS tooling on the VM control node'
 require_doc_text docs/baselines/package-requirements.md \
-  '`nfs-kernel-server`' \
+  '`iproute2` for libvirt bridge inspection' \
+  'Package requirements must place bridge tooling on the VM control node'
+require_doc_text docs/baselines/package-requirements.md \
+  'inherits the target-deployment package requirements for the Gerrit target,' \
+  'VM role environments must inherit target-deployment package requirements'
+require_doc_text docs/baselines/package-requirements.md \
+  'package presence in that superset does not create' \
+  'VM base-image content must not create logical package dependencies'
+require_doc_text docs/baselines/package-requirements.md \
+  'nfs-kernel-server' \
   'Package requirements must document Jenkins agent NFS server package'
 require_doc_text docs/baselines/package-requirements.md \
-  '`nfs-common`' \
+  'nfs-common' \
   'Package requirements must document Jenkins controller NFS client package'
 require_doc_text docs/baselines/package-requirements.md \
-  '| VM LDAP guest | `slapd` for the simulation-owned LDAP service' \
+  '`slapd` and `ldap-utils` support the simulation-owned LDAP service' \
   'Package requirements must document the VM LDAP guest service package'
 require_doc_text docs/baselines/package-requirements.md \
-  '`ldap-utils` for LDAP bind/search readiness and seed proof' \
+  'simulation-owned LDAP service and readiness' \
   'Package requirements must document VM LDAP proof tooling'
-require_doc_text docs/baselines/package-requirements.md \
+require_doc_text simulation/docs/vm/vm-simulation.md \
   '`flock` serializes selected VM-set base-image preparation' \
-  'Package requirements must document VM-set base-image locking'
-require_doc_text docs/baselines/package-requirements.md \
-  'VM LDAP guest service' \
-  'Package requirements evidence map must include VM LDAP guest service'
+  'VM guide must document VM-set base-image locking'
 require_doc_text docs/baselines/package-requirements.md \
   'VM simulation realizes role target OS dependency baselines during VM' \
   'Package requirements must place VM role OS dependencies in provisioning'

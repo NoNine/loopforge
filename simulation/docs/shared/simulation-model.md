@@ -50,15 +50,17 @@ The model has two layers:
    `simulation/docker/simulate.sh`.
 2. VM-based simulation second.
 
-Both layers use the same five-machine topology:
+Both layers realize the same six logical environments: one host control node
+and the same five backend-managed machines.
 
-| Machine/environment | Docker form | VM form | Responsibility |
+| Logical environment | Docker form | VM form | Responsibility |
 | --- | --- | --- | --- |
+| Control node | Docker harness host | VM harness host | Holds simulation inputs and generated state, invokes the harness, and provides backend control-plane tooling. |
 | Bundle factory | Container | VM | Runs role helper `prepare-artifacts` commands and produces curated application artifacts, plugins, manifests, and checksums. |
-| LDAP | Container | VM | Hosts LDAP bind, admin, and test accounts and groups. |
-| Gerrit | Container | VM | Runs Gerrit with LDAP authentication, SSH access, integration permissions, and the `Verified` label. |
-| Jenkins controller | Container | VM | Runs Jenkins, LDAP/JCasC configuration, Gerrit Trigger, and agent registration. |
-| Jenkins agent | Container | VM | Runs SSH build jobs scheduled by Jenkins. |
+| LDAP environment | Container | VM | Hosts LDAP bind, admin, and test accounts and groups. |
+| Gerrit target | Container | VM | Runs Gerrit with LDAP authentication, SSH access, integration permissions, and the `Verified` label. |
+| Jenkins controller target | Container | VM | Runs Jenkins, LDAP/JCasC configuration, Gerrit Trigger, and agent registration. |
+| Jenkins agent target | Container | VM | Runs SSH build jobs scheduled by Jenkins. |
 
 ## Shared Terminology And Backend Mapping
 

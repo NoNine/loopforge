@@ -48,8 +48,10 @@ Consumed inputs:
 - Optional bundle-factory artifact source inputs: `GERRIT_WAR_SOURCE`,
   and `GERRIT_DOWNLOAD_ARTIFACTS`. For v1, `GERRIT_DOWNLOAD_ARTIFACTS=1`
   is simulation-only for the Gerrit WAR source.
-- `GERRIT_OS_DEPENDENCIES`, whose baseline and layered package rationale are
-  defined in `docs/baselines/package-requirements.md`.
+- `GERRIT_OS_DEPENDENCIES`, which names the commands checked by the role
+  helper. The complete native target composition, including the common
+  operations environment and direct Gerrit role dependencies, is defined in
+  `docs/baselines/package-requirements.md`.
 - Gerrit `3.13.6`, Java `21`, and Ubuntu `24.04`/`noble` are internal helper
   constants for v1, not operator env overrides.
 
@@ -88,7 +90,10 @@ Produced outputs:
 
 - Readiness result showing required commands, reviewed values, baseline values,
   endpoint values, LDAP assumptions, and artifact paths.
-- OS dependency expectation checks for the package/tooling names above.
+- OS dependency expectation checks for the configured helper command subset.
+  The OS dependency provisioning checkpoint separately reviews the complete
+  native target package composition; the role helper does not install or
+  exhaustively validate the common operations environment.
 - Normal-mode disk-space, host-resolution, LDAP bind/search, and Gerrit
   runtime identity checks. Fully absent account/group/product-home state is
   accepted for creation by `install`; a fully matching identity with an empty

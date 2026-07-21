@@ -119,21 +119,61 @@ The package rationale and layered classification are maintained in
 
 ```bash
 sudo apt update
+
+# Common operations environment
 sudo apt install -y \
   ca-certificates \
   curl \
+  fd-find \
+  jq \
+  ldap-utils \
+  openssh-client \
+  ripgrep \
+  rsync \
+  strace \
+  tar \
+  tree \
+  unzip \
+  vim \
+  wget \
+  xz-utils
+
+# Jenkins agent direct role dependencies
+sudo apt install -y \
   nfs-kernel-server \
   openjdk-21-jre-headless \
-  openssh-server \
-  rsync \
-  tar \
-  wget
+  openssh-server
+
+# Jenkins agent build environment
+sudo apt install -y \
+  git \
+  git-lfs \
+  build-essential \
+  gcc-multilib \
+  g++-multilib \
+  cmake \
+  ninja-build \
+  pkg-config \
+  gdb \
+  python3 \
+  python3-dev \
+  python3-venv \
+  debhelper \
+  devscripts \
+  dpkg-dev \
+  fakeroot \
+  lintian \
+  shellcheck
 java -version
 ```
 
-The Java command must report OpenJDK 21. Add site-wide build packages to the
-reviewed package operation only when every general agent requires them. Keep
-project-specific toolchains outside this host baseline.
+The Java command must report OpenJDK 21. Ubuntu exposes the `fd-find` command
+as `fdfind`. The common operations environment supports status and issue
+diagnosis and shared directory-proof tooling. The reviewed general agent build
+environment is separate from the agent runtime dependencies and is an amd64
+profile because it includes the multilib packages. Keep project-specific SDKs
+and toolchains outside this host baseline and use a separately reviewed agent
+profile for non-amd64 agents.
 
 ### 2.2 Create the Agent Artifact Bundle
 
